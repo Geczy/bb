@@ -329,6 +329,106 @@
   font-style: italic;
 }
 
+.post-carousel {
+  margin-top: 28px;
+}
+
+.post-carousel-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  margin-bottom: 10px;
+}
+
+.post-carousel-label {
+  color: var(--subtle);
+  font-size: 13.5px;
+}
+
+.post-carousel-nav {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.post-carousel-bar[data-overflowing="false"] .post-carousel-nav {
+  visibility: hidden;
+}
+
+.post-carousel-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.post-carousel-nav button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.post-carousel-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.post-carousel-nav button:focus-visible,
+.post-carousel-track:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.post-body .post-carousel-track {
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  margin-top: 0;
+  padding: 2px 2px 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 2px;
+  scrollbar-width: thin;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .post-carousel-track {
+    scroll-behavior: smooth;
+  }
+}
+
+.post-body .post-carousel-card {
+  flex: 0 0 min(260px, 80%);
+  padding-left: 0;
+  scroll-snap-align: start;
+}
+
+.post-body .post-carousel-card::before {
+  content: none;
+}
+
+.post-body .post-carousel-title {
+  margin-top: 10px;
+  color: var(--heading-sub);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.post-body .post-carousel-caption {
+  margin-top: 2px;
+  color: var(--subtle);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
 .post-quote {
   margin-top: 28px;
   padding: 2px 0 2px 18px;

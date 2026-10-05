@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { ChangelogInline } from "../landing/changelog-inline";
 import { LazyPluginGuide } from "../plugin-guide/lazy-plugin-guide";
+import { PostCarousel } from "./carousel";
 import { getImageSize } from "./image-sizes";
 import { LightboxImage } from "./lightbox";
 import type { Post, PostBlock } from "./parse-post";
@@ -63,6 +64,8 @@ function Block({ block }: { block: PostBlock }): ReactNode {
       return <TweetEmbed href={block.href} id={block.id} />;
     case "component":
       return <PluginGuideEmbed slide={block.slide} />;
+    case "carousel":
+      return <PostCarousel label={block.label} items={block.items} />;
   }
 }
 

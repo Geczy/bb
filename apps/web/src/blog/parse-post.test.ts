@@ -147,6 +147,108 @@ component:other
       },
     ]);
   });
+
+  it("reads a carousel of cards until the first non-card line", () => {
+    const post = parsePost(
+      "carousel",
+      `---
+title: Carousel
+date: 2026-08-05
+lede: Hi
+---
+
+carousel: Plugins I built
+- ![A festival schedule](/blog/festival.jpg) **Festival Planner** Schedules from your **Spotify** likes
+- ![A clustered map](/blog/places.jpg) **Saved Places**
+After the cards.
+`,
+    );
+    expect(post.blocks).toEqual([
+      {
+        kind: "carousel",
+        label: "Plugins I built",
+        items: [
+          {
+            src: "/blog/festival.jpg",
+            alt: "A festival schedule",
+            title: "Festival Planner",
+            caption: "Schedules from your **Spotify** likes",
+          },
+          {
+            src: "/blog/places.jpg",
+            alt: "A clustered map",
+            title: "Saved Places",
+          },
+        ],
+      },
+      { kind: "paragraph", text: "After the cards." },
+    ]);
+    expect(post.cover).toBeUndefined();
+  });
+
+  it("ends a carousel at a blank line and keeps later list items as a list", () => {
+    const post = parsePost(
+      "carousel-end",
+      `---
+title: Carousel
+date: 2026-08-05
+lede: Hi
+---
+
+carousel:
+- ![One](/blog/one.jpg) **One**
+
+- A normal bullet
+`,
+    );
+    expect(post.blocks).toEqual([
+      {
+        kind: "carousel",
+        items: [{ src: "/blog/one.jpg", alt: "One", title: "One" }],
+      },
+      { kind: "list", items: ["A normal bullet"] },
+    ]);
+  });
+
+  it("does not render a carousel card with a javascript src", () => {
+    const post = parsePost(
+      "carousel-safe",
+      `---
+title: Carousel
+date: 2026-08-05
+lede: Hi
+---
+
+carousel:
+- ![One](/blog/one.jpg) **One**
+- ![x](javascript:alert(1)) **Bad**
+`,
+    );
+    expect(post.blocks).toEqual([
+      {
+        kind: "carousel",
+        items: [{ src: "/blog/one.jpg", alt: "One", title: "One" }],
+      },
+      { kind: "list", items: ["![x](javascript:alert(1)) **Bad**"] },
+    ]);
+  });
+
+  it("rejects a carousel with no cards", () => {
+    expect(() =>
+      parsePost(
+        "carousel-empty",
+        `---
+title: Carousel
+date: 2026-08-05
+lede: Hi
+---
+
+carousel: Nothing here
+- A bullet without an image
+`,
+      ),
+    ).toThrow("carousel with no items");
+  });
 });
 
 describe("stripMarkdown", () => {

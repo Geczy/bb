@@ -13,7 +13,15 @@ export type PostBlock =
   | { kind: "quote"; lines: string[] }
   | { kind: "video"; src: string; poster: string; caption: string }
   | { kind: "tweet"; href: string; id: string }
-  | { kind: "component"; name: "plugin-guide"; slide?: string };
+  | { kind: "component"; name: "plugin-guide"; slide?: string }
+  | { kind: "carousel"; label?: string; items: CarouselItem[] };
+
+export type CarouselItem = {
+  src: string;
+  alt: string;
+  title: string;
+  caption?: string;
+};
 
 export type Post = {
   slug: string;
@@ -80,6 +88,9 @@ const TWEET_RE =
   /^tweet:(https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]+\/status\/(\d+)(?:\?.*)?)$/;
 const VIDEO_RE = /^video:([^|]+)\|([^|]+)\|(.+)$/;
 const PLUGIN_GUIDE_RE = /^component:plugin-guide(?::([a-z0-9-]+))?$/;
+const CAROUSEL_RE = /^carousel:(?:\s+(.+))?$/;
+const CAROUSEL_ITEM_RE =
+  /^- !\[([^\]]*)\]\(([^)]+)\)\s+\*\*([^*]+)\*\*(?:\s+(.+))?$/;
 
 function parseImage(
   line: string,
@@ -104,6 +115,15 @@ function parseImage(
   return { kind: "image", alt: image[1], src };
 }
 
+function parseCarouselItem(line: string): CarouselItem | null {
+  const match = CAROUSEL_ITEM_RE.exec(line);
+  if (!match || !isRenderableHref(match[2])) {
+    return null;
+  }
+  const [, alt, src, title, caption] = match;
+  return caption ? { src, alt, title, caption } : { src, alt, title };
+}
+
 export function parsePost(slug: string, source: string): Post {
   const { fields, body } = parseFrontMatter(source);
   const title = fields.title;
@@ -120,6 +140,7 @@ export function parsePost(slug: string, source: string): Post {
   let paragraph: string[] = [];
   let list: string[] = [];
   let quote: string[] = [];
+  let carousel: Extract<PostBlock, { kind: "carousel" }> | null = null;
 
   const flushParagraph = () => {
     if (paragraph.length === 0) {
@@ -142,16 +163,45 @@ export function parsePost(slug: string, source: string): Post {
     blocks.push({ kind: "quote", lines: quote });
     quote = [];
   };
+  const flushCarousel = () => {
+    if (!carousel) {
+      return;
+    }
+    if (carousel.items.length === 0) {
+      throw new Error(`Post ${slug} has a carousel with no items`);
+    }
+    blocks.push(carousel);
+    carousel = null;
+  };
   const flushAll = () => {
     flushParagraph();
     flushList();
     flushQuote();
+    flushCarousel();
   };
 
   for (const rawLine of body.split("\n")) {
     const line = rawLine.replace(/\s+$/, "");
     if (!line) {
       flushAll();
+      continue;
+    }
+
+    if (carousel) {
+      const item = parseCarouselItem(line);
+      if (item) {
+        carousel.items.push(item);
+        continue;
+      }
+      flushCarousel();
+    }
+
+    const carouselStart = CAROUSEL_RE.exec(line);
+    if (carouselStart) {
+      flushAll();
+      carousel = carouselStart[1]
+        ? { kind: "carousel", label: carouselStart[1], items: [] }
+        : { kind: "carousel", items: [] };
       continue;
     }
 
