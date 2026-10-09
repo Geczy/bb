@@ -278,7 +278,7 @@ describe("workflow composer banner", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => vi.advanceTimersByTimeAsync(1));
     const toggle = slot.getByRole("button", {
       name: "Workflow: Review the release",
     });
@@ -321,7 +321,7 @@ describe("workflow composer banner", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(slot.rpcCalls).toHaveLength(1);
     await act(async () => vi.advanceTimersByTimeAsync(5_000));
     expect(slot.rpcCalls).toHaveLength(1);
@@ -331,7 +331,7 @@ describe("workflow composer banner", () => {
 
     runs = [run];
     await slot.emitRealtime("workflow-runs", { threadId: "thr_idle" });
-    await act(async () => Promise.resolve());
+    await act(async () => vi.advanceTimersByTimeAsync(100));
     expect(slot.rpcCalls).toHaveLength(2);
     expect(slot.getByText("Review the release")).toBeTruthy();
     await act(async () => vi.advanceTimersByTimeAsync(14_000));
@@ -367,7 +367,7 @@ describe("workflow composer banner", () => {
       },
     );
     try {
-      await act(async () => Promise.resolve());
+      await act(async () => vi.advanceTimersByTimeAsync(1));
       expect(slot.rpcCalls).toHaveLength(1);
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
       expect(slot.rpcCalls).toHaveLength(2);
@@ -383,7 +383,7 @@ describe("workflow composer banner", () => {
       await act(async () => {
         setVisibility("visible");
       });
-      await act(async () => Promise.resolve());
+      await act(async () => vi.advanceTimersByTimeAsync(1));
       expect(slot.rpcCalls).toHaveLength(3);
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
       expect(slot.rpcCalls).toHaveLength(4);
@@ -617,7 +617,7 @@ describe("workflow-preview directive", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(slot.getByRole("alert").textContent).toMatch(/initial outage/i);
 
     await act(async () => vi.advanceTimersByTimeAsync(2_000));
@@ -682,7 +682,7 @@ describe("workflow-preview directive", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(slot.getByText("Review the release")).toBeTruthy();
     expect(slot.queryByText("Complete")).toBeNull();
 
@@ -694,13 +694,14 @@ describe("workflow-preview directive", () => {
     await act(async () => {
       resolvePoll?.({ run: terminalRun });
       await delayedPoll;
+      await vi.advanceTimersByTimeAsync(1);
     });
     expect(slot.getByText("Complete")).toBeTruthy();
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(attempt).toBe(2);
   });
 
-  it("refreshes a run view on workflow-runs signals and folds a burst into one follow-up request", async () => {
+  it("refreshes a run view on workflow-runs signals, folds a burst into one request, and follows a pending request once", async () => {
     let attempt = 0;
     let resolveFirstSignalLoad:
       | ((value: { run: WorkflowRunView }) => void)
@@ -735,14 +736,16 @@ describe("workflow-preview directive", () => {
     await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
     await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
     await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
-    expect(attempt).toBe(2);
+    await waitFor(() => expect(attempt).toBe(2));
 
+    await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
+    await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
     await act(async () => {
       resolveFirstSignalLoad?.({ run });
       await firstSignalLoad;
     });
     await waitFor(() => expect(attempt).toBe(3));
-    await act(async () => Promise.resolve());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 100)));
     expect(attempt).toBe(3);
     slot.unmount();
   });

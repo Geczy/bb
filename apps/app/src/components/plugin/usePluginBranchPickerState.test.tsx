@@ -8,10 +8,6 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { usePluginBranches } from "./usePluginBranchPickerState";
 
-vi.mock("@/hooks/queries/sidebar-navigation-query", () => ({
-  useSidebarNavigation: () => ({ data: undefined }),
-}));
-
 vi.mock("@/lib/sdk", () => ({
   sdk: { projects: { branches: vi.fn() } },
 }));
@@ -22,6 +18,7 @@ vi.mock("@/lib/project-branch-options", () => ({
 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({
   useProjectDetailRealtimeSubscription: vi.fn(),
+  useProjectListRealtimeSubscription: vi.fn(),
 }));
 
 const BRANCHES = {

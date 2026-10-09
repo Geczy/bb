@@ -27,19 +27,21 @@ afterEach(() => {
 
 describe("memory settings", () => {
   it("lists all memories and saves an inline edit", async () => {
+    let current = memory;
     const slot = renderSlot(
       app.settingsSections[0]!,
       {},
       {
         rpc: {
-          listMemories: () => ({ memories: [memory] }),
-          updateMemory: () => ({
-            memory: {
+          listMemories: () => ({ memories: [current] }),
+          updateMemory: () => {
+            current = {
               ...memory,
               summary: "Run all focused tests.",
               version: 2,
-            },
-          }),
+            };
+            return { memory: current };
+          },
         },
       },
     );
@@ -66,6 +68,7 @@ describe("memory settings", () => {
   });
 
   it("confirms and deletes a memory", async () => {
+    let memories = [memory];
     const confirm = vi
       .fn<(message: string) => boolean>()
       .mockReturnValueOnce(false)
@@ -76,8 +79,11 @@ describe("memory settings", () => {
       {},
       {
         rpc: {
-          listMemories: () => ({ memories: [memory] }),
-          deleteMemory: () => ({ deleted: { id: memory.id, version: 2 } }),
+          listMemories: () => ({ memories }),
+          deleteMemory: () => {
+            memories = [];
+            return { deleted: { id: memory.id, version: 2 } };
+          },
         },
       },
     );

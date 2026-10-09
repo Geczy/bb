@@ -1,7 +1,9 @@
 import type { ProjectSource } from "@bb/domain";
-import { useSidebarNavigation } from "@/hooks/queries/sidebar-navigation-query";
-import { useCallback, useMemo } from "react";
-import { useProjectSourceBranches } from "@/hooks/queries/project-queries";
+import { useMemo } from "react";
+import {
+  useProjects,
+  useProjectSourceBranches,
+} from "@/hooks/queries/project-queries";
 import type {
   BranchesState,
   CheckoutState,
@@ -25,43 +27,32 @@ export function usePluginBranches({
   projectId,
   query = "",
 }: UseBranchesArgs): BranchesState {
-  const navigation = useSidebarNavigation({
+  const projects = useProjects({
     enabled: hostId === null && projectId !== null,
   });
   const branchHostId = resolvePluginBranchHostId(
     hostId,
-    navigation.data?.projects.find((project) => project.id === projectId)
-      ?.sources,
+    projects.data?.find((project) => project.id === projectId)?.sources,
   );
   const enabled = branchHostId !== null && projectId !== null;
-  const branchesQuery = useProjectSourceBranches(
-    projectId ?? undefined,
-    branchHostId,
-    {
-      enabled,
-      query,
-      selectedBranch: "",
-    },
-  );
-  const refreshFromRemote = branchesQuery.refreshFromRemote;
-  const refresh = useCallback(async () => {
-    if (!enabled) return;
-    await refreshFromRemote();
-  }, [enabled, refreshFromRemote]);
-
+  const branchesQuery = useProjectSourceBranches(projectId, branchHostId, {
+    enabled,
+    query,
+    selectedBranch: "",
+  });
   return useMemo(
     () => ({
       branches: enabled ? (branchesQuery.data?.branches ?? []) : [],
       remoteBranches: enabled ? (branchesQuery.data?.remoteBranches ?? []) : [],
       isLoading: enabled && branchesQuery.isFetching,
-      refresh,
+      refresh: branchesQuery.refreshFromRemote,
     }),
     [
       branchesQuery.data?.branches,
       branchesQuery.data?.remoteBranches,
       branchesQuery.isFetching,
       enabled,
-      refresh,
+      branchesQuery.refreshFromRemote,
     ],
   );
 }
@@ -71,7 +62,7 @@ export function usePluginCheckoutState({
   projectId,
 }: UseCheckoutStateArgs): CheckoutState {
   const enabled = hostId !== null && projectId !== null;
-  const query = useProjectSourceBranches(projectId ?? undefined, hostId, {
+  const query = useProjectSourceBranches(projectId, hostId, {
     enabled,
     query: "",
     selectedBranch: "",

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { withReadBatches } from "../../read-test-fixtures.js";
 import { cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
@@ -24,7 +25,7 @@ const project = {
 
 const labels: Label[] = ["bug", "frontend", "needs-design"].map(
   (name, index) => ({
-    id: `01HZZZZZZZZZZZZZZZZZZZZZL${index}`,
+    id: `01HZZZZZZZZZZZZZZZZZZZZZB${index}`,
     projectId: PROJECT_ID,
     name,
     color: "#5e6ad2",
@@ -59,17 +60,17 @@ function renderList() {
     app.navPanels[0]!,
     { subPath: PROJECT_ID },
     {
-      rpc: {
+      rpc: withReadBatches({
         listProjects: () => ({ projects: [project] }),
         listFolders: () => ({ folders: [] }),
         listPresets: () => ({ presets: [] }),
         sidebarSummary: () => ({ projects: [] }),
         listLabels: () => ({ labels }),
-        listTasks: () => ({ tasks: [busyTask] }),
+        listTasks: () => ({ tasks: [busyTask], nextCursor: null }),
         listTaskThreads: () => ({ taskThreads: [workerThread] }),
         listComments: () => ({ comments: [] }),
         listAttachments: () => ({ attachments: [] }),
-      },
+      }),
     },
   );
 }

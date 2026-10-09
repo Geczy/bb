@@ -3,6 +3,7 @@ import {
   listTasksOpenFirst,
   patchTasks,
   useTasksQuery,
+  useTasksRead,
   type TasksRpc,
 } from "../../shell/data.js";
 import {
@@ -10,7 +11,6 @@ import {
   type TaskSignal,
 } from "../../shell/signal-scheduler.js";
 import type {
-  Label,
   Task,
   TaskPriority,
   TaskStatus,
@@ -98,16 +98,14 @@ export function useListTasks(
 }
 
 export function useLabels(projectIds: readonly string[]) {
-  return useTasksQuery<Label[]>(
-    async (rpc) => {
-      const results = await Promise.all(
-        projectIds.map((projectId) => rpc.call("listLabels", { projectId })),
-      );
-      return results.flatMap((result) => result.labels);
-    },
+  const query = useTasksRead(
+    "listLabelsForProjects",
+    { projectIds: [...projectIds] },
+    (result) => result.labels,
     ["projects:changed"],
-    [projectIds.join()],
+    { enabled: projectIds.length > 0 },
   );
+  return { ...query, data: projectIds.length === 0 ? [] : query.data };
 }
 
 export interface TaskRowMeta {

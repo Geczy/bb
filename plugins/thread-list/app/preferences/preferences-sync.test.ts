@@ -4,7 +4,7 @@ import {
   applyRemotePreferenceSignal,
   attachPreferencesStore,
   flushPreferenceWritesForTest,
-  hydratePreferences,
+  applyPreferenceSnapshot,
   hydratePreferencesFromMirror,
   preferencesMirrorStorageKey,
   preferencesReadyAtom,
@@ -17,18 +17,23 @@ import { defaultPreferences } from "../../shared/preferences.js";
 
 function fakeRpc(
   preferences: Record<string, unknown> = {},
-): PreferencesRpc & { calls: { method: string; input: unknown }[] } {
+): PreferencesRpc & {
+  preferences: Record<string, unknown>;
+  calls: { method: string; input: unknown }[];
+} {
   const calls: { method: string; input: unknown }[] = [];
   return {
     calls,
+    preferences: { ...defaultPreferences(), ...preferences },
     async call(method: string, input: unknown) {
       calls.push({ method, input });
-      if (method === "listPreferences") {
-        return { preferences: { ...defaultPreferences(), ...preferences } };
-      }
       return input;
     },
   };
+}
+
+function hydratePreferences(rpc: ReturnType<typeof fakeRpc>) {
+  applyPreferenceSnapshot({ preferences: rpc.preferences }, rpc);
 }
 
 function memoryStorage(): Storage {
