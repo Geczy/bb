@@ -70,7 +70,7 @@ interface SessionState {
   turnCounter: number;
 }
 
-const SEEDS = 5;
+const SEEDS = 20;
 const STEPS = 70;
 const execution = {
   model: "gpt-5",
@@ -655,6 +655,7 @@ function pruneUsageSnapshots(testThread: TestThread): void {
 describe("latest timeline selection memo", () => {
   it("matches a cold build over randomized streaming, out-of-order deltas, rewrites, prunes and context clears", () => {
     let reused = 0;
+    let reusedWithItemRows = 0;
     let rebuilt = 0;
     for (let seed = 1; seed <= SEEDS; seed += 1) {
       const random = createRandom(seed);
@@ -662,6 +663,7 @@ describe("latest timeline selection memo", () => {
         const state = initialState();
         for (let step = 0; step < STEPS; step += 1) {
           const roll = random();
+          let appended: readonly RowSpec[] = [];
           const latest = getLatestThreadSequence(testThread.db, {
             threadId: testThread.thread.id,
           });
@@ -687,7 +689,8 @@ describe("latest timeline selection memo", () => {
             );
             pruneUsageSnapshots(testThread);
           } else {
-            append(testThread, randomSessionRows(state, random));
+            appended = randomSessionRows(state, random);
+            append(testThread, appended);
           }
           const label = JSON.stringify({ seed, step });
           const includeDiagnosticOperations = random() < 0.2;
@@ -698,6 +701,15 @@ describe("latest timeline selection memo", () => {
           );
           if (selectionWasReused(warm.profile)) {
             reused += 1;
+            if (
+              appended.some(
+                (spec) =>
+                  (spec.itemKind ?? null) !== null ||
+                  (spec.parentToolCallId ?? null) !== null,
+              )
+            ) {
+              reusedWithItemRows += 1;
+            }
           } else {
             rebuilt += 1;
           }
@@ -718,10 +730,11 @@ describe("latest timeline selection memo", () => {
       });
     }
     expect(reused).toBeGreaterThan(SEEDS * 10);
-    expect(rebuilt).toBeGreaterThan(SEEDS * 15);
+    expect(reusedWithItemRows).toBeGreaterThan(SEEDS * 3);
+    expect(rebuilt).toBeGreaterThan(SEEDS * 10);
   }, 120_000);
 
-  it("reuses the selection for root deltas and rebuilds for lifecycle rows", () => {
+  it("reuses the selection for root deltas and lifecycle rows and rebuilds for an unseen parent", () => {
     withTestThread((testThread) => {
       const args = latestArgs("default");
       append(testThread, [
@@ -756,7 +769,7 @@ describe("latest timeline selection memo", () => {
         }),
       ]);
       const lifecycle = expectWarmEqualsCold(testThread, args, "lifecycle");
-      expect(selectionWasReused(lifecycle.profile)).toBe(false);
+      expect(selectionWasReused(lifecycle.profile)).toBe(true);
 
       append(testThread, [
         deltaRow(
@@ -963,10 +976,10 @@ describe("latest timeline selection memo", () => {
   });
 
   it.each([
-    { itemId: "task:wf-1", itemKind: "backgroundTask" },
-    { itemId: "agent-1", itemKind: "toolCall" },
+    { itemId: "task:wf-1", itemKind: "backgroundTask", reused: false },
+    { itemId: "agent-1", itemKind: "toolCall", reused: true },
   ] as const)(
-    "rebuilds for a delta row whose item kind is $itemKind",
+    "matches a cold build for a delta row whose item kind is $itemKind (reused: $reused)",
     (testCase) => {
       withTestThread((testThread) => {
         const args = latestArgs("default");
@@ -985,10 +998,116 @@ describe("latest timeline selection memo", () => {
           },
         ]);
         const after = expectWarmEqualsCold(testThread, args, "after");
-        expect(selectionWasReused(after.profile)).toBe(false);
+        expect(selectionWasReused(after.profile)).toBe(testCase.reused);
       });
     },
   );
+
+  it("reuses the selection for child rows of a subagent already in the window", () => {
+    withTestThread((testThread) => {
+      const args = latestArgs("default");
+      append(testThread, [
+        ...startTurn(initialState()),
+        agentToolCall("item/started", "turn-1", "agent-1"),
+        childCommand("turn-1", "child-1", "agent-1"),
+      ]);
+      expectWarmEqualsCold(testThread, args, "before");
+      append(testThread, [
+        childCommand("turn-1", "child-2", "agent-1"),
+        {
+          data: { itemId: "agent-1", message: "working" },
+          itemId: "agent-1",
+          itemKind: "toolCall",
+          turnId: "turn-1",
+          type: "item/toolCall/progress",
+        },
+      ]);
+      const child = expectWarmEqualsCold(testThread, args, "child");
+      expect(selectionWasReused(child.profile)).toBe(true);
+      append(testThread, [
+        agentToolCall("item/completed", "turn-1", "agent-1"),
+      ]);
+      const completed = expectWarmEqualsCold(testThread, args, "completed");
+      expect(selectionWasReused(completed.profile)).toBe(true);
+    });
+  });
+
+  it("rebuilds when a tool call first appears after rows that name it as their parent", () => {
+    withTestThread((testThread) => {
+      const args = latestArgs("default");
+      append(testThread, [
+        ...startTurn(initialState()),
+        messageStarted("turn-1", "message-1"),
+        {
+          data: {},
+          parentToolCallId: "agent-late",
+          turnId: "sub-turn-1",
+          type: "turn/started",
+        },
+        childCommand("sub-turn-1", "early-child", "agent-late"),
+      ]);
+      expectWarmEqualsCold(testThread, args, "before");
+      append(testThread, [
+        agentToolCall("item/started", "turn-1", "agent-late"),
+      ]);
+      const late = expectWarmEqualsCold(testThread, args, "late parent");
+      expect(selectionWasReused(late.profile)).toBe(false);
+    });
+  });
+
+  it.each([
+    { includeDiagnosticOperations: false, reused: true },
+    { includeDiagnosticOperations: true, reused: true },
+  ])(
+    "matches a cold build when a diagnostic row streams in (diagnostics shown: $includeDiagnosticOperations)",
+    ({ includeDiagnosticOperations, reused }) => {
+      withTestThread((testThread) => {
+        const args = latestArgs("default", includeDiagnosticOperations);
+        append(testThread, [
+          ...startTurn(initialState()),
+          messageStarted("turn-1", "message-1"),
+        ]);
+        expectWarmEqualsCold(testThread, args, "before");
+        append(testThread, [
+          {
+            data: {
+              providerId: "codex",
+              rawType: "session.updated",
+              rawEvent: { jsonrpc: "2.0", method: "session.updated" },
+            },
+            turnId: "turn-1",
+            type: "provider/unhandled",
+          },
+          messageDelta("turn-1", "message-1", "after\n"),
+        ]);
+        const after = expectWarmEqualsCold(testThread, args, "after");
+        expect(selectionWasReused(after.profile)).toBe(reused);
+      });
+    },
+  );
+
+  it.each([
+    {
+      name: "a goal update",
+      row: (threadId: string) => goalRow(threadId, "Ship"),
+    },
+    {
+      name: "a plan steps snapshot",
+      row: () => planStepsRow("turn-1", "plan-1", "Implement"),
+    },
+  ])("rebuilds when $name changes the head state", ({ row }) => {
+    withTestThread((testThread) => {
+      const args = latestArgs("default");
+      append(testThread, [
+        ...startTurn(initialState()),
+        messageStarted("turn-1", "message-1"),
+      ]);
+      expectWarmEqualsCold(testThread, args, "before");
+      append(testThread, [row(testThread.thread.id)]);
+      const after = expectWarmEqualsCold(testThread, args, "after");
+      expect(selectionWasReused(after.profile)).toBe(false);
+    });
+  });
 
   it("rebuilds when appended deltas move the budget floor past an anchor", () => {
     withTestThread((testThread) => {

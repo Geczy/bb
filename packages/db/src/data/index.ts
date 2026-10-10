@@ -320,7 +320,7 @@ export {
   listTimelineWindowHintsDescending,
   getFirstParentedTimelineBoundarySequence,
   getTimelineGroupingContextChangesInRange,
-  listStoredEventRowsInSequenceRange,
+  hasParentedEventInSequenceRange,
   listTimelineOrderingContext,
   listTimelineInterruptionRows,
   findTimelineWindowBudgetFloorSequence,

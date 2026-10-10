@@ -2842,7 +2842,10 @@ function selectStoredConversationOutlineEventRows(
     .where(
       and(
         rootWhere,
-        storedConversationOutlineLifecycleWhere(args.threadId, args.sequenceStart),
+        storedConversationOutlineLifecycleWhere(
+          args.threadId,
+          args.sequenceStart,
+        ),
       ),
     );
   const completedConversationRows = db
@@ -2851,7 +2854,10 @@ function selectStoredConversationOutlineEventRows(
     .where(
       and(
         rootWhere,
-        storedConversationOutlineCompletedWhere(args.threadId, args.sequenceStart),
+        storedConversationOutlineCompletedWhere(
+          args.threadId,
+          args.sequenceStart,
+        ),
       ),
     );
   const structuralRows = db
@@ -3043,29 +3049,25 @@ export function getTimelineGroupingContextChangesInRange(
   return { ordering: row?.ordering === 1, parented: row?.parented === 1 };
 }
 
-export function listStoredEventRowsInSequenceRange(
+export function hasParentedEventInSequenceRange(
   db: DbConnection,
   args: {
     afterSequence: number;
-    limit: number;
-    maxInlineOutputChars: InlineOutputCharLimit;
     threadId: string;
     throughSequence: number;
   },
-): StoredEventRow[] {
-  return db
-    .select(storedEventRowSqlFields(args.maxInlineOutputChars))
-    .from(sql`${events} INDEXED BY events_thread_sequence_idx`)
-    .where(
-      and(
-        eq(events.threadId, args.threadId),
-        gt(events.sequence, args.afterSequence),
-        lte(events.sequence, args.throughSequence),
-      ),
-    )
-    .orderBy(events.sequence)
-    .limit(args.limit)
-    .all();
+): boolean {
+  return (
+    db.get<{ found: number }>(sql`
+      SELECT 1 AS found
+      FROM events INDEXED BY events_thread_sequence_idx
+      WHERE thread_id = ${args.threadId}
+        AND sequence > ${args.afterSequence}
+        AND sequence <= ${args.throughSequence}
+        AND parent_tool_call_id IS NOT NULL
+      LIMIT 1
+    `) !== undefined
+  );
 }
 
 export function getFirstParentedTimelineBoundarySequence(

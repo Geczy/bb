@@ -22,7 +22,7 @@ import {
   getFirstParentedTimelineBoundarySequence,
   getTimelineGroupingContextChangesInRange,
   hasStoredSpawnAgentToolCall,
-  listStoredEventRowsInSequenceRange,
+  hasParentedEventInSequenceRange,
   getLastStoredProviderThreadId,
   insertEvents,
   listActiveBackgroundTaskCountsByThreadIds,
@@ -33,6 +33,7 @@ import {
   listStoredConversationOutlineEventRows,
   listStoredEventRows,
   listStoredEventRowsByParentToolCallIds,
+  listStoredTimelineWindowEventRows,
   listStoredTurnCompletedKeys,
   listTodoSnapshotEventRowsForThread,
 } from "../src/data/events.js";
@@ -253,9 +254,11 @@ describe("slow query index plans", () => {
         "USING INDEX events_delegating_item_lookup_idx (thread_id=?)",
       );
       db.$client
-        .prepare(`INSERT INTO events
+        .prepare(
+          `INSERT INTO events
         (id, thread_id, scope_kind, sequence, type, item_kind, data, created_at)
-        VALUES (?, ?, 'thread', ?, 'item/started', ?, ?, 0)`)
+        VALUES (?, ?, 'thread', ?, 'item/started', ?, ?, 0)`,
+        )
         .run(
           "ordinary-tool",
           thread.id,
@@ -265,9 +268,11 @@ describe("slow query index plans", () => {
         );
       expect(hasStoredSpawnAgentToolCall(db, thread.id)).toBe(false);
       db.$client
-        .prepare(`INSERT INTO events
+        .prepare(
+          `INSERT INTO events
         (id, thread_id, scope_kind, sequence, type, item_kind, data, created_at)
-        VALUES (?, ?, 'thread', 3, 'item/completed', 'delegation', ?, 0)`)
+        VALUES (?, ?, 'thread', 3, 'item/completed', 'delegation', ?, 0)`,
+        )
         .run(
           "delegation",
           thread.id,
@@ -275,9 +280,11 @@ describe("slow query index plans", () => {
         );
       expect(hasStoredSpawnAgentToolCall(db, thread.id)).toBe(false);
       db.$client
-        .prepare(`INSERT INTO events
+        .prepare(
+          `INSERT INTO events
         (id, thread_id, scope_kind, sequence, type, item_kind, data, created_at)
-        VALUES (?, ?, 'thread', ?, 'item/completed', ?, ?, 0)`)
+        VALUES (?, ?, 'thread', ?, 'item/completed', ?, ?, 0)`,
+        )
         .run(
           "spawn-tool",
           thread.id,
@@ -692,12 +699,10 @@ describe("slow query index plans", () => {
         }),
     },
     {
-      name: "lists rows in a sequence range",
+      name: "probes appended parented rows",
       run: (db: DbConnection, threadId: string) =>
-        listStoredEventRowsInSequenceRange(db, {
+        hasParentedEventInSequenceRange(db, {
           afterSequence: 10,
-          limit: 513,
-          maxInlineOutputChars: 32_000,
           threadId,
           throughSequence: 30,
         }),
@@ -712,6 +717,29 @@ describe("slow query index plans", () => {
     expect(queryPlanDetails({ db, ...query }).split("\n")).toEqual([
       "SEARCH events USING INDEX events_thread_sequence_idx (thread_id=? AND sequence>? AND sequence<?)",
     ]);
+
+    db.$client.close();
+  });
+
+  it("reads appended window rows through the thread sequence index", () => {
+    const { db, thread } = setup();
+
+    const [query] = captureStatements(db, () =>
+      listStoredTimelineWindowEventRows(db, {
+        beforeSequence: 31,
+        excludeDiagnosticEvents: true,
+        excludedTypes: ["thread/tokenUsage/updated"],
+        maxInlineOutputChars: 32_000,
+        sequenceStart: 11,
+        threadId: thread.id,
+      }),
+    );
+    if (!query) {
+      throw new Error("Expected the window-range SQL");
+    }
+    expect(queryPlanDetails({ db, ...query }).split("\n")[0]).toBe(
+      "SEARCH events USING INDEX events_thread_sequence_idx (thread_id=? AND sequence>? AND sequence<?)",
+    );
 
     db.$client.close();
   });
@@ -1045,9 +1073,10 @@ describe("slow query index plans", () => {
         expect(supportQueries.length).toBeGreaterThan(0);
         for (const statement of supportQueries) {
           const instructions = db.$client
-            .prepare<SqliteParameter[], { p4: string | null }>(
-              `EXPLAIN ${statement.sql}`,
-            )
+            .prepare<
+              SqliteParameter[],
+              { p4: string | null }
+            >(`EXPLAIN ${statement.sql}`)
             .all(...statement.params);
           expect(instructions.some((row) => row.p4?.startsWith("json_"))).toBe(
             false,
@@ -1150,9 +1179,10 @@ describe("slow query index plans", () => {
       },
     ]);
     const insertedEvent = db.$client
-      .prepare<[string, number], IdentifiedRow>(
-        "SELECT id FROM events WHERE thread_id = ? AND sequence = ?",
-      )
+      .prepare<
+        [string, number],
+        IdentifiedRow
+      >("SELECT id FROM events WHERE thread_id = ? AND sequence = ?")
       .get(thread.id, 1);
     if (!insertedEvent) {
       throw new Error("Expected completed output query-plan event");
@@ -1270,9 +1300,10 @@ describe("slow query index plans", () => {
       },
     ]);
     const insertedEvent = db.$client
-      .prepare<[string, number], IdentifiedRow>(
-        "SELECT id FROM events WHERE thread_id = ? AND sequence = ?",
-      )
+      .prepare<
+        [string, number],
+        IdentifiedRow
+      >("SELECT id FROM events WHERE thread_id = ? AND sequence = ?")
       .get(thread.id, 1);
     if (!insertedEvent) {
       throw new Error("Expected legacy image generation query-plan event");
@@ -1587,9 +1618,10 @@ describe("slow query index plans", () => {
       });
       for (const statement of statements) {
         const instructions = db.$client
-          .prepare<SqliteParameter[], { p4: string | null }>(
-            `EXPLAIN ${statement.sql}`,
-          )
+          .prepare<
+            SqliteParameter[],
+            { p4: string | null }
+          >(`EXPLAIN ${statement.sql}`)
           .all(...statement.params);
         expect(
           instructions.filter((row) => /^(json_|sum\()/u.test(row.p4 ?? "")),
@@ -1695,9 +1727,10 @@ describe("slow query index plans", () => {
   it("drops redundant events indexes after creating their consolidated replacement", () => {
     const { db } = setup();
     const indexRows = db.$client
-      .prepare<[], IndexNameRow>(
-        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'",
-      )
+      .prepare<
+        [],
+        IndexNameRow
+      >("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'")
       .all();
     const indexNames = indexRows.map((row) => row.name);
 
