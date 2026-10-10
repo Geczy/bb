@@ -47,13 +47,6 @@ export interface ThreadTimelineWindowRequest {
   summaryOnly: boolean;
 }
 
-const MAX_PUSH_PAUSE_MS = 1_000;
-
-interface ThreadPushSchedule {
-  nextAllowedAt: number;
-  timer: ReturnType<typeof setTimeout> | null;
-}
-
 export interface ThreadTimelineWindows {
   read(
     thread: Thread,
@@ -91,7 +84,7 @@ export function createThreadTimelineWindows(
     ThreadTimelineSubscriptionTarget,
     ThreadTimelineResponse
   >();
-  const pushSchedulesByThreadId = new Map<string, ThreadPushSchedule>();
+  const pendingPushThreadIds = new Set<string>();
   const slowTimelineBuildLogger = createSlowThreadTimelineBuildLogger({
     logger: deps.logger,
   });
@@ -252,42 +245,22 @@ export function createThreadTimelineWindows(
     }
   }
 
-  function runScheduledPush(threadId: string): void {
-    const schedule = pushSchedulesByThreadId.get(threadId);
-    if (schedule === undefined) {
-      return;
+  function flushPendingPushes(): void {
+    const threadIds = [...pendingPushThreadIds];
+    pendingPushThreadIds.clear();
+    for (const threadId of threadIds) {
+      try {
+        pushThread(threadId);
+      } catch (error) {
+        deps.logger.warn(
+          {
+            threadId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to push thread timeline",
+        );
+      }
     }
-    schedule.timer = null;
-    const startedAt = performance.now();
-    try {
-      pushThread(threadId);
-    } catch (error) {
-      deps.logger.warn(
-        {
-          threadId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "Failed to push thread timeline",
-      );
-    }
-    const finishedAt = performance.now();
-    schedule.nextAllowedAt =
-      finishedAt + Math.min(MAX_PUSH_PAUSE_MS, finishedAt - startedAt);
-  }
-
-  function schedulePush(threadId: string): void {
-    const schedule = pushSchedulesByThreadId.get(threadId) ?? {
-      nextAllowedAt: 0,
-      timer: null,
-    };
-    pushSchedulesByThreadId.set(threadId, schedule);
-    if (schedule.timer !== null) {
-      return;
-    }
-    schedule.timer = setTimeout(
-      () => runScheduledPush(threadId),
-      Math.max(0, schedule.nextAllowedAt - performance.now()),
-    );
   }
 
   deps.hub.onChangedMessage((message) => {
@@ -296,18 +269,16 @@ export function createThreadTimelineWindows(
     }
     if (message.changes.includes("thread-deleted")) {
       deltaFloorByThreadId.delete(message.id);
-      const schedule = pushSchedulesByThreadId.get(message.id);
-      if (schedule?.timer) {
-        clearTimeout(schedule.timer);
-      }
-      pushSchedulesByThreadId.delete(message.id);
       return;
     }
     if (
       message.changes.includes("events-appended") &&
       deps.hub.listThreadTimelineTargets(message.id).length > 0
     ) {
-      schedulePush(message.id);
+      if (pendingPushThreadIds.size === 0) {
+        setImmediate(flushPendingPushes);
+      }
+      pendingPushThreadIds.add(message.id);
     }
     const rewritten = message.changes.includes("history-rewritten");
     if (!rewritten && !message.changes.includes("history-compacted")) {
