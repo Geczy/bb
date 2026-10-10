@@ -10,6 +10,7 @@ import {
   getLatestThreadSequence,
   getThreadEventRewriteGeneration,
   hasParentedEventInSequenceRange,
+  listStoredDelegatingItemRowsByItemIds,
   listStoredEventRowsByParentToolCallIds,
   listStoredTimelineWindowEventRows,
   type DbConnection,
@@ -245,7 +246,16 @@ function appendedToolCallsKeepSelection(
     ...selectedToolCallIds,
     ...appendedToolCallIds,
   ]);
-  if ([...childParentIds].some((id) => !visibleToolCallIds.has(id))) {
+  const unseenParentIds = [...childParentIds].filter(
+    (id) => !visibleToolCallIds.has(id),
+  );
+  if (
+    listStoredDelegatingItemRowsByItemIds(db, {
+      itemIds: unseenParentIds,
+      maxInlineOutputChars: args.maxInlineOutputChars,
+      threadId: args.threadId,
+    }).some((row) => row.sequence <= args.maxSeq)
+  ) {
     return false;
   }
   const selectedRowIds = new Set(entry.selection.rows.map((row) => row.id));
@@ -255,7 +265,7 @@ function appendedToolCallsKeepSelection(
     excludeDiagnosticEvents: args.excludeDiagnosticEvents,
     maxInlineOutputChars: args.maxInlineOutputChars,
     parentToolCallIds: [
-      ...childParentIds,
+      ...[...childParentIds].filter((id) => visibleToolCallIds.has(id)),
       ...appendedToolCallIds.filter((id) => !selectedToolCallIds.has(id)),
     ],
     sequenceStart: args.epochSequenceStart,

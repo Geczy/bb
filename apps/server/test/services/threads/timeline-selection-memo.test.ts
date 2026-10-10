@@ -734,7 +734,7 @@ describe("latest timeline selection memo", () => {
     expect(rebuilt).toBeGreaterThan(SEEDS * 10);
   }, 120_000);
 
-  it("reuses the selection for root deltas and lifecycle rows and rebuilds for an unseen parent", () => {
+  it("reuses the selection for root deltas, lifecycle rows and children of a parent that was never stored", () => {
     withTestThread((testThread) => {
       const args = latestArgs("default");
       append(testThread, [
@@ -789,7 +789,7 @@ describe("latest timeline selection memo", () => {
         },
       ]);
       const parented = expectWarmEqualsCold(testThread, args, "parented");
-      expect(selectionWasReused(parented.profile)).toBe(false);
+      expect(selectionWasReused(parented.profile)).toBe(true);
     });
   });
 
@@ -1052,6 +1052,26 @@ describe("latest timeline selection memo", () => {
       ]);
       const completed = expectWarmEqualsCold(testThread, args, "completed");
       expect(selectionWasReused(completed.profile)).toBe(true);
+    });
+  });
+
+  it("rebuilds when a child row names a parent stored before a context clear", () => {
+    withTestThread((testThread) => {
+      const state = initialState();
+      const args = latestArgs("default");
+      append(testThread, [
+        ...startTurn(state),
+        agentToolCall("item/started", "turn-1", "agent-old"),
+        completeTurn(state, "turn-1"),
+        contextClear("clear-1"),
+        ...startTurn(state),
+        messageStarted("turn-2", "message-2"),
+      ]);
+      const before = expectWarmEqualsCold(testThread, args, "before");
+      expect(before.response.contextBoundarySeq).not.toBeNull();
+      append(testThread, [childCommand("turn-2", "child-1", "agent-old")]);
+      const child = expectWarmEqualsCold(testThread, args, "child");
+      expect(selectionWasReused(child.profile)).toBe(false);
     });
   });
 
