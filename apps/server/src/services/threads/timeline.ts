@@ -1357,8 +1357,7 @@ function buildThreadTimelineInternal(
         return lookup.selection;
       }
       const result = selectRows(lookup.budgetFloor);
-      rememberLatestTimelineSelection(db, memoArgs, lookup, result);
-      return result.selection;
+      return rememberLatestTimelineSelection(db, memoArgs, lookup, result);
     },
   );
   const eventSelection =

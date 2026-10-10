@@ -57,6 +57,7 @@ export interface LatestTimelineSelectionMemoArgs {
 export interface LatestTimelineSelectionLookup {
   budgetFloor: TimelineBudgetFloor | null;
   checkpoints: Map<string, EventProjectionCheckpoint>;
+  previousRows: readonly StoredEventRow[];
   dataVersion: number;
   generation: number;
   selection: TimelineEventRowSelection | null;
@@ -343,6 +344,7 @@ export function lookupLatestTimelineSelection(
     budgetFloor: null,
     checkpoints: entry?.checkpoints ?? new Map(),
     dataVersion,
+    previousRows: entry?.selection.rows ?? [],
     generation,
     selection: null,
   };
@@ -392,13 +394,50 @@ export function lookupLatestTimelineSelection(
   return { ...miss, budgetFloor, selection };
 }
 
+function isSameStoredEventRow(
+  left: StoredEventRow,
+  right: StoredEventRow,
+): boolean {
+  return (
+    left.sequence === right.sequence &&
+    left.type === right.type &&
+    left.threadId === right.threadId &&
+    left.scopeKind === right.scopeKind &&
+    left.turnId === right.turnId &&
+    left.providerThreadId === right.providerThreadId &&
+    left.itemId === right.itemId &&
+    left.itemKind === right.itemKind &&
+    left.parentToolCallId === right.parentToolCallId &&
+    left.createdAt === right.createdAt &&
+    left.data === right.data
+  );
+}
+
+function reuseUnchangedRows(
+  rows: StoredEventRow[],
+  previousRows: readonly StoredEventRow[],
+): StoredEventRow[] {
+  if (previousRows.length === 0) return rows;
+  const previousById = new Map(previousRows.map((row) => [row.id, row]));
+  return rows.map((row) => {
+    const previous = previousById.get(row.id);
+    return previous !== undefined && isSameStoredEventRow(previous, row)
+      ? previous
+      : row;
+  });
+}
+
 export function rememberLatestTimelineSelection(
   db: DbConnection,
   args: LatestTimelineSelectionMemoArgs,
   lookup: LatestTimelineSelectionLookup,
   result: StandardTimelineEventRowSelection,
-): void {
+): TimelineEventRowSelection {
   const memo = getSelectionMemo(db);
+  const selection: TimelineEventRowSelection = {
+    ...result.selection,
+    rows: reuseUnchangedRows(result.selection.rows, lookup.previousRows),
+  };
   deleteThreadMemoEntries(
     memo,
     args.threadId,
@@ -409,15 +448,16 @@ export function rememberLatestTimelineSelection(
     hints: result.hints,
     appendableTurnIds: result.fetchedTurnIds,
     dataChars:
-      dataCharsOfRows(result.selection.rows) +
-      dataCharsOfRows(result.selection.headStateRows),
+      dataCharsOfRows(selection.rows) +
+      dataCharsOfRows(selection.headStateRows),
     dataVersion: lookup.dataVersion,
     epochSequenceStart: args.epochSequenceStart,
     generation: lookup.generation,
     maxSeq: args.maxSeq,
-    selection: result.selection,
+    selection,
     threadId: args.threadId,
   });
+  return selection;
 }
 
 export function latestTimelineProjectionCheckpoint(
