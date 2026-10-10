@@ -1,4 +1,8 @@
-import { THREAD_TIMELINE_EXCLUDED_EVENT_TYPES } from "@bb/thread-view";
+import {
+  createEventProjectionCheckpoint,
+  THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+  type EventProjectionCheckpoint,
+} from "@bb/thread-view";
 import type { ThreadEventType } from "@bb/domain";
 import {
   findTimelineWindowBudgetFloorSequence,
@@ -48,12 +52,14 @@ export interface LatestTimelineSelectionMemoArgs {
 
 export interface LatestTimelineSelectionLookup {
   budgetFloor: TimelineBudgetFloor | null;
+  checkpoints: Map<string, EventProjectionCheckpoint>;
   dataVersion: number;
   generation: number;
   selection: TimelineEventRowSelection | null;
 }
 
 interface TimelineSelectionMemoEntry {
+  checkpoints: Map<string, EventProjectionCheckpoint>;
   hints: readonly TimelineWindowHint[];
   appendableTurnIds: ReadonlySet<string>;
   dataChars: number;
@@ -71,6 +77,7 @@ interface TimelineSelectionMemo {
 }
 
 export const TIMELINE_SELECTION_MEMO_MAX_ENTRIES = 16;
+const TIMELINE_PROJECTION_CHECKPOINTS_PER_ENTRY = 4;
 const TIMELINE_SELECTION_MEMO_MAX_DATA_CHARS = 16_000_000;
 const TIMELINE_SELECTION_MEMO_MAX_APPENDED_ROWS = 512;
 
@@ -252,15 +259,16 @@ export function lookupLatestTimelineSelection(
 ): LatestTimelineSelectionLookup {
   const generation = getThreadEventRewriteGeneration(args.threadId);
   const dataVersion = getDatabaseDataVersion(db);
+  const memo = selectionMemos.get(db);
+  const key = selectionMemoKey(args);
+  const entry = memo?.entries.get(key);
   const miss: LatestTimelineSelectionLookup = {
     budgetFloor: null,
+    checkpoints: entry?.checkpoints ?? new Map(),
     dataVersion,
     generation,
     selection: null,
   };
-  const memo = selectionMemos.get(db);
-  const key = selectionMemoKey(args);
-  const entry = memo?.entries.get(key);
   if (
     memo === undefined ||
     entry === undefined ||
@@ -320,6 +328,7 @@ export function rememberLatestTimelineSelection(
     (entry) => entry.epochSequenceStart === args.epochSequenceStart,
   );
   storeMemoEntry(memo, selectionMemoKey(args), {
+    checkpoints: lookup.checkpoints,
     hints: result.hints,
     appendableTurnIds: result.fetchedTurnIds,
     dataChars:
@@ -332,4 +341,24 @@ export function rememberLatestTimelineSelection(
     selection: result.selection,
     threadId: args.threadId,
   });
+}
+
+export function latestTimelineProjectionCheckpoint(
+  checkpoints: Map<string, EventProjectionCheckpoint>,
+  key: string,
+): EventProjectionCheckpoint {
+  const existing = checkpoints.get(key);
+  if (existing !== undefined) {
+    checkpoints.delete(key);
+    checkpoints.set(key, existing);
+    return existing;
+  }
+  const checkpoint = createEventProjectionCheckpoint();
+  checkpoints.set(key, checkpoint);
+  while (checkpoints.size > TIMELINE_PROJECTION_CHECKPOINTS_PER_ENTRY) {
+    const oldest = checkpoints.keys().next().value;
+    if (oldest === undefined) break;
+    checkpoints.delete(oldest);
+  }
+  return checkpoint;
 }

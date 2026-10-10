@@ -51,6 +51,10 @@ export {
   buildThreadTimelineFromEvents,
   buildThreadTimelineTurnDetailsFromEvents,
 } from "./build-thread-timeline.js";
+export {
+  createEventProjectionCheckpoint,
+  type EventProjectionCheckpoint,
+} from "./build-event-projection.js";
 export { extractThreadTimelineActivePlanTurn } from "./active-prompt-mode-extraction.js";
 export { extractThreadTimelineGoal } from "./goal-snapshot-extraction.js";
 export {

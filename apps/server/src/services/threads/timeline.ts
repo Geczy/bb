@@ -29,6 +29,7 @@ import {
   compactThreadTimelineSummaryEvents,
   MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION,
   type AcceptedClientRequestContext,
+  type EventProjectionCheckpoint,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import {
@@ -116,6 +117,7 @@ import { decodeStoredEventRowCached } from "./stored-event-decode-cache.js";
 import {
   selectTimelineWindowStart,
   forgetLatestTimelineSelections,
+  latestTimelineProjectionCheckpoint,
   lookupLatestTimelineSelection,
   rememberLatestTimelineSelection,
   type LatestTimelineSelectionMemoArgs,
@@ -1336,6 +1338,8 @@ function buildThreadTimelineInternal(
           threadId: thread.id,
         }
       : null;
+  let projectionCheckpoints: Map<string, EventProjectionCheckpoint> | null =
+    null;
   const storedEventSelection = measureThreadTimelineStage(
     profile,
     "event-query",
@@ -1348,6 +1352,7 @@ function buildThreadTimelineInternal(
         "selection-memo-lookup",
         () => lookupLatestTimelineSelection(db, memoArgs),
       );
+      projectionCheckpoints = lookup.checkpoints;
       if (lookup.selection !== null) {
         return lookup.selection;
       }
@@ -1429,12 +1434,25 @@ function buildThreadTimelineInternal(
     acceptedClientRequestEvents: [],
     rejectedClientRequestEvents: [],
   };
+  const checkpoint =
+    projectionCheckpoints === null
+      ? undefined
+      : latestTimelineProjectionCheckpoint(
+          projectionCheckpoints,
+          JSON.stringify([
+            includeDiagnosticOperations,
+            options.providerDisplayName ?? null,
+            commonProjectionOptions.threadName,
+            snapshot.status,
+          ]),
+        );
   const timeline = measureThreadTimelineStage(
     profile,
     "thread-view-projection",
     () =>
       buildThreadTimelineFromEvents({
         acceptedClientRequestContext,
+        checkpoint,
         contextWindowEvents,
         headStateEvents,
         events: decodedEvents,

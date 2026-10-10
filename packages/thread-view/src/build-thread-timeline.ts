@@ -46,6 +46,7 @@ import { getEventProjectionMessageScopeTurnId } from "./message-scope.js";
 import {
   buildEventProjection,
   buildEventProjectionEntries,
+  type EventProjectionCheckpoint,
   type ThreadEventWithMeta,
 } from "./build-event-projection.js";
 import {
@@ -91,6 +92,7 @@ interface ThreadTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOp
 
 interface BuildThreadTimelineFromEventsArgs {
   acceptedClientRequestContext: AcceptedClientRequestContext;
+  checkpoint?: EventProjectionCheckpoint;
   contextWindowEvents: ThreadEventWithMeta[];
   headStateEvents?: ThreadEventWithMeta[];
   events: ThreadEventWithMeta[];
@@ -1166,7 +1168,11 @@ export function buildThreadTimelineFromEvents(
     threadName: args.options.threadName,
     turnMessageDetail: "full",
   } satisfies Parameters<typeof buildEventProjection>[1];
-  const projection = buildEventProjection(args.events, projectionOptions);
+  const projection = buildEventProjection(
+    args.events,
+    projectionOptions,
+    args.checkpoint,
+  );
 
   const rows = [
     ...buildTimelineRows(projection, {

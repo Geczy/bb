@@ -1,4 +1,5 @@
 import { buildPendingSteerMessagesFromEvents } from "../src/build-thread-timeline.js";
+import { assertTimelineResumesFromEveryCheckpoint } from "./timeline-checkpoint-resume.js";
 import { assertTimelineSourceOwnership } from "./timeline-source-ownership.js";
 import {
   buildThreadEvent,
@@ -1489,7 +1490,7 @@ export function renderTimelineFixture(
     threadName: args.projectionOptions.threadName ?? "",
     workspaceRoot: null,
   };
-  const timeline = buildThreadTimelineFromEvents({
+  const timelineArgs = {
     acceptedClientRequestContext: EMPTY_ACCEPTED_CLIENT_REQUEST_CONTEXT,
     contextWindowEvents: [],
     events: decodedEvents,
@@ -1497,7 +1498,9 @@ export function renderTimelineFixture(
       ...commonProjectionOptions,
       includeNestedRows,
     },
-  });
+  };
+  const timeline = buildThreadTimelineFromEvents(timelineArgs);
+  assertTimelineResumesFromEveryCheckpoint(timelineArgs, timeline);
   const rows = timeline.rows;
   const ownershipProjection =
     includeNestedRows || args.projectionOptions.turnMessageDetail === "full"
