@@ -15,7 +15,7 @@ import type { DbConnection } from "@bb/db";
 import { defaultFeatureFlags } from "@bb/domain";
 import type { Thread } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
-import type { CorpusThread } from "@bb/test-helpers";
+import type { CorpusStoredEventRow, CorpusThread } from "@bb/test-helpers";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { resolveRepoRelativeFile } from "./env-file-path.js";
@@ -115,12 +115,7 @@ export function loadCorpusThreadIntoDb(
           updatedAt: row.updatedAt,
         })
         .run();
-      for (const event of corpusThread.eventRows) {
-        tx.run(
-          sql`INSERT INTO events (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, parent_tool_call_id, data, created_at)
-              VALUES (${event.id}, ${event.threadId}, ${null}, ${event.scopeKind}, ${event.turnId}, ${event.providerThreadId}, ${event.sequence}, ${event.type}, ${event.itemId}, ${event.itemKind}, ${event.parentToolCallId}, ${event.data}, ${event.createdAt})`,
-        );
-      }
+      insertCorpusEventRows(tx, corpusThread.eventRows);
     },
     { behavior: "immediate" },
   );
@@ -137,6 +132,18 @@ export function loadCorpusThreadIntoDb(
   };
 }
 
+export function insertCorpusEventRows(
+  db: Pick<DbConnection, "run">,
+  rows: readonly CorpusStoredEventRow[],
+): void {
+  for (const event of rows) {
+    db.run(
+      sql`INSERT INTO events (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, parent_tool_call_id, data, created_at)
+          VALUES (${event.id}, ${event.threadId}, ${null}, ${event.scopeKind}, ${event.turnId}, ${event.providerThreadId}, ${event.sequence}, ${event.type}, ${event.itemId}, ${event.itemKind}, ${event.parentToolCallId}, ${event.data}, ${event.createdAt})`,
+    );
+  }
+}
+
 export type TimelineVariant = "default" | "nested";
 
 export const TIMELINE_VARIANTS: readonly TimelineVariant[] = [
@@ -151,6 +158,7 @@ export interface BuiltTimelinePage {
 
 export interface BuildRouteTimelinePageArgs {
   db: DbConnection;
+  deferContent?: boolean;
   eventBudget?: number;
   includeDiagnosticOperations?: boolean;
   maxSeq?: number;
@@ -169,6 +177,7 @@ export function buildRouteTimelinePage(
     args.thread,
     {
       completedTurnDisplay: "collapse",
+      deferContent: args.deferContent ?? false,
       eventBudget:
         args.eventBudget ?? defaultFeatureFlags.timelineWindowEventBudget,
       includeClearedContextHistory: false,

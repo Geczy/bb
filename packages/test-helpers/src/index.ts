@@ -23,6 +23,9 @@ export {
   loadCorpusThread,
   resolveProviderCorpusDir,
 } from "./provider-corpus.js";
-export type { CorpusThread } from "./provider-corpus.js";
+export type {
+  CorpusStoredEventRow,
+  CorpusThread,
+} from "./provider-corpus.js";
 export { makeTempDir, makeTempDirSync } from "./temp-dir.js";
 export { createMemoryStorage } from "./memory-storage.js";
