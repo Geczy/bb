@@ -92,6 +92,7 @@ import {
   type PendingDelegationTurnLink,
   type ProjectionState,
 } from "./event-projection-state.js";
+import { cloneProjectionState } from "./projection-state-clone.js";
 import { buildProjectionActiveThinking } from "./reasoning-lifecycle-projection.js";
 import { projectAssistantAndReasoningEvent } from "./assistant-event-projection.js";
 
@@ -1113,7 +1114,7 @@ function buildFlatProjectionData(
   const state =
     args.checkpoint === undefined
       ? folded.state
-      : structuredClone(folded.state);
+      : cloneProjectionState(folded.state);
   finalizeProjectionState({ state, options: args.options });
   const messages = sortEventProjectionMessagesBySource(
     normalizeProvisioningFailures(args.events, state.messages),
