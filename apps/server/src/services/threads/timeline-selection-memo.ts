@@ -212,7 +212,9 @@ function isAppendableRow(
 }
 
 function delegatingItemId(row: StoredEventRow): string | null {
-  return row.itemKind === "toolCall" ? row.itemId : null;
+  return row.itemKind === "toolCall" || row.itemKind === "delegation"
+    ? row.itemId
+    : null;
 }
 
 function appendedToolCallsKeepSelection(

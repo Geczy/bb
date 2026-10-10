@@ -1003,7 +1003,42 @@ describe("latest timeline selection memo", () => {
     },
   );
 
-  it("reuses the selection for child rows of a subagent already in the window", () => {
+  it.each(["toolCall", "delegation"] as const)(
+    "reuses the selection for child rows of a %s subagent already in the window",
+    (parentKind) => {
+      withTestThread((testThread) => {
+        const args = latestArgs("default");
+        const parentStarted =
+          parentKind === "toolCall"
+            ? agentToolCall("item/started", "turn-1", "agent-1")
+            : itemRow("item/started", "turn-1", {
+                background: false,
+                childRef: "agent-1-child",
+                id: "agent-1",
+                label: "Investigate",
+                status: "pending",
+                type: "delegation",
+              });
+        append(testThread, [
+          ...startTurn(initialState()),
+          parentStarted,
+          childCommand("turn-1", "child-1", "agent-1"),
+        ]);
+        expectWarmEqualsCold(testThread, args, "before");
+        append(testThread, [
+          childCommand("turn-1", "child-2", "agent-1"),
+          messageStarted("turn-1", "message-1"),
+        ]);
+        const child = expectWarmEqualsCold(testThread, args, "child");
+        expect(selectionWasReused(child.profile)).toBe(true);
+        append(testThread, [childCommand("turn-1", "child-3", "agent-1")]);
+        const again = expectWarmEqualsCold(testThread, args, "again");
+        expect(selectionWasReused(again.profile)).toBe(true);
+      });
+    },
+  );
+
+  it("reuses the selection when a subagent tool call completes", () => {
     withTestThread((testThread) => {
       const args = latestArgs("default");
       append(testThread, [
@@ -1012,18 +1047,6 @@ describe("latest timeline selection memo", () => {
         childCommand("turn-1", "child-1", "agent-1"),
       ]);
       expectWarmEqualsCold(testThread, args, "before");
-      append(testThread, [
-        childCommand("turn-1", "child-2", "agent-1"),
-        {
-          data: { itemId: "agent-1", message: "working" },
-          itemId: "agent-1",
-          itemKind: "toolCall",
-          turnId: "turn-1",
-          type: "item/toolCall/progress",
-        },
-      ]);
-      const child = expectWarmEqualsCold(testThread, args, "child");
-      expect(selectionWasReused(child.profile)).toBe(true);
       append(testThread, [
         agentToolCall("item/completed", "turn-1", "agent-1"),
       ]);
