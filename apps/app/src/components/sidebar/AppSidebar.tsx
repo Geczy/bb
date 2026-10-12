@@ -29,10 +29,6 @@ import {
   usePluginSidebarFooterDisclosure,
 } from "@/components/plugin/PluginSidebarFooterItems";
 import { SidebarPluginAttentionGlyph } from "./SidebarPluginAttentionGlyph";
-import {
-  SidebarNotificationsCard,
-  useSidebarNotificationsPrompt,
-} from "./SidebarNotificationsPrompt";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
 import { SidebarResizeHandle, SidebarTopReserveRow } from "./SidebarChrome";
 import { SIDEBAR_FOOTER_ACTION_CLASS } from "@bb/shared-ui/sidebar-row-classes";
@@ -104,7 +100,6 @@ export function AppSidebar({
   );
   const isAppCommandModifierHeld = useIsAppCommandModifierHeld();
   const pluginSidebarFooter = usePluginSidebarFooterDisclosure();
-  const notificationsPrompt = useSidebarNotificationsPrompt();
 
   const handleNewChat = useCallback(() => {
     closeOnMobile();
@@ -229,9 +224,7 @@ export function AppSidebar({
       <div
         className={cn(
           "relative flex flex-col gap-2",
-          (isFooterCustomizing ||
-            pluginSidebarFooter.activeItem !== null ||
-            notificationsPrompt.visible) &&
+          (isFooterCustomizing || pluginSidebarFooter.activeItem !== null) &&
             "px-2 pt-2",
         )}
       >
@@ -250,10 +243,6 @@ export function AppSidebar({
             item={pluginSidebarFooter.activeItem}
             onDismiss={pluginSidebarFooter.dismiss}
           />
-        )}
-        {isFooterCustomizing ||
-        pluginSidebarFooter.activeItem !== null ? null : (
-          <SidebarNotificationsCard prompt={notificationsPrompt} />
         )}
       </div>
       <SidebarResizeHandle
