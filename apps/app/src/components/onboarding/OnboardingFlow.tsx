@@ -456,6 +456,7 @@ function AgentStepContainer({
         });
 
   const agentReady = hasReadyAgent(states);
+  const agentBlocked = agents === null ? statesQuery.isError : !agentReady;
   return (
     <OnboardingLayout
       {...chrome}
@@ -463,11 +464,11 @@ function AgentStepContainer({
       title="Connect a coding agent"
       description="bb runs the agents you already use. You need one that is installed and signed in on this computer."
       footerNote={
-        agentReady ? null : "Threads can't start until one agent is ready."
+        agentBlocked ? "Threads can't start until one agent is ready." : null
       }
       primaryLabel="Continue"
       primaryDisabled={!agentReady}
-      secondaryLabel={agentReady ? undefined : "Skip for now"}
+      secondaryLabel={agentBlocked ? "Skip for now" : undefined}
       onPrimary={onContinue}
       onSecondary={onContinue}
     >
@@ -833,11 +834,13 @@ function DevicesStepContainer({
   hostId,
   onBack,
   onFinish,
+  onLeave,
 }: {
   chrome: StepChrome;
   hostId: string | null;
   onBack: () => void;
   onFinish: () => void;
+  onLeave: () => void;
 }) {
   const configQuery = useSystemConfig();
   const hostsQuery = useHosts();
@@ -847,8 +850,8 @@ function DevicesStepContainer({
   const [initialPathname] = useState(location.pathname);
   const navigatedAway = location.pathname !== initialPathname;
   useEffect(() => {
-    if (navigatedAway) onFinish();
-  }, [navigatedAway, onFinish]);
+    if (navigatedAway) onLeave();
+  }, [navigatedAway, onLeave]);
   const otherMachineCount = (hostsQuery.data ?? []).filter(
     (host) => host.id !== hostId,
   ).length;
@@ -929,7 +932,10 @@ export function OnboardingFlow({
       },
     });
   }, [agentStates]);
+  const reachedStepsRef = useRef(new Set<OnboardingStepId>());
   useEffect(() => {
+    if (reachedStepsRef.current.has(step)) return;
+    reachedStepsRef.current.add(step);
     recordTelemetryEvent({
       name: "onboarding_step_reached",
       properties: { step, entry },
@@ -1022,6 +1028,7 @@ export function OnboardingFlow({
           hostId={hostId}
           onBack={goTo(-1)}
           onFinish={() => close("completed")}
+          onLeave={() => close("skipped")}
         />
       );
   }
