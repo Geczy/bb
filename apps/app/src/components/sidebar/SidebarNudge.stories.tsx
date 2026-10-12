@@ -26,6 +26,7 @@ export function Overview() {
   return (
     <StoryCard labelWidth="200px">
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="notifications"
         hint="Shown once a thread is running and browser permission is undecided. Body only, one action, dismiss reads as Not now."
       >
@@ -42,6 +43,7 @@ export function Overview() {
         </SidebarFooterFrame>
       </StoryRow>
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="mobile app"
         hint="The same nudge after the notification card is answered."
       >
@@ -56,6 +58,7 @@ export function Overview() {
         </SidebarFooterFrame>
       </StoryRow>
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="no action"
         hint="A nudge that only informs still keeps one dismiss control."
       >
