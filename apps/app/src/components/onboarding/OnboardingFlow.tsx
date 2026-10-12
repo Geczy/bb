@@ -90,10 +90,6 @@ import {
   shortRemoteName,
   type OnboardingStepId,
 } from "./onboarding-model";
-import {
-  recordTelemetryEvent,
-  type OnboardingEntry,
-} from "./onboarding-telemetry";
 
 const SIGN_IN_POLL_INTERVAL_MS = 3_000;
 const SIGN_IN_TERMINAL_COLS = 200;
@@ -501,7 +497,6 @@ function ProjectsStepContainer({
   projectIdsAtOpen,
   onBack,
   onContinue,
-  onSkip,
 }: {
   chrome: StepChrome;
   hostId: string | null;
@@ -509,7 +504,6 @@ function ProjectsStepContainer({
   projectIdsAtOpen: ReadonlySet<string> | null;
   onBack: () => void;
   onContinue: () => void;
-  onSkip: () => void;
 }) {
   const reposQuery = useHostDiscoveredRepos(hostId);
   const createProject = useCreateProject();
@@ -646,7 +640,7 @@ function ProjectsStepContainer({
         if (selectedPaths.size === 0) onContinue();
         else void importSelected();
       }}
-      onSecondary={onSkip}
+      onSecondary={onContinue}
       onBack={onBack}
     >
       <ProjectsStep
@@ -777,12 +771,10 @@ function PluginsStepContainer({
   chrome,
   onBack,
   onContinue,
-  onSkip,
 }: {
   chrome: StepChrome;
   onBack: () => void;
   onContinue: () => void;
-  onSkip: () => void;
 }) {
   const catalogQuery = usePluginCatalogSearch("", { enabled: true });
   const listQuery = usePluginList({ enabled: true });
@@ -820,7 +812,7 @@ function PluginsStepContainer({
       primaryLabel="Continue"
       secondaryLabel="Skip"
       onPrimary={onContinue}
-      onSecondary={onSkip}
+      onSecondary={onContinue}
       onBack={onBack}
     >
       <OnboardingPluginGrid compact={chrome.compact}>
@@ -859,13 +851,11 @@ function DevicesStepContainer({
   hostId,
   onBack,
   onFinish,
-  onLeave,
 }: {
   chrome: StepChrome;
   hostId: string | null;
   onBack: () => void;
   onFinish: () => void;
-  onLeave: () => void;
 }) {
   const configQuery = useSystemConfig();
   const hostsQuery = useHosts();
@@ -876,8 +866,8 @@ function DevicesStepContainer({
   const [initialPathname] = useState(location.pathname);
   const navigatedAway = location.pathname !== initialPathname;
   useEffect(() => {
-    if (navigatedAway) onLeave();
-  }, [navigatedAway, onLeave]);
+    if (navigatedAway) onFinish();
+  }, [navigatedAway, onFinish]);
   const otherMachineCount = (hostsQuery.data ?? []).filter(
     (host) => host.id !== hostId,
   ).length;
@@ -921,11 +911,9 @@ const STEP_ORDER: readonly OnboardingStepId[] = [
 
 export function OnboardingFlow({
   initialStep,
-  entry,
   onClose,
 }: {
   initialStep: OnboardingStepId;
-  entry: OnboardingEntry;
   onClose: () => void;
 }) {
   const [step, setStep] = useState(initialStep);
@@ -940,56 +928,6 @@ export function OnboardingFlow({
   const primaryHost = usePrimaryHost();
   const hostId = primaryHost?.id ?? null;
   useHostDiscoveredRepos(hostId);
-  const agentStates = useSystemProviderStates({
-    enabled: hostId !== null,
-    poll: false,
-    ...(hostId === null ? {} : { hostId }),
-  }).data?.providers;
-  const startReportedRef = useRef(entry !== "first_run");
-  useEffect(() => {
-    if (startReportedRef.current || agentStates === undefined) return;
-    startReportedRef.current = true;
-    recordTelemetryEvent({
-      name: "onboarding_started",
-      properties: {
-        agent_installed: agentStates.some(
-          (state) =>
-            state.status !== "not_installed" && state.status !== "unknown",
-        ),
-        agent_ready: hasReadyAgent(agentStates),
-      },
-    });
-  }, [agentStates]);
-  const reachedStepsRef = useRef(new Set<OnboardingStepId>());
-  useEffect(() => {
-    if (reachedStepsRef.current.has(step)) return;
-    reachedStepsRef.current.add(step);
-    recordTelemetryEvent({
-      name: "onboarding_step_reached",
-      properties: { step, entry },
-    });
-  }, [entry, step]);
-  const finishedRef = useRef(false);
-  const close = (outcome: "completed" | "skipped") => {
-    if (finishedRef.current) return;
-    finishedRef.current = true;
-    if (outcome === "skipped") {
-      recordTelemetryEvent({
-        name: "onboarding_step_skipped",
-        properties: { step, entry },
-      });
-    } else {
-      recordTelemetryEvent({
-        name: "onboarding_step_completed",
-        properties: { step, entry },
-      });
-    }
-    recordTelemetryEvent({
-      name: "onboarding_finished",
-      properties: { outcome, entry, last_step: step },
-    });
-    onClose();
-  };
   const compact = useMediaQuery("(max-width: 640px)");
   const [desktopInfo] = useState(getBbDesktopInfo);
   const windowState = useDesktopWindowState();
@@ -1000,21 +938,11 @@ export function OnboardingFlow({
       windowState,
     }),
     onSelectStep: setStep,
-    onSkipAll: () => close("skipped"),
+    onSkipAll: onClose,
   };
   const goTo = (offset: number) => () => {
     const next = STEP_ORDER[STEP_ORDER.indexOf(step) + offset];
     if (next !== undefined) setStep(next);
-  };
-  const advance = (outcome: "completed" | "skipped") => () => {
-    recordTelemetryEvent({
-      name:
-        outcome === "completed"
-          ? "onboarding_step_completed"
-          : "onboarding_step_skipped",
-      properties: { step, entry },
-    });
-    goTo(1)();
   };
 
   switch (step) {
@@ -1024,9 +952,7 @@ export function OnboardingFlow({
           chrome={chrome}
           hostId={hostId}
           hostName={primaryHost?.name ?? null}
-          onContinue={advance(
-            hasReadyAgent(agentStates) ? "completed" : "skipped",
-          )}
+          onContinue={goTo(1)}
         />
       );
     case "projects":
@@ -1037,8 +963,7 @@ export function OnboardingFlow({
           hostName={primaryHost?.name ?? null}
           projectIdsAtOpen={projectIdsAtOpen}
           onBack={goTo(-1)}
-          onContinue={advance("completed")}
-          onSkip={advance("skipped")}
+          onContinue={goTo(1)}
         />
       );
     case "plugins":
@@ -1046,8 +971,7 @@ export function OnboardingFlow({
         <PluginsStepContainer
           chrome={chrome}
           onBack={goTo(-1)}
-          onContinue={advance("completed")}
-          onSkip={advance("skipped")}
+          onContinue={goTo(1)}
         />
       );
     case "devices":
@@ -1056,8 +980,7 @@ export function OnboardingFlow({
           chrome={chrome}
           hostId={hostId}
           onBack={goTo(-1)}
-          onFinish={() => close("completed")}
-          onLeave={() => close("skipped")}
+          onFinish={onClose}
         />
       );
   }
