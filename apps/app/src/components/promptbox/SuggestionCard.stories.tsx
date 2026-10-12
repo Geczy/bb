@@ -59,7 +59,7 @@ function FirstTaskCards({
     <SuggestionSection
       label={compact ? "First task" : "Pick a first task for acme-web"}
     >
-      <div className={compact ? "grid gap-2" : "grid grid-cols-2 gap-3"}>
+      <div className={compact ? "grid gap-2" : "grid grid-cols-1 gap-3 sm:grid-cols-2"}>
         {FIRST_TASKS.map((task, index) => (
           <SuggestionCard
             key={task.title}
@@ -105,13 +105,14 @@ function Stage({
   width?: string;
   children: ReactNode;
 }) {
-  return <div className={width}>{children}</div>;
+  return <div className={`max-w-full ${width}`}>{children}</div>;
 }
 
 export function Overview() {
   return (
     <StoryCard labelWidth="190px">
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="first tasks"
         hint="Under the home composer until the first thread. Picking a card fills the composer and never sends."
       >
@@ -120,6 +121,7 @@ export function Overview() {
         </Stage>
       </StoryRow>
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="first task picked"
         hint="A card that needs a plugin turns it on and confirms inside the card. No Undo; the plugin can be turned off in Plugins."
       >
@@ -128,6 +130,7 @@ export function Overview() {
         </Stage>
       </StoryRow>
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="phone"
         hint="One column, title only; the plugin line stays because it names a side effect."
       >
@@ -136,6 +139,7 @@ export function Overview() {
         </Stage>
       </StoryRow>
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="threads that need you"
         hint="Same card; the attention dot plus the words in the meta line mark urgency, never color alone."
       >
@@ -165,6 +169,7 @@ export function Overview() {
         </Stage>
       </StoryRow>
       <StoryRow
+        className="max-md:grid-cols-1 max-md:gap-y-3"
         label="tips"
         hint="Tips keep one grouped container with the same rows, so they stay quieter than first tasks and threads that need you."
       >
