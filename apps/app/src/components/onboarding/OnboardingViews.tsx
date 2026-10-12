@@ -927,7 +927,7 @@ export function DevicesStep({
       <DeviceRow
         icon="Smartphone"
         title="Get the mobile app"
-        description="Check on agents from your phone, with push notifications when a thread needs you."
+        description="Get a push when a thread needs you."
         action={
           <span className="flex items-center gap-2">
             <Button size="sm" variant="outline" asChild>

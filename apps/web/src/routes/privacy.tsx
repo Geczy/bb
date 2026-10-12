@@ -73,8 +73,8 @@ function PrivacyRoute() {
             Unless you turn it off, the bb server sends us anonymous usage
             events through PostHog: app starts, thread and message counts,
             plugin installs, setup progress, such as which first-run steps you
-            completed or skipped and whether you turned on notifications, which
-            built-in tips were shown or used, when you create an automation
+            completed or skipped, which built-in tips were shown or used, when
+            you create an automation
             (whether it repeats or runs once, and whether it runs an agent or a
             script), when you open a split view (how many panes it has), when an
             agent turn finishes (whether it completed, failed, or was stopped, a

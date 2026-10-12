@@ -39,8 +39,8 @@ describe("client telemetry events", () => {
         properties: { is_child_thread: false, provider: "codex" },
       });
       const extra = await post(harness, {
-        name: "notification_prompt_shown",
-        properties: { surface: "sidebar", threadId: "thr_123" },
+        name: "onboarding_step_reached",
+        properties: { step: "agent", entry: "first_run", threadId: "thr_123" },
       });
 
       expect(unknown.status).toBe(400);
