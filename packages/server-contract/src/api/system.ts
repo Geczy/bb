@@ -213,6 +213,43 @@ const notificationPromptTelemetryPropertiesSchema = z
 export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
   z
     .object({
+      name: z.literal("onboarding_agent_state"),
+      properties: z
+        .object({
+          entry: onboardingEntryTelemetrySchema,
+          agent_installed: z.boolean().nullable(),
+          agent_ready: z.boolean().nullable(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("onboarding_sign_in"),
+      properties: z
+        .object({
+          entry: onboardingEntryTelemetrySchema,
+          outcome: z.enum([
+            "started",
+            "ready",
+            "exited",
+            "failed",
+            "cancelled",
+          ]),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("new_thread_submit"),
+      properties: z
+        .object({ outcome: z.enum(["started", "accepted", "failed"]) })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       name: z.literal("onboarding_started"),
       properties: z
         .object({ agent_installed: z.boolean(), agent_ready: z.boolean() })

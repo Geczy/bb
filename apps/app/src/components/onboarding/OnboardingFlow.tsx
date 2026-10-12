@@ -255,11 +255,13 @@ interface SignInSession {
 
 function AgentStepContainer({
   chrome,
+  entry,
   hostId,
   hostName,
   onContinue,
 }: {
   chrome: StepChrome;
+  entry: OnboardingEntry;
   hostId: string | null;
   hostName: string | null;
   onContinue: () => void;
@@ -285,14 +287,21 @@ function AgentStepContainer({
   const { mutate: closeTerminalMutate } = closeTerminal;
   const { mutateAsync: createTerminalAsync } = createTerminal;
 
-  const endSignIn = useCallback(() => {
-    const current = signInRef.current;
-    if (current === null) return;
-    signInRef.current = null;
-    setSignIn(null);
-    closeTerminalMutate({ mode: "force", terminalId: current.session.id });
-    void refetchStates();
-  }, [closeTerminalMutate, refetchStates]);
+  const endSignIn = useCallback(
+    (outcome: "ready" | "exited" | "failed" | "cancelled" = "cancelled") => {
+      const current = signInRef.current;
+      if (current === null) return;
+      signInRef.current = null;
+      recordTelemetryEvent({
+        name: "onboarding_sign_in",
+        properties: { entry, outcome },
+      });
+      setSignIn(null);
+      closeTerminalMutate({ mode: "force", terminalId: current.session.id });
+      void refetchStates();
+    },
+    [closeTerminalMutate, entry, refetchStates],
+  );
 
   const signInRequestRef = useRef(0);
   useEffect(
@@ -309,7 +318,7 @@ function AgentStepContainer({
       if (current !== null && exitCode !== 0) {
         setSignInFailedProviderId(current.providerId);
       }
-      endSignIn();
+      endSignIn(exitCode === 0 ? "exited" : "failed");
     },
     [endSignIn],
   );
@@ -329,7 +338,7 @@ function AgentStepContainer({
     states?.find((state) => state.providerId === signingInProviderId)
       ?.status === "ready";
   useEffect(() => {
-    if (signingInProviderReady) endSignIn();
+    if (signingInProviderReady) endSignIn("ready");
   }, [endSignIn, signingInProviderReady]);
 
   const { runningJobKey } = installRunner;
@@ -351,6 +360,10 @@ function AgentStepContainer({
     setSignInFailedProviderId(null);
     signInRequestRef.current += 1;
     const request = signInRequestRef.current;
+    recordTelemetryEvent({
+      name: "onboarding_sign_in",
+      properties: { entry, outcome: "started" },
+    });
     const title = `Sign in to ${state.displayName}`;
     await closeAbandonedSignInTerminals({ hostId, title });
     let session: TerminalSession;
@@ -363,9 +376,17 @@ function AgentStepContainer({
         target: { kind: "host_path", hostId, cwd: null },
       });
     } catch {
+      recordTelemetryEvent({
+        name: "onboarding_sign_in",
+        properties: { entry, outcome: "failed" },
+      });
       return;
     }
     if (signInRequestRef.current !== request) {
+      recordTelemetryEvent({
+        name: "onboarding_sign_in",
+        properties: { entry, outcome: "cancelled" },
+      });
       void sdk.terminals
         .close({ mode: "force", terminalId: session.id })
         .catch(() => null);
@@ -478,7 +499,7 @@ function AgentStepContainer({
         onSignIn={(providerId) => void startSignIn(providerId)}
         onInstall={startInstall}
         onViewInstallLog={viewInstallLog}
-        onCancelSignIn={endSignIn}
+        onCancelSignIn={() => endSignIn()}
         onRecheck={() => {
           void refetchStates();
           void cliStatusQuery.refetch();
@@ -912,11 +933,37 @@ export function OnboardingFlow({
   const primaryHost = usePrimaryHost();
   const hostId = primaryHost?.id ?? null;
   useHostDiscoveredRepos(hostId);
-  const agentStates = useSystemProviderStates({
+  const agentStatesQuery = useSystemProviderStates({
     enabled: hostId !== null,
     poll: false,
     ...(hostId === null ? {} : { hostId }),
-  }).data?.providers;
+  });
+  const agentStates = agentStatesQuery.data?.providers;
+  const agentStateRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (agentStates === undefined && !agentStatesQuery.isError) return;
+    const knownStates = agentStatesQuery.isError ? undefined : agentStates;
+    const hasUnknown =
+      knownStates?.some((state) => state.status === "unknown") ?? true;
+    const installed =
+      knownStates?.some(
+        (state) =>
+          state.status !== "not_installed" && state.status !== "unknown",
+      ) ?? false;
+    const properties = {
+      entry,
+      agent_installed: installed ? true : hasUnknown ? null : false,
+      agent_ready: hasReadyAgent(knownStates)
+        ? true
+        : hasUnknown
+          ? null
+          : false,
+    };
+    const key = JSON.stringify(properties);
+    if (agentStateRef.current === key) return;
+    agentStateRef.current = key;
+    recordTelemetryEvent({ name: "onboarding_agent_state", properties });
+  }, [agentStates, agentStatesQuery.isError, entry]);
   const startReportedRef = useRef(entry !== "first_run");
   useEffect(() => {
     if (startReportedRef.current || agentStates === undefined) return;
@@ -994,6 +1041,7 @@ export function OnboardingFlow({
       return (
         <AgentStepContainer
           chrome={chrome}
+          entry={entry}
           hostId={hostId}
           hostName={primaryHost?.name ?? null}
           onContinue={advance(
