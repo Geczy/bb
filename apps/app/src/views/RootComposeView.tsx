@@ -701,7 +701,11 @@ function RootComposeSurface({
 
   const providerStates = useSystemProviderStates({
     enabled: rootProjectHostId !== null,
-    ...(rootProjectHostId === null ? {} : { hostId: rootProjectHostId }),
+    ...(rootPanelEnvironmentId !== null
+      ? { environmentId: rootPanelEnvironmentId }
+      : rootProjectHostId !== null
+        ? { hostId: rootProjectHostId }
+        : {}),
   }).data?.providers;
   const openSetupGuide = useOpenSetupGuide();
   const composerSignInState = useMemo(
