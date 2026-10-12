@@ -96,6 +96,12 @@ export const preferenceDefinitions = {
     "Show each thread's agent provider icon before its title.",
     null,
   ),
+  showChildProjects: definePreference(
+    z.boolean(),
+    true,
+    "Show a child thread's project name at the end of its row when it differs from its parent's project.",
+    null,
+  ),
   threadLifecycles: definePreference(
     z
       .array(z.enum(["active", "archived"]))

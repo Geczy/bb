@@ -35,7 +35,10 @@ import {
   makeSidebarEnvironment,
   makeSidebarThread,
 } from "../model/fixtures.js";
-import { sidebarShowProviderIconsAtom } from "../preferences/atoms.js";
+import {
+  sidebarShowChildProjectsAtom,
+  sidebarShowProviderIconsAtom,
+} from "../preferences/atoms.js";
 import type { ThreadRowOptions } from "./ThreadRow.js";
 import {
   preferenceValueAtom,
@@ -917,22 +920,22 @@ describe("ThreadRow", () => {
     const marker = container.querySelector(
       "[data-sidebar-thread-cross-project]",
     );
-    expect(marker?.getAttribute("aria-label")).toBe("In project Web App");
-    expect(marker?.querySelector('[data-icon="FolderExport"]')).not.toBeNull();
-    expect(
-      marker?.parentElement?.previousElementSibling?.querySelector(
-        ".bb-thread-title",
-      ),
-    ).not.toBeNull();
+    expect(marker?.textContent).toBe("Web App");
+    expect(marker?.getAttribute("title")).toBe("In project Web App");
     expect(
       marker?.closest("[data-sidebar-thread-trailing-indicator]"),
     ).toBeNull();
     expect(
       screen.getByRole("link", { name: "Open Thread" }).getAttribute("href"),
     ).toBe("/projects/proj_other/threads/thr_test");
+
+    act(() => getDefaultStore().set(sidebarShowChildProjectsAtom, false));
+    expect(
+      container.querySelector("[data-sidebar-thread-cross-project]"),
+    ).toBeNull();
   });
 
-  it("falls back to a generic label when the other project is unknown", () => {
+  it("omits the project name when the other project is unknown", () => {
     const { container } = renderThreadRow({
       crossProjectId: "proj_unknown",
       thread: createThread({
@@ -942,29 +945,8 @@ describe("ThreadRow", () => {
     });
 
     expect(
-      container
-        .querySelector("[data-sidebar-thread-cross-project]")
-        ?.getAttribute("aria-label"),
-    ).toBe("In another project");
-  });
-
-  it("opens the thread when the cross-project marker is clicked", () => {
-    const { container } = renderThreadRow({
-      crossProjectId: "proj_other",
-      thread: createThread({
-        parentThreadId: "thr_parent",
-        projectId: "proj_other",
-      }),
-    });
-    const link = screen.getByRole("link", { name: "Open Thread" });
-    const onLinkClick = vi.fn();
-    link.addEventListener("click", onLinkClick);
-
-    fireEvent.click(
-      container.querySelector("[data-sidebar-thread-cross-project]")!,
-    );
-
-    expect(onLinkClick).toHaveBeenCalledTimes(1);
+      container.querySelector("[data-sidebar-thread-cross-project]"),
+    ).toBeNull();
   });
 
   it("omits the cross-project marker for same-project rows", () => {

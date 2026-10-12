@@ -2089,6 +2089,11 @@ Organize → Rows → Provider icons or
 `bb thread-list prefs set showProviderIcons false` hides the agent provider
 icon before each thread title. Unknown provider ids have no icon.
 
+The `showChildProjects` preference defaults to `true`. A child thread whose
+project differs from its parent's shows that project's name in muted text at the
+end of its row; the name gives way to the row's hover actions. Organize → Rows →
+Child projects or `bb thread-list prefs set showChildProjects false` hides it.
+
 The `groupByReadStatus` preference defaults to `false`. Organize → Groups →
 By read status or `bb thread-list prefs set groupByReadStatus true` lists
 threads that show an unread dot above the rest, keeping the selected sort within

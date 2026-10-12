@@ -22,6 +22,7 @@ import {
   sidebarGroupThreadsByEnvironmentAtom,
   sidebarEnvironmentGroupingAtom,
   sidebarGroupByReadStatusAtom,
+  sidebarShowChildProjectsAtom,
   sidebarShowProviderIconsAtom,
 } from "../preferences/atoms.js";
 
@@ -146,6 +147,9 @@ function SidebarViewItems({ page }: { page: SidebarViewPage }) {
   const [showProviderIcons, setShowProviderIcons] = useAtom(
     sidebarShowProviderIconsAtom,
   );
+  const [showChildProjects, setShowChildProjects] = useAtom(
+    sidebarShowChildProjectsAtom,
+  );
   const selectedSort = sort === "none" ? "updated" : sort;
   if (page === "filter") {
     return (
@@ -248,6 +252,19 @@ function SidebarViewItems({ page }: { page: SidebarViewPage }) {
             Provider icons
             <span className="ml-auto inline-flex size-4 shrink-0 items-center justify-center">
               {showProviderIcons && <Icon name="Check" className="size-4" />}
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            role="menuitemcheckbox"
+            aria-checked={showChildProjects}
+            onSelect={(event) => {
+              event.preventDefault();
+              setShowChildProjects(!showChildProjects);
+            }}
+          >
+            Child projects
+            <span className="ml-auto inline-flex size-4 shrink-0 items-center justify-center">
+              {showChildProjects && <Icon name="Check" className="size-4" />}
             </span>
           </DropdownMenuItem>
         </DropdownMenuGroup>

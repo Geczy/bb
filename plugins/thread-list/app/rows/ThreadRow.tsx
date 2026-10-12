@@ -62,6 +62,7 @@ import {
 } from "../list/sidebarDraftPresence.js";
 import { useSidebarProjectName } from "../model/use-sidebar-data.js";
 import {
+  sidebarShowChildProjectsAtom,
   sidebarShowProviderIconsAtom,
   threadRowActionsAtom,
 } from "../preferences/atoms.js";
@@ -384,13 +385,10 @@ function ThreadRowComponent({
     hasComposerDraft,
   );
   const labelTitle = thread.displayTitle;
-  const crossProjectName = useSidebarProjectName(crossProjectId);
-  const crossProjectLabel =
-    crossProjectId === null
-      ? null
-      : crossProjectName
-        ? `In project ${crossProjectName}`
-        : "In another project";
+  const showChildProjects = useAtomValue(sidebarShowChildProjectsAtom);
+  const crossProjectName = useSidebarProjectName(
+    showChildProjects ? crossProjectId : null,
+  );
   const handleRename = useCallback(
     async (nextTitle: string) => {
       await sdk.threads.update({ threadId: thread.id, title: nextTitle });
@@ -463,8 +461,7 @@ function ThreadRowComponent({
   const childActivity =
     parentOptions?.childActivity ?? NO_COLLAPSED_CHILD_ACTIVITY;
   const hasChildren = childCount > 0;
-  const reserveActionSpace =
-    crossProjectLabel !== null || (isParentRow && hasChildren);
+  const reserveActionSpace = isParentRow && hasChildren;
   const hasHiddenChildren = isParentRow && isParentCollapsed && hasChildren;
   const hiddenChildrenHaveDraft = useThreadsHaveDraft(
     hasHiddenChildren ? childActivity.threadIds : NO_THREAD_IDS,
@@ -647,9 +644,7 @@ function ThreadRowComponent({
         <span
           className={cn(
             "pointer-events-none relative flex min-w-0 items-center self-stretch",
-            ((crossProjectLabel === null && (!parentOptions || !hasChildren)) ||
-              isEditing) &&
-              "flex-1",
+            (!parentOptions || !hasChildren || isEditing) && "flex-1",
           )}
         >
           {provider ? (
@@ -682,10 +677,7 @@ function ThreadRowComponent({
             </span>
           ) : (
             <span
-              className={cn(
-                "bb-thread-title",
-                crossProjectLabel !== null && "min-w-0 truncate",
-              )}
+              className="bb-thread-title"
               title={labelTitle}
               onDoubleClick={startTitleEditing}
             >
@@ -693,26 +685,6 @@ function ThreadRowComponent({
             </span>
           )}
         </span>
-        {crossProjectLabel !== null ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                data-sidebar-thread-cross-project=""
-                role="img"
-                aria-label={crossProjectLabel}
-                className="relative z-[31] flex size-5 shrink-0 items-center justify-center text-muted-foreground"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  rowLinkRef.current?.click();
-                }}
-              >
-                <Icon name="FolderExport" className="size-3.5" aria-hidden />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">{crossProjectLabel}</TooltipContent>
-          </Tooltip>
-        ) : null}
         {parentOptions && hasChildren ? (
           <SidebarChildToggleChevron
             disabled={isEditing}
@@ -725,6 +697,21 @@ function ThreadRowComponent({
           />
         ) : null}
       </span>
+      {crossProjectName ? (
+        <span
+          data-sidebar-thread-cross-project=""
+          title={`In project ${crossProjectName}`}
+          className={cn(
+            SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
+            "pointer-events-none max-w-[40%] shrink-0 truncate pl-1.5 text-xs text-subtle-foreground",
+            !isActionsOpen &&
+              "group-data-[sidebar-touch-armed=true]/thread-row:hidden",
+            (isEditing || isCustomizingActions) && "hidden",
+          )}
+        >
+          {crossProjectName}
+        </span>
+      ) : null}
       {rowDragBindings && !rowDragBindings.disabled && !isActionsOpen ? (
         <SidebarThreadDragChip
           title={labelTitle}

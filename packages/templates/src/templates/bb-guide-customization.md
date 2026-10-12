@@ -102,6 +102,10 @@ word is a string. On first load the plugin copies non-default `sidebar.*`
 values from `bb settings ui` once. `showProviderIcons` defaults to `true`;
 Organize → Rows → Provider icons toggles the icon before each title, and
 `bb thread-list prefs set showProviderIcons false` turns it off from the CLI.
+`showChildProjects` defaults to `true`; it shows a child thread's project name
+at the end of its row when that project differs from the parent's. Organize →
+Rows → Child projects or `bb thread-list prefs set showChildProjects false`
+hides it.
 `groupByReadStatus` defaults to `false`; Organize → Groups → By read status or
 `bb thread-list prefs set groupByReadStatus true` lists unread threads above
 read ones, keeping the selected sort within each group.
