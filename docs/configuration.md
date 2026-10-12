@@ -2084,8 +2084,26 @@ through `POST /api/v1/system/telemetry/events` (`sdk.system.experimental_recordT
 `onboarding_started` (whether an agent was installed or ready at first launch),
 `onboarding_step_reached`, `onboarding_step_completed`, and
 `onboarding_step_skipped` (per setup-guide step, marked first run or replay),
-`onboarding_finished` (completed or skipped). That route
-accepts only those events and their fixed, non-identifying properties.
+`onboarding_finished` (completed or skipped), `onboarding_agent_state`
+(aggregate installed/ready booleans when the guide's health snapshot changes;
+null means unknown or a failed health query), and `onboarding_sign_in`
+(started, ready, exited, failed, or cancelled, marked first run or replay).
+Sign-in `ready` means the selected provider's health became ready during the
+attempt. `exited` means its command exited successfully before readiness was
+observed; it does not establish successful authentication. Cancellation
+includes leaving the Agent step or switching sign-in methods.
+
+`new_thread_submit` records started, accepted, or failed composer submissions.
+It covers all new-thread submissions, so analytics must restrict first-send
+analysis to the installation's earliest attempt and check prior thread history.
+Accepted means the creation callback succeeded, not that the provider produced
+an answer. Disabled send controls and later turn failures are not measured.
+Attempts without a delivered outcome remain unknown, not inferred failures.
+
+The route accepts only these events and their fixed enums, booleans, and unknown
+markers. These additions include no provider IDs, account details, prompts,
+project or file names, terminal output, error messages, or session identifiers.
+They do not measure foreground time, app exit, or install/update error reasons.
 
 Anonymous usage telemetry can be disabled in Settings → General → Privacy & diagnostics → Share anonymous usage data,
 or with `bb settings general telemetryEnabled false`. The saved server-wide preference
