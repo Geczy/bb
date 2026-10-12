@@ -2101,9 +2101,7 @@ through `POST /api/v1/system/telemetry/events` (`sdk.system.experimental_recordT
 `onboarding_started` (whether an agent was installed or ready at first launch),
 `onboarding_step_reached`, `onboarding_step_completed`, and
 `onboarding_step_skipped` (per setup-guide step, marked first run or replay),
-`onboarding_finished` (completed or skipped), and the sidebar notification card's
-`notification_prompt_shown`, `notification_prompt_accepted`,
-`notification_prompt_dismissed`, and `notification_prompt_denied`, plus
+`onboarding_finished` (completed or skipped), plus
 `tip_shown` (once per tip per visit to the New thread page) and `tip_used` (on
 click) from the bundled Tips plugin, each with the built-in tip id, its position
 in the feed (1-3), and its action type (`prompt`, `open-page`, `run-command`,

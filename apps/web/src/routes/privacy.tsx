@@ -73,7 +73,7 @@ function PrivacyRoute() {
             Unless you turn it off, the bb server sends us anonymous usage
             events through PostHog: app starts, thread and message counts,
             plugin installs, setup progress, such as which first-run steps you
-            completed or skipped and whether you turned on notifications, and
+            completed or skipped, and
             which built-in tips were shown or used. Each event carries a random
             install ID, the app version, and your operating system and
             architecture. Events never include your prompts, code, file names,
