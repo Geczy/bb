@@ -699,8 +699,17 @@ function RootComposeSurface({
     });
   }, [selectedProviderCliIssue, rootProjectHostId, startInstall]);
 
+  const rootPanelEnvironmentQuery = useEnvironment(rootPanelEnvironmentId, {
+    enabled: rootPanelEnvironmentId !== null,
+    staleTime: 5_000,
+  });
+  const rootPanelEnvironment = rootPanelEnvironmentQuery.data;
+  const providerStateHostId =
+    rootPanelEnvironmentId !== null
+      ? (rootPanelEnvironment?.hostId ?? null)
+      : rootProjectHostId;
   const providerStates = useSystemProviderStates({
-    enabled: rootProjectHostId !== null,
+    enabled: rootPanelEnvironmentId !== null || rootProjectHostId !== null,
     ...(rootPanelEnvironmentId !== null
       ? { environmentId: rootPanelEnvironmentId }
       : rootProjectHostId !== null
@@ -715,7 +724,8 @@ function RootComposeSurface({
             providerStates?.find(
               (state) => state.providerId === selectedProviderId,
             ),
-            rootProjectHostId !== null && rootProjectHostId === primaryHostId
+            providerStateHostId !== null &&
+              providerStateHostId === primaryHostId
               ? () => openSetupGuide("agent")
               : null,
           )
@@ -725,7 +735,7 @@ function RootComposeSurface({
       openSetupGuide,
       primaryHostId,
       providerStates,
-      rootProjectHostId,
+      providerStateHostId,
       selectedProviderId,
     ],
   );
@@ -774,11 +784,6 @@ function RootComposeSurface({
     ROOT_COMPOSE_FIXED_PANEL_STATE_ID,
     null,
   );
-  const rootPanelEnvironmentQuery = useEnvironment(rootPanelEnvironmentId, {
-    enabled: rootPanelEnvironmentId !== null,
-    staleTime: 5_000,
-  });
-  const rootPanelEnvironment = rootPanelEnvironmentQuery.data;
   const rootPanelHostPathTerminalTarget =
     useMemo<RootComposeTerminalTarget | null>(() => {
       if (rootPanelEnvironmentId !== null) {
