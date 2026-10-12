@@ -206,6 +206,9 @@ const onboardingStepTelemetryPropertiesSchema = z
     entry: onboardingEntryTelemetrySchema,
   })
   .strict();
+const notificationPromptTelemetryPropertiesSchema = z
+  .object({ surface: z.enum(["sidebar"]) })
+  .strict();
 
 export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
   z
@@ -244,6 +247,30 @@ export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
           last_step: onboardingStepTelemetrySchema,
         })
         .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("notification_prompt_shown"),
+      properties: notificationPromptTelemetryPropertiesSchema,
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("notification_prompt_accepted"),
+      properties: notificationPromptTelemetryPropertiesSchema,
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("notification_prompt_dismissed"),
+      properties: notificationPromptTelemetryPropertiesSchema,
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("notification_prompt_denied"),
+      properties: notificationPromptTelemetryPropertiesSchema,
     })
     .strict(),
 ]);
