@@ -65,15 +65,16 @@ export function AppNavigationHostProvider({
   children: ReactNode;
 }) {
   const parent = useContext(AppNavigationHostContext);
+  const openFilePreview = capabilities.openFilePreview;
   const value = useMemo<ResolvedAppNavigationHostCapabilities>(
     () => ({
       openFileExternally:
         capabilities.openFileExternally ?? parent.openFileExternally,
       openFilePreview:
-        capabilities.openFilePreview === undefined
+        openFilePreview === undefined
           ? parent.openFilePreview
           : (intent) => {
-              const opened = capabilities.openFilePreview!(intent);
+              const opened = openFilePreview(intent);
               if (opened)
                 recordTelemetryEvent({
                   name: "feature_used",
@@ -92,7 +93,7 @@ export function AppNavigationHostProvider({
     }),
     [
       capabilities.openFileExternally,
-      capabilities.openFilePreview,
+      openFilePreview,
       capabilities.openFixedTab,
       capabilities.openTerminal,
       capabilities.openUrl,
