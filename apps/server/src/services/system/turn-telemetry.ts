@@ -1,3 +1,4 @@
+import { captureFeatureUsed } from "./feature-telemetry.js";
 import { eq } from "drizzle-orm";
 import { afterCommit, telemetryThreads, type DbQueryConnection } from "@bb/db";
 import {
@@ -143,13 +144,22 @@ export function recordAppliedWorkLifecycle(
         .set({ activeRequestId: requestId, pendingRequestId: null })
         .where(eq(telemetryThreads.threadId, threadId))
         .run();
+      const origin = workOriginProperties(db, threadId, requestId);
+      afterCommit(db, () =>
+        captureFeatureUsed(deps.telemetry, {
+          feature: "provider",
+          feature_scope: "core",
+          interaction: "ran",
+          trigger: origin.trigger,
+        }),
+      );
       captureWorkEvent(
         db,
         {
           name: "thread_lifecycle",
           properties: {
             ...identity,
-            ...workOriginProperties(db, threadId, requestId),
+            ...origin,
             transition: "turn_started",
           },
         },

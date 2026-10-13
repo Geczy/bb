@@ -1,3 +1,4 @@
+import { captureFeatureUsed } from "./feature-telemetry.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
@@ -374,6 +375,15 @@ export function captureThreadCreated(thread: Thread): void {
   const deps = workDeps;
   if (!deps || !enabled()) return;
   try {
+    if (thread.parentThreadId !== null)
+      afterCommit(deps.db, () =>
+        captureFeatureUsed(deps.telemetry, {
+          feature: "child_thread",
+          feature_scope: "core",
+          interaction: "invoked",
+          trigger: "unknown",
+        }),
+      );
     captureWorkEvent(
       deps.db,
       {
