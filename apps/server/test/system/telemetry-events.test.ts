@@ -16,16 +16,43 @@ describe("client telemetry events", () => {
     await withTestHarness(async (harness) => {
       const capture = vi.fn<TelemetryService["capture"]>();
       harness.deps.telemetry = { ...harness.deps.telemetry, capture };
-      const event = {
-        name: "onboarding_step_skipped",
-        properties: { step: "projects", entry: "first_run" },
-      };
-
-      const response = await post(harness, event);
-
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({ ok: true });
-      expect(capture).toHaveBeenCalledExactlyOnceWith(event);
+      const events = [
+        {
+          name: "onboarding_step_skipped",
+          properties: { step: "projects", entry: "first_run" },
+        },
+        {
+          name: "onboarding_agent_state",
+          properties: {
+            entry: "first_run",
+            agent_installed: true,
+            agent_ready: false,
+          },
+        },
+        {
+          name: "onboarding_agent_state",
+          properties: {
+            entry: "replay",
+            agent_installed: null,
+            agent_ready: null,
+          },
+        },
+        {
+          name: "onboarding_sign_in",
+          properties: { entry: "first_run", outcome: "failed" },
+        },
+        {
+          name: "new_thread_submit",
+          properties: { outcome: "failed" },
+        },
+      ];
+      for (const event of events) {
+        capture.mockClear();
+        const response = await post(harness, event);
+        expect(response.status).toBe(200);
+        await expect(readJson(response)).resolves.toEqual({ ok: true });
+        expect(capture).toHaveBeenCalledExactlyOnceWith(event);
+      }
     });
   });
 
@@ -45,6 +72,26 @@ describe("client telemetry events", () => {
 
       expect(unknown.status).toBe(400);
       expect(extra.status).toBe(400);
+      for (const event of [
+        {
+          name: "onboarding_agent_state",
+          properties: {
+            entry: "first_run",
+            agent_installed: "account@example.com",
+            agent_ready: false,
+          },
+        },
+        {
+          name: "onboarding_sign_in",
+          properties: { entry: "first_run", outcome: "account@example.com" },
+        },
+        {
+          name: "new_thread_submit",
+          properties: { outcome: "failed", message: "private prompt" },
+        },
+      ]) {
+        expect((await post(harness, event)).status).toBe(400);
+      }
       expect(capture).not.toHaveBeenCalled();
     });
   });
