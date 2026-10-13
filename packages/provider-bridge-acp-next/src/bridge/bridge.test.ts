@@ -1,5 +1,3 @@
-import { ChildProcess } from "node:child_process";
-import { channel } from "node:diagnostics_channel";
 import {
   chmodSync,
   existsSync,
@@ -13,15 +11,7 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  onTestFailed,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStandaloneBuiltinCompactCommandInput } from "@bb/domain";
 import type { DynamicTool, ReasoningLevel } from "@bb/domain";
 import {
@@ -56,28 +46,6 @@ let nextThreadSerial = 0;
 const startedProviderThreadIds: string[] = [];
 let nextRequestId = 1;
 const realSetTimeout = setTimeout;
-let diagnosticTrace: string[] = [];
-const childProcessChannel = channel("child_process");
-function traceDiagnostic(label: string): void {
-  diagnosticTrace.push(`${Date.now()} ${label}`);
-}
-function traceChild(message: unknown): void {
-  if (
-    typeof message !== "object" ||
-    message === null ||
-    !("process" in message) ||
-    !(message.process instanceof ChildProcess)
-  ) {
-    return;
-  }
-  const child = message.process;
-  traceDiagnostic(`spawn ${child.pid} ${child.spawnfile}`);
-  child.once("exit", (code, signal) =>
-    traceDiagnostic(`exit ${child.pid} ${code} ${signal}`),
-  );
-  child.once("close", () => traceDiagnostic(`close ${child.pid}`));
-  child.stdout?.once("data", () => traceDiagnostic(`stdout ${child.pid}`));
-}
 
 function requestId(): number {
   nextRequestId += 1;
@@ -86,7 +54,6 @@ function requestId(): number {
 
 function sendRequest(method: string, params: object): number {
   const id = requestId();
-  traceDiagnostic(`request ${id} ${method}`);
   handleLine(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
   return id;
 }
@@ -126,9 +93,7 @@ function findResponse(id: number): BridgeJsonRpcOutputMessage | undefined {
 async function waitForResponse(
   id: number,
 ): Promise<BridgeJsonRpcOutputMessage> {
-  const response = await waitFor(() => findResponse(id), `response ${id}`);
-  traceDiagnostic(`response ${id}`);
-  return response;
+  return waitFor(() => findResponse(id), `response ${id}`);
 }
 
 function notifications(method: string): BridgeJsonRpcOutputMessage[] {
@@ -647,18 +612,12 @@ async function waitForAgentExit(readyFile: string): Promise<void> {
 }
 
 beforeEach(() => {
-  diagnosticTrace = [];
-  childProcessChannel.subscribe(traceChild);
-  onTestFailed(() =>
-    console.error("ACP timing trace\n" + diagnosticTrace.join("\n")),
-  );
   bbThreadIdByProviderThreadId.clear();
   workspaceDir = mkdtempSync(join(tmpdir(), "bb-acp-bridge-test-"));
   output = captureBridgeJsonRpcOutput();
 });
 
 afterEach(async () => {
-  childProcessChannel.unsubscribe(traceChild);
   for (const providerThreadId of startedProviderThreadIds.splice(0)) {
     await stopThread(providerThreadId);
   }
