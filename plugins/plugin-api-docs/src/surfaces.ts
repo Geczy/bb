@@ -906,8 +906,6 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Use RPC, HTTP, WebSocket, and realtime messages to connect the plugin. With this, a plugin can:",
         bullets: [
           "Call its server from its UI with schema-checked RPC",
-          "Classify RPC actions for anonymous capability counts; queries and unclassified methods are excluded",
-          "Record background work with fixed trigger categories; core resolves plugin source and honors opt-out",
           "Receive webhooks and serve HTTP or WebSocket routes",
           "Push live updates to open bb windows",
           "Publish RPC methods other plugins can discover",
@@ -916,8 +914,6 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginRpc",
           "PluginRpcMethodContract",
           "PluginRpcMethodContract.experimental_usage",
-          "BbPluginApi.experimental_recordFeatureUse",
-          "PluginBbSdk.plugins.experimental_recordPanelOpen",
           "ExperimentalPluginRpcHandlersWithContext",
           "ExperimentalPluginRpcHandlerContext",
           "ExperimentalPluginRpcCaller",
@@ -966,6 +962,23 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Workflows",
           "Worktree",
         ],
+      },
+      {
+        id: "anonymous-usage",
+        tagline: "Categorical capability use with the existing opt-out",
+        title: "Anonymous capability usage",
+        summary:
+          "Describe explicit work without exporting plugin identities. With this, a plugin can:",
+        bullets: [
+          "Classify RPC methods as actions or queries; polling and unclassified methods do not count",
+          "Report background work with a fixed person, agent, schedule, system or unknown trigger",
+          "Use core's shared provenance classification, opt-out and nested-call suppression",
+        ],
+        apiSymbols: [
+          "BbPluginApi.experimental_recordFeatureUse",
+          "PluginBbSdk.plugins.experimental_recordPanelOpen",
+        ],
+        firstParty: ["Automations"],
       },
       {
         id: "thread-events",

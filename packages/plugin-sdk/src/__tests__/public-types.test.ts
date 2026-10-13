@@ -16,6 +16,7 @@ import type {
 } from "../app-contract.js";
 
 type ExpectedBbPluginApiKey =
+  | "experimental_recordFeatureUse"
   | "agents"
   | "background"
   | "cli"
