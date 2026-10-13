@@ -537,6 +537,12 @@ describe("thread credential environment terminals", () => {
           env: { CLAUDE_CONFIG_DIR: "/profiles/failed-thread" },
           cwd: "/tmp/terminal-workspace",
         });
+        await harness.manager.handleMessage({
+          type: "terminal.close",
+          terminalId: "login-terminal",
+          reason: "user",
+        });
+        expect(harness.adapter.spawned[0]?.pty.killCalls).toEqual([null]);
       } else {
         expect(harness.adapter.spawned).toEqual([]);
         expect(harness.messages).toContainEqual(

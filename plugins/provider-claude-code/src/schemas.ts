@@ -338,7 +338,6 @@ export const claudeWorkflowPhaseRecordSchema = z
 export const claudeAssistantMessageSchema = z
   .object({
     type: z.literal("assistant"),
-    error: claudeAssistantMessageErrorSchema.optional().catch(undefined),
     message: z.unknown(),
     uuid: z.string().min(1).optional(),
   })

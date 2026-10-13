@@ -796,14 +796,19 @@ export class TerminalSessionLifecycle {
       ...(args.providerLogin === undefined
         ? {}
         : { threadEnvironment: args.providerLogin.threadEnvironment }),
-      contributedEnv: await resolveHostEnvironment(this.options, {
-        hostId: launchTarget.hostId,
-        projectId:
-          launchTarget.environmentId === null
-            ? null
-            : requireEnvironment(this.options.db, launchTarget.environmentId)
-                .projectId,
-      }),
+      contributedEnv:
+        args.providerLogin === undefined
+          ? await resolveHostEnvironment(this.options, {
+              hostId: launchTarget.hostId,
+              projectId:
+                launchTarget.environmentId === null
+                  ? null
+                  : requireEnvironment(
+                      this.options.db,
+                      launchTarget.environmentId,
+                    ).projectId,
+            })
+          : [],
       requestId,
       terminalId: startingSession.id,
       ...(args.threadId !== null ? { threadId: args.threadId } : {}),

@@ -178,6 +178,15 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
   },
   {
     reason:
+      "Authentication recovery is offered only for a terminal unauthorized error. Absence means this row offers no sign-in action and preserves timelines produced by earlier servers.",
+    fields: [
+      "threadTimelineResponseSchema.delta.upsertRows.providerAuthRequired",
+      "threadTimelineResponseSchema.rows.providerAuthRequired",
+      "threadTimelineResponseSchema.timelinePage.olderRowUpdates.providerAuthRequired",
+    ],
+  },
+  {
+    reason:
       "A user question omits shortLabel when its prompt is short enough to title the row itself, omits options when it takes free text only, and omits an option description when the option label needs no gloss. Each absence is the question's shape, not missing data.",
     fields: [
       "threadPendingInteractionsResponseSchema.payload.questions.options",

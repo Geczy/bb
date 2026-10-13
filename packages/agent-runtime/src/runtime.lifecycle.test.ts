@@ -351,11 +351,13 @@ describe("createAgentRuntime lifecycle", () => {
         runtime: {
           workspacePath: tmpDir,
           shellEnv: { CLAUDE_CONFIG_DIR: "/profiles/default" },
+          onEvent: () => {},
         },
       });
       try {
         await runtime.startThread({
           environmentId: "env-profile",
+          projectId: "project-profile",
           threadId: "profile-thread",
           providerId: "fake",
           contributedEnv: [

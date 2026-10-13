@@ -125,6 +125,24 @@ describe("bb terminal command output", () => {
     },
   );
 
+  it("starts provider sign-in through the shared terminal API", async () => {
+    const create = vi.fn(async () => makeTerminalSession());
+    stubServerApi({ "v1.terminals.$post": create });
+    await runCommand(
+      ["terminal", "create", "--thread", "thr-1", "--provider-login"],
+      register,
+    );
+    expect(create).toHaveBeenCalledWith({
+      json: {
+        cols: 80,
+        rows: 24,
+        title: undefined,
+        target: { kind: "thread", threadId: "thr-1" },
+        start: { mode: "provider-login" },
+      },
+    });
+  });
+
   it("sends positional command arguments unquoted for the machine to quote", async () => {
     const create = vi.fn(async () => makeTerminalSession());
     stubServerApi({ "v1.terminals.$post": create });
