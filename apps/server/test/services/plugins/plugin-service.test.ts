@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import {
   cp,
   mkdtemp,
@@ -17,6 +18,7 @@ import {
   createEnvironment,
   createProject,
   getInstalledPlugin,
+  installedPlugins,
   migrate,
   noopNotifier,
   upsertHost,
@@ -859,72 +861,158 @@ describe("plugin service", () => {
       "disabled",
     );
     expect((await tracked.setEnabled("tracked", true))?.status).toBe("running");
-    expect(
-      captured.filter((event) => event.name === "plugin_installed"),
-    ).toHaveLength(1);
+    expect(captured).toHaveLength(1);
     await tracked.stop();
   });
 
-  it("reports plugin_enabled only when a disabled plugin is turned on", async () => {
+  it("counts plugin actions once and classifies installed provenance without exporting identifiers", async () => {
     const captured: TelemetryEvent[] = [];
     const tracked = createTelemetryTrackedService(captured);
     const rootDir = await writePlugin(workDir, {
-      name: "bb-plugin-enable-tracked",
-      serverSource: "export default function plugin() {}",
+      name: "bb-plugin-private-work",
+      serverSource: `import { z } from "zod";
+      export default function plugin(bb) {
+        bb.cli.register({ name: "private-work", description: "Work", run() {
+          bb.experimental_recordFeatureUse({ trigger: "schedule" });
+          return { exitCode: 0, stdout: "done" };
+        }});
+        bb.rpc.register({
+          read: { input: z.null(), output: z.null() },
+          act: { experimental_usage: "action", input: z.null(), output: z.null() }
+        }, { read: () => null, act: () => { bb.experimental_recordFeatureUse({ trigger: "schedule" }); return null; } });
+      }`,
     });
-    const installed = await tracked.installPath(rootDir);
-    captured.length = 0;
-    await tracked.setEnabled(installed.id, true);
-    await tracked.setEnabled(installed.id, false);
-    await tracked.setEnabled(installed.id, true);
-    expect(captured).toEqual([
-      {
-        name: "plugin_enabled",
+    try {
+      await tracked.installPath(rootDir);
+      captured.length = 0;
+      const read = tracked.getRpcHandler("private-work", "read");
+      const act = tracked.getRpcHandler("private-work", "act");
+      if (read.outcome !== "found" || act.outcome !== "found")
+        throw new Error("RPC fixture not loaded");
+      await tracked.invokeRpcHandler("private-work", "read", read.value, null, {
+        kind: "client",
+      });
+      expect(captured).toEqual([]);
+      await tracked.runCliCommand("private-work", [], {});
+      await tracked.invokeRpcHandler("private-work", "act", act.value, null, {
+        kind: "client",
+      });
+      await tracked.invokeRpcHandler("private-work", "act", act.value, null, {
+        kind: "plugin",
+        pluginId: "private-caller",
+      });
+      expect(captured).toHaveLength(2);
+      expect(captured[0]).toEqual({
+        name: "feature_used",
         properties: {
-          plugin_id: null,
+          feature: "plugin",
+          feature_scope: "plugin",
+          interaction: "invoked",
+          trigger: "unknown",
+          plugin_source: "local",
+        },
+      });
+      const marketplace = {
+        sourceGitRef: null,
+        sourceGitSubdirectory: null,
+        sourceGitCommit: null,
+        manifestJson: "{}",
+        statsJson: null,
+        etag: null,
+        lastModified: null,
+        lastSuccessfulRefreshAt: null,
+        lastAttemptedRefreshAt: null,
+        lastError: null,
+      };
+      upsertPluginMarketplace(db, {
+        ...marketplace,
+        name: "bb-community",
+        sourceKind: "https",
+        manifestUrl: "https://getbb.app/marketplace/v2/marketplace.json",
+      });
+      upsertPluginMarketplace(db, {
+        ...marketplace,
+        name: "private-team",
+        sourceKind: "git",
+        manifestUrl: "https://github.com/private-team/marketplace.git",
+      });
+      const sources = [
+        {
+          sourceKind: "builtin",
+          provenance: "builtin",
+          catalogMarketplaceName: null,
+          expected: "builtin",
+        },
+        {
+          sourceKind: "git",
+          provenance: "catalog",
+          catalogMarketplaceName: "bb-community",
+          expected: "public_catalog",
+        },
+        {
+          sourceKind: "git",
+          provenance: "catalog",
+          catalogMarketplaceName: "private-team",
+          expected: "private_marketplace",
+        },
+        {
+          sourceKind: "path",
+          provenance: "catalog",
+          catalogMarketplaceName: "bb-community",
+          expected: "local",
+        },
+        {
+          sourceKind: "git",
           provenance: "direct",
-          marketplace: null,
+          catalogMarketplaceName: null,
+          expected: "unknown",
         },
-      },
-    ]);
-    await tracked.stop();
-  });
-
-  it("still turns a plugin on when its enable telemetry throws", async () => {
-    const service = createPluginService({
-      aiServices: createAiServiceRegistry(),
-      db,
-      hub: {
-        getDaemonSessionIdForHost: () => null,
-        notifyPluginSignal: () => 0,
-        notifySystem: () => {},
-      },
-      logger,
-      telemetry: {
-        ...createNoopTelemetryService(),
-        capture: (event) => {
-          if (event.name === "plugin_enabled") {
-            throw new Error("telemetry unavailable");
-          }
-        },
-      },
-      dataDir: join(workDir, "data"),
-      appVersion: "0.9.0",
-      bundledPlugins: [],
-      loadTimeoutMs: 2000,
-    });
-    const rootDir = await writePlugin(workDir, {
-      name: "bb-plugin-enable-guarded",
-      serverSource: "export default function plugin() {}",
-    });
-    const installed = await service.installPath(rootDir);
-    await service.setEnabled(installed.id, false);
-    await expect(service.setEnabled(installed.id, true)).resolves.toMatchObject(
-      {
-        status: "running",
-      },
-    );
-    await service.stop();
+      ] as const;
+      for (const { expected, ...source } of sources) {
+        db.update(installedPlugins)
+          .set(source)
+          .where(eq(installedPlugins.id, "private-work"))
+          .run();
+        captured.length = 0;
+        expect(tracked.recordPanelOpen("private-work")).toBe(true);
+        expect(captured).toEqual([
+          {
+            name: "feature_used",
+            properties: {
+              feature: "plugin",
+              feature_scope: "plugin",
+              interaction: "opened",
+              trigger: "unknown",
+              plugin_source: expected,
+            },
+          },
+        ]);
+        expect(JSON.stringify(captured)).not.toMatch(
+          /private-work|private-team|github|marketplace.json/,
+        );
+      }
+      upsertPluginMarketplace(db, {
+        ...marketplace,
+        name: "bb-community",
+        sourceKind: "https",
+        manifestUrl: "https://private.example/marketplace.json",
+      });
+      db.update(installedPlugins)
+        .set({
+          sourceKind: "git",
+          provenance: "catalog",
+          catalogMarketplaceName: "bb-community",
+        })
+        .where(eq(installedPlugins.id, "private-work"))
+        .run();
+      captured.length = 0;
+      tracked.recordPanelOpen("private-work");
+      expect(captured[0]).toMatchObject({
+        properties: { plugin_source: "unknown" },
+      });
+    } finally {
+      await tracked.stop();
+    }
   });
 
   it("does not report plugin_installed during boot-time reconcile", async () => {

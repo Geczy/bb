@@ -143,15 +143,25 @@ export const FEED_SIZE = 3;
 export const tipsRpcContract = defineRpcContract({
   current: { input: tipFeedInputSchema, output: tipFeedOutputSchema },
   hide: {
+    experimental_usage: "action",
     input: z.object({ hidden: z.boolean() }).strict(),
     output: okSchema,
   },
   setEnabled: {
+    experimental_usage: "action",
     input: z.object({ enabled: z.boolean() }).strict(),
     output: okSchema,
   },
-  dismiss: { input: tipIdInputSchema, output: okSchema },
-  act: { input: tipIdInputSchema, output: okSchema },
+  dismiss: {
+    experimental_usage: "action",
+    input: tipIdInputSchema,
+    output: okSchema,
+  },
+  act: {
+    experimental_usage: "action",
+    input: tipIdInputSchema,
+    output: okSchema,
+  },
   list: {
     input: z
       .object({ client: tipClientSchema.nullable(), all: z.boolean() })
@@ -164,7 +174,7 @@ export const tipsRpcContract = defineRpcContract({
       })
       .strict(),
   },
-  reset: { input: z.null(), output: okSchema },
+  reset: { experimental_usage: "action", input: z.null(), output: okSchema },
 });
 
 export const TIPS_CHANGED_CHANNEL = "tips-changed";

@@ -33,10 +33,16 @@ type AgentThreadsSdk = {
     args: Parameters<BbPluginApi["sdk"]["threads"]["spawn"]>[0],
   ): Promise<unknown>;
 };
-export type AgentRunApi = Pick<BbPluginApi, "realtime" | "log"> & {
+export type AgentRunApi = Pick<
+  BbPluginApi,
+  "realtime" | "log" | "experimental_recordFeatureUse"
+> & {
   sdk: { threads: AgentThreadsSdk };
 };
-export type ScriptRunApi = Pick<BbPluginApi, "realtime" | "log"> & {
+export type ScriptRunApi = Pick<
+  BbPluginApi,
+  "realtime" | "log" | "experimental_recordFeatureUse"
+> & {
   sdk: { projects: ProjectsSdk };
 };
 
@@ -109,6 +115,9 @@ export async function executeAgentRun(
   db: Db,
   args: AgentRunArgs,
 ): Promise<void> {
+  bb.experimental_recordFeatureUse({
+    trigger: args.run.trigger === "manual" ? "unknown" : "schedule",
+  });
   try {
     if (args.automation.targetThreadId !== null) {
       await reuseTargetThreadForRun(bb, db, {
@@ -269,6 +278,9 @@ export async function executeScriptRun(
     resolveWorkingDirectory: ScriptWorkingDirectoryResolver;
   },
 ): Promise<void> {
+  bb.experimental_recordFeatureUse({
+    trigger: args.run.trigger === "manual" ? "unknown" : "schedule",
+  });
   try {
     const scriptFile = args.execution.scriptFile;
     if (scriptFile === undefined) {

@@ -15,10 +15,7 @@ import {
   createPluginService,
   type PluginService,
 } from "../../../src/services/plugins/plugin-service.js";
-import {
-  createNoopTelemetryService,
-  type TelemetryEvent,
-} from "../../../src/services/system/telemetry.js";
+import { createNoopTelemetryService } from "../../../src/services/system/telemetry.js";
 import { testLogger } from "../../helpers/test-app.js";
 
 const logger = testLogger as unknown as Logger;
@@ -50,7 +47,6 @@ describe("replacement plugins", () => {
   let db: DbConnection;
   let workDir: string;
   let service: PluginService;
-  let captured: TelemetryEvent[];
 
   function state(id: string) {
     const plugin = service.list().find((candidate) => candidate.id === id);
@@ -63,15 +59,9 @@ describe("replacement plugins", () => {
     db = createConnection(":memory:");
     migrate(db);
     workDir = await mkdtemp(join(tmpdir(), "bb-plugin-replacement-"));
-    captured = [];
     service = createPluginService({
       aiServices: createAiServiceRegistry(),
-      telemetry: {
-        ...createNoopTelemetryService(),
-        capture: (event) => {
-          captured.push(event);
-        },
-      },
+      telemetry: createNoopTelemetryService(),
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
@@ -92,7 +82,6 @@ describe("replacement plugins", () => {
     await service.installPath(await writePathPlugin(workDir, "next"));
     await service.installPath(await writePathPlugin(workDir, "bystander"));
     await service.setEnabled("next", false);
-    captured.length = 0;
   });
 
   afterEach(async () => {
@@ -109,15 +98,10 @@ describe("replacement plugins", () => {
     expect(state("next")).toEqual({ enabled: true, status: "running" });
     expect(state("original")).toEqual({ enabled: false, status: "disabled" });
     expect(state("bystander")).toEqual({ enabled: true, status: "running" });
-    expect(captured.map((event) => event.name)).toEqual(["plugin_enabled"]);
 
     await service.setEnabled("next", false);
     expect(state("next")).toEqual({ enabled: false, status: "disabled" });
     expect(state("original")).toEqual({ enabled: true, status: "running" });
-    expect(captured.map((event) => event.name)).toEqual([
-      "plugin_enabled",
-      "plugin_enabled",
-    ]);
   });
 
   it("turns the replacement off when the original is turned back on", async () => {

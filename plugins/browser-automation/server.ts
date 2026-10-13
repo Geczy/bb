@@ -21,10 +21,6 @@ import {
   type BrowserCliRequest,
 } from "./cli.js";
 import { previewDirective } from "./preview-directive.js";
-import {
-  recordBrowserSessionStarted,
-  type BrowserSessionInitiator,
-} from "./telemetry.js";
 
 const desktopSchema = z
   .object({
@@ -191,7 +187,6 @@ export default async function browserAutomationPlugin(bb: BbPluginApi) {
   async function open(
     input: z.output<typeof rpcContract.open.input>,
     signal: AbortSignal,
-    initiatedBy: BrowserSessionInitiator,
   ): Promise<Session> {
     let threadLifecycle = threadLifecycles.get(input.threadId);
     if (!threadLifecycle) {
@@ -335,10 +330,6 @@ export default async function browserAutomationPlugin(bb: BbPluginApi) {
           }),
         );
       }
-      void recordBrowserSessionStarted(bb, {
-        surface: session.backend === "local" ? "headless" : "desktop",
-        initiated_by: initiatedBy,
-      });
       return session;
     } catch (error) {
       await finish(record, "closed").catch(() => {});
@@ -409,10 +400,9 @@ export default async function browserAutomationPlugin(bb: BbPluginApi) {
   }
   function handlers(
     signal: AbortSignal,
-    initiatedBy: BrowserSessionInitiator,
   ): PluginRpcHandlers<typeof rpcContract> {
     return {
-      open: (input) => open(input, signal, initiatedBy),
+      open: (input) => open(input, signal),
       async list({ threadId }) {
         const records = await Promise.all(
           (
@@ -450,14 +440,13 @@ export default async function browserAutomationPlugin(bb: BbPluginApi) {
         finish(await owned(input.threadId, input.sessionId), "closed"),
     };
   }
-  bb.rpc.register(rpcContract, handlers(lifecycle.signal, "sdk"));
+  bb.rpc.register(rpcContract, handlers(lifecycle.signal));
   function dispatch(
     method: BrowserCliMethod,
     input: unknown,
     signal: AbortSignal,
-    initiatedBy: BrowserSessionInitiator,
   ) {
-    const h = handlers(signal, initiatedBy);
+    const h = handlers(signal);
     switch (method) {
       case "open":
         return h.open(rpcContract.open.input.parse(input));
@@ -538,7 +527,6 @@ export default async function browserAutomationPlugin(bb: BbPluginApi) {
           context.signal ?? new AbortController().signal,
           lifecycle.signal,
         ]),
-        context.threadId === undefined ? "user" : "agent",
       );
       const output = rpcContract.run.output.safeParse(result);
       const previewed = rpcContract.preview.output.safeParse(result);

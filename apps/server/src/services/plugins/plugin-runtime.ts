@@ -1,3 +1,4 @@
+import { capturePluginUse } from "./plugin-feature-telemetry.js";
 import type { MachineEnrollmentService } from "../machines/machine-services.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
@@ -1621,6 +1622,8 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       current: {},
     };
     const handle = createPluginApi({
+      recordFeatureUse: (trigger) =>
+        capturePluginUse(deps, row.id, "ran", trigger),
       pluginId: row.id,
       logger: deps.logger,
       db: deps.db,

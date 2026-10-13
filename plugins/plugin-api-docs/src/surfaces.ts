@@ -906,6 +906,8 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Use RPC, HTTP, WebSocket, and realtime messages to connect the plugin. With this, a plugin can:",
         bullets: [
           "Call its server from its UI with schema-checked RPC",
+          "Classify RPC actions for anonymous capability counts; queries and unclassified methods are excluded",
+          "Record background work with fixed trigger categories; core resolves plugin source and honors opt-out",
           "Receive webhooks and serve HTTP or WebSocket routes",
           "Push live updates to open bb windows",
           "Publish RPC methods other plugins can discover",
@@ -913,6 +915,9 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         apiSymbols: [
           "PluginRpc",
           "PluginRpcMethodContract",
+          "PluginRpcMethodContract.experimental_usage",
+          "BbPluginApi.experimental_recordFeatureUse",
+          "PluginBbSdk.plugins.experimental_recordPanelOpen",
           "ExperimentalPluginRpcHandlersWithContext",
           "ExperimentalPluginRpcHandlerContext",
           "ExperimentalPluginRpcCaller",

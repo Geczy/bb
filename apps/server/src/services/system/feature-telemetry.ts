@@ -133,10 +133,18 @@ export function captureFeatureUsed(
   } catch {}
 }
 
-export function coreFeatureTelemetry(getTelemetry: () => TelemetryService) {
+export function coreFeatureTelemetry(
+  getTelemetry: () => TelemetryService,
+  isPluginRequest: (context: Context) => boolean = () => false,
+) {
   return async (context: Context, next: Next): Promise<void> => {
     await next();
-    if (context.res.status < 200 || context.res.status >= 300) return;
+    if (
+      context.res.status < 200 ||
+      context.res.status >= 300 ||
+      isPluginRequest(context)
+    )
+      return;
     const feature = registry.get(
       `${context.req.method} ${context.req.routePath}`,
     );
