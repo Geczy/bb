@@ -1,5 +1,6 @@
 import {
   bbDesktopServerChoicesSchema,
+  MACOS_TRAFFIC_LIGHT_INSET_PX,
   type BbDesktopServerChoice,
 } from "@bb/desktop-contract";
 import { contextBridge, ipcRenderer, webFrame } from "electron";
@@ -416,6 +417,7 @@ const bbDesktopApi: BbDesktopApi = {
   get pendingVersion() {
     return currentInfo.pendingVersion;
   },
+  macosTrafficLightInset: MACOS_TRAFFIC_LIGHT_INSET_PX,
   platform: resolveBbDesktopPlatform(process.platform),
   get serverDaemonLogsAvailable() {
     return currentInfo.serverDaemonLogsAvailable;

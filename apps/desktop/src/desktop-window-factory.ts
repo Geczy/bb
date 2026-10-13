@@ -17,13 +17,13 @@ import {
 } from "./window-state.js";
 import { resolveDesktopExternalUrl } from "./desktop-external-url.js";
 import type { DesktopContextMenuWebContents } from "./desktop-context-menu.js";
+import { MACOS_TRAFFIC_LIGHT_INSET_PX } from "@bb/desktop-contract";
 
 type DesktopWindowIcon = BrowserWindowConstructorOptions["icon"];
 
-const MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET = 18;
 const MACOS_TRAFFIC_LIGHT_POSITION = {
-  x: MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET,
-  y: MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET,
+  x: MACOS_TRAFFIC_LIGHT_INSET_PX,
+  y: MACOS_TRAFFIC_LIGHT_INSET_PX,
 };
 
 interface DesktopWindowOpenDetails {

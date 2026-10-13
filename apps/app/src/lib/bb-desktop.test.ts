@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
-import type { BbDesktopInfo } from "@bb/desktop-contract";
+import {
+  MACOS_LEGACY_TRAFFIC_LIGHT_INSET_PX,
+  MACOS_TRAFFIC_LIGHT_CLUSTER_WIDTH_PX,
+  MACOS_TRAFFIC_LIGHT_INSET_PX,
+  MACOS_TRAFFIC_LIGHT_SIZE_PX,
+  type BbDesktopInfo,
+} from "@bb/desktop-contract";
 import { createBbDesktopApi } from "@/test/bb-desktop-test-utils";
 import {
   DEFAULT_WINDOW_FIND_TOP_OFFSET,
-  MACOS_COLLAPSED_TOP_LEFT_RESERVE_CLASS,
-  MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
-  MACOS_TRAFFIC_LIGHT_RESERVE_PADDING_CLASS,
+  applyMacosWindowChromeGeometry,
+  getMacosWindowChromeGeometry,
   resolveWindowFindTopOffset,
   shouldReserveMacosTrafficLights,
 } from "./bb-desktop";
@@ -20,13 +25,7 @@ const desktopInfo: BbDesktopInfo = {
   version: "0.0.0-test",
 };
 
-const px = (className: string): number => {
-  const match = /\[(\d+)px\]/.exec(className);
-  if (match === null) {
-    throw new Error(`no px token in "${className}"`);
-  }
-  return Number(match[1]);
-};
+const macosDesktopApi = createBbDesktopApi(desktopInfo);
 
 describe("desktop chrome geometry", () => {
   it("reserves macOS traffic-light space only when lights are visible", () => {
@@ -52,23 +51,67 @@ describe("desktop chrome geometry", () => {
     ).toBe(false);
   });
 
-  it("lands the collapsed reserve at the traffic-light-clearing target", () => {
-    const TRIGGER_OFFSET = px(MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS);
-    const TRIGGER_BUTTON = 28;
-    const TRIGGER_GAP = 8;
-    const TARGET = TRIGGER_OFFSET + TRIGGER_BUTTON + TRIGGER_GAP;
+  it.each([
+    { name: "current desktop", inset: MACOS_TRAFFIC_LIGHT_INSET_PX },
+    { name: "older desktop", inset: undefined },
+  ])(
+    "keeps $name chrome clear of and centered on the traffic lights",
+    ({ inset }) => {
+      const reportedInset = inset ?? MACOS_LEGACY_TRAFFIC_LIGHT_INSET_PX;
+      const geometry = getMacosWindowChromeGeometry({
+        ...macosDesktopApi,
+        macosTrafficLightInset: inset,
+      });
+      const CONTROL_SIZE = 28;
+      const TRAFFIC_LIGHT_CLEARANCE = 12;
+      const COLLAPSED_TRIGGER_GAP = 8;
+      const PAGE_HEADER_BASE_INSET = 16;
 
-    const BASE_INSET = 16;
+      expect(geometry.trafficLightCenterY).toBe(
+        reportedInset + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2,
+      );
+      expect(geometry.titleBarHeight - CONTROL_SIZE / 2).toBe(
+        geometry.trafficLightCenterY,
+      );
+      expect(geometry.trafficLightReserve).toBe(
+        reportedInset +
+          MACOS_TRAFFIC_LIGHT_CLUSTER_WIDTH_PX +
+          TRAFFIC_LIGHT_CLEARANCE,
+      );
+      expect(PAGE_HEADER_BASE_INSET + geometry.collapsedTopLeftReserve).toBe(
+        geometry.trafficLightReserve + CONTROL_SIZE + COLLAPSED_TRIGGER_GAP,
+      );
+    },
+  );
 
-    expect(BASE_INSET + px(MACOS_COLLAPSED_TOP_LEFT_RESERVE_CLASS)).toBe(
-      TARGET,
+  it("puts the close button above the rail icons on the current desktop", () => {
+    const RAIL_PADDING = 6;
+    const RAIL_CONTROL_SIZE = 28;
+
+    expect(MACOS_TRAFFIC_LIGHT_INSET_PX + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2).toBe(
+      RAIL_PADDING + RAIL_CONTROL_SIZE / 2,
     );
   });
 
-  it("starts the framed title bar controls where the lone trigger sits", () => {
-    expect(px(MACOS_TRAFFIC_LIGHT_RESERVE_PADDING_CLASS)).toBe(
-      px(MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS),
-    );
+  it("applies the reported geometry to the document root", () => {
+    const properties = new Map<string, string>();
+    const root = {
+      style: {
+        setProperty: (name: string, value: string) =>
+          properties.set(name, value),
+      },
+    };
+
+    applyMacosWindowChromeGeometry(root, {
+      ...macosDesktopApi,
+      macosTrafficLightInset: MACOS_TRAFFIC_LIGHT_INSET_PX,
+    });
+    expect(properties.get("--bb-window-title-bar-height")).toBe("34px");
+    expect(properties.get("--bb-macos-traffic-light-reserve")).toBe("85px");
+
+    properties.clear();
+    applyMacosWindowChromeGeometry(root, null);
+    expect(properties.size).toBe(0);
   });
 });
 
