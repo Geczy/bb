@@ -801,6 +801,9 @@ export function createApp(
   setPluginThreadEventEmitter(pluginService.events);
   setTurnTelemetryDeps({
     ...deps,
+    get telemetry() {
+      return deps.telemetry;
+    },
     builtInProviderIds: () => {
       const builtInPluginIds = new Set(
         pluginService

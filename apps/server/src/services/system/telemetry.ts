@@ -1,3 +1,8 @@
+import { validWorkTelemetry } from "./work-telemetry-schema.js";
+import type {
+  AnalyticsThreadProperties,
+  WorkOriginProperties,
+} from "./work-telemetry.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { release } from "node:os";
 import type { AppInstall } from "@bb/config/app-install";
@@ -32,18 +37,35 @@ export type TurnErrorCategory =
 
 export type TelemetryEvent =
   | { name: "feature_used"; properties: FeatureUsedProperties }
+  | {
+      name: "thread_lifecycle";
+      properties: AnalyticsThreadProperties &
+        Partial<WorkOriginProperties> & {
+          transition:
+            | "turn_started"
+            | "waiting_on_user"
+            | "waiting_cleared"
+            | "thread_stopped"
+            | "thread_archived"
+            | "thread_unarchived"
+            | "thread_deleted"
+            | "parent_changed";
+          wait_kind?: "question" | "approval" | "other" | "unknown";
+        };
+    }
   | { name: "app_started" }
   | { name: "telemetry_disabled" }
   | {
       name: "thread_created";
-      properties: {
+      properties: Partial<AnalyticsThreadProperties> & {
         is_child_thread: boolean;
         provider: string;
       };
     }
   | {
       name: "user_message_sent";
-      properties: {
+      properties: Partial<AnalyticsThreadProperties> & {
+        request_analytics_id?: string;
         is_child_thread: boolean;
         message_source: "queued_message" | "thread_create" | "thread_send";
         provider: string;
@@ -51,12 +73,13 @@ export type TelemetryEvent =
     }
   | {
       name: "turn_finished";
-      properties: {
-        outcome: TurnFinishedOutcome;
-        provider: string;
-        error_category: TurnErrorCategory;
-        first_turn: boolean;
-      };
+      properties: AnalyticsThreadProperties &
+        WorkOriginProperties & {
+          outcome: TurnFinishedOutcome;
+          provider: string;
+          error_category: TurnErrorCategory;
+          first_turn: boolean;
+        };
     }
   | {
       name: "plugin_installed";
@@ -70,7 +93,8 @@ export type TelemetryEvent =
   | RecordTelemetryEventRequest;
 
 export interface TelemetryService {
-  capture(event: TelemetryEvent): void;
+  capture(event: TelemetryEvent, occurrenceTime?: number): void;
+  isEnabled(): boolean;
   setEnabled(enabled: boolean): void;
 }
 
@@ -87,6 +111,7 @@ interface CreateTelemetryServiceArgs {
 
 const noopTelemetryService: TelemetryService = {
   capture: () => {},
+  isEnabled: () => false,
   setEnabled: () => {},
 };
 
@@ -130,6 +155,13 @@ function appInstallProperties(install: AppInstall | null) {
   return { install_kind: "source", source_origin: install.origin };
 }
 
+export function currentTelemetryTrigger(): "person" | "unknown" {
+  const surface = telemetryAppSurfaceStorage.getStore();
+  return surface === "web" || surface === "desktop" || surface === "mobile"
+    ? "person"
+    : "unknown";
+}
+
 export function runWithTelemetryAppSurface<T>(
   appSurface: RequestAppSurface,
   callback: () => T,
@@ -170,11 +202,13 @@ export async function createTelemetryService(
     setEnabled(enabled: boolean): void {
       telemetryEnabled = enabled;
     },
-    capture(event: TelemetryEvent): void {
+    isEnabled: () => telemetryEnabled,
+    capture(event: TelemetryEvent, occurrenceTime = Date.now()): void {
       if (!telemetryEnabled) return;
       const appSurface =
         telemetryAppSurfaceStorage.getStore() ?? args.appSurface;
       const eventProperties = "properties" in event ? event.properties : {};
+      if (!validWorkTelemetry(event.name, eventProperties)) return;
       const body = JSON.stringify({
         api_key: args.apiKey,
         distinct_id: distinctId,
@@ -184,7 +218,7 @@ export async function createTelemetryService(
           ...eventProperties,
           app_surface: appSurface,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(occurrenceTime).toISOString(),
       });
       fetch(POSTHOG_INGESTION_URL, {
         body,
