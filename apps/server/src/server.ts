@@ -1,3 +1,4 @@
+import { telemetryTriggerSchema } from "@bb/server-contract";
 import { coreFeatureTelemetry } from "./services/system/feature-telemetry.js";
 import { createPluginUpdateJobs } from "./services/plugins/plugin-update-jobs.js";
 import { registerPluginUpdateJobRoutes } from "./routes/plugin-update-jobs.js";
@@ -885,7 +886,11 @@ export function createApp(
         const caller = pluginService.resolveRpcCaller(
           context.req.header("x-bb-plugin-caller"),
         );
-        return caller.ok && caller.caller.kind === "plugin";
+        return caller.ok && caller.caller.kind === "plugin"
+          ? (telemetryTriggerSchema.safeParse(
+              context.req.header("x-bb-plugin-trigger"),
+            ).data ?? "unknown")
+          : null;
       },
     ),
   );

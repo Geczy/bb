@@ -13,7 +13,7 @@ import {
 import { captureFeatureUsed } from "../system/feature-telemetry.js";
 import type { PluginServiceDeps } from "./plugin-service-internal.js";
 
-const invocation = new AsyncLocalStorage<boolean>();
+const invocation = new AsyncLocalStorage<TelemetryTrigger>();
 const capabilities: Readonly<Record<string, CoreFeature>> = {
   automations: "automation",
   "browser-automation": "browser",
@@ -98,8 +98,13 @@ export function withPluginUse<T>(
   trigger: TelemetryTrigger,
   run: () => T,
   capture = true,
+  interaction: "invoked" | "ran" = "invoked",
 ): T {
   if (invocation.getStore()) return run();
-  if (capture) capturePluginUse(deps, pluginId, "invoked", trigger);
-  return invocation.run(true, run);
+  if (capture) capturePluginUse(deps, pluginId, interaction, trigger);
+  return invocation.run(trigger, run);
+}
+
+export function pluginInvocationTrigger(): TelemetryTrigger {
+  return invocation.getStore() ?? "unknown";
 }

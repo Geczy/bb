@@ -873,13 +873,13 @@ describe("plugin service", () => {
       serverSource: `import { z } from "zod";
       export default function plugin(bb) {
         bb.cli.register({ name: "private-work", description: "Work", run() {
-          bb.experimental_recordFeatureUse({ trigger: "schedule" });
+          bb.experimental_withFeatureUse({ trigger: "schedule" }, () => undefined);
           return { exitCode: 0, stdout: "done" };
         }});
         bb.rpc.register({
           read: { input: z.null(), output: z.null() },
           act: { experimental_usage: "action", input: z.null(), output: z.null() }
-        }, { read: () => null, act: () => { bb.experimental_recordFeatureUse({ trigger: "schedule" }); return null; } });
+        }, { read: () => null, act: () => { bb.experimental_withFeatureUse({ trigger: "schedule" }, () => undefined); return null; } });
       }`,
     });
     try {

@@ -4214,5 +4214,5 @@ Stabilize after deciding whether depth, recency window, and limit should be call
 ## Anonymous capability capture
 
 - `PluginRpcMethodContract.experimental_usage`: optional `action` or `query` classification. Core registers the same metadata for bundled plugins and captures only explicit actions through the shared RPC boundary. Stabilize after plugin authors can classify actions without counting polling or restoration.
-- `BbPluginApi.experimental_recordFeatureUse`: records one background work invocation using fixed trigger categories. Core owns source classification, nested-call suppression and opt-out. Automations uses it at actual agent/script execution, never at timer polling. Stabilize after execution and nested-call parity is verified.
+- `BbPluginApi.experimental_withFeatureUse`: wraps one background work invocation using fixed trigger categories. Core owns source classification, nested-call suppression and opt-out. Automations uses it at actual agent/script execution, never at timer polling. Stabilize after execution and nested-call parity is verified.
 - `PluginsArea.experimental_recordPanelOpen`: core panel actions and route navigation use the same endpoint; the server resolves the installed plugin and sends only categorical provenance. Stabilize after panel restoration and explicit opens remain distinguishable.

@@ -1499,7 +1499,9 @@ function createFakePluginHostInternal(
   };
 
   const bb: BbPluginApi = {
-    experimental_recordFeatureUse() {},
+    experimental_withFeatureUse(_options, run) {
+      return run();
+    },
     pluginId,
     log,
     settings,

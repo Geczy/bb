@@ -1,3 +1,4 @@
+import type { TelemetryTrigger } from "@bb/server-contract";
 import { validWorkTelemetry } from "./work-telemetry-schema.js";
 import type {
   AnalyticsThreadProperties,
@@ -163,7 +164,17 @@ function appInstallProperties(install: AppInstall | null) {
   return { install_kind: "source", source_origin: install.origin };
 }
 
-export function currentTelemetryTrigger(): "person" | "unknown" {
+const triggerStorage = new AsyncLocalStorage<TelemetryTrigger>();
+export function withTelemetryTrigger<T>(
+  trigger: TelemetryTrigger,
+  run: () => T,
+): T {
+  return triggerStorage.run(trigger, run);
+}
+
+export function currentTelemetryTrigger(): TelemetryTrigger {
+  const trigger = triggerStorage.getStore();
+  if (trigger !== undefined) return trigger;
   const surface = telemetryAppSurfaceStorage.getStore();
   return surface === "web" || surface === "desktop" || surface === "mobile"
     ? "person"

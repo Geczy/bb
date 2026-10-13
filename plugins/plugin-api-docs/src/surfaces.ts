@@ -754,6 +754,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         surfaceIds: [
           "background",
           "wire",
+          "anonymous-usage",
           "thread-events",
           "dispatch-hook",
           "environment-providers",
@@ -968,14 +969,14 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         tagline: "Categorical capability use with the existing opt-out",
         title: "Anonymous capability usage",
         summary:
-          "Describe explicit work without exporting plugin identities. With this, a plugin can:",
+          "Use categorical events for explicit work without exporting plugin identities. With this, a plugin can:",
         bullets: [
           "Classify RPC methods as actions or queries; polling and unclassified methods do not count",
-          "Report background work with a fixed person, agent, schedule, system or unknown trigger",
+          "Wrap background work with a fixed person, agent, schedule, system or unknown trigger",
           "Use core's shared provenance classification, opt-out and nested-call suppression",
         ],
         apiSymbols: [
-          "BbPluginApi.experimental_recordFeatureUse",
+          "BbPluginApi.experimental_withFeatureUse",
           "PluginBbSdk.plugins.experimental_recordPanelOpen",
         ],
         firstParty: ["Automations"],

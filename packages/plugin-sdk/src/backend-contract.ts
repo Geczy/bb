@@ -2089,10 +2089,13 @@ export type PluginBbSdk = Omit<BbSdk, "threads"> & {
  * against.
  */
 export interface BbPluginApi {
-  /** Report one background work invocation; core resolves anonymous plugin provenance and applies opt-out. Do not report timers, polling, or startup. */
-  experimental_recordFeatureUse(options: {
-    trigger: "person" | "agent" | "schedule" | "system" | "unknown";
-  }): void;
+  /** Wrap one background work invocation; core resolves anonymous provenance, trigger context, nested calls and opt-out. Excludes timers, polling and startup. */
+  experimental_withFeatureUse<T>(
+    options: {
+      trigger: "person" | "agent" | "schedule" | "system" | "unknown";
+    },
+    run: () => T,
+  ): T;
   /** The plugin's own id (namespaces storage, routes, commands). */
   readonly pluginId: string;
   /** Leveled, plugin-scoped logger. */

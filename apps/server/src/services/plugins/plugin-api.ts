@@ -476,9 +476,10 @@ function createStagedRegistrations<
 const PLUGIN_HOST_CALL_MAX_TIMEOUT_MS = 30 * 60_000;
 
 export function createPluginApi(options: {
-  recordFeatureUse?: (
+  withFeatureUse?: <T>(
     trigger: import("@bb/server-contract").TelemetryTrigger,
-  ) => void;
+    run: () => T,
+  ) => T;
   pluginId: string;
   logger: ServerLogger;
   db: DbConnection;
@@ -1324,9 +1325,10 @@ export function createPluginApi(options: {
   };
 
   const api: BbPluginApi = {
-    experimental_recordFeatureUse(value) {
+    experimental_withFeatureUse(value, run) {
       const parsed = telemetryTriggerSchema.safeParse(value?.trigger);
-      if (parsed.success) options.recordFeatureUse?.(parsed.data);
+      if (!parsed.success || !options.withFeatureUse) return run();
+      return options.withFeatureUse(parsed.data, run);
     },
     pluginId,
     log,
