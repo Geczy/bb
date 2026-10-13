@@ -114,7 +114,7 @@ async function setup() {
         { threadId: thread.id, event: { type } },
       ),
     );
-  const queue = () =>
+  const queue = (beforeAccept?: () => void) =>
     withMessageOrigin(
       {
         threadId: thread.id,
@@ -122,8 +122,9 @@ async function setup() {
         trigger: "person",
         captureMessage: true,
       },
-      () =>
-        recordQueuedMessageWait(harness.deps, {
+      () => {
+        beforeAccept?.();
+        return recordQueuedMessageWait(harness.deps, {
           thread,
           claimed: null,
           sendAt: null,
@@ -138,7 +139,8 @@ async function setup() {
             payload: { kind: "inline" },
             systemNotice: null,
           },
-        })!,
+        })!;
+      },
     );
   return { harness, thread, capture, request, settle, queue };
 }
@@ -147,8 +149,8 @@ describe("work analytics lineage", () => {
   it("preserves grouped accepted messages and their timestamps through a retry, without attributing steering", async () => {
     const { harness, thread, capture, request, settle, queue } = await setup();
     try {
-      const now = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
-      const first = queue();
+      const now = vi.spyOn(Date, "now").mockReturnValue(1_799_999_940_000);
+      const first = queue(() => now.mockReturnValue(1_800_000_000_000));
       now.mockReturnValue(1_800_086_400_001);
       const second = queue();
       const messages = capture.mock.calls.filter(
