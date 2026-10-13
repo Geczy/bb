@@ -25,6 +25,37 @@ function providerErrors(events: readonly ThreadEvent[]) {
   return events.filter((event) => event.type === "provider/error");
 }
 
+describe("Claude authentication recovery classification", () => {
+  it.each(["success", "error_during_execution"])(
+    "preserves assistant authentication failures through a %s result and clears them before continuation",
+    (subtype) => {
+      const harness = createClaudeDeltaHarness();
+      harness.translate(sdkMessage({
+        type: "assistant",
+        error: "authentication_failed",
+        isApiErrorMessage: true,
+        message: { id: "auth-error", content: [{ type: "text", text: "Please sign in" }] },
+      }), { threadId: THREAD_ID });
+      const failed = harness.translate(sdkMessage({
+        type: "result", subtype, is_error: true,
+        result: "Please sign in", errors: ["Please sign in"], usage: {}, modelUsage: {},
+      }), { threadId: THREAD_ID });
+      expect(providerErrors(failed)).toContainEqual(expect.objectContaining({
+        errorInfo: { category: "unauthorized", providerCode: "authentication_failed", httpStatusCode: null },
+      }));
+      harness.acceptInput("creq_23456789ad", THREAD_ID);
+      harness.translate(sdkMessage({ type: "assistant", message: { id: "next", content: [] } }), { threadId: THREAD_ID });
+      const next = harness.translate(sdkMessage({
+        type: "result", subtype: "error_max_budget_usd", is_error: true,
+        errors: ["Budget exceeded"], usage: {}, modelUsage: {},
+      }), { threadId: THREAD_ID });
+      expect(providerErrors(next)).toContainEqual(expect.objectContaining({
+        errorInfo: { category: "budget-exceeded", providerCode: "error_max_budget_usd", httpStatusCode: null },
+      }));
+    },
+  );
+});
+
 describe("claude rate-limit classification (delta path)", () => {
   it("classifies an SDK rate-limit retry as a retrying rate-limit error", () => {
     const harness = createClaudeDeltaHarness();
