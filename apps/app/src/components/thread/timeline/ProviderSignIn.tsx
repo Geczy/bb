@@ -1,15 +1,20 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { TerminalSession } from "@bb/server-contract";
 import { Button } from "@bb/shared-ui/button";
 import {
   useCloseTerminal,
   useCreateTerminal,
 } from "@/hooks/queries/thread-terminal-queries";
-import { ThreadTerminalView } from "../terminal/ThreadTerminalView.js";
 import {
   DEFAULT_TERMINAL_COLS,
   DEFAULT_TERMINAL_ROWS,
 } from "../terminal/useThreadTerminalController.js";
+
+const ThreadTerminalView = lazy(() =>
+  import("../terminal/ThreadTerminalView.js").then((module) => ({
+    default: module.ThreadTerminalView,
+  })),
+);
 
 export function ProviderSignIn({
   threadId,
@@ -77,12 +82,20 @@ export function ProviderSignIn({
       ) : null}
       {session !== null ? (
         <div className="h-80 overflow-hidden rounded-md border">
-          <ThreadTerminalView
-            autoFocus={false}
-            isPanelOpen
-            session={session}
-            onSessionChange={setSession}
-          />
+          <Suspense
+            fallback={
+              <p className="p-3 text-sm text-muted-foreground">
+                Opening sign-in terminal…
+              </p>
+            }
+          >
+            <ThreadTerminalView
+              autoFocus={false}
+              isPanelOpen
+              session={session}
+              onSessionChange={setSession}
+            />
+          </Suspense>
         </div>
       ) : null}
     </div>
