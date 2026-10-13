@@ -53,10 +53,7 @@ async function setup() {
       enabled = value;
     },
   };
-  setTurnTelemetryDeps({
-    ...harness.deps,
-    builtInProviderIds: () => new Set([thread.providerId]),
-  });
+  setTurnTelemetryDeps(harness.deps);
   const execution = {
     model: "test-model",
     reasoningLevel: "medium",
