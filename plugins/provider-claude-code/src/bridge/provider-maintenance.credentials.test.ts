@@ -70,6 +70,8 @@ const defaultDir = path.join("/test/home", ".claude");
 const customDir = "/test/home/custom-claude";
 const defaultService = "Claude Code-credentials";
 const customService = "Claude Code-credentials-07a20a2a";
+const storageDir = " ~/cafe\u0301/../secure-store ";
+const storageService = "Claude Code-credentials-017dfee1";
 const accountUuid = "11111111-1111-4111-8111-111111111111";
 
 function credentials(accessToken: string, expiresAt = 4_102_444_800_000) {
@@ -116,6 +118,7 @@ async function expectProfile(token: string, email: string | null) {
 beforeEach(() => {
   platform("darwin");
   vi.stubEnv("CLAUDE_CONFIG_DIR", undefined);
+  vi.stubEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR", undefined);
   state.files.clear();
   state.keychain.clear();
   state.security.mockClear();
@@ -203,6 +206,67 @@ describe("Claude Code credential loading", () => {
     await expectProfile("custom-keychain", "custom@example.com");
   });
 
+  it.each([
+    ["linux", "", defaultDir, defaultService, "selected-file"],
+    ["darwin", "", defaultDir, defaultService, "selected-keychain"],
+    [
+      "linux",
+      storageDir,
+      storageDir.normalize("NFC"),
+      storageService,
+      "selected-file",
+    ],
+    [
+      "darwin",
+      storageDir,
+      storageDir.normalize("NFC"),
+      storageService,
+      "selected-keychain",
+    ],
+    [
+      "darwin",
+      storageDir,
+      storageDir.normalize("NFC"),
+      storageService,
+      "selected-file",
+    ],
+  ] as const)(
+    "honors %s storage override %j using %s / %s / %s without moving account metadata",
+    async (os, override, directory, service, token) => {
+      platform(os);
+      vi.stubEnv("CLAUDE_CONFIG_DIR", customDir);
+      vi.stubEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR", override);
+      state.files.set(
+        path.join(customDir, ".credentials.json"),
+        credentials("expired-settings-file", 1),
+      );
+      state.keychain.set(
+        customService,
+        credentials("expired-settings-keychain", 1),
+      );
+      state.files.set(
+        path.join(directory, ".credentials.json"),
+        credentials("selected-file"),
+      );
+      state.keychain.set(
+        service,
+        token === "selected-keychain"
+          ? credentials(token)
+          : "invalid-keychain-value",
+      );
+      state.files.set(
+        path.join(directory, ".config.json"),
+        account("storage@example.com"),
+      );
+      state.files.set(
+        path.join(customDir, ".claude.json"),
+        account("settings@example.com"),
+      );
+
+      await expectProfile(token, "settings@example.com");
+    },
+  );
+
   it.each([undefined, "invalid-keychain-value"])(
     "falls back within the custom profile for Keychain value %s",
     async (keychain) => {
@@ -221,11 +285,24 @@ describe("Claude Code credential loading", () => {
     },
   );
 
-  it.each(["linux", "darwin"] as const)(
-    "does not borrow a signed-in default account for a missing custom profile on %s",
-    async (os) => {
+  it.each([
+    ["linux", undefined],
+    ["darwin", undefined],
+    ["linux", storageDir],
+    ["darwin", storageDir],
+  ] as const)(
+    "does not borrow another signed-in account for a missing custom profile on %s with storage override %j",
+    async (os, override) => {
       platform(os);
       vi.stubEnv("CLAUDE_CONFIG_DIR", customDir);
+      vi.stubEnv("CLAUDE_SECURESTORAGE_CONFIG_DIR", override);
+      if (override !== undefined) {
+        state.files.set(
+          path.join(customDir, ".credentials.json"),
+          credentials("settings-file"),
+        );
+        state.keychain.set(customService, credentials("settings-keychain"));
+      }
 
       expect(await getClaudeProviderHealth()).toMatchObject({
         health: { status: "unauthenticated", accountEmail: null },
