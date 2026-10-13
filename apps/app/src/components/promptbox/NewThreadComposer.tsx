@@ -528,11 +528,10 @@ export function NewThreadComposer({
   const sidebarNavigationSettled =
     sidebarNavigationQuery.isError ||
     (sidebarNavigationQuery.isSuccess && replayKnowsCandidate);
-  const projectId = useMemo(() => {
-    if (isProjectlessProjectId(requestedCandidate)) return PERSONAL_PROJECT_ID;
-    if (!projects || !replayKnowsCandidate) return requestedCandidate;
-    return candidateKnown ? requestedCandidate : PERSONAL_PROJECT_ID;
-  }, [candidateKnown, projects, replayKnowsCandidate, requestedCandidate]);
+  const projectId = isProjectlessProjectId(requestedCandidate)
+    ? PERSONAL_PROJECT_ID
+    : requestedCandidate;
+  const projectUnavailable = sidebarNavigationSettled && !candidateKnown;
   const isProjectless = isProjectlessProjectId(projectId);
   const currentProject = useMemo(() => {
     if (isProjectless) {
@@ -546,8 +545,13 @@ export function NewThreadComposer({
     [currentProject?.sources],
   );
   const projectOptions = useMemo(
-    () => projects?.map(({ id, name }) => ({ id, name })) ?? [],
-    [projects],
+    () => [
+      ...(projectUnavailable
+        ? [{ id: projectId, name: "Unavailable project" }]
+        : []),
+      ...(projects?.map(({ id, name }) => ({ id, name })) ?? []),
+    ],
+    [projectId, projectUnavailable, projects],
   );
 
   const hostsQuery = useHosts();
@@ -1454,7 +1458,10 @@ export function NewThreadComposer({
   const changeProject = useCallback(
     async (nextProjectId: string | null): Promise<ProjectChangeOutcome> => {
       const nextValue = nextProjectId ?? PERSONAL_PROJECT_ID;
-      if (nextValue === projectId) return "unchanged";
+      if (nextValue === projectId) {
+        await onProjectChange(nextValue);
+        return "unchanged";
+      }
       if (
         isCopyingAttachmentsRef.current ||
         pendingUploadCountRef.current > 0 ||
@@ -1620,24 +1627,27 @@ export function NewThreadComposer({
     : (selectedEnvironment ??
       (selectionScope === "new-thread" ? seed?.environment : undefined) ??
       null);
-  const submissionReadinessReason = resolveNewThreadSubmitDisabledReason({
-    environmentProviderInputsBlocker:
-      machineProviderInputs.blockedReason ?? environmentProviderInputsBlocker,
-    environmentSetupRequiredReason:
-      environmentSetupRequiredReason ?? machineServerAccessReason,
-    isCopyingAttachments,
-    isLoadingModels,
-    isSubmitting,
-    isUploading,
-    modelLoadError,
-    projectDefaultsStatus: projectDefaultsState.status,
-    projectDefaultsUnavailable,
-    promptInputEmpty: false,
-    providerDisplayName: selectedProviderDisplayName,
-    selectedProviderId,
-    selectedThreadModel,
-    submissionEnvironmentUnavailable: submissionEnvironment === null,
-  });
+  const submissionReadinessReason = projectUnavailable
+    ? "This project is unavailable. Choose a project to continue."
+    : resolveNewThreadSubmitDisabledReason({
+        environmentProviderInputsBlocker:
+          machineProviderInputs.blockedReason ??
+          environmentProviderInputsBlocker,
+        environmentSetupRequiredReason:
+          environmentSetupRequiredReason ?? machineServerAccessReason,
+        isCopyingAttachments,
+        isLoadingModels,
+        isSubmitting,
+        isUploading,
+        modelLoadError,
+        projectDefaultsStatus: projectDefaultsState.status,
+        projectDefaultsUnavailable,
+        promptInputEmpty: false,
+        providerDisplayName: selectedProviderDisplayName,
+        selectedProviderId,
+        selectedThreadModel,
+        submissionEnvironmentUnavailable: submissionEnvironment === null,
+      });
   const submitDisabledReason =
     submissionReadinessReason ??
     (promptInputEmpty ? "Enter a prompt or attach a file." : null);
