@@ -1069,21 +1069,21 @@ schema, a default, and a revision that increments on every write. Writes name
 the revision they expect and receive `409 ui_preference_conflict` when another
 client wrote first, so a stale window cannot silently clobber a newer value.
 
-| Key                                  | Value                                                                                     |
-| ------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `sidebar.organizationMode`           | `project`, `chronological`, or `machine`                                                  |
-| `sidebar.threadGrouping.environment` | `auto`, `true`, or `false`                                                                |
-| `sidebar.chronologicalSort`          | `updated`, `created`, `alpha`, or `none`                                                  |
-| `sidebar.sectionOrder`               | Section id list for **By project**                                                        |
-| `sidebar.manualSectionOrder`         | Section id list for **Manually**                                                          |
-| `sidebar.machineSectionOrder`        | Section id list for **By machine**                                                        |
-| `sidebar.hiddenGroups`               | Legacy project, custom section, and machine ids migrated once into the Thread list plugin |
-| `sidebar.footerOrder`                | Footer action order                                                                       |
-| `sidebar.hiddenFooterItems`          | Footer actions moved into More                                                            |
-| `sidebar.pluginPanelOrder`           | Rail destination order                                                                    |
-| `sidebar.visiblePluginPanels`        | Rail destinations shown, or `null` for every destination                                  |
-| `sidebar.threadListProvider`         | Plugin key or `__automatic__` (default)                                                   |
-| `infoPanel.collapsedSections`        | Collapsed thread Info panel sections (`commits`, `uncommittedChanges`, `childThreads`, `forks`, `threadStorage`)   |
+| Key                                  | Value                                                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `sidebar.organizationMode`           | `project`, `chronological`, or `machine`                                                                         |
+| `sidebar.threadGrouping.environment` | `auto`, `true`, or `false`                                                                                       |
+| `sidebar.chronologicalSort`          | `updated`, `created`, `alpha`, or `none`                                                                         |
+| `sidebar.sectionOrder`               | Section id list for **By project**                                                                               |
+| `sidebar.manualSectionOrder`         | Section id list for **Manually**                                                                                 |
+| `sidebar.machineSectionOrder`        | Section id list for **By machine**                                                                               |
+| `sidebar.hiddenGroups`               | Legacy project, custom section, and machine ids migrated once into the Thread list plugin                        |
+| `sidebar.footerOrder`                | Footer action order                                                                                              |
+| `sidebar.hiddenFooterItems`          | Footer actions moved into More                                                                                   |
+| `sidebar.pluginPanelOrder`           | Rail destination order                                                                                           |
+| `sidebar.visiblePluginPanels`        | Rail destinations shown, or `null` for every destination                                                         |
+| `sidebar.threadListProvider`         | Plugin key or `__automatic__` (default)                                                                          |
+| `infoPanel.collapsedSections`        | Collapsed thread Info panel sections (`commits`, `uncommittedChanges`, `childThreads`, `forks`, `threadStorage`) |
 
 The sidebar thread list defaults to `__automatic__`: the first installed thread list
 plugin other than the bundled Thread list plugin (`thread-list/thread-list`), or the
@@ -2125,7 +2125,21 @@ markers. These additions include no provider IDs, account details, prompts,
 project or file names, terminal output, error messages, or session identifiers.
 They do not measure foreground time, app exit, or install/update error reasons.
 
-The bundled Tips plugin sends `tip_shown` and `tip_used` with fixed tip IDs, positions and action types. Automations reports `automation_created` and split view reports `split_view_opened` through the same strict allowlist.
+The bundled Tips plugin sends `tip_shown` and `tip_used` with fixed tip IDs,
+positions and action types. `feature_used` uses a finite capability registry:
+threads, child threads, providers, remote access, automations, browser,
+terminals, files, git, settings, projects, environments, split view, search,
+voice and plugin management. Core actions carry only `feature`,
+`feature_scope=core`, `interaction=opened/invoked/ran`, and
+`trigger=person/agent/schedule/system/unknown`. Triggers are a breakdown of
+engagement, including automated work. Unobserved provenance stays unknown.
+
+Successful explicit core API actions are captured at their shared route
+boundary for UI, SDK and CLI callers. File previews, side-panel opens and
+split additions cover local UI actions. Background queries, resize/persistence
+writes and layout restoration are excluded. The telemetry endpoint rejects
+unknown fields, feature codes and caller-supplied plugin provenance. Legacy
+client event variants remain accepted for compatibility.
 
 Anonymous usage telemetry can be disabled in Settings → General → Privacy & diagnostics → Share anonymous usage data,
 or with `bb settings general telemetryEnabled false`. The saved server-wide preference

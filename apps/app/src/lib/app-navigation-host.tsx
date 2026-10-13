@@ -1,3 +1,4 @@
+import { recordTelemetryEvent } from "@/components/onboarding/onboarding-telemetry";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type {
   ExperimentalAppPanelSurface,
@@ -68,7 +69,23 @@ export function AppNavigationHostProvider({
     () => ({
       openFileExternally:
         capabilities.openFileExternally ?? parent.openFileExternally,
-      openFilePreview: capabilities.openFilePreview ?? parent.openFilePreview,
+      openFilePreview:
+        capabilities.openFilePreview === undefined
+          ? parent.openFilePreview
+          : (intent) => {
+              const opened = capabilities.openFilePreview!(intent);
+              if (opened)
+                recordTelemetryEvent({
+                  name: "feature_used",
+                  properties: {
+                    feature: "file",
+                    feature_scope: "core",
+                    interaction: "opened",
+                    trigger: "unknown",
+                  },
+                });
+              return opened;
+            },
       openFixedTab: capabilities.openFixedTab ?? parent.openFixedTab,
       openTerminal: capabilities.openTerminal ?? parent.openTerminal,
       openUrl: capabilities.openUrl ?? parent.openUrl,

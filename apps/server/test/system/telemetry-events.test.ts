@@ -1,3 +1,4 @@
+import { defaultAppSettings } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import type { TelemetryService } from "../../src/services/system/telemetry.js";
 import { readJson } from "../helpers/json.js";
@@ -187,6 +188,69 @@ describe("client telemetry events", () => {
         400, 400, 400, 400,
       ]);
       expect(capture.mock.calls).toEqual([[automation], [split]]);
+    });
+  });
+  it("counts explicit core actions once, without exporting their inputs or background reads", async () => {
+    await withTestHarness(async (harness) => {
+      const capture = vi.fn<TelemetryService["capture"]>();
+      harness.deps.telemetry = { ...harness.deps.telemetry, capture };
+      const response = await harness.app.request("/api/v1/settings/general", {
+        method: "PUT",
+        headers: {
+          "content-type": "application/json",
+          "x-bb-app-surface": "web",
+        },
+        body: JSON.stringify({
+          ...defaultAppSettings,
+          showKeyboardHints: false,
+        }),
+      });
+      expect(response.status).toBe(200);
+      expect(capture).toHaveBeenCalledExactlyOnceWith({
+        name: "feature_used",
+        properties: {
+          feature: "settings",
+          feature_scope: "core",
+          interaction: "invoked",
+          trigger: "person",
+        },
+      });
+      capture.mockClear();
+      await harness.app.request("/api/v1/system/config");
+      const rejected = await harness.app.request("/api/v1/settings/general", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      expect(rejected.status).toBe(400);
+      expect(capture).not.toHaveBeenCalled();
+    });
+  });
+
+  it("accepts fixed feature values but rejects identities and caller-supplied plugin provenance", async () => {
+    await withTestHarness(async (harness) => {
+      const capture = vi.fn<TelemetryService["capture"]>();
+      harness.deps.telemetry = { ...harness.deps.telemetry, capture };
+      const event = {
+        name: "feature_used",
+        properties: {
+          feature: "split_view",
+          feature_scope: "core",
+          interaction: "opened",
+          trigger: "unknown",
+        },
+      };
+      expect((await post(harness, event)).status).toBe(200);
+      for (const properties of [
+        { ...event.properties, feature: "my-private-command" },
+        { ...event.properties, threadId: "private-thread" },
+        { ...event.properties, plugin_source: "builtin" },
+        { ...event.properties, feature_scope: "plugin" },
+      ])
+        expect((await post(harness, { ...event, properties })).status).toBe(
+          400,
+        );
+      expect(capture).toHaveBeenCalledExactlyOnceWith(event);
     });
   });
 });

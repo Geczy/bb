@@ -1,3 +1,4 @@
+import { coreFeatureUsedPropertiesSchema } from "../feature-telemetry.js";
 import { rejectMultipleWorkspaceSelectors } from "./shared.js";
 import { z } from "zod";
 import {
@@ -244,6 +245,12 @@ const tipTelemetryPropertiesSchema = z
   .strict();
 
 export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
+  z
+    .object({
+      name: z.literal("feature_used"),
+      properties: coreFeatureUsedPropertiesSchema,
+    })
+    .strict(),
   z
     .object({
       name: z.literal("onboarding_agent_state"),
