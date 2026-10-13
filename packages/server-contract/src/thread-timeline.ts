@@ -201,6 +201,7 @@ const timelineSystemRowBaseSchema = timelineRowBaseSchema.extend({
 export const timelineNonOperationSystemRowSchema =
   timelineSystemRowBaseSchema.extend({
     systemKind: z.enum(["debug", "error", "reconnect"]),
+    providerAuthRequired: z.boolean().optional(),
   });
 export type TimelineNonOperationSystemRow = z.infer<
   typeof timelineNonOperationSystemRowSchema

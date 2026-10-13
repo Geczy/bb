@@ -529,6 +529,15 @@ const hostDaemonTerminalOpenTargetSchema = z.discriminatedUnion("kind", [
 const hostDaemonTerminalOpenMessageSchema = z
   .object({
     type: z.literal("terminal.open"),
+    threadEnvironment: z
+      .object({
+        failedTurnId: z.string().min(1),
+        providerId: z.string().min(1),
+        rejectEnv: z.array(z.string().min(1)),
+        executableEnvVar: z.string().min(1).nullable(),
+      })
+      .strict()
+      .optional(),
     contributedEnv: z.array(hostDaemonContributedEnvEntrySchema).default([]),
     requestId: terminalRequestIdSchema,
     terminalId: terminalIdSchema,

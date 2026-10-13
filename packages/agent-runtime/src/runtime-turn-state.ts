@@ -12,6 +12,7 @@ interface WaitForActiveTurnStateArgs {
 }
 
 export class RuntimeTurnState {
+  private readonly failedTurnIdByThreadId = new Map<string, string>();
   private readonly activeTurnIdByThreadId = new Map<string, string>();
   private readonly activeTurnWaitersByThreadId = new Map<
     string,
@@ -20,6 +21,7 @@ export class RuntimeTurnState {
 
   clear(): void {
     this.activeTurnIdByThreadId.clear();
+    this.failedTurnIdByThreadId.clear();
     for (const threadId of [...this.activeTurnWaitersByThreadId.keys()]) {
       this.resolveWaiters(threadId, null);
     }
@@ -27,7 +29,12 @@ export class RuntimeTurnState {
 
   clearThread(threadId: string): void {
     this.activeTurnIdByThreadId.delete(threadId);
+    this.failedTurnIdByThreadId.delete(threadId);
     this.resolveWaiters(threadId, null);
+  }
+
+  getFailedTurnId(threadId: string): string | null {
+    return this.failedTurnIdByThreadId.get(threadId) ?? null;
   }
 
   getActiveTurnId(threadId: string): string | null {
@@ -72,6 +79,7 @@ export class RuntimeTurnState {
         type: event.type,
         scope: event.scope,
       });
+      this.failedTurnIdByThreadId.delete(event.threadId);
       this.activeTurnIdByThreadId.set(event.threadId, turnId);
       this.resolveWaiters(event.threadId, turnId);
       return;
@@ -84,6 +92,8 @@ export class RuntimeTurnState {
       });
       if (this.activeTurnIdByThreadId.get(event.threadId) === turnId) {
         this.activeTurnIdByThreadId.delete(event.threadId);
+        if (event.status === "failed")
+          this.failedTurnIdByThreadId.set(event.threadId, turnId);
       }
     }
   }

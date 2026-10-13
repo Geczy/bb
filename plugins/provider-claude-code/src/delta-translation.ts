@@ -392,6 +392,10 @@ interface ClaudeThreadDialectState {
   lastModelFallback:
     | (ClaudeModelFallbackTransition & { segment: number })
     | undefined;
+  assistantAuthError:
+    | "authentication_failed"
+    | "oauth_org_not_allowed"
+    | undefined;
   armedHardRateLimitRejection: { detail: string; segment: number } | undefined;
   selectedModelContextWindow: number | null;
   suppressUnacceptedTurnStart: boolean;
@@ -409,6 +413,7 @@ function createThreadState(): ClaudeThreadDialectState {
     latestRequestContextTokens: undefined,
     latestProviderCheckpointId: undefined,
     lastModelFallback: undefined,
+    assistantAuthError: undefined,
     armedHardRateLimitRejection: undefined,
     selectedModelContextWindow: null,
     suppressUnacceptedTurnStart: false,
@@ -459,12 +464,14 @@ export function createClaudeDeltaTranslator(
     state.latestRequestContextTokens = undefined;
     state.latestProviderCheckpointId = undefined;
     state.armedHardRateLimitRejection = undefined;
+    state.assistantAuthError = undefined;
     state.startedTools.clear();
   }
 
   function mirrorCloseTurn(state: ClaudeThreadDialectState): void {
     state.mirror.turnOpen = false;
     state.armedHardRateLimitRejection = undefined;
+    state.assistantAuthError = undefined;
     state.startedTools.clear();
   }
 
@@ -842,6 +849,13 @@ export function createClaudeDeltaTranslator(
     }
 
     const deltas = withMirror(state, [{ kind: "turn.open" }]);
+    if (parentToolCallId === undefined) {
+      state.assistantAuthError =
+        message.error === "authentication_failed" ||
+        message.error === "oauth_org_not_allowed"
+          ? message.error
+          : undefined;
+    }
     if (providerCheckpointId !== undefined) {
       state.latestProviderCheckpointId = providerCheckpointId;
     }
@@ -1096,6 +1110,7 @@ export function createClaudeDeltaTranslator(
     const failed = resultFailed || pendingHardRateLimitRejection !== undefined;
     if (failed) {
       const resultErrorInfo = buildClaudeProviderErrorInfo({
+        code: state.assistantAuthError,
         httpStatusCode: message.api_error_status,
         resultSubtype: message.subtype,
       });

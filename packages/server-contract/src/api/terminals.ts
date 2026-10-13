@@ -91,6 +91,12 @@ export const createTerminalRequestSchema = z
       .discriminatedUnion("mode", [
         z
           .object({
+            mode: z.literal("provider-login"),
+            turnId: z.string().min(1).optional(),
+          })
+          .strict(),
+        z
+          .object({
             mode: z.literal("shell"),
           })
           .strict(),

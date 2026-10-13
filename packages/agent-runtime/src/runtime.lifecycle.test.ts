@@ -346,6 +346,43 @@ describe("createAgentRuntime lifecycle", () => {
       await runtime.shutdown();
     });
 
+    it("retains the execution profile for sign-in without resolving a new default", async () => {
+      const runtime = createScriptedEchoRuntime({
+        runtime: {
+          workspacePath: tmpDir,
+          shellEnv: { CLAUDE_CONFIG_DIR: "/profiles/default" },
+        },
+      });
+      try {
+        await runtime.startThread({
+          environmentId: "env-profile",
+          threadId: "profile-thread",
+          providerId: "fake",
+          contributedEnv: [
+            {
+              name: "CLAUDE_CONFIG_DIR",
+              value: "/profiles/failed-account",
+              source: { plugin: "profile-routing" },
+              reason: "Selected account",
+            },
+          ],
+          options: fullRuntimeOptions,
+        });
+        expect(
+          runtime.getThreadExecutionEnvironment?.("profile-thread"),
+        ).toMatchObject({
+          environmentId: "env-profile",
+          providerId: "fake",
+          env: { CLAUDE_CONFIG_DIR: "/profiles/failed-account" },
+        });
+        expect(
+          runtime.getThreadExecutionEnvironment?.("unknown-thread"),
+        ).toBeNull();
+      } finally {
+        await runtime.shutdown();
+      }
+    });
+
     it("reinjects rotated machine credentials on the next turn and resume", async () => {
       const record = createScriptedEchoRequestRecord();
       const events: ThreadEvent[] = [];

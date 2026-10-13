@@ -267,8 +267,19 @@ interface ListTerminalsArgs {
   query: TerminalListQuery;
 }
 
+interface ProviderLoginLaunch {
+  argv: string[];
+  threadEnvironment: NonNullable<
+    Extract<
+      HostDaemonServerWsMessage,
+      { type: "terminal.open" }
+    >["threadEnvironment"]
+  >;
+}
+
 interface CreateTerminalArgs {
   payload: CreateTerminalRequest;
+  providerLogin?: ProviderLoginLaunch;
 }
 
 interface GetTerminalArgs {
@@ -283,6 +294,7 @@ interface TerminalCreatePayload {
 }
 
 interface CreateTerminalForTargetArgs {
+  providerLogin?: ProviderLoginLaunch;
   payload: TerminalCreatePayload;
   target: TerminalLaunchTarget;
   threadId: string | null;
@@ -694,6 +706,7 @@ export class TerminalSessionLifecycle {
         : target;
     return this.createTerminalForTarget({
       payload: args.payload,
+      providerLogin: args.providerLogin,
       target: launchTarget,
       threadId: target.kind === "thread" ? target.threadId : null,
       title: initialTitleForTerminal(args.payload, existingSessionCount),
@@ -751,7 +764,21 @@ export class TerminalSessionLifecycle {
       this.options,
       launchTarget.hostId,
     );
-    const start = args.payload.start ?? DEFAULT_TERMINAL_START;
+    const requestedStart = args.payload.start ?? DEFAULT_TERMINAL_START;
+    if (
+      requestedStart.mode === "provider-login" &&
+      args.providerLogin === undefined
+    ) {
+      throw new ApiError(
+        409,
+        "provider_login_context_missing",
+        "Sign-in context could not be resolved for this thread.",
+      );
+    }
+    const start =
+      requestedStart.mode === "provider-login"
+        ? { mode: "argv" as const, argv: args.providerLogin!.argv }
+        : requestedStart;
     const startingSession = createTerminalSession(this.options.db, {
       cols: args.payload.cols,
       daemonSessionId: daemonSession.id,
@@ -766,6 +793,9 @@ export class TerminalSessionLifecycle {
     const requestId = randomUUID();
     const openMessage: HostDaemonServerWsMessage = {
       type: "terminal.open",
+      ...(args.providerLogin === undefined
+        ? {}
+        : { threadEnvironment: args.providerLogin.threadEnvironment }),
       contributedEnv: await resolveHostEnvironment(this.options, {
         hostId: launchTarget.hostId,
         projectId:

@@ -607,18 +607,67 @@ export class TerminalManager {
     try {
       const target = await this.resolveTerminalOpenTarget(message);
       const shell = await this.resolveShell();
+      const inherited = message.threadEnvironment;
+      const context =
+        inherited === undefined ||
+        target.environmentId === null ||
+        message.threadId === undefined
+          ? null
+          : this.options.runtimeManager
+              .get(target.environmentId)
+              ?.runtime.getThreadExecutionEnvironment?.(message.threadId);
+      if (
+        inherited !== undefined &&
+        (context === null ||
+          context === undefined ||
+          context.environmentId !== target.environmentId ||
+          context.providerId !== inherited.providerId ||
+          context.failedTurnId !== inherited.failedTurnId ||
+          message.start.mode !== "argv")
+      ) {
+        throw new Error(
+          "The failed thread's execution environment is no longer retained or the thread is running. No default account was used. Retry remains available.",
+        );
+      }
+      const terminalEnv =
+        context == null
+          ? operationEnvironment(
+              message.contributedEnv,
+              buildTerminalEnv({
+                shellEnv: this.options.runtimeManager.getShellEnv(),
+                terminalId: message.terminalId,
+              }),
+            )
+          : buildTerminalEnv({
+              shellEnv: context.env,
+              terminalId: message.terminalId,
+            });
+      const rejectedKey = inherited?.rejectEnv.find((key) =>
+        Boolean(terminalEnv[key]),
+      );
+      if (rejectedKey !== undefined) {
+        throw new Error(
+          `Sign-in cannot repair this thread's account routing through ${rejectedKey}. Update that credential source, then retry this thread.`,
+        );
+      }
+      const loginArgv =
+        inherited !== undefined && message.start.mode === "argv"
+          ? message.start.argv
+          : null;
+      const executableOverride =
+        inherited?.executableEnvVar === null ||
+        inherited?.executableEnvVar === undefined
+          ? undefined
+          : context?.env[inherited.executableEnvVar]?.trim();
       const pty = this.ptyAdapter.spawn({
-        args: terminalShellArgs({ shell, start: message.start }),
+        args:
+          loginArgv === null
+            ? terminalShellArgs({ shell, start: message.start })
+            : loginArgv.slice(1),
         cols: message.cols,
         cwd: target.cwd,
-        env: operationEnvironment(
-          message.contributedEnv,
-          buildTerminalEnv({
-            shellEnv: this.options.runtimeManager.getShellEnv(),
-            terminalId: message.terminalId,
-          }),
-        ),
-        file: shell,
+        env: terminalEnv,
+        file: loginArgv === null ? shell : executableOverride || loginArgv[0]!,
         logger: this.options.logger,
         rows: message.rows,
       });

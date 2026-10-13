@@ -76,6 +76,7 @@ export function isRowExpandable(row: ThreadTimelineViewRow): boolean {
       return false;
     case "system":
       return (
+        (row.systemKind !== "operation" && row.providerAuthRequired === true) ||
         deferredTimelineContentItemId(row) !== null ||
         (row.detail !== null && row.detail.trim().length > 0)
       );

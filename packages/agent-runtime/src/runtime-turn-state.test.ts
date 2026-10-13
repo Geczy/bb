@@ -18,19 +18,39 @@ function turnStarted(
   };
 }
 
-function turnCompleted(turnId: string): ThreadEvent {
+function turnCompleted(
+  turnId: string,
+  status: "completed" | "failed" = "completed",
+): ThreadEvent {
   return {
     type: "turn/completed",
     threadId: "t1",
     providerThreadId: "p1",
     scope: turnScope(turnId),
-    status: "completed",
+    status,
   };
 }
 
 describe("RuntimeTurnState", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("keeps a failed root turn available for recovery only until the next turn starts", () => {
+    const state = new RuntimeTurnState();
+    state.observe(turnStarted("failed-root"));
+    state.observe(turnStarted("child", { parentToolCallId: "tool" }));
+    state.observe(turnCompleted("child", "failed"));
+    expect(state.getFailedTurnId("t1")).toBeNull();
+    state.observe(turnCompleted("failed-root", "failed"));
+    expect(state.getFailedTurnId("t1")).toBe("failed-root");
+    state.observe(turnStarted("continued"));
+    expect(state.getFailedTurnId("t1")).toBeNull();
+    state.observe(turnCompleted("failed-root", "failed"));
+    expect(state.getFailedTurnId("t1")).toBeNull();
+    state.observe(turnCompleted("continued", "failed"));
+    state.clearThread("t1");
+    expect(state.getFailedTurnId("t1")).toBeNull();
   });
 
   it("tracks only the current active turn", () => {

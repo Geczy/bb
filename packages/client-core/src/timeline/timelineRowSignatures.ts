@@ -378,6 +378,7 @@ function computeTimelineRowRenderSignature(row: ThreadTimelineViewRow): string {
         baseSignature,
         row.status,
         row.systemKind,
+        row.providerAuthRequired ?? false,
         row.title,
         row.detail,
       ]);

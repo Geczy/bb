@@ -477,6 +477,88 @@ function textChunk(text: string, seq: number): TerminalOutputChunk {
   };
 }
 
+describe("thread credential environment terminals", () => {
+  it.each(["profile", "missing", "other-provider", "new-turn", "proxy"])(
+    "uses the retained profile or fails closed: %s",
+    async (scenario) => {
+      const harness = createHarness();
+      harness.runtime.getThreadExecutionEnvironment = () =>
+        scenario === "missing"
+          ? null
+          : {
+              environmentId: "env-1",
+              failedTurnId:
+                scenario === "new-turn" ? "different-turn" : "failed-turn",
+              providerId:
+                scenario === "other-provider"
+                  ? "different-provider"
+                  : "test-provider",
+              env: {
+                CLAUDE_CONFIG_DIR: "/profiles/failed-thread",
+                BB_CLAUDE_CODE_EXECUTABLE: "/tools/failed-thread-cli",
+                ...(scenario === "proxy"
+                  ? { ANTHROPIC_AUTH_TOKEN: "test-token" }
+                  : {}),
+              },
+            };
+      await harness.manager.handleMessage({
+        type: "terminal.open",
+        requestId: "login",
+        terminalId: "login-terminal",
+        threadId: "thr-1",
+        contributedEnv: [
+          {
+            name: "CLAUDE_CONFIG_DIR",
+            value: "/profiles/wrong-default",
+            source: { plugin: "changed-routing" },
+            reason: "Changed after failure",
+          },
+        ],
+        target: {
+          kind: "workspace",
+          environmentId: "env-1",
+          workspaceContext: { workspacePath: "/tmp/terminal-workspace" },
+        },
+        cols: 80,
+        rows: 24,
+        start: { mode: "argv", argv: ["claude", "auth", "login"] },
+        threadEnvironment: {
+          providerId: "test-provider",
+          failedTurnId: "failed-turn",
+          rejectEnv: ["ANTHROPIC_AUTH_TOKEN"],
+          executableEnvVar: "BB_CLAUDE_CODE_EXECUTABLE",
+        },
+      });
+      if (scenario === "profile") {
+        expect(harness.adapter.spawned).toHaveLength(1);
+        expect(harness.adapter.spawned[0]?.args).toMatchObject({
+          file: "/tools/failed-thread-cli",
+          args: ["auth", "login"],
+          env: { CLAUDE_CONFIG_DIR: "/profiles/failed-thread" },
+          cwd: "/tmp/terminal-workspace",
+        });
+      } else {
+        expect(harness.adapter.spawned).toEqual([]);
+        expect(harness.messages).toContainEqual(
+          expect.objectContaining({
+            type: "terminal.error",
+            code: "terminal_open_failed",
+            message: expect.stringContaining(
+              scenario === "proxy"
+                ? "ANTHROPIC_AUTH_TOKEN"
+                : "No default account was used",
+            ),
+          }),
+        );
+      }
+      expect(harness.runtime.runTurn).not.toHaveBeenCalled();
+      expect(harness.runtime.stopThread).not.toHaveBeenCalled();
+      await harness.manager.shutdownAll();
+      await harness.runtimeManager.shutdownAll();
+    },
+  );
+});
+
 describe("TerminalManager", () => {
   afterEach(async () => {
     vi.useRealTimers();

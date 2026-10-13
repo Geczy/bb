@@ -190,6 +190,10 @@ For review or fix pipelines, get the environment ID from
   explicit host ID; terminal commands never silently fall back to the server machine.
 - Start a server with
   `bb terminal create --thread <thread-id> --title "pnpm dev" --command "pnpm dev"`.
+  After a failed authentication turn, use `bb terminal create --thread <thread-id> --provider-login --attach`.
+  It uses the failed thread's retained machine/profile and reports an error if that
+  context is unavailable or uses token/proxy routing. Login never sends a turn;
+  continue explicitly after signing in.
 - A terminal runs the machine's own shell: `$SHELL` (then zsh, bash, sh) on
   macOS and Linux; PowerShell 7, then Windows PowerShell, then cmd on Windows.
   `--command` text is parsed by that shell, so write it in that shell's syntax.

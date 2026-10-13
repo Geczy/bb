@@ -2,6 +2,7 @@ import { replaceMachineEnvironment } from "../../src/services/machines/environme
 import * as gitCredentials from "../../src/services/machines/git-credentials.js";
 import {
   createTerminalSession,
+  insertEvents,
   getAppSettings,
   getTerminalSession,
   listTerminalSessions,
@@ -956,6 +957,160 @@ describe("public terminal routes", () => {
       title: "zsh",
     });
   });
+
+  it("opens sign-in on the failed execution host even when provider health is ready", async () => {
+    const fixture = await createTerminalRouteFixture();
+    harnesses.push(fixture.harness);
+    const primary = seedHost(fixture.harness.deps, { id: "other-primary" });
+    seedPrimaryHost(fixture.harness.deps, primary.id);
+    insertEvents(fixture.harness.db, fixture.harness.hub, [
+      {
+        threadId: fixture.thread.id,
+        providerThreadId: "provider-session",
+        sequence: 1,
+        scope: { kind: "turn", turnId: "failed-turn" },
+        itemId: null,
+        itemKind: null,
+        parentToolCallId: null,
+        type: "provider/error",
+        data: JSON.stringify({
+          message: "Sign in",
+          errorInfo: {
+            category: "unauthorized",
+            providerCode: "authentication_failed",
+            httpStatusCode: null,
+          },
+        }),
+      },
+      {
+        threadId: fixture.thread.id,
+        providerThreadId: "provider-session",
+        sequence: 2,
+        scope: { kind: "turn", turnId: "failed-turn" },
+        itemId: null,
+        itemKind: null,
+        parentToolCallId: null,
+        type: "turn/completed",
+        data: JSON.stringify({ status: "failed" }),
+      },
+    ]);
+    const responsePromise = fixture.harness.app.request("/api/v1/terminals", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        cols: 80,
+        rows: 24,
+        target: { kind: "thread", threadId: fixture.thread.id },
+        start: { mode: "provider-login" },
+      }),
+    });
+    const health = await waitForDaemonMessage(fixture.socket);
+    expect(health).toMatchObject({
+      type: "host-rpc.request",
+      command: {
+        type: "provider.health",
+        providerId: fixture.thread.providerId,
+      },
+    });
+    if (health.type !== "host-rpc.request")
+      throw new Error("Expected provider health request");
+    fixture.harness.hub.recordHostOnlineRpcResponse({
+      sessionId: fixture.session.id,
+      message: hostDaemonOnlineRpcResponseMessageSchema.parse({
+        type: "host-rpc.response",
+        requestId: health.requestId,
+        commandType: "provider.health",
+        ok: true,
+        result: {
+          supported: true,
+          health: {
+            status: "ready",
+            statusMessage: null,
+            accountEmail: null,
+            planLabel: null,
+            installedVersion: null,
+            minimumSupportedVersion: null,
+            canInstall: false,
+            canUpdate: false,
+            loginCommand: "codex login --device-auth",
+          },
+        },
+      }),
+    });
+    const open = await waitForDaemonMessage(fixture.socket, 1);
+    expect(open).toMatchObject({
+      type: "terminal.open",
+      threadId: fixture.thread.id,
+      target: { kind: "workspace", environmentId: fixture.environment.id },
+      threadEnvironment: { providerId: fixture.thread.providerId },
+      start: { mode: "argv", argv: ["codex", "login", "--device-auth"] },
+    });
+    if (open.type !== "terminal.open")
+      throw new Error("Expected terminal.open");
+    acknowledgeTerminalOpen(fixture, open);
+    const response = await responsePromise;
+    expect(response.status).toBe(201);
+    expect(terminalSessionSchema.parse(await readJson(response))).toMatchObject(
+      { hostId: fixture.host.id, threadId: fixture.thread.id },
+    );
+    expect(readDaemonOperationMessages(fixture.socket)).toHaveLength(2);
+  });
+
+  it.each([false, true])(
+    "rejects sign-in without a current failed auth turn (stale=%s)",
+    async (stale) => {
+      const fixture = await createTerminalRouteFixture();
+      harnesses.push(fixture.harness);
+      if (stale) {
+        insertEvents(fixture.harness.db, fixture.harness.hub, [
+          {
+            threadId: fixture.thread.id,
+            providerThreadId: "provider-session",
+            sequence: 1,
+            scope: { kind: "turn", turnId: "old-turn" },
+            itemId: null,
+            itemKind: null,
+            parentToolCallId: null,
+            type: "provider/error",
+            data: JSON.stringify({
+              message: "Sign in",
+              errorInfo: {
+                category: "unauthorized",
+                providerCode: "authentication_failed",
+                httpStatusCode: null,
+              },
+            }),
+          },
+          {
+            threadId: fixture.thread.id,
+            providerThreadId: "provider-session",
+            sequence: 2,
+            scope: { kind: "turn", turnId: "new-turn" },
+            itemId: null,
+            itemKind: null,
+            parentToolCallId: null,
+            type: "turn/completed",
+            data: JSON.stringify({ status: "completed" }),
+          },
+        ]);
+      }
+      const response = await fixture.harness.app.request("/api/v1/terminals", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          cols: 80,
+          rows: 24,
+          target: { kind: "thread", threadId: fixture.thread.id },
+          start: { mode: "provider-login" },
+        }),
+      });
+      expect(response.status).toBe(409);
+      expect(await readJson(response)).toMatchObject({
+        code: "provider_auth_failure_required",
+      });
+      expect(readDaemonOperationMessages(fixture.socket)).toEqual([]);
+    },
+  );
 
   it("opens a command terminal with thread context for the daemon", async () => {
     const fixture = await createTerminalRouteFixture();
@@ -2494,9 +2649,7 @@ describe("public terminal routes", () => {
           terminalId: stored.id,
           chunk: {
             seq,
-            dataBase64: Buffer.from(`line ${seq}\n`, "utf8").toString(
-              "base64",
-            ),
+            dataBase64: Buffer.from(`line ${seq}\n`, "utf8").toString("base64"),
           },
         },
       });

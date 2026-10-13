@@ -38,6 +38,7 @@ interface TerminalStartOptions
   extends TerminalJsonOptions, TerminalScopeOptions {
   attach?: boolean;
   command?: string;
+  providerLogin?: boolean;
   cols?: string;
   rows?: string;
   title?: string;
@@ -74,6 +75,7 @@ interface TerminalCloseOptions extends TerminalJsonOptions {
 }
 
 type TerminalStartResolution =
+  | { mode: "provider-login" }
   | { mode: "shell" }
   | { mode: "command"; command: string }
   | { mode: "argv"; argv: string[] };
@@ -111,6 +113,10 @@ export function registerTerminalCommands(
       .description("Create a terminal session in exactly one scope")
       .option("--title <title>", "Terminal title")
       .option(
+        "--provider-login",
+        "Sign in after this thread's authentication failure",
+      )
+      .option(
         "--command <command>",
         "Command to run instead of an interactive shell",
       )
@@ -124,6 +130,7 @@ export function registerTerminalCommands(
       const resolvedStart = resolveTerminalStart({
         commandOption: opts.command,
         commandParts,
+        providerLogin: opts.providerLogin,
       });
       const session = await sdk.terminals.create({
         cols: parsePositiveInteger(opts.cols, DEFAULT_COLS, "--cols"),
@@ -428,9 +435,16 @@ function assertExactlyOneTerminalScope(args: {
 }
 
 function resolveTerminalStart(args: {
+  providerLogin?: boolean;
   commandOption?: string;
   commandParts: readonly string[];
 }): TerminalStartResolution {
+  if (args.providerLogin) {
+    if (args.commandOption !== undefined || args.commandParts.length > 0) {
+      throw new Error("--provider-login cannot be combined with a command");
+    }
+    return { mode: "provider-login" };
+  }
   if (args.commandOption !== undefined && args.commandParts.length > 0) {
     throw new Error(
       "Provide either --command or positional command args, not both",

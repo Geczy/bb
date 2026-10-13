@@ -1975,6 +1975,32 @@ describe("buildThreadTimelineFromEvents", () => {
     ]);
   });
 
+  it.each([false, true])(
+    "offers sign-in only for terminal authentication errors (retrying=%s)",
+    (willRetry) => {
+      const rows = collectSystemRows(
+        buildTimelineRows([
+          turnStartedEvent({ seq: 1 }),
+          providerErrorEvent({
+            seq: 2,
+            willRetry,
+            errorInfo: {
+              category: "unauthorized",
+              providerCode: "authentication_failed",
+              httpStatusCode: null,
+            },
+          }),
+        ]),
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        systemKind: willRetry ? "reconnect" : "error",
+      });
+      if (willRetry) expect(rows[0]).not.toHaveProperty("providerAuthRequired");
+      else expect(rows[0]).toHaveProperty("providerAuthRequired", true);
+    },
+  );
+
   it("uses structured provider error info for provider error titles", () => {
     const rows = buildTimelineRows([
       turnStartedEvent({ seq: 1 }),

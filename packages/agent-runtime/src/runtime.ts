@@ -2547,6 +2547,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return threadIdentityRegistry.getProviderSession(threadId) !== null;
     },
 
+    getThreadExecutionEnvironment(threadId) {
+      const config = threadRuntimeConfigs.get(threadId);
+      if (
+        !config ||
+        turnState.getActiveTurnId(threadId) !== null ||
+        pendingTurnStarts.has(threadId)
+      ) {
+        return null;
+      }
+      return {
+        environmentId: config.environmentId,
+        providerId: config.providerId,
+        failedTurnId: turnState.getFailedTurnId(threadId),
+        env: { ...config.envVars },
+      };
+    },
+
     getLiveThreadIds() {
       return [
         ...new Set([

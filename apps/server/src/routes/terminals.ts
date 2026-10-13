@@ -4,6 +4,7 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
+import { prepareProviderLogin } from "../services/terminals/provider-login.js";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 
@@ -19,7 +20,14 @@ export function registerTerminalRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post(routes.create, async (context, payload) => {
-    const session = await deps.terminalSessions.createTerminal({ payload });
+    const providerLogin =
+      payload.start?.mode === "provider-login"
+        ? await prepareProviderLogin(deps, payload)
+        : undefined;
+    const session = await deps.terminalSessions.createTerminal({
+      payload,
+      providerLogin,
+    });
     return context.json(session, 201);
   });
 

@@ -358,6 +358,13 @@ export interface AgentRuntime {
 
   getLiveThreadIds(): string[];
 
+  getThreadExecutionEnvironment?(threadId: string): {
+    failedTurnId: string | null;
+    environmentId: string;
+    providerId: string;
+    env: Record<string, string>;
+  } | null;
+
   hasOpenBackgroundWork(): boolean;
 
   shutdown(): Promise<void>;

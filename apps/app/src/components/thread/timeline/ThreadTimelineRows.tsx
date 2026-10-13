@@ -67,6 +67,7 @@ import type {
   ThreadTimelineUnreadDividerPlacement,
   UserAttachmentImageSrcResolver,
 } from "./types.js";
+import { ProviderSignIn } from "./ProviderSignIn.js";
 import { ConversationMessageContent } from "./ConversationMessageContent.js";
 import {
   MessageColumnWidthContext,
@@ -1233,12 +1234,21 @@ function TimelineExpandableBodyContent({
           <TimelineReasoningDetail text={row.detail} />
         ) : null;
       }
-      return row.detail ? (
-        <TimelineSystemDetailBlock
-          detail={row.detail}
-          streaming={row.status === "pending"}
-        />
-      ) : null;
+      return (
+        <>
+          {row.detail ? (
+            <TimelineSystemDetailBlock
+              detail={row.detail}
+              streaming={row.status === "pending"}
+            />
+          ) : null}
+          {row.systemKind !== "operation" &&
+          row.providerAuthRequired === true &&
+          row.turnId !== null ? (
+            <ProviderSignIn threadId={row.threadId} turnId={row.turnId} />
+          ) : null}
+        </>
+      );
     case "conversation":
       return null;
     default:

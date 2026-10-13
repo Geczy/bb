@@ -18,6 +18,7 @@ List and create require exactly one explicit scope:
   bb terminal list --machine <id-or-name> [--cwd <path>]
 
   bb terminal create --thread <thread-id> --command "pnpm dev"
+  bb terminal create --thread <thread-id> --provider-login --attach
   bb terminal create --environment <environment-id>
   bb terminal create --machine <id-or-name> [--cwd <path>]
     --host <id-or-name>                   Alias for --machine
@@ -26,6 +27,15 @@ List and create require exactly one explicit scope:
     --rows <n>                            Initial terminal rows
     --attach                              Attach after creating
     --json                                Print machine-readable output
+
+After a turn fails authentication, `--provider-login` starts the provider's sign-in
+command on that thread's execution machine using its retained credential environment.
+It requires `--thread` and cannot be combined with a command. The SDK equivalent is
+`terminals.create({ scope: { kind: "thread", threadId }, start: { mode: "provider-login" }, cols: 80, rows: 24 })`.
+Completing or cancelling login never resubmits the failed turn. Send a message when
+ready to continue. If the execution context is gone or credentials come from a token
+or proxy override, bb reports the blocker instead of using another account. Ordinary
+shell, command, and argv terminals retain their existing environment behavior.
 
 Machine names are resolved to an explicit machine ID. No scope defaults to the
 server machine, and --cwd is valid only with --machine or --host.

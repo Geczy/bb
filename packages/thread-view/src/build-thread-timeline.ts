@@ -820,6 +820,10 @@ function convertMessage(
           ...buildTimelineRowBase(message, options.rowIdPrefix),
           kind: "system",
           systemKind: isReconnect ? "reconnect" : "error",
+          ...(!isReconnect &&
+          message.providerErrorInfo?.category === "unauthorized"
+            ? { providerAuthRequired: true }
+            : {}),
           title: errorDisplay.title,
           detail: errorDisplay.detail,
           status: isReconnect ? null : "error",
