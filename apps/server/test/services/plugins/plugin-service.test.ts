@@ -873,7 +873,7 @@ describe("plugin service", () => {
       serverSource: `export default function plugin(bb) {
         const schema = { "~standard": { version: 1, vendor: "fixture", validate: (value) =>
           value === null ? { value } : { issues: [{ message: "Expected null" }] } } };
-        bb.cli.register({ name: "private-work", description: "Work", run() {
+        bb.cli.register({ name: "private-work", summary: "Work", run() {
           bb.experimental_withFeatureUse({ trigger: "schedule" }, () => undefined);
           return { exitCode: 0, stdout: "done" };
         }});
