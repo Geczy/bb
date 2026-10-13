@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -267,18 +268,39 @@ function buildClaudeProviderInstallationRun(
   };
 }
 
-async function readKeychainCredentials(): Promise<string | null> {
+function claudeCredentialProfile() {
+  const configuredDir = process.env.CLAUDE_CONFIG_DIR;
+  const configDir = (
+    configuredDir ?? path.join(os.homedir(), ".claude")
+  ).normalize("NFC");
+  return {
+    credentialsPath: path.join(configDir, ".credentials.json"),
+    accountPath: path.join(configuredDir || os.homedir(), ".claude.json"),
+    legacyAccountPath: configuredDir
+      ? path.join(configDir, ".config.json")
+      : null,
+    keychainService: configuredDir
+      ? `${CLAUDE_KEYCHAIN_SERVICE}-${createHash("sha256").update(configDir).digest("hex").slice(0, 8)}`
+      : CLAUDE_KEYCHAIN_SERVICE,
+  };
+}
+
+type ClaudeCredentialProfile = ReturnType<typeof claudeCredentialProfile>;
+
+async function readKeychainCredentials(
+  profile: ClaudeCredentialProfile,
+): Promise<string | null> {
   if (process.platform !== "darwin") return null;
   const argumentSets = [
     [
       "find-generic-password",
       "-s",
-      CLAUDE_KEYCHAIN_SERVICE,
+      profile.keychainService,
       "-a",
       os.userInfo().username,
       "-w",
     ],
-    ["find-generic-password", "-s", CLAUDE_KEYCHAIN_SERVICE, "-w"],
+    ["find-generic-password", "-s", profile.keychainService, "-w"],
   ];
   for (const args of argumentSets) {
     try {
@@ -306,39 +328,37 @@ function parseCredentials(raw: string): ClaudeCredentials | null {
   return null;
 }
 
-async function readCredentials(): Promise<ClaudeCredentials | null> {
-  const keychainCredentials = await readKeychainCredentials();
+async function readCredentials(
+  profile: ClaudeCredentialProfile,
+): Promise<ClaudeCredentials | null> {
+  const keychainCredentials = await readKeychainCredentials(profile);
   if (keychainCredentials !== null) {
     const parsed = parseCredentials(keychainCredentials);
     if (parsed !== null) return parsed;
   }
   try {
-    return parseCredentials(
-      await fs.readFile(
-        path.join(os.homedir(), ".claude", ".credentials.json"),
-        "utf8",
-      ),
-    );
+    return parseCredentials(await fs.readFile(profile.credentialsPath, "utf8"));
   } catch {
     return null;
   }
 }
 
-async function readAccount() {
+async function readAccount(profile: ClaudeCredentialProfile) {
+  let accountPath = profile.accountPath;
+  if (profile.legacyAccountPath !== null) {
+    try {
+      await fs.access(profile.legacyAccountPath);
+      accountPath = profile.legacyAccountPath;
+    } catch {}
+  }
   try {
     const parsed = claudeAccountSchema.safeParse(
-      JSON.parse(
-        await fs.readFile(path.join(os.homedir(), ".claude.json"), "utf8"),
-      ),
+      JSON.parse(await fs.readFile(accountPath, "utf8")),
     );
     return parsed.success ? (parsed.data.oauthAccount ?? null) : null;
   } catch {
     return null;
   }
-}
-
-async function readAccountEmail(): Promise<string | null> {
-  return (await readAccount())?.emailAddress ?? null;
 }
 
 function planLabel(credentials: ClaudeCredentials): string | null {
@@ -382,15 +402,16 @@ export async function getClaudeProviderHealth(): Promise<ProviderHealthResult> {
   }
   const version = await readCliVersion(command);
   try {
-    const [credentials, email] = await Promise.all([
-      readCredentials(),
-      readAccountEmail(),
+    const profile = claudeCredentialProfile();
+    const [credentials, account] = await Promise.all([
+      readCredentials(profile),
+      readAccount(profile),
     ]);
     if (!credentials) {
       return healthResult("unauthenticated", { installedVersion: version });
     }
     const known = {
-      accountEmail: email,
+      accountEmail: account?.emailAddress ?? null,
       planLabel: planLabel(credentials),
       installedVersion: version,
     };
@@ -528,9 +549,10 @@ export async function getClaudeProviderUsage(): Promise<ProviderUsageResult> {
   if ((await resolveExecutablePath(command)) === null) {
     return { supported: true, usage: { status: "not_installed" } };
   }
+  const profile = claudeCredentialProfile();
   const [credentials, account] = await Promise.all([
-    readCredentials(),
-    readAccount(),
+    readCredentials(profile),
+    readAccount(profile),
   ]);
   const email = account?.emailAddress ?? null;
   if (!credentials) {
