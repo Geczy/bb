@@ -35,7 +35,7 @@
     --bb-window-frame-top: 0px;
     --bb-window-frame-lip: 0px;
     --secondary-panel-width-mobile: min(76vw, 320px);
-    --bb-sidebar-rail-padding: 8px;
+    --bb-sidebar-rail-padding: 6px;
     --bb-sidebar-control-size: 28px;
     --bb-sidebar-control-icon-size: 16px;
   }
