@@ -5,6 +5,7 @@ import type {
 } from "@bb/server-contract";
 import {
   allTerminalsQueryKeyPrefix,
+  providerSignInQueryKeyPrefix,
   terminalsQueryKey,
   type TerminalQueryScope,
 } from "../queries/query-keys";
@@ -77,6 +78,10 @@ export function applyTerminalSessionUpsert({
   queryClient,
   session,
 }: TerminalSessionCacheArgs): void {
+  queryClient.setQueriesData<TerminalSession | null>(
+    { queryKey: providerSignInQueryKeyPrefix() },
+    (current) => (current?.id === session.id ? session : current),
+  );
   for (const scope of terminalScopesForSession(session)) {
     queryClient.setQueryData<TerminalListResponse>(
       terminalsQueryKey(scope),
@@ -95,6 +100,10 @@ export function applyTerminalSessionMissing({
   queryClient: QueryClient;
   terminalId: string;
 }): void {
+  queryClient.setQueriesData<TerminalSession | null>(
+    { queryKey: providerSignInQueryKeyPrefix() },
+    (current) => (current?.id === terminalId ? null : current),
+  );
   queryClient.setQueriesData<TerminalListResponse>(
     { queryKey: allTerminalsQueryKeyPrefix() },
     (current) => removeTerminalSession(current, terminalId),
@@ -109,6 +118,10 @@ export function applyTerminalSessionClose({
   session,
   terminalId,
 }: CloseTerminalSessionCacheArgs): void {
+  queryClient.setQueriesData<TerminalSession | null>(
+    { queryKey: providerSignInQueryKeyPrefix() },
+    (current) => (current?.id === session.id ? session : current),
+  );
   for (const scope of terminalScopesForSession(session)) {
     queryClient.setQueryData<TerminalListResponse>(
       terminalsQueryKey(scope),

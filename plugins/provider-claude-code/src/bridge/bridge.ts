@@ -226,6 +226,7 @@ interface ClaudeSessionRestart {
 }
 
 interface ThreadSession {
+  executionContext: { env: Record<string, string>; executable: string | null };
   contextUsageCollector: ClaudeContextUsageCollector;
   session: SdkSession;
   attachment: ThreadAttachment;
@@ -1082,6 +1083,12 @@ function createThreadSession(attachment: ThreadAttachment): ThreadSession {
     })),
   );
   const threadSession: ThreadSession = {
+    executionContext: {
+      env: {
+        ...readConfigEnvOverrides(attachment.sessionConstructionConfig.config),
+      },
+      executable: attachment.sessionOptions.pathToClaudeCodeExecutable ?? null,
+    },
     contextUsageCollector: new ClaudeContextUsageCollector(),
     session,
     attachment,
@@ -2449,7 +2456,10 @@ async function runTurnInput(
     );
     emitCanonicalTurnInputAccepted(threadSession, acceptance, params.threadId);
     threadSession.attachment.permissionEscalation = params.permissionEscalation;
-    sendResult(id, { threadId: params.threadId });
+    sendResult(id, {
+      threadId: params.threadId,
+      executionContext: threadSession.executionContext,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     sendError(id, -32000, message);

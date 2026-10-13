@@ -659,6 +659,11 @@ export class TerminalManager {
         inherited?.executableEnvVar === undefined
           ? undefined
           : context?.env[inherited.executableEnvVar]?.trim();
+      if (loginArgv !== null && context?.executable === null) {
+        throw new Error(
+          "The failed provider session's executable could not be retained. No other CLI was used. Retry remains available.",
+        );
+      }
       const pty = this.ptyAdapter.spawn({
         args:
           loginArgv === null
@@ -667,7 +672,10 @@ export class TerminalManager {
         cols: message.cols,
         cwd: target.cwd,
         env: terminalEnv,
-        file: loginArgv === null ? shell : executableOverride || loginArgv[0]!,
+        file:
+          loginArgv === null
+            ? shell
+            : (context?.executable ?? (executableOverride || loginArgv[0]!)),
         logger: this.options.logger,
         rows: message.rows,
       });
@@ -1106,7 +1114,10 @@ export class TerminalManager {
     }, PAUSED_PROCESS_EXIT_POLL_MS);
   }
 
-  private resumeOutput(session: TerminalSession, flow: TerminalOutputFlow): void {
+  private resumeOutput(
+    session: TerminalSession,
+    flow: TerminalOutputFlow,
+  ): void {
     if (flow.pausedExitPoll === null) {
       return;
     }

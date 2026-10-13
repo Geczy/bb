@@ -250,6 +250,18 @@ function resolveThreadStoragePath(
   return path.join(rootPath, args.threadId);
 }
 
+const turnExecutionContextSchema = z.object({
+  executionContext: z.object({
+    env: z.record(z.string(), z.string()),
+    executable: z.string().min(1).nullable(),
+  }),
+});
+
+type RetainedExecutionContext = {
+  env: Record<string, string>;
+  executable?: string | null;
+};
+
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const additionalWorkspaceWriteRoots =
     options.additionalWorkspaceWriteRoots ?? [];
@@ -264,6 +276,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextRequestId = 1;
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
+  const threadExecutionContexts = new Map<string, RetainedExecutionContext>();
   const rateLimitedRetryDelaysMs =
     options.rateLimitRetry?.delaysMs ?? DEFAULT_RATE_LIMITED_RETRY_DELAYS_MS;
   const threadCreationRequestTimeoutMs =
@@ -709,6 +722,39 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     threadRuntimeConfigs.set(threadId, config);
   }
 
+  function retainTurnExecutionContext(args: {
+    threadId: string;
+    proc: RuntimeProviderProcess;
+    result: unknown;
+    envVars?: Record<string, string>;
+  }): void {
+    const parsed = turnExecutionContextSchema.safeParse(args.result);
+    if (
+      !parsed.success &&
+      typeof args.result === "object" &&
+      args.result !== null &&
+      "executionContext" in args.result
+    ) {
+      threadExecutionContexts.delete(args.threadId);
+      return;
+    }
+    if (!parsed.success && args.envVars === undefined) return;
+    const inherited = Object.fromEntries(
+      Object.entries(args.proc.env ?? {}).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    );
+    threadExecutionContexts.set(
+      args.threadId,
+      parsed.success
+        ? {
+            env: { ...inherited, ...parsed.data.executionContext.env },
+            executable: parsed.data.executionContext.executable,
+          }
+        : { env: { ...inherited, ...args.envVars } },
+    );
+  }
+
   function updateSessionRestoreCapability(
     threadId: string,
     sessionRestorable: boolean | undefined,
@@ -729,6 +775,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     pendingTurnStarts.delete(threadId);
     threadGoalState.clearThread(threadId);
     threadRuntimeConfigs.delete(threadId);
+    threadExecutionContexts.delete(threadId);
   }
 
   function beginThreadOperation(threadId: string): void {
@@ -2034,13 +2081,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             providerId: pid,
           });
           assertThreadCanStartTurn(threadId);
+          threadExecutionContexts.delete(threadId);
           pendingTurnStarts.set(threadId, {
             sinceMs: Date.now(),
             watchdogFired: false,
           });
           markProviderSessionNotIdle(threadId);
           try {
-            await sendCommand({
+            const result = await sendCommand({
               proc,
               message: cmd,
               resultSchema: ignoredJsonRpcResultSchema,
@@ -2049,6 +2097,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
                 providerThreadId: adapterCommand.providerThreadId,
                 threadId,
               },
+            });
+            retainTurnExecutionContext({
+              threadId,
+              proc,
+              result,
+              envVars: resolvedEnvironment.envVars,
             });
             setThreadRuntimeConfig(threadId, {
               ...currentConfig,
@@ -2151,7 +2205,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             providerId: pid,
           });
           try {
-            await sendCommand({
+            const result = await sendCommand({
               proc,
               message: cmd,
               resultSchema: ignoredJsonRpcResultSchema,
@@ -2160,6 +2214,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
                 providerThreadId: adapterCommand.providerThreadId,
                 threadId,
               },
+            });
+            retainTurnExecutionContext({
+              threadId,
+              proc,
+              result,
             });
             setThreadRuntimeConfig(threadId, {
               ...currentConfig,
@@ -2549,8 +2608,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
     getThreadExecutionEnvironment(threadId) {
       const config = threadRuntimeConfigs.get(threadId);
+      const context = threadExecutionContexts.get(threadId);
       if (
         !config ||
+        !context ||
         turnState.getActiveTurnId(threadId) !== null ||
         pendingTurnStarts.has(threadId)
       ) {
@@ -2560,7 +2621,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         environmentId: config.environmentId,
         providerId: config.providerId,
         failedTurnId: turnState.getFailedTurnId(threadId),
-        env: { ...config.envVars },
+        ...context,
+        env: { ...context.env },
       };
     },
 

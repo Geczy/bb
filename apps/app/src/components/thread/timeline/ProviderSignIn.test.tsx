@@ -84,14 +84,20 @@ describe("inline provider sign-in ownership", () => {
       mounted.rerender(view(true));
       if (pending) {
         expect(
-          screen.getByRole("button", { name: "Starting sign-in…" }),
-        ).toBeDisabled();
+          screen
+            .getByRole("button", { name: "Starting sign-in…" })
+            .hasAttribute("disabled"),
+        ).toBe(true);
         mounted.rerender(view(false));
         await act(async () => resolve(session));
         mounted.rerender(view(true));
       }
       await screen.findByText("Terminal login-a");
-      expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
+      expect(
+        screen
+          .getByRole("button", { name: "Sign in" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
       fireEvent.click(screen.getByRole("button", { name: "Cancel sign-in" }));
       await waitFor(() =>
         expect(sdk.terminals.close).toHaveBeenCalledWith({
@@ -100,7 +106,11 @@ describe("inline provider sign-in ownership", () => {
         }),
       );
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled(),
+        expect(
+          screen
+            .getByRole("button", { name: "Sign in" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
       );
       expect(sdk.terminals.create).toHaveBeenCalledTimes(1);
       mounted.unmount();

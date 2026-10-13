@@ -609,6 +609,28 @@ carries the whole item, so refusing it would lose real content.
    side. There is no side channel for this (the former `thread/openWork`
    notification is gone; a runtime ignores it).
 
+## Retained execution context
+
+A successful `turn/start` or `turn/steer` response may include
+`executionContext: { env: Record<string, string>, executable: string | null }`.
+`env` is the effective per-thread environment applied to the executing provider
+session, overlaid on its bridge process environment. `executable` is the exact
+CLI selected for that session; null means the bridge cannot identify it safely.
+When a steer stages settings for a later process, this context still describes
+the resident process accepting the steer.
+
+The runtime retains this host-local context for recovery of the matching failed
+root turn. It does not persist it as a thread event or send it to the server.
+Starting another root turn or releasing the session invalidates it. A null
+executable refuses direct recovery rather than searching for another CLI.
+
+This is additive: existing response fields retain their meaning, older runtimes
+ignore the extra field, and providers may continue returning their existing
+opaque results. Without this field, the runtime retains the root turn's requested
+environment and does not replace it with settings requested by a steer. The
+Claude bridge supplies the context from its resident session and existing CLI
+resolver. The server/daemon terminal wire format is unchanged.
+
 ## Ordering guarantees
 
 Producers guarantee:

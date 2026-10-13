@@ -800,6 +800,14 @@ export function terminalsQueryKey(
   return [TERMINALS_QUERY_KEY, scope];
 }
 
+export function providerSignInQueryKeyPrefix() {
+  return ["providerSignIn"] as const;
+}
+
+export function providerSignInQueryKey(threadId: string, turnId: string) {
+  return [...providerSignInQueryKeyPrefix(), threadId, turnId] as const;
+}
+
 export function allTerminalsQueryKeyPrefix(): AllTerminalsQueryKeyPrefix {
   return [TERMINALS_QUERY_KEY];
 }

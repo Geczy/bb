@@ -25,6 +25,7 @@ import type {
 } from "./types.js";
 
 export interface RuntimeProviderProcess extends ManagedProcess {
+  env?: NodeJS.ProcessEnv;
   adapter: BridgeProtocolAdapter;
   expectedShutdownExpectations: number;
   exitFinalized: Promise<void>;
@@ -387,6 +388,7 @@ export class RuntimeProviderProcessManager {
 
     const providerProcess: RuntimeProviderProcess = {
       ...managed,
+      env: { ...env },
       adapter: args.adapter,
       expectedShutdownExpectations: 0,
       exitFinalized,

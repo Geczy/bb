@@ -115,6 +115,8 @@ export async function prepareProviderLogin(
         "CLAUDE_CODE_USE_FOUNDRY",
         "OPENAI_API_KEY",
         "OPENAI_BASE_URL",
+        "CODEX_OPENAI_BASE_URL",
+        "CODEX_POOL_AUTH_TOKEN",
       ],
       executableEnvVar:
         argv[0] === "claude" ? "BB_CLAUDE_CODE_EXECUTABLE" : null,

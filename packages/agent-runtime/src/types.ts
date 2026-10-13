@@ -359,6 +359,7 @@ export interface AgentRuntime {
   getLiveThreadIds(): string[];
 
   getThreadExecutionEnvironment?(threadId: string): {
+    executable?: string | null;
     failedTurnId: string | null;
     environmentId: string;
     providerId: string;

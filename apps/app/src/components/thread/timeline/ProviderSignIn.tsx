@@ -1,14 +1,6 @@
-import { lazy, Suspense, useState } from "react";
-import type { TerminalSession } from "@bb/server-contract";
+import { lazy, Suspense } from "react";
 import { Button } from "@bb/shared-ui/button";
-import {
-  useCloseTerminal,
-  useCreateTerminal,
-} from "@/hooks/queries/thread-terminal-queries";
-import {
-  DEFAULT_TERMINAL_COLS,
-  DEFAULT_TERMINAL_ROWS,
-} from "../terminal/useThreadTerminalController.js";
+import { useProviderSignIn } from "@/hooks/queries/provider-sign-in-queries";
 
 const ThreadTerminalView = lazy(() =>
   import("../terminal/ThreadTerminalView.js").then((module) => ({
@@ -23,46 +15,27 @@ export function ProviderSignIn({
   threadId: string;
   turnId: string;
 }) {
-  const create = useCreateTerminal();
-  const close = useCloseTerminal();
-  const [session, setSession] = useState<TerminalSession | null>(null);
+  const { session, pending, error, signIn, cancel, closing, updateSession } =
+    useProviderSignIn(threadId, turnId);
   const running =
     session?.status === "running" || session?.status === "starting";
-  const signIn = async () => {
-    try {
-      setSession(
-        await create.mutateAsync({
-          target: { kind: "thread", threadId },
-          start: { mode: "provider-login", turnId },
-          title: "Provider sign-in",
-          cols: DEFAULT_TERMINAL_COLS,
-          rows: DEFAULT_TERMINAL_ROWS,
-        }),
-      );
-    } catch {}
-  };
   return (
     <div className="flex flex-col gap-2 py-2">
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
           size="sm"
-          disabled={create.isPending || running}
+          disabled={pending || running}
           onClick={() => void signIn()}
         >
-          {create.isPending ? "Starting sign-in…" : "Sign in"}
+          {pending ? "Starting sign-in…" : "Sign in"}
         </Button>
         {running && session !== null ? (
           <Button
             variant="ghost"
             size="sm"
-            disabled={close.isPending}
-            onClick={() => {
-              void close
-                .mutateAsync({ terminalId: session.id, mode: "force" })
-                .then((next) => setSession(next))
-                .catch(() => undefined);
-            }}
+            disabled={closing}
+            onClick={() => void cancel()}
           >
             Cancel sign-in
           </Button>
@@ -75,9 +48,9 @@ export function ProviderSignIn({
             : "Sign-in ended. Your work is still here; you can sign in again or retry."
           : "Sign in on this thread's machine, then send a message to continue."}
       </p>
-      {create.error ? (
+      {error ? (
         <p role="alert" className="text-sm text-destructive">
-          {create.error.message}
+          {error.message}
         </p>
       ) : null}
       {session !== null ? (
@@ -93,7 +66,7 @@ export function ProviderSignIn({
               autoFocus={false}
               isPanelOpen
               session={session}
-              onSessionChange={setSession}
+              onSessionChange={updateSession}
             />
           </Suspense>
         </div>
