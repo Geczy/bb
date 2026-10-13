@@ -53,7 +53,7 @@ function mount(initial: SplitLayout | null) {
 }
 
 describe("useSplitViewTelemetry", () => {
-  it("reports each added pane with the pane count, and nothing for closing panes", () => {
+  it("reports each added pane as feature use, and nothing for closing panes", () => {
     const { update } = mount(singlePane());
     update((layout) =>
       splitPane(layout, "pane-1", "right", thread("thread-2")),
@@ -63,8 +63,28 @@ describe("useSplitViewTelemetry", () => {
     );
     update((layout) => removePane(layout, layout.focusedPaneId));
     expect(mocks.recordTelemetryEvent.mock.calls).toEqual([
-      [{ name: "split_view_opened", properties: { panes: 2 } }],
-      [{ name: "split_view_opened", properties: { panes: 3 } }],
+      [
+        {
+          name: "feature_used",
+          properties: {
+            feature: "split_view",
+            feature_scope: "core",
+            interaction: "opened",
+            trigger: "unknown",
+          },
+        },
+      ],
+      [
+        {
+          name: "feature_used",
+          properties: {
+            feature: "split_view",
+            feature_scope: "core",
+            interaction: "opened",
+            trigger: "unknown",
+          },
+        },
+      ],
     ]);
   });
 

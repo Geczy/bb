@@ -11,8 +11,13 @@ export function useSplitViewTelemetry(): void {
   useEffect(() => {
     if (panes > previousPanes.current && panes >= 2) {
       recordTelemetryEvent({
-        name: "split_view_opened",
-        properties: { panes },
+        name: "feature_used",
+        properties: {
+          feature: "split_view",
+          feature_scope: "core",
+          interaction: "opened",
+          trigger: "unknown",
+        },
       });
     }
     previousPanes.current = panes;

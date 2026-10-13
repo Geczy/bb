@@ -1069,21 +1069,21 @@ schema, a default, and a revision that increments on every write. Writes name
 the revision they expect and receive `409 ui_preference_conflict` when another
 client wrote first, so a stale window cannot silently clobber a newer value.
 
-| Key                                  | Value                                                                                     |
-| ------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `sidebar.organizationMode`           | `project`, `chronological`, or `machine`                                                  |
-| `sidebar.threadGrouping.environment` | `auto`, `true`, or `false`                                                                |
-| `sidebar.chronologicalSort`          | `updated`, `created`, `alpha`, or `none`                                                  |
-| `sidebar.sectionOrder`               | Section id list for **By project**                                                        |
-| `sidebar.manualSectionOrder`         | Section id list for **Manually**                                                          |
-| `sidebar.machineSectionOrder`        | Section id list for **By machine**                                                        |
-| `sidebar.hiddenGroups`               | Legacy project, custom section, and machine ids migrated once into the Thread list plugin |
-| `sidebar.footerOrder`                | Footer action order                                                                       |
-| `sidebar.hiddenFooterItems`          | Footer actions moved into More                                                            |
-| `sidebar.pluginPanelOrder`           | Rail destination order                                                                    |
-| `sidebar.visiblePluginPanels`        | Rail destinations shown, or `null` for every destination                                  |
-| `sidebar.threadListProvider`         | Plugin key or `__automatic__` (default)                                                   |
-| `infoPanel.collapsedSections`        | Collapsed thread Info panel sections (`commits`, `uncommittedChanges`, `forks`, `threadStorage`)                   |
+| Key                                  | Value                                                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `sidebar.organizationMode`           | `project`, `chronological`, or `machine`                                                                         |
+| `sidebar.threadGrouping.environment` | `auto`, `true`, or `false`                                                                                       |
+| `sidebar.chronologicalSort`          | `updated`, `created`, `alpha`, or `none`                                                                         |
+| `sidebar.sectionOrder`               | Section id list for **By project**                                                                               |
+| `sidebar.manualSectionOrder`         | Section id list for **Manually**                                                                                 |
+| `sidebar.machineSectionOrder`        | Section id list for **By machine**                                                                               |
+| `sidebar.hiddenGroups`               | Legacy project, custom section, and machine ids migrated once into the Thread list plugin                        |
+| `sidebar.footerOrder`                | Footer action order                                                                                              |
+| `sidebar.hiddenFooterItems`          | Footer actions moved into More                                                                                   |
+| `sidebar.pluginPanelOrder`           | Rail destination order                                                                                           |
+| `sidebar.visiblePluginPanels`        | Rail destinations shown, or `null` for every destination                                                         |
+| `sidebar.threadListProvider`         | Plugin key or `__automatic__` (default)                                                                          |
+| `infoPanel.collapsedSections`        | Collapsed thread Info panel sections (`commits`, `uncommittedChanges`, `childThreads`, `forks`, `threadStorage`) |
 
 The sidebar thread list defaults to `__automatic__`: the first installed thread list
 plugin other than the bundled Thread list plugin (`thread-list/thread-list`), or the
@@ -1607,7 +1607,10 @@ not on disk. `bb marketplace add|list|refresh|remove` and Settings → Plugin
 marketplaces manage them; the reserved `bb-community` marketplace comes from
 `BB_MARKETPLACE_URL` and cannot be added or removed. Adding a marketplace
 installs nothing, and removing one keeps its installed plugins as direct
-installs.
+installs. A `git:` marketplace reads `marketplace.json` from the repository
+root, or from the relative directory given with
+`bb marketplace add --subdirectory <relative-path>` (the Subdirectory field in
+Settings); bb stores that directory and reuses it on every refresh.
 
 ### Multi-plugin repositories
 
@@ -2101,35 +2104,64 @@ through `POST /api/v1/system/telemetry/events` (`sdk.system.experimental_recordT
 `onboarding_started` (whether an agent was installed or ready at first launch),
 `onboarding_step_reached`, `onboarding_step_completed`, and
 `onboarding_step_skipped` (per setup-guide step, marked first run or replay),
-`onboarding_finished` (completed or skipped), plus
-`tip_shown` (once per tip per visit to the New thread page) and `tip_used` (on
-click) from the bundled Tips plugin, each with the built-in tip id, its position
-in the feed (1-3), and its action type (`prompt`, `open-page`, `run-command`,
-`open-plugin`, or `learn-more`), plus `automation_created` from the bundled
-Automations plugin when any surface creates an automation (its trigger,
-`schedule` or `once`; its mode, `agent` or `script`; and its origin, `human`,
-`app`, or `agent`) and `split_view_opened` when a pane is added to the split
-view (the pane count after it opens, 2-8; restoring a saved layout does not
-count), and `device_paired` from the bundled Push Notifications plugin when a
-new phone registers for notifications (`mobile_ios` or `mobile_android`) and
-from the server when a new machine enrolls with a join code (`machine`; the
-server's own machine and re-enrollments do not count), each with `first_of_kind`, and `browser_session_started` from the bundled
-Browser Automation plugin when a session opens (`surface`: `headless` or
-`desktop`; `initiated_by`: `agent` when the CLI runs inside a thread, as agents'
-shells do, `user` when it runs outside any thread, and `sdk` for a direct SDK or
-RPC call).
-That route accepts
-only those events and their fixed, non-identifying properties.
+`onboarding_finished` (completed or skipped), `onboarding_agent_state`
+(aggregate installed/ready booleans when the guide's health snapshot changes;
+null means unknown or a failed health query), and `onboarding_sign_in`
+(started, ready, exited, failed, or cancelled, marked first run or replay).
+Sign-in `ready` means the selected provider's health became ready during the
+attempt. `exited` means its command exited successfully before readiness was
+observed; it does not establish successful authentication. Cancellation
+includes leaving the Agent step or switching sign-in methods.
 
-The server sends `plugin_enabled` when a disabled plugin is turned on, with the
-same `plugin_id`, `provenance`, and `marketplace` rules as `plugin_installed`
-(the id only for built-in and curated marketplace plugins). It also sends
-`turn_finished` whenever a thread's turn ends, from the same lifecycle transition that marks it finished, failed, or stopped (including provisioning failures, host disconnects, and manual stops): `outcome`
-(`completed`, `failed`, or `stopped`), `provider` (a built-in provider id, or
-`other` for any custom or third-party provider), `error_category` (`none`,
-`auth`, `billing`, `rate_limit`, `provider_unavailable`, `limit_reached`,
-`process_exited`, `start_failed`, `host_lost`, or `other`; never the error text), and
-`first_turn` (true only for the install's first finished turn).
+`new_thread_submit` records started, accepted, or failed composer submissions.
+It covers all new-thread submissions, so analytics must restrict first-send
+analysis to the installation's earliest attempt and check prior thread history.
+Accepted means the creation callback succeeded, not that the provider produced
+an answer. Disabled send controls and later turn failures are not measured.
+Attempts without a delivered outcome remain unknown, not inferred failures.
+
+The route accepts only these events and their fixed enums, booleans, and unknown
+markers. These additions include no provider IDs, account details, prompts,
+project or file names, terminal output, error messages, or session identifiers.
+They do not measure foreground time, app exit, or install/update error reasons.
+
+The bundled Tips plugin sends `tip_shown` and `tip_used` with fixed tip IDs,
+positions and action types. `feature_used` uses a finite capability registry:
+threads, child threads, providers, remote access, automations, browser,
+terminals, files, git, settings, projects, environments, split view, search,
+voice and plugin management. Core actions carry only `feature`,
+`feature_scope=core`, `interaction=opened/invoked/ran`, and
+`trigger=person/agent/schedule/system/unknown`. Triggers are a breakdown of
+engagement, including automated work. Unobserved provenance stays unknown.
+
+Successful explicit core API actions are captured at their shared route
+boundary for UI, SDK and CLI callers. File previews, side-panel opens and
+split additions cover local UI actions. Background queries, resize/persistence
+writes and layout restoration are excluded. The telemetry endpoint rejects
+unknown fields, feature codes and caller-supplied plugin provenance. Legacy
+client event variants remain accepted for compatibility.
+
+Work events add random analytics-only thread IDs and the parent's analytics ID
+where applicable. Accepted messages have independently random request analytics
+IDs; a grouped dispatch carries the complete bounded list. Local lookup records
+keep these separate from real thread, queue, message and provider IDs. They are
+never PostHog person IDs and are not accepted as bb API routing keys.
+
+`thread_lifecycle` reports applied turn starts, explicit user-blocking waits and
+clears, settled stops, archives, unarchives, deletion and parent changes.
+`turn_finished` reports `completed`, `failed` or `stopped`, the bundled provider
+(or `other`), a coarse error category and original message linkage. Explicit
+retries retain the original message identities and carry `attempt_kind=retry`;
+steering cannot replace a turn's initiating messages. Missing origin records
+remain `unavailable`. Queue acceptance and turn events retain their original
+occurrence timestamps. Capture runs only after a successful transaction.
+
+These tokens permit per-thread timelines, parent-child graphs, message-to-work
+and retry joins, and observed queue delays within an installation. They do not
+encode content or replace the anonymous install ID. The local database contains
+the mapping; PostHog does not receive it. Opt-out prevents future capture and
+backfill, but does not erase prior events. Forked/recreated threads get fresh
+identities; copying a whole database can copy analytics identities as well.
 
 Anonymous usage telemetry can be disabled in Settings → General → Privacy & diagnostics → Share anonymous usage data,
 or with `bb settings general telemetryEnabled false`. The saved server-wide preference

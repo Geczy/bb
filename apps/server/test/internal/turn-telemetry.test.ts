@@ -48,7 +48,11 @@ async function setup(
 ) {
   const harness = await createTestAppHarness();
   const capture = vi.fn<TelemetryService["capture"]>();
-  harness.deps.telemetry = { ...harness.deps.telemetry, capture };
+  harness.deps.telemetry = {
+    ...harness.deps.telemetry,
+    capture,
+    isEnabled: () => true,
+  };
   setTurnTelemetryDeps({
     ...harness.deps,
     get telemetry() {
@@ -108,7 +112,7 @@ describe("turn_finished telemetry", () => {
       ]);
       expect(response.status).toBe(200);
       await vi.waitFor(() =>
-        expect(turnFinished()).toEqual([
+        expect(turnFinished()).toMatchObject([
           {
             name: "turn_finished",
             properties: {
@@ -144,7 +148,7 @@ describe("turn_finished telemetry", () => {
       ]);
       expect(response.status).toBe(200);
       await vi.waitFor(() =>
-        expect(turnFinished()).toEqual([
+        expect(turnFinished()).toMatchObject([
           {
             name: "turn_finished",
             properties: {

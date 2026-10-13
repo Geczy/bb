@@ -1,3 +1,11 @@
+import { eq } from "drizzle-orm";
+import { afterCommit, telemetryThreads, type DbQueryConnection } from "@bb/db";
+import {
+  analyticsThreadProperties,
+  captureWorkEvent,
+  workOriginProperties,
+  setWorkTelemetryDeps,
+} from "./work-telemetry.js";
 import {
   claimFirstFinishedTurn,
   getLatestStoredThreadEventOfTypes,
@@ -26,13 +34,12 @@ const SYSTEM_ERROR_CATEGORIES: Readonly<Record<string, TurnErrorCategory>> = {
 };
 
 let turnTelemetryDeps: TurnTelemetryDeps | undefined;
-let firstTurnSettled = false;
 
 export function setTurnTelemetryDeps(
   next: TurnTelemetryDeps | undefined,
 ): void {
   turnTelemetryDeps = next;
-  firstTurnSettled = false;
+  setWorkTelemetryDeps(next);
 }
 
 export function turnErrorCategory(
@@ -64,16 +71,6 @@ export function reportedProviderId(
   builtInProviderIds: ReadonlySet<string>,
 ): string {
   return builtInProviderIds.has(providerId) ? providerId : "other";
-}
-
-export function isTurnEndingLifecycleEvent(
-  event: ThreadLifecycleEvent,
-): boolean {
-  return (
-    event.type === "run.failed" ||
-    event.type === "run.succeeded" ||
-    event.type === "stop.settled"
-  );
 }
 
 export function turnFinishedOutcome(
@@ -114,47 +111,101 @@ function failureCategory(
   );
 }
 
-function claimFirstTurn(deps: TurnTelemetryDeps): boolean {
-  if (firstTurnSettled) return false;
-  firstTurnSettled = true;
-  return claimFirstFinishedTurn(deps.db, Date.now());
-}
-
-export function recordTurnFinished(
-  deps: TurnTelemetryDeps,
-  args: { threadId: string; outcome: TurnFinishedOutcome },
-): void {
-  try {
-    const thread = getThread(deps.db, args.threadId);
-    if (!thread) return;
-    deps.telemetry.capture({
-      name: "turn_finished",
-      properties: {
-        outcome: args.outcome,
-        provider: reportedProviderId(
-          thread.providerId,
-          deps.builtInProviderIds(),
-        ),
-        error_category:
-          args.outcome === "failed"
-            ? failureCategory(deps.db, args.threadId)
-            : "none",
-        first_turn: claimFirstTurn(deps),
-      },
-    });
-  } catch (error) {
-    deps.logger.debug(
-      { err: error, threadId: args.threadId },
-      "Turn telemetry failed",
-    );
-  }
-}
-
-export function announceTurnFinished(
+export function recordAppliedWorkLifecycle(
+  db: DbQueryConnection,
   threadId: string,
-  outcome: TurnFinishedOutcome,
+  event: ThreadLifecycleEvent,
+  previousStatus: ThreadStatus,
 ): void {
   const deps = turnTelemetryDeps;
-  if (deps === undefined) return;
-  setImmediate(() => recordTurnFinished(deps, { threadId, outcome }));
+  if (!deps) return;
+  if (!deps.telemetry.isEnabled()) {
+    try {
+      db.update(telemetryThreads)
+        .set({ activeRequestId: null, pendingRequestId: null, waiting: false })
+        .where(eq(telemetryThreads.threadId, threadId))
+        .run();
+    } catch {}
+    return;
+  }
+  try {
+    const thread = getThread(db, threadId);
+    if (!thread) return;
+    const identity = analyticsThreadProperties(db, thread);
+    const state = db
+      .select()
+      .from(telemetryThreads)
+      .where(eq(telemetryThreads.threadId, threadId))
+      .get();
+    if (event.type === "run.started") {
+      const requestId = state?.pendingRequestId ?? null;
+      db.update(telemetryThreads)
+        .set({ activeRequestId: requestId, pendingRequestId: null })
+        .where(eq(telemetryThreads.threadId, threadId))
+        .run();
+      captureWorkEvent(
+        db,
+        {
+          name: "thread_lifecycle",
+          properties: {
+            ...identity,
+            ...workOriginProperties(db, threadId, requestId),
+            transition: "turn_started",
+          },
+        },
+        thread.updatedAt,
+      );
+      return;
+    }
+    const outcome = turnFinishedOutcome(event, previousStatus);
+    if (outcome === null) return;
+    const requestId =
+      previousStatus === "starting" || previousStatus === "pending"
+        ? (state?.pendingRequestId ?? null)
+        : (state?.activeRequestId ?? null);
+    const properties = {
+      ...identity,
+      ...workOriginProperties(db, threadId, requestId),
+      outcome,
+      provider: reportedProviderId(
+        thread.providerId,
+        deps.builtInProviderIds(),
+      ),
+      error_category:
+        outcome === "failed"
+          ? failureCategory(deps.db, threadId)
+          : ("none" as const),
+    };
+    const occurredAt = thread.updatedAt;
+    afterCommit(db, () => {
+      try {
+        if (!deps.telemetry.isEnabled()) return;
+        deps.telemetry.capture(
+          {
+            name: "turn_finished",
+            properties: {
+              ...properties,
+              first_turn: claimFirstFinishedTurn(deps.db, occurredAt),
+            },
+          },
+          occurredAt,
+        );
+      } catch {}
+    });
+    if (event.type === "stop.settled")
+      captureWorkEvent(
+        db,
+        {
+          name: "thread_lifecycle",
+          properties: { ...identity, transition: "thread_stopped" },
+        },
+        occurredAt,
+      );
+    db.update(telemetryThreads)
+      .set({ activeRequestId: null, pendingRequestId: null })
+      .where(eq(telemetryThreads.threadId, threadId))
+      .run();
+  } catch (error) {
+    deps.logger.debug({ err: error }, "Work telemetry failed");
+  }
 }

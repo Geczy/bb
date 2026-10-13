@@ -77,10 +77,7 @@ async function bootAutomationsPlugin(
   const host = createFakePluginHost({
     pluginId: "automations",
     sdk: {
-      system: {
-        config: async () => ({ primaryHostId: "host_fake" }),
-        experimental_recordTelemetryEvent: async () => ({ ok: true }),
-      },
+      system: { config: async () => ({ primaryHostId: "host_fake" }) },
       projects: {
         async get({ projectId }) {
           if (projectId === PROJECT_ID) return project(projectId);
@@ -281,16 +278,6 @@ describe("automations server plugin harness", () => {
         origin: "human",
       }),
     ).rejects.toThrow(`Project ${DELETED_PROJECT_ID} is not available`);
-    expect(
-      harness.sdk.callsTo("system.experimental_recordTelemetryEvent"),
-    ).toEqual([
-      [
-        {
-          name: "automation_created",
-          properties: { trigger: "once", mode: "agent", origin: "human" },
-        },
-      ],
-    ]);
 
     await expect(
       harness.callRpc("automations_delete", {

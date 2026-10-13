@@ -265,7 +265,6 @@ export type { EnvironmentRow } from "./environments.js";
 
 export {
   upsertHost,
-  countActiveHostsExcept,
   getHost,
   getNonDestroyedHost,
   getNonDestroyedHostByLaunchKey,
