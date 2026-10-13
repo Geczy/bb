@@ -602,6 +602,7 @@ function ThreadRowComponent({
           !shortcut &&
             !isEditing &&
             !isCustomizingActions &&
+            !crossProjectName &&
             (reserveActionSpace
               ? "pr-(--bb-sidebar-hover-actions-inset) [@media(hover:none)]:pr-0"
               : SIDEBAR_HOVER_ACTIONS_INSET_CLASS),
@@ -696,22 +697,23 @@ function ThreadRowComponent({
             revealOnHover={!isParentCollapsed}
           />
         ) : null}
+        {crossProjectName ? (
+          <span
+            data-sidebar-thread-cross-project=""
+            title={`In project ${crossProjectName}`}
+            className={cn(
+              "pointer-events-none ml-auto max-w-[40%] shrink-0 truncate pl-1.5 text-right text-xs text-subtle-foreground",
+              !shortcut && [
+                SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
+                "min-w-(--bb-sidebar-hover-actions-inset) [@media(hover:none)]:min-w-0",
+              ],
+              (isEditing || isCustomizingActions) && "hidden",
+            )}
+          >
+            {crossProjectName}
+          </span>
+        ) : null}
       </span>
-      {crossProjectName ? (
-        <span
-          data-sidebar-thread-cross-project=""
-          title={`In project ${crossProjectName}`}
-          className={cn(
-            SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
-            "pointer-events-none max-w-[40%] shrink-0 truncate pl-1.5 text-xs text-subtle-foreground",
-            !isActionsOpen &&
-              "group-data-[sidebar-touch-armed=true]/thread-row:hidden",
-            (isEditing || isCustomizingActions) && "hidden",
-          )}
-        >
-          {crossProjectName}
-        </span>
-      ) : null}
       {rowDragBindings && !rowDragBindings.disabled && !isActionsOpen ? (
         <SidebarThreadDragChip
           title={labelTitle}
