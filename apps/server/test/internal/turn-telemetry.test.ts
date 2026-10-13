@@ -86,6 +86,71 @@ async function setup(
 }
 
 describe("turn_finished telemetry", () => {
+  it("keeps a disabled builtin plugin's saved custom provider private", async () => {
+    const harness = await createTestAppHarness({
+      seedFirstPartyProviders: false,
+    });
+    const capture = vi.fn<TelemetryService["capture"]>();
+    harness.deps.telemetry = {
+      ...harness.deps.telemetry,
+      capture,
+      isEnabled: () => true,
+    };
+    try {
+      const installed = await harness.pluginService.install(
+        "builtin:provider-acp",
+        { kind: "root" },
+      );
+      expect(installed.status, installed.statusDetail ?? undefined).toBe(
+        "running",
+      );
+      await harness.pluginService.updateSettings("provider-acp", {
+        customAgents: JSON.stringify([
+          {
+            id: "private-team-agent",
+            displayName: "Private",
+            command: "node",
+            args: [],
+          },
+        ]),
+      });
+      await vi.waitFor(() =>
+        expect(
+          harness.deps.providerRegistry.get("acp-private-team-agent"),
+        ).not.toBeNull(),
+      );
+      await harness.pluginService.setEnabled("provider-acp", false);
+      expect(harness.pluginService.providerCatalog()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: "acp-private-team-agent" }),
+        ]),
+      );
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        providerId: "acp-private-team-agent",
+        status: "active",
+      });
+      applyLoggedThreadLifecycleEvent(harness.deps, {
+        threadId: thread.id,
+        event: { type: "run.failed" },
+      });
+      expect(capture.mock.calls.map(([event]) => event)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "turn_finished",
+            properties: expect.objectContaining({ provider: "other" }),
+          }),
+        ]),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("reports a completed root turn once, as the install's first turn", async () => {
     const { harness, session, thread, turnFinished } = await setup();
     try {
