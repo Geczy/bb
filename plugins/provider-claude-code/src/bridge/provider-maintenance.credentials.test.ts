@@ -32,7 +32,7 @@ vi.mock("node:os", async (importOriginal) => {
   return {
     ...original,
     default: {
-      ...original.default,
+      ...original,
       homedir: () => "/test/home",
       userInfo: () => ({ username: "test-user" }),
     },
