@@ -27,12 +27,17 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-vi.mock("node:os", () => ({
-  default: {
-    homedir: () => "/test/home",
-    userInfo: () => ({ username: "test-user" }),
-  },
-}));
+vi.mock("node:os", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:os")>();
+  return {
+    ...original,
+    default: {
+      ...original.default,
+      homedir: () => "/test/home",
+      userInfo: () => ({ username: "test-user" }),
+    },
+  };
+});
 
 vi.mock("node:fs/promises", () => ({
   default: {
