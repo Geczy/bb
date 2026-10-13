@@ -5754,9 +5754,13 @@ describe("failed session execution context", () => {
         return query;
       });
       const threadId = `thread-recovery-${executableSource}`;
+      const threadEnv = {
+        BB_THREAD_ID: threadId,
+        BB_ENVIRONMENT_ID: "env_recovery",
+      };
       const options = {
         ...canonicalOptions(),
-        envVars: { CLAUDE_CONFIG_DIR: "/profiles/a" },
+        envVars: { ...threadEnv, CLAUDE_CONFIG_DIR: "/profiles/a" },
       };
       try {
         bridge.sendRequest(1, "thread/start", {
@@ -5793,7 +5797,10 @@ describe("failed session execution context", () => {
             expectedTurnId: turn.scope.turnId,
             clientRequestId: "creq_abcdefghjm",
             input: [{ type: "text", text: "steer" }],
-            options: { ...canonicalOptions(), envVars: nextEnv },
+            options: {
+              ...canonicalOptions(),
+              envVars: { ...threadEnv, ...nextEnv },
+            },
           });
           await readNextPrompt(getLatestQueryCall());
           const response = await bridge.waitForResponse(id);
@@ -5819,7 +5826,7 @@ describe("failed session execution context", () => {
           providerThreadId,
           clientRequestId: "creq_abcdefghjn",
           input: [{ type: "text", text: "next" }],
-          options: { ...canonicalOptions(), envVars: {} },
+          options: { ...canonicalOptions(), envVars: threadEnv },
         });
         await bridge.flushWork();
         await readNextPrompt(getLatestQueryCall());
