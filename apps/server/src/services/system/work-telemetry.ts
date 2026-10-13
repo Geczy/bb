@@ -48,7 +48,6 @@ export function setWorkTelemetryDeps(deps: WorkDeps | undefined): void {
 interface MessageOrigin {
   threadId: string;
   ids: string[];
-  acceptedAt: number;
   source: MessageSource;
   trigger: TelemetryTrigger;
   captureMessage: boolean;
@@ -172,7 +171,6 @@ export function withMessageOrigin<T>(
     {
       threadId: args.threadId,
       ids,
-      acceptedAt: Date.now(),
       source: args.source,
       trigger: args.trigger,
       captureMessage: args.captureMessage,
@@ -202,12 +200,13 @@ function bindOrigin(
   const identity = analyticsThreadProperties(db, thread);
   if (origin.fresh) {
     const id = origin.ids[0]!;
+    const acceptedAt = Date.now();
     const inserted = db
       .insert(telemetryMessages)
       .values({
         analyticsId: id,
         threadId,
-        acceptedAt: origin.acceptedAt,
+        acceptedAt,
         trigger: origin.trigger,
         messageSource: origin.source,
       })
@@ -227,7 +226,7 @@ function bindOrigin(
             provider: thread.providerId,
           },
         },
-        origin.acceptedAt,
+        acceptedAt,
       );
   }
   const stored = db
@@ -259,7 +258,6 @@ export function recordMessageRequest(
       ids: request.retryOfRequestId
         ? originIds(db, threadId, "request", request.retryOfRequestId)
         : [],
-      acceptedAt: Date.now(),
       source: request.source === "spawn" ? "thread_create" : "thread_send",
       trigger:
         request.initiator === "agent"
