@@ -273,15 +273,23 @@ function claudeCredentialProfile() {
   const configDir = (
     configuredDir ?? path.join(os.homedir(), ".claude")
   ).normalize("NFC");
+  const configuredStorageDir = process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR;
+  const storageDir =
+    configuredStorageDir === undefined
+      ? configDir
+      : (configuredStorageDir || path.join(os.homedir(), ".claude")).normalize(
+          "NFC",
+        );
   return {
-    credentialsPath: path.join(configDir, ".credentials.json"),
+    credentialsPath: path.join(storageDir, ".credentials.json"),
     accountPath: path.join(configuredDir || os.homedir(), ".claude.json"),
     legacyAccountPath: configuredDir
       ? path.join(configDir, ".config.json")
       : null,
-    keychainService: configuredDir
-      ? `${CLAUDE_KEYCHAIN_SERVICE}-${createHash("sha256").update(configDir).digest("hex").slice(0, 8)}`
-      : CLAUDE_KEYCHAIN_SERVICE,
+    keychainService:
+      (configuredStorageDir ?? configuredDir)
+        ? `${CLAUDE_KEYCHAIN_SERVICE}-${createHash("sha256").update(storageDir).digest("hex").slice(0, 8)}`
+        : CLAUDE_KEYCHAIN_SERVICE,
   };
 }
 
