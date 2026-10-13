@@ -1,0 +1,13 @@
+# Recovery sign-in QA retry
+
+**Verdict: BLOCKED** — the one fresh Browser Automation session reached the correct thread route but the app remained at “Loading thread,” so the recovery flow and matched after screenshots could not be exercised. No product defect was demonstrated. The cause is not conclusively attributable to the product or harness; available evidence points to local app/fixture initialization because the server was reachable and related environment APIs returned 200, while no thread timeline request appeared in the server log after navigation.
+
+- Exact head: `b832a49c250e23346d470e3193af2ed05fd71a99`; branch restored and tracked tree clean.
+- Browser: Chrome for Testing headless, UA `HeadlessChrome/155.0.0.0`; session `76798d26-3794-4f9d-9084-f662470eb206` on `host_q7quxdditd`, closed and verified.
+- Route/fixture: `http://127.0.0.1:18445/projects/proj_s7v42a4adh/threads/thr_j9uvsu9cpe`, existing isolated fixture; intended desktop 1440×900 CSS at DPR2. Browser viewport set to 1440×900 DPR2.
+- Before evidence reused from the previous base run: `before-base-desktop-final.png` and `before-base-mobile-final.png`. No new after captures were produced, so no matched screenshot pair is available for sign-off.
+- Preflight warmed the route (HTTP 200, 5060 bytes) and `/src/main.tsx` (HTTP 200, 7014 bytes) before the browser opened. In the browser, the title was “Existing thread · synthetic auth recovery,” but body content stayed at the navigation shell with “Loading thread” on two observations including a bounded wait. `performance` showed no API resource entries. Server logs recorded environment status calls (HTTP 200, 3.85–3.98s) and provider CLI status (HTTP 200, 4.73s); no timeline fetch for this navigation was logged. The prior startup evidence and these observations do not prove whether the stalled timeline is caused by the app or the fixture/browser integration.
+- App command: existing task `run-dev.sh` via environment terminal `term_gj4qpwjgy6`, environment `env_jeqe9ahwrp`, host `host_q7quxdditd`; task-local HOME/profile and fake executable were reused. It exited cleanly. Ports 18445, 26445, and 34445 are closed. PID values were not exposed by the host terminal/`ss` output.
+- Unblocker: diagnose why this isolated local app remains on the thread-loading state and ensure its existing thread timeline resolves in the browser before authorizing another attempt. No retry was made after the stall.
+
+The unchanged base screenshots remain available at the task directory with their existing hashes. No source edits, tests, builds, CI, review, PR, or merge were performed.
