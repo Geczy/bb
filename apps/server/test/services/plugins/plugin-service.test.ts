@@ -870,20 +870,22 @@ describe("plugin service", () => {
     const tracked = createTelemetryTrackedService(captured);
     const rootDir = await writePlugin(workDir, {
       name: "bb-plugin-private-work",
-      serverSource: `import { z } from "zod";
-      export default function plugin(bb) {
+      serverSource: `export default function plugin(bb) {
+        const schema = { "~standard": { version: 1, vendor: "fixture", validate: (value) =>
+          value === null ? { value } : { issues: [{ message: "Expected null" }] } } };
         bb.cli.register({ name: "private-work", description: "Work", run() {
           bb.experimental_withFeatureUse({ trigger: "schedule" }, () => undefined);
           return { exitCode: 0, stdout: "done" };
         }});
         bb.rpc.register({
-          read: { input: z.null(), output: z.null() },
-          act: { experimental_usage: "action", input: z.null(), output: z.null() }
+          read: { input: schema, output: schema },
+          act: { experimental_usage: "action", input: schema, output: schema }
         }, { read: () => null, act: () => { bb.experimental_withFeatureUse({ trigger: "schedule" }, () => undefined); return null; } });
       }`,
     });
     try {
-      await tracked.installPath(rootDir);
+      const installed = await tracked.installPath(rootDir);
+      expect(installed.status, installed.statusDetail ?? undefined).toBe("running");
       captured.length = 0;
       const read = tracked.getRpcHandler("private-work", "read");
       const act = tracked.getRpcHandler("private-work", "act");
