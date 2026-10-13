@@ -25,7 +25,6 @@ import {
   resolvePermissionMode,
 } from "./provider-permissions.js";
 import { publishAutomationChange } from "./realtime.js";
-import { recordAutomationCreated } from "./telemetry.js";
 import { isPrintableWorkingDirectoryPath } from "./limits.js";
 import {
   AUTOMATION_RUNS_LIMIT_MAX,
@@ -70,10 +69,7 @@ import {
 
 type ServiceApi = Pick<BbPluginApi, "realtime" | "log"> & {
   sdk: {
-    system: Pick<
-      BbPluginApi["sdk"]["system"],
-      "experimental_recordTelemetryEvent"
-    > & { config(): Promise<{ primaryHostId: string | null }> };
+    system: { config(): Promise<{ primaryHostId: string | null }> };
     projects: Pick<BbPluginApi["sdk"]["projects"], "get" | "list">;
     providers: Pick<BbPluginApi["sdk"]["providers"], "list">;
     threads: Pick<BbPluginApi["sdk"]["threads"], "get" | "send" | "spawn">;
@@ -655,11 +651,6 @@ export function createAutomationService(args: {
         throw error;
       }
       publishAutomationChange(bb, payload.projectId, "automations-changed");
-      void recordAutomationCreated(bb, {
-        trigger: payload.trigger.triggerType,
-        mode: payload.execution.mode,
-        origin: payload.origin,
-      });
       return withResolvedWorkingDirectory({
         bb,
         pluginDataDir,
