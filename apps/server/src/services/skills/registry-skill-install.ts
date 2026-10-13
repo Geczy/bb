@@ -12,14 +12,15 @@ import {
   REGISTRY_SKILL_PROVENANCE_FILE_NAME,
   writeRegistrySkillProvenance,
 } from "./registry-skill-provenance.js";
+import { SKILL_TREE_LIMITS } from "@bb/host-daemon-contract";
 
 const SKILL_FILE_NAME = "SKILL.md";
 const SKILLS_INSTALL_TIMEOUT_MS = 120_000;
 const MAX_INSTALL_OUTPUT_BYTES = 1_000_000;
-const MAX_SKILL_FILES = 1_000;
+const MAX_SKILL_FILES = SKILL_TREE_LIMITS.maxFiles;
 const MAX_SKILL_DIRECTORIES = 1_000;
-const MAX_SKILL_BYTES = 10 * 1024 * 1024;
-const MAX_SKILL_DEPTH = 24;
+const MAX_SKILL_BYTES = SKILL_TREE_LIMITS.maxBytes;
+const MAX_SKILL_DEPTH = SKILL_TREE_LIMITS.maxDepth;
 const REGISTRY_SKILLS_CLI_VERSION = "1.5.19";
 
 interface InstallCommandResult {

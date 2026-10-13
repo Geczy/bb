@@ -618,6 +618,40 @@ describe("public project skills route", () => {
     });
   });
 
+  it("searches skills.sh's public search when the authenticated API is unavailable", async () => {
+    await withTestHarness(async (harness) => {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", "");
+      const requested: string[] = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL) => {
+          const url = String(input);
+          requested.push(url);
+          if (url.startsWith("https://www.skills.sh/api/search?")) {
+            return Response.json({
+              query: "anatomy",
+              skills: [
+                { id: "wheresryan22/anatomy/anatomy", source: "wheresryan22/anatomy", skillId: "anatomy", name: "anatomy", installs: 6401 },
+                { id: "example.com/skills/other", source: "example.com/skills", skillId: "other", name: "other", installs: 9 },
+              ],
+            });
+          }
+          return new Response(null, { status: 404 });
+        }),
+      );
+
+      const body = (await readJson(
+        await harness.app.request("/api/v1/skills-registry?q=anatomy&page=0&perPage=24"),
+      )) as { skills: Array<{ id: string; installs: number }>; pagination: { total: number } };
+      expect(body.skills.map((skill) => skill.id)).toEqual(["wheresryan22/anatomy/anatomy"]);
+      expect(body.skills[0]?.installs).toBe(6401);
+      expect(body.pagination.total).toBe(1);
+      const searchUrl = new URL(requested.find((url) => url.includes("/api/search?")) ?? "https://x.invalid");
+      expect(searchUrl.searchParams.get("q")).toBe("anatomy");
+      expect(requested).not.toContain("https://www.skills.sh/");
+    });
+  });
+
   it("returns an empty page, not an error, when a search matches nothing", async () => {
     await withTestHarness(async (harness) => {
       vi.stubEnv("VERCEL_OIDC_TOKEN", "");

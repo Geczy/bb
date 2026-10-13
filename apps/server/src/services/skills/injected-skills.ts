@@ -5,6 +5,7 @@ import path from "node:path";
 import matter from "gray-matter";
 import { resolveDataDirSkillsRootPath } from "@bb/config/skill-storage-paths";
 import type { HostDaemonInjectedSkillSource } from "@bb/host-daemon-contract";
+import { SKILL_TREE_LIMITS } from "@bb/host-daemon-contract";
 import { z } from "zod";
 import type { ServerLogger } from "../../types.js";
 import { isFsErrorWithCode } from "../lib/fs-errors.js";
@@ -215,10 +216,22 @@ function normalizeRelativePath(relativePath: string): string {
   return relativePath.split(path.sep).join("/");
 }
 
+interface SkillTreeTotals {
+  bytes: number;
+  files: number;
+}
+
 function collectSkillTreeEntries(
   rootPath: string,
   currentPath = rootPath,
+  depth = 0,
+  totals: SkillTreeTotals = { bytes: 0, files: 0 },
 ): SkillTreeEntry[] {
+  if (depth > SKILL_TREE_LIMITS.maxDepth) {
+    throw new Error(
+      `Skill tree is nested deeper than ${SKILL_TREE_LIMITS.maxDepth} directories`,
+    );
+  }
   const entries: SkillTreeEntry[] = [];
   for (const entry of fs
     .readdirSync(currentPath, { withFileTypes: true })
@@ -235,11 +248,25 @@ function collectSkillTreeEntries(
       throw new Error(`Skill tree contains a symlink: ${entryPath}`);
     }
     if (stat.isDirectory()) {
-      entries.push(...collectSkillTreeEntries(rootPath, entryPath));
+      entries.push(
+        ...collectSkillTreeEntries(rootPath, entryPath, depth + 1, totals),
+      );
       continue;
     }
     if (!stat.isFile()) {
       throw new Error(`Skill tree entry is not a regular file: ${entryPath}`);
+    }
+    totals.files += 1;
+    totals.bytes += stat.size;
+    if (totals.files > SKILL_TREE_LIMITS.maxFiles) {
+      throw new Error(
+        `Skill tree has more than ${SKILL_TREE_LIMITS.maxFiles} files`,
+      );
+    }
+    if (totals.bytes > SKILL_TREE_LIMITS.maxBytes) {
+      throw new Error(
+        `Skill tree is larger than ${SKILL_TREE_LIMITS.maxBytes / 1024 / 1024} MB`,
+      );
     }
     entries.push({
       bytes: fs.readFileSync(entryPath),

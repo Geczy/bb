@@ -23,6 +23,7 @@ import {
   type ResolveInjectedSkillSourcesArgs,
 } from "../../src/services/skills/injected-skills.js";
 import type { ServerLogger } from "../../src/types.js";
+import { SKILL_TREE_LIMITS } from "@bb/host-daemon-contract";
 
 interface CapturedLog {
   context: object;
@@ -226,6 +227,36 @@ describe("injected skill source discovery", () => {
       candidatePath: skillRootPath,
       reason: "Frontmatter name must match the skill directory name",
       sourceType: "data-dir",
+    });
+  });
+
+  it("skips a skill too large to stage and keeps the rest", async () => {
+    const dataDir = await makeTempDir();
+    const skillsRoot = path.join(dataDir, "skills");
+    const largeRoot = await writeSkill({ name: "large-skill", rootPath: skillsRoot });
+    await mkdir(path.join(largeRoot, "examples"), { recursive: true });
+    await Promise.all(
+      Array.from({ length: SKILL_TREE_LIMITS.maxFiles }, (_, index) =>
+        writeFile(path.join(largeRoot, "examples", `page-${index}.html`), "x", "utf8"),
+      ),
+    );
+    const smallRoot = await writeSkill({ name: "small-skill", rootPath: skillsRoot });
+    const { logger, warnings } = createCapturingLogger();
+
+    expect(resolveInjectedSkillSources(logger, { dataDir })).toEqual([
+      expectedTreeSource({
+        description: "Use small-skill when tests need it.",
+        name: "small-skill",
+        rootPath: smallRoot,
+        sourceType: "data-dir",
+      }),
+    ]);
+    expect(warnings).toEqual([
+      expect.objectContaining({ message: "Skipping invalid injected skill" }),
+    ]);
+    expect(warnings[0]?.context).toMatchObject({
+      candidatePath: largeRoot,
+      reason: `Skill tree has more than ${SKILL_TREE_LIMITS.maxFiles} files`,
     });
   });
 

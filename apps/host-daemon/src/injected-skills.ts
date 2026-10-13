@@ -6,6 +6,7 @@ import { resolveDataDirSkillsRootPath } from "@bb/config/skill-storage-paths";
 import type { AgentRuntimeSkillRoot } from "@bb/agent-runtime";
 import type { HostDaemonInjectedSkillSource } from "@bb/host-daemon-contract";
 import type { HostDaemonSkillTree } from "@bb/host-daemon-contract";
+import { SKILL_TREE_LIMITS } from "@bb/host-daemon-contract";
 import { isPathWithinDirectory } from "@bb/process-utils";
 import { SKILL_FILE_NAME } from "./command-discovery.js";
 import { isFsErrorWithCode } from "./fs-errors.js";
@@ -23,9 +24,9 @@ const STAGE_CATALOG_FILE = "catalog.json";
 const WINDOWS_RENAME_RETRY_BUDGET_MS = 5_000;
 const WINDOWS_TRANSIENT_RENAME_CODES = ["EPERM", "EACCES", "EBUSY"] as const;
 const SKILL_NAME_PATTERN = /^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
-const MAX_STAGED_SKILL_FILES = 1_000;
-const MAX_STAGED_SKILL_BYTES = 10 * 1024 * 1024;
-const MAX_STAGED_SKILL_DEPTH = 24;
+const MAX_STAGED_SKILL_FILES = SKILL_TREE_LIMITS.maxFiles;
+const MAX_STAGED_SKILL_BYTES = SKILL_TREE_LIMITS.maxBytes;
+const MAX_STAGED_SKILL_DEPTH = SKILL_TREE_LIMITS.maxDepth;
 export const EMPTY_SKILL_CATALOG_HASH = createHash("sha256")
   .update("bb-global-skills-v1-empty")
   .digest("hex");

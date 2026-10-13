@@ -163,6 +163,39 @@ export function parsePublicDirectorySkills(html: string): RegistrySkill[] {
   return [...byId.values()];
 }
 
+export function parsePublicSearchSkills(value: unknown): RegistrySkill[] | null {
+  if (!isRecord(value) || !Array.isArray(value.skills)) return null;
+  const skills: RegistrySkill[] = [];
+  for (const entry of value.skills) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.source !== "string" ||
+      typeof entry.skillId !== "string" ||
+      typeof entry.name !== "string" ||
+      typeof entry.installs !== "number" ||
+      !Number.isFinite(entry.installs)
+    ) {
+      continue;
+    }
+    const id = `${entry.source}/${entry.skillId}`;
+    skills.push({
+      id,
+      source: entry.source,
+      skillId: entry.skillId,
+      name: entry.name,
+      installs: entry.installs,
+      stars: null,
+      installUrl: entry.source.includes(".")
+        ? `https://${entry.source}`
+        : `https://github.com/${entry.source}`,
+      url: registrySkillUrl(id),
+      topic: null,
+      summary: null,
+    });
+  }
+  return skills;
+}
+
 export function parsePublicDetail(
   html: string,
 ): Pick<RegistrySkill, "topic" | "summary"> {

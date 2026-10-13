@@ -123,6 +123,12 @@ const hostDaemonInjectedSkillSourceBaseSchema = z
   })
   .strict();
 
+export const SKILL_TREE_LIMITS = {
+  maxFiles: 1_000,
+  maxBytes: 32 * 1024 * 1024,
+  maxDepth: 24,
+} as const;
+
 export const hostDaemonInjectedSkillSourceSchema = z.discriminatedUnion(
   "kind",
   [

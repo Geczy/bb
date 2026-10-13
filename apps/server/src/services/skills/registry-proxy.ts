@@ -15,6 +15,7 @@ import {
   isRecord,
   parsePublicDetailSkill,
   parsePublicDirectorySkills,
+  parsePublicSearchSkills,
   parsePublicSkillMarkdown,
   parseRegistryDetailFiles,
   parseRegistrySkillId,
@@ -332,6 +333,21 @@ async function fetchPublicDirectoryRecords(
   }
 }
 
+async function fetchPublicSearchSkills(
+  query: string,
+): Promise<RegistrySkill[] | null> {
+  const url = new URL("/api/search", SKILLS_BASE_URL);
+  url.searchParams.set("q", query);
+  url.searchParams.set("limit", String(MAX_SEARCH_RESULTS));
+  try {
+    const response = await registryFetch(url);
+    if (!response.ok) return null;
+    return parsePublicSearchSkills(await response.json());
+  } catch {
+    return null;
+  }
+}
+
 async function fetchPublicDirectorySkills(
   query: string,
   page: number,
@@ -406,6 +422,26 @@ export async function listRegistrySkills(
     apiUrl.searchParams.set("per_page", String(perPage));
   }
   const apiPage = await fetchRegistryJson(apiUrl);
+  const searched =
+    apiPage === null && normalizedQuery.length > 0
+      ? await fetchPublicSearchSkills(normalizedQuery)
+      : null;
+  if (searched !== null) {
+    const supported = searched.filter(
+      (skill) => githubRepoForSource(skill.source) !== null,
+    );
+    const start = page * perPage;
+    return {
+      skills: supported.slice(start, start + perPage),
+      pagination: {
+        page,
+        perPage,
+        total: supported.length,
+        hasMore: start + perPage < supported.length,
+      },
+      ranking,
+    };
+  }
   const publicPage = apiPage
     ? null
     : await fetchPublicDirectorySkills(normalizedQuery, page, perPage, ranking);
