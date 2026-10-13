@@ -19,6 +19,7 @@ import { Route as ChangelogRouteImport } from "./routes/changelog";
 import { Route as BlogRouteImport } from "./routes/blog";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as MarketplacePluginIdRouteImport } from "./routes/marketplace_.$pluginId";
+import { Route as ForPersonaRouteImport } from "./routes/for.$persona";
 import { Route as DownloadMacosRouteImport } from "./routes/download.macos";
 import { Route as DownloadLinuxRouteImport } from "./routes/download.linux";
 import { Route as BlogSlugRouteImport } from "./routes/blog_.$slug";
@@ -88,6 +89,11 @@ const MarketplacePluginIdRoute = MarketplacePluginIdRouteImport.update({
   id: "/$pluginId",
   path: "/$pluginId",
   getParentRoute: () => MarketplaceRoute,
+} as any);
+const ForPersonaRoute = ForPersonaRouteImport.update({
+  id: "/for/$persona",
+  path: "/for/$persona",
+  getParentRoute: () => rootRouteImport,
 } as any);
 const DownloadMacosRoute = DownloadMacosRouteImport.update({
   id: "/download/macos",
@@ -204,6 +210,7 @@ export interface FileRoutesByFullPath {
   "/blog/$slug": typeof BlogSlugRoute;
   "/download/linux": typeof DownloadLinuxRoute;
   "/download/macos": typeof DownloadMacosRoute;
+  "/for/$persona": typeof ForPersonaRoute;
   "/marketplace/$pluginId": typeof MarketplacePluginIdRoute;
   "/api/account/me": typeof ApiAccountMeRoute;
   "/api/auth/$": typeof ApiAuthSplatRoute;
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   "/blog/$slug": typeof BlogSlugRoute;
   "/download/linux": typeof DownloadLinuxRoute;
   "/download/macos": typeof DownloadMacosRoute;
+  "/for/$persona": typeof ForPersonaRoute;
   "/marketplace/$pluginId": typeof MarketplacePluginIdRoute;
   "/api/account/me": typeof ApiAccountMeRoute;
   "/api/auth/$": typeof ApiAuthSplatRoute;
@@ -267,6 +275,7 @@ export interface FileRoutesById {
   "/blog_/$slug": typeof BlogSlugRoute;
   "/download/linux": typeof DownloadLinuxRoute;
   "/download/macos": typeof DownloadMacosRoute;
+  "/for/$persona": typeof ForPersonaRoute;
   "/marketplace_/$pluginId": typeof MarketplacePluginIdRoute;
   "/api/account/me": typeof ApiAccountMeRoute;
   "/api/auth/$": typeof ApiAuthSplatRoute;
@@ -300,6 +309,7 @@ export interface FileRouteTypes {
     | "/blog/$slug"
     | "/download/linux"
     | "/download/macos"
+    | "/for/$persona"
     | "/marketplace/$pluginId"
     | "/api/account/me"
     | "/api/auth/$"
@@ -331,6 +341,7 @@ export interface FileRouteTypes {
     | "/blog/$slug"
     | "/download/linux"
     | "/download/macos"
+    | "/for/$persona"
     | "/marketplace/$pluginId"
     | "/api/account/me"
     | "/api/auth/$"
@@ -362,6 +373,7 @@ export interface FileRouteTypes {
     | "/blog_/$slug"
     | "/download/linux"
     | "/download/macos"
+    | "/for/$persona"
     | "/marketplace_/$pluginId"
     | "/api/account/me"
     | "/api/auth/$"
@@ -394,6 +406,7 @@ export interface RootRouteChildren {
   BlogSlugRoute: typeof BlogSlugRoute;
   DownloadLinuxRoute: typeof DownloadLinuxRoute;
   DownloadMacosRoute: typeof DownloadMacosRoute;
+  ForPersonaRoute: typeof ForPersonaRoute;
   ApiAccountMeRoute: typeof ApiAccountMeRoute;
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute;
   ApiConnectMachineCodeRoute: typeof ApiConnectMachineCodeRoute;
@@ -479,6 +492,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/marketplace/$pluginId";
       preLoaderRoute: typeof MarketplacePluginIdRouteImport;
       parentRoute: typeof MarketplaceRoute;
+    };
+    "/for/$persona": {
+      id: "/for/$persona";
+      path: "/for/$persona";
+      fullPath: "/for/$persona";
+      preLoaderRoute: typeof ForPersonaRouteImport;
+      parentRoute: typeof rootRouteImport;
     };
     "/download/macos": {
       id: "/download/macos";
@@ -647,6 +667,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlogSlugRoute: BlogSlugRoute,
   DownloadLinuxRoute: DownloadLinuxRoute,
   DownloadMacosRoute: DownloadMacosRoute,
+  ForPersonaRoute: ForPersonaRoute,
   ApiAccountMeRoute: ApiAccountMeRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiConnectMachineCodeRoute: ApiConnectMachineCodeRoute,

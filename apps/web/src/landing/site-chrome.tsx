@@ -1,3 +1,4 @@
+import ArrowDown01Icon from "@hugeicons/core-free-icons/ArrowDown01Icon";
 import GithubIcon from "@hugeicons/core-free-icons/GithubIcon";
 import { HugeiconsIcon } from "@hugeicons/react";
 
@@ -6,7 +7,36 @@ import { DiscordLink, DownloadLink, GitHubLink, XLink } from "./cta";
 import { useDesktopPlatform } from "./desktop-platform";
 import { DESKTOP_DOWNLOADS } from "./site";
 
-type SiteNavPage = "blog" | "changelog" | "plugins";
+type SiteNavPage = "blog" | "changelog" | "plugins" | "for";
+
+const FOR_LINKS = [
+  { href: "/", label: "Developers" },
+  { href: "/for/product-managers", label: "Product managers" },
+  { href: "/for/analysts", label: "Analysts & researchers" },
+  { href: "/for/business-owners", label: "Business owners" },
+] as const;
+
+function ForMenu({ current }: { current: boolean }) {
+  return (
+    <div className="nav-menu">
+      <button
+        type="button"
+        className={current ? "nav-menu-trigger nav-current" : "nav-menu-trigger"}
+        aria-haspopup="true"
+      >
+        For
+        <HugeiconsIcon icon={ArrowDown01Icon} className="nav-menu-chev" />
+      </button>
+      <div className="nav-menu-list">
+        {FOR_LINKS.map((link) => (
+          <a key={link.href} href={link.href}>
+            {link.label}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function SiteNav({ current }: { current?: SiteNavPage }) {
   const platform = useDesktopPlatform();
@@ -17,6 +47,7 @@ export function SiteNav({ current }: { current?: SiteNavPage }) {
         <span className="bb-mark logo-mark" />
       </a>
       <div className="nav-links">
+        <ForMenu current={current === "for"} />
         <a
           className={current === "plugins" ? "nav-current" : undefined}
           href="/marketplace"
@@ -30,7 +61,11 @@ export function SiteNav({ current }: { current?: SiteNavPage }) {
           Blog
         </a>
         <a
-          className={current === "changelog" ? "nav-current" : undefined}
+          className={
+            current === "changelog"
+              ? "nav-changelog nav-current"
+              : "nav-changelog"
+          }
           href="/changelog"
         >
           Changelog
