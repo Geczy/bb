@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { isPromptDraftEmpty } from "@bb/client-core";
 import { useCreateProject } from "@/hooks/mutations/project-mutations";
 import { usePromptDraftController } from "@/hooks/usePromptDraftStorage";
@@ -17,19 +17,19 @@ export function useOnboardingProjectImport({
   const createProject = useCreateProject();
   const setImportedProjectDefault = useImportedProjectDefault();
   const draft = usePromptDraftController({ kind: "new-thread" });
-  const lifetime = useMemo(
-    () => ({
-      active: false,
-      canSelect:
-        entry === "first_run" && isPromptDraftEmpty(draft.getCurrent()),
-    }),
-    [draft, entry],
+  const lifetimeRef = useRef<{ active: boolean; canSelect: boolean } | null>(
+    null,
   );
   const [importing, setImporting] = useState(false);
   const importingRef = useRef(false);
 
   useEffect(() => {
-    lifetime.active = true;
+    const lifetime = {
+      active: true,
+      canSelect:
+        entry === "first_run" && isPromptDraftEmpty(draft.getCurrent()),
+    };
+    lifetimeRef.current = lifetime;
     const checkDraft = () => {
       if (!isPromptDraftEmpty(draft.getCurrent())) lifetime.canSelect = false;
     };
@@ -39,14 +39,15 @@ export function useOnboardingProjectImport({
       lifetime.active = false;
       unsubscribe();
     };
-  }, [draft, lifetime]);
+  }, [draft, entry]);
 
   const importProjects = useCallback(
     async (
       hostId: string,
       repos: readonly { name: string; path: string }[],
     ) => {
-      if (importingRef.current || !lifetime.active) return;
+      const lifetime = lifetimeRef.current;
+      if (importingRef.current || !lifetime?.active) return;
       importingRef.current = true;
       setImporting(true);
       let lastImportedProjectId: string | null = null;
@@ -73,7 +74,7 @@ export function useOnboardingProjectImport({
       }
       if (lifetime.active) onContinue();
     },
-    [createProject, lifetime, onContinue, onSettled, setImportedProjectDefault],
+    [createProject, onContinue, onSettled, setImportedProjectDefault],
   );
 
   return { importing, importProjects };

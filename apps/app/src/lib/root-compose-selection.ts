@@ -20,6 +20,7 @@ function parseStoredProjectId(
   initialValue: string | null,
 ): string | null {
   if (storedValue) return storedValue;
+  if (storedValue === "") return initialValue;
   return withLocalStorage((storage) => {
     const draft = getPromptDraftAccessor({ kind: "new-thread" }).getCurrent();
     if (!isPromptDraftEmpty(draft)) return initialValue;
@@ -27,10 +28,13 @@ function parseStoredProjectId(
   }, initialValue);
 }
 
-const rootComposeProjectIdStorage = createTabScopedStorage<string | null>({
-  parse: parseStoredProjectId,
-  serialize: (value) => value ?? "",
-});
+const rootComposeProjectIdStorage = createTabScopedStorage<string | null>(
+  {
+    parse: parseStoredProjectId,
+    serialize: (value) => value ?? "",
+  },
+  { persistInitialValue: true },
+);
 
 const rootComposeStoredProjectIdAtom = atomWithStorage<string | null>(
   ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY,

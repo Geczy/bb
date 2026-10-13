@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
+import { createDeferredPromise } from "@bb/test-helpers";
 import { createStore, Provider } from "jotai";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -88,7 +89,7 @@ describe("onboarding project imports", () => {
   it.each(["close", "choice", "draft"] as const)(
     "ignores a delayed import after %s",
     async (interruption) => {
-      const pending = Promise.withResolvers<{ id: string }>();
+      const pending = createDeferredPromise<{ id: string }>();
       createProject.mockReturnValueOnce(pending.promise);
       const view = arrange();
       let imported: Promise<void>;
