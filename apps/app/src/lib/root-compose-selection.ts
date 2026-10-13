@@ -8,24 +8,15 @@ import { useMemo } from "react";
 import { atom, useAtom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
-import { isPromptDraftEmpty } from "@bb/client-core";
-import { getPromptDraftAccessor } from "@/hooks/usePromptDraftStorage";
-import { createTabScopedStorage, withLocalStorage } from "./browser-storage";
+import { createTabScopedStorage } from "./browser-storage";
 
 const ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY = "bb.root-compose.project-id";
-const LAST_USED_PROJECT_ID_STORAGE_KEY = "bb.root-compose.last-used-project-id";
 
 function parseStoredProjectId(
   storedValue: string | null,
   initialValue: string | null,
 ): string | null {
-  if (storedValue) return storedValue;
-  if (storedValue === "") return initialValue;
-  return withLocalStorage((storage) => {
-    const draft = getPromptDraftAccessor({ kind: "new-thread" }).getCurrent();
-    if (!isPromptDraftEmpty(draft)) return initialValue;
-    return storage.getItem(LAST_USED_PROJECT_ID_STORAGE_KEY) || initialValue;
-  }, initialValue);
+  return storedValue && storedValue.length > 0 ? storedValue : initialValue;
 }
 
 const rootComposeProjectIdStorage = createTabScopedStorage<string | null>(
@@ -43,14 +34,11 @@ const rootComposeStoredProjectIdAtom = atomWithStorage<string | null>(
   { getOnInit: true },
 );
 
-const rootComposeProjectSelectionRevisionAtom = atom(0);
+const rootComposeProjectChosenAtom = atom(false);
 const rootComposeProjectIdAtom = atom(
   (get) => get(rootComposeStoredProjectIdAtom) ?? PERSONAL_PROJECT_ID,
-  (get, set, projectId: string) => {
-    set(
-      rootComposeProjectSelectionRevisionAtom,
-      get(rootComposeProjectSelectionRevisionAtom) + 1,
-    );
+  (_get, set, projectId: string) => {
+    set(rootComposeProjectChosenAtom, true);
     set(rootComposeStoredProjectIdAtom, projectId);
   },
 );
@@ -59,25 +47,17 @@ export function useImportedProjectDefault() {
   const store = useStore();
   useAtomValue(rootComposeStoredProjectIdAtom);
   return useMemo(() => {
-    const revision = store.get(rootComposeProjectSelectionRevisionAtom);
     let lastDefault: string | null = null;
     return (projectId: string) => {
       if (
         store.get(rootComposeStoredProjectIdAtom) !== lastDefault ||
-        store.get(rootComposeProjectSelectionRevisionAtom) !== revision
+        store.get(rootComposeProjectChosenAtom)
       )
         return;
       store.set(rootComposeStoredProjectIdAtom, projectId);
       lastDefault = projectId;
     };
   }, [store]);
-}
-
-export function rememberUsedRootComposeProject(projectId: string) {
-  withLocalStorage(
-    (storage) => storage.setItem(LAST_USED_PROJECT_ID_STORAGE_KEY, projectId),
-    undefined,
-  );
 }
 
 const rootComposeReuseEnvironmentAtom = atomWithStorage<string | null>(

@@ -1,5 +1,4 @@
 import { notifyComposerSubmitted } from "@/lib/composer-submissions";
-import { rememberUsedRootComposeProject } from "@/lib/root-compose-selection";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ThreadQueuedMessage } from "@bb/domain";
 import type {
@@ -139,7 +138,6 @@ export function useCreateThread() {
       }),
     onMutate: async () => beginCreateThreadTransaction({ queryClient }),
     onSuccess: (thread, variables) => {
-      rememberUsedRootComposeProject(thread.projectId);
       notifyComposerSubmitted({
         kind: "new-thread",
         projectId: variables.projectId,

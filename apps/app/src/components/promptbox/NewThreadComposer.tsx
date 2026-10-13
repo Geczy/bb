@@ -528,10 +528,11 @@ export function NewThreadComposer({
   const sidebarNavigationSettled =
     sidebarNavigationQuery.isError ||
     (sidebarNavigationQuery.isSuccess && replayKnowsCandidate);
-  const projectId = isProjectlessProjectId(requestedCandidate)
-    ? PERSONAL_PROJECT_ID
-    : requestedCandidate;
-  const projectUnavailable = sidebarNavigationSettled && !candidateKnown;
+  const projectId = useMemo(() => {
+    if (isProjectlessProjectId(requestedCandidate)) return PERSONAL_PROJECT_ID;
+    if (!projects || !replayKnowsCandidate) return requestedCandidate;
+    return candidateKnown ? requestedCandidate : PERSONAL_PROJECT_ID;
+  }, [candidateKnown, projects, replayKnowsCandidate, requestedCandidate]);
   const isProjectless = isProjectlessProjectId(projectId);
   const currentProject = useMemo(() => {
     if (isProjectless) {
@@ -545,13 +546,8 @@ export function NewThreadComposer({
     [currentProject?.sources],
   );
   const projectOptions = useMemo(
-    () => [
-      ...(projectUnavailable
-        ? [{ id: projectId, name: "Unavailable project" }]
-        : []),
-      ...(projects?.map(({ id, name }) => ({ id, name })) ?? []),
-    ],
-    [projectId, projectUnavailable, projects],
+    () => projects?.map(({ id, name }) => ({ id, name })) ?? [],
+    [projects],
   );
 
   const hostsQuery = useHosts();
@@ -1627,27 +1623,24 @@ export function NewThreadComposer({
     : (selectedEnvironment ??
       (selectionScope === "new-thread" ? seed?.environment : undefined) ??
       null);
-  const submissionReadinessReason = projectUnavailable
-    ? "This project is unavailable. Choose a project to continue."
-    : resolveNewThreadSubmitDisabledReason({
-        environmentProviderInputsBlocker:
-          machineProviderInputs.blockedReason ??
-          environmentProviderInputsBlocker,
-        environmentSetupRequiredReason:
-          environmentSetupRequiredReason ?? machineServerAccessReason,
-        isCopyingAttachments,
-        isLoadingModels,
-        isSubmitting,
-        isUploading,
-        modelLoadError,
-        projectDefaultsStatus: projectDefaultsState.status,
-        projectDefaultsUnavailable,
-        promptInputEmpty: false,
-        providerDisplayName: selectedProviderDisplayName,
-        selectedProviderId,
-        selectedThreadModel,
-        submissionEnvironmentUnavailable: submissionEnvironment === null,
-      });
+  const submissionReadinessReason = resolveNewThreadSubmitDisabledReason({
+    environmentProviderInputsBlocker:
+      machineProviderInputs.blockedReason ?? environmentProviderInputsBlocker,
+    environmentSetupRequiredReason:
+      environmentSetupRequiredReason ?? machineServerAccessReason,
+    isCopyingAttachments,
+    isLoadingModels,
+    isSubmitting,
+    isUploading,
+    modelLoadError,
+    projectDefaultsStatus: projectDefaultsState.status,
+    projectDefaultsUnavailable,
+    promptInputEmpty: false,
+    providerDisplayName: selectedProviderDisplayName,
+    selectedProviderId,
+    selectedThreadModel,
+    submissionEnvironmentUnavailable: submissionEnvironment === null,
+  });
   const submitDisabledReason =
     submissionReadinessReason ??
     (promptInputEmpty ? "Enter a prompt or attach a file." : null);
