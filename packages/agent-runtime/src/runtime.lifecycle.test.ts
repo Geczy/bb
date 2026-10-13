@@ -376,7 +376,7 @@ describe("createAgentRuntime lifecycle", () => {
           await runtime.runTurn({
             threadId: "profile-thread",
             clientRequestId: "creq_abcdefghjk",
-            input: [promptTextInput({ text: "hold_turn" })],
+            input: [promptTextInput({ text: "delay:500" })],
             options: fullRuntimeOptions,
           });
           const { turnId } = await waitForThreadTurnStarted({
@@ -392,9 +392,7 @@ describe("createAgentRuntime lifecycle", () => {
             threadId: "profile-thread",
             expectedTurnId: turnId,
             clientRequestId: "creq_abcdefghjm",
-            input: [
-              promptTextInput({ text: "fail_turn:authentication_failed" }),
-            ],
+            input: [promptTextInput({ text: "stage the next profile" })],
             contributedEnv:
               nextProfile === null ? [] : contribution(nextProfile),
             options: fullRuntimeOptions,
@@ -410,7 +408,7 @@ describe("createAgentRuntime lifecycle", () => {
           ).toMatchObject({
             environmentId: "env-profile",
             providerId: "fake",
-            failedTurnId: turnId,
+            failedTurnId: null,
             env: { CLAUDE_CONFIG_DIR: "/profiles/failed-account" },
           });
           await runtime.runTurn({

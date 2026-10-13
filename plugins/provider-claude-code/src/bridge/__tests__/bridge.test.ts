@@ -433,7 +433,9 @@ function createAuthenticationErrorMessage(sessionId: string): SDKMessage {
   };
 }
 
-function createSuccessfulResultMessage(sessionId: string): SDKMessage {
+function createSuccessfulResultMessage(
+  sessionId: string,
+): Extract<SDKMessage, { type: "result"; subtype: "success" }> {
   return {
     type: "result",
     subtype: "success",
