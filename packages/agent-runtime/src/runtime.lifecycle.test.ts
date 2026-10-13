@@ -346,44 +346,87 @@ describe("createAgentRuntime lifecycle", () => {
       await runtime.shutdown();
     });
 
-    it("retains the execution profile for sign-in without resolving a new default", async () => {
-      const runtime = createScriptedEchoRuntime({
-        runtime: {
-          workspacePath: tmpDir,
-          shellEnv: { CLAUDE_CONFIG_DIR: "/profiles/default" },
-          onEvent: () => {},
-        },
-      });
-      try {
-        await runtime.startThread({
-          environmentId: "env-profile",
-          projectId: "project-profile",
-          threadId: "profile-thread",
-          providerId: "fake",
-          contributedEnv: [
-            {
-              name: "CLAUDE_CONFIG_DIR",
-              value: "/profiles/failed-account",
-              source: { plugin: "profile-routing" },
-              reason: "Selected account",
-            },
-          ],
-          options: fullRuntimeOptions,
+    it.each(["/profiles/next", null])(
+      "retains the executed root profile when a steer stages %s",
+      async (nextProfile) => {
+        const events: ThreadEvent[] = [];
+        const runtime = createScriptedEchoRuntime({
+          runtime: {
+            workspacePath: tmpDir,
+            onEvent: (event) => events.push(event),
+          },
         });
-        expect(
-          runtime.getThreadExecutionEnvironment?.("profile-thread"),
-        ).toMatchObject({
-          environmentId: "env-profile",
-          providerId: "fake",
-          env: { CLAUDE_CONFIG_DIR: "/profiles/failed-account" },
-        });
-        expect(
-          runtime.getThreadExecutionEnvironment?.("unknown-thread"),
-        ).toBeNull();
-      } finally {
-        await runtime.shutdown();
-      }
-    });
+        const contribution = (value: string) => [
+          {
+            name: "CLAUDE_CONFIG_DIR",
+            value,
+            source: { plugin: "profile-routing" },
+            reason: "Selected account",
+          },
+        ];
+        try {
+          await runtime.startThread({
+            environmentId: "env-profile",
+            projectId: "project-profile",
+            threadId: "profile-thread",
+            providerId: "fake",
+            contributedEnv: contribution("/profiles/failed-account"),
+            options: fullRuntimeOptions,
+          });
+          await runtime.runTurn({
+            threadId: "profile-thread",
+            clientRequestId: "creq_abcdefghjk",
+            input: [promptTextInput({ text: "hold_turn" })],
+            options: fullRuntimeOptions,
+          });
+          const { turnId } = await waitForThreadTurnStarted({
+            events,
+            providerId: "fake",
+            runtime,
+            threadId: "profile-thread",
+          });
+          expect(
+            runtime.getThreadExecutionEnvironment?.("profile-thread"),
+          ).toBeNull();
+          await runtime.steerTurn({
+            threadId: "profile-thread",
+            expectedTurnId: turnId,
+            clientRequestId: "creq_abcdefghjm",
+            input: [
+              promptTextInput({ text: "fail_turn:authentication_failed" }),
+            ],
+            contributedEnv:
+              nextProfile === null ? [] : contribution(nextProfile),
+            options: fullRuntimeOptions,
+          });
+          await waitForThreadTurnCompleted({
+            events,
+            providerId: "fake",
+            runtime,
+            threadId: "profile-thread",
+          });
+          expect(
+            runtime.getThreadExecutionEnvironment?.("profile-thread"),
+          ).toMatchObject({
+            environmentId: "env-profile",
+            providerId: "fake",
+            failedTurnId: turnId,
+            env: { CLAUDE_CONFIG_DIR: "/profiles/failed-account" },
+          });
+          await runtime.runTurn({
+            threadId: "profile-thread",
+            clientRequestId: "creq_abcdefghjn",
+            input: [promptTextInput({ text: "hold_turn" })],
+            options: fullRuntimeOptions,
+          });
+          expect(
+            runtime.getThreadExecutionEnvironment?.("profile-thread"),
+          ).toBeNull();
+        } finally {
+          await runtime.shutdown();
+        }
+      },
+    );
 
     it("reinjects rotated machine credentials on the next turn and resume", async () => {
       const record = createScriptedEchoRequestRecord();

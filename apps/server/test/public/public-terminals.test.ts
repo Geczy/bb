@@ -1042,7 +1042,13 @@ describe("public terminal routes", () => {
       type: "terminal.open",
       threadId: fixture.thread.id,
       target: { kind: "workspace", environmentId: fixture.environment.id },
-      threadEnvironment: { providerId: fixture.thread.providerId },
+      threadEnvironment: {
+        providerId: fixture.thread.providerId,
+        rejectEnv: expect.arrayContaining([
+          "CODEX_OPENAI_BASE_URL",
+          "CODEX_POOL_AUTH_TOKEN",
+        ]),
+      },
       start: { mode: "argv", argv: ["codex", "login", "--device-auth"] },
     });
     if (open.type !== "terminal.open")

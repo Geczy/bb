@@ -107,6 +107,7 @@ interface ControlledClaudeQuery {
 }
 
 interface ClaudeQueryCallOptions {
+  pathToClaudeCodeExecutable?: string;
   allowDangerouslySkipPermissions?: boolean;
   canUseTool?: CanUseTool;
   env?: Record<string, string | undefined>;
@@ -5722,4 +5723,119 @@ describe("canonical model context-window hint", () => {
       bridge.restore();
     }
   });
+});
+
+describe("failed session execution context", () => {
+  it.each(["inherited", "native"])(
+    "retains the executed profile and %s executable across a staged steer",
+    async (executableSource) => {
+      const bridge = createBridgeJsonRpcTestHarness(handleLine);
+      const queries: ControlledClaudeQuery[] = [];
+      const home = mkdtempSync(join(tmpdir(), "bb-recovery-profile-"));
+      const bin = join(home, ".local", "bin");
+      mkdirSync(bin, { recursive: true });
+      const executable = join(bin, CLAUDE_EXECUTABLE_NAME);
+      writeFileSync(executable, "#!/bin/sh\nexit 0\n");
+      chmodSync(executable, 0o755);
+      if (process.getuid) vi.spyOn(process, "getuid").mockReturnValue(1000);
+      vi.stubEnv("PATH", "/nonexistent-bb-test-dir");
+      vi.stubEnv("HOME", home);
+      vi.stubEnv("USERPROFILE", home);
+      vi.stubEnv("CLAUDE_CONFIG_DIR", undefined);
+      vi.stubEnv(
+        "BB_CLAUDE_CODE_EXECUTABLE",
+        executableSource === "inherited" ? executable : undefined,
+      );
+      queryMock.mockImplementation(() => {
+        const query = createControlledClaudeQuery();
+        queries.push(query);
+        return query;
+      });
+      const threadId = `thread-recovery-${executableSource}`;
+      const options = {
+        ...canonicalOptions(),
+        envVars: { CLAUDE_CONFIG_DIR: "/profiles/a" },
+      };
+      try {
+        bridge.sendRequest(1, "thread/start", {
+          threadId,
+          cwd: home,
+          instructionMode: "append",
+          options,
+        });
+        const started = await bridge.waitForResponse(1);
+        const providerThreadId = getProviderThreadIdFromResult(started);
+        bridge.sendRequest(2, "turn/start", {
+          threadId,
+          providerThreadId,
+          clientRequestId: "creq_abcdefghjk",
+          input: [{ type: "text", text: "start" }],
+          options,
+        });
+        await readNextPrompt(getLatestQueryCall());
+        await bridge.waitForResponse(2);
+        const turn = assembleCapturedThreadEvents(
+          bridge.messages,
+          "claude-code",
+        ).find((event) => event.type === "turn/started");
+        if (turn?.scope.kind !== "turn") throw new Error("Missing root turn");
+        const activeOptions = getLatestQueryOptions();
+        expect(activeOptions.pathToClaudeCodeExecutable).toBe(executable);
+        for (const [id, nextEnv] of [
+          [3, { CLAUDE_CONFIG_DIR: "/profiles/b" }],
+          [4, {}],
+        ] as const) {
+          bridge.sendRequest(id, "turn/steer", {
+            threadId,
+            providerThreadId,
+            expectedTurnId: turn.scope.turnId,
+            clientRequestId: "creq_abcdefghjm",
+            input: [{ type: "text", text: "steer" }],
+            options: { ...canonicalOptions(), envVars: nextEnv },
+          });
+          await readNextPrompt(getLatestQueryCall());
+          const response = await bridge.waitForResponse(id);
+          expect(queries).toHaveLength(1);
+          expect(activeOptions.env?.CLAUDE_CONFIG_DIR).toBe("/profiles/a");
+          expect(response).toMatchObject({
+            result: {
+              executionContext: {
+                env: { CLAUDE_CONFIG_DIR: "/profiles/a" },
+                executable,
+              },
+            },
+          });
+        }
+        queries[0]?.emit(createAuthenticationErrorMessage(providerThreadId));
+        queries[0]?.emit({
+          ...createSuccessfulResultMessage(providerThreadId),
+          is_error: true,
+        });
+        await bridge.flushWork();
+        bridge.sendRequest(5, "turn/start", {
+          threadId,
+          providerThreadId,
+          clientRequestId: "creq_abcdefghjn",
+          input: [{ type: "text", text: "next" }],
+          options: { ...canonicalOptions(), envVars: {} },
+        });
+        await bridge.flushWork();
+        await readNextPrompt(getLatestQueryCall());
+        const next = await bridge.waitForResponse(5);
+        expect(queries).toHaveLength(2);
+        expect(getLatestQueryOptions().env?.CLAUDE_CONFIG_DIR).toBeUndefined();
+        expect(next).not.toMatchObject({
+          result: {
+            executionContext: { env: { CLAUDE_CONFIG_DIR: "/profiles/a" } },
+          },
+        });
+      } finally {
+        queries.forEach((query) => query.finish());
+        bridge.restore();
+        vi.unstubAllEnvs();
+        vi.restoreAllMocks();
+        rmSync(home, { recursive: true, force: true });
+      }
+    },
+  );
 });

@@ -478,91 +478,130 @@ function textChunk(text: string, seq: number): TerminalOutputChunk {
 }
 
 describe("thread credential environment terminals", () => {
-  it.each(["profile", "missing", "other-provider", "new-turn", "proxy"])(
-    "uses the retained profile or fails closed: %s",
-    async (scenario) => {
-      const harness = createHarness();
-      harness.runtime.getThreadExecutionEnvironment = () =>
-        scenario === "missing"
-          ? null
-          : {
-              environmentId: "env-1",
-              failedTurnId:
-                scenario === "new-turn" ? "different-turn" : "failed-turn",
-              providerId:
-                scenario === "other-provider"
-                  ? "different-provider"
-                  : "test-provider",
-              env: {
-                CLAUDE_CONFIG_DIR: "/profiles/failed-thread",
-                BB_CLAUDE_CODE_EXECUTABLE: "/tools/failed-thread-cli",
-                ...(scenario === "proxy"
-                  ? { ANTHROPIC_AUTH_TOKEN: "test-token" }
-                  : {}),
-              },
-            };
-      await harness.manager.handleMessage({
-        type: "terminal.open",
-        requestId: "login",
-        terminalId: "login-terminal",
-        threadId: "thr-1",
-        contributedEnv: [
-          {
-            name: "CLAUDE_CONFIG_DIR",
-            value: "/profiles/wrong-default",
-            source: { plugin: "changed-routing" },
-            reason: "Changed after failure",
-          },
+  it.each([
+    "profile",
+    "resolved-executable",
+    "direct-codex",
+    "missing",
+    "other-provider",
+    "new-turn",
+    "proxy",
+    "CODEX_OPENAI_BASE_URL",
+    "CODEX_POOL_AUTH_TOKEN",
+  ])("uses the retained profile or fails closed: %s", async (scenario) => {
+    const harness = createHarness();
+    harness.runtime.getThreadExecutionEnvironment = () =>
+      scenario === "missing"
+        ? null
+        : {
+            environmentId: "env-1",
+            failedTurnId:
+              scenario === "new-turn" ? "different-turn" : "failed-turn",
+            providerId:
+              scenario === "other-provider"
+                ? "different-provider"
+                : "test-provider",
+            ...(scenario === "resolved-executable"
+              ? { executable: "/native/claude" }
+              : {}),
+            env: {
+              ...(scenario.startsWith("CODEX_")
+                ? { [scenario]: "private-pool-value" }
+                : {}),
+              CLAUDE_CONFIG_DIR: "/profiles/failed-thread",
+              ...(scenario === "resolved-executable" ||
+              scenario === "direct-codex"
+                ? {}
+                : { BB_CLAUDE_CODE_EXECUTABLE: "/tools/failed-thread-cli" }),
+              ...(scenario === "proxy"
+                ? { ANTHROPIC_AUTH_TOKEN: "test-token" }
+                : {}),
+            },
+          };
+    await harness.manager.handleMessage({
+      type: "terminal.open",
+      requestId: "login",
+      terminalId: "login-terminal",
+      threadId: "thr-1",
+      contributedEnv: [
+        {
+          name: "CLAUDE_CONFIG_DIR",
+          value: "/profiles/wrong-default",
+          source: { plugin: "changed-routing" },
+          reason: "Changed after failure",
+        },
+      ],
+      target: {
+        kind: "workspace",
+        environmentId: "env-1",
+        workspaceContext: { workspacePath: "/tmp/terminal-workspace" },
+      },
+      cols: 80,
+      rows: 24,
+      start: {
+        mode: "argv",
+        argv:
+          scenario === "direct-codex"
+            ? ["codex", "login", "--device-auth"]
+            : ["claude", "auth", "login"],
+      },
+      threadEnvironment: {
+        providerId: "test-provider",
+        failedTurnId: "failed-turn",
+        rejectEnv: [
+          "ANTHROPIC_AUTH_TOKEN",
+          "CODEX_OPENAI_BASE_URL",
+          "CODEX_POOL_AUTH_TOKEN",
         ],
-        target: {
-          kind: "workspace",
-          environmentId: "env-1",
-          workspaceContext: { workspacePath: "/tmp/terminal-workspace" },
-        },
-        cols: 80,
-        rows: 24,
-        start: { mode: "argv", argv: ["claude", "auth", "login"] },
-        threadEnvironment: {
-          providerId: "test-provider",
-          failedTurnId: "failed-turn",
-          rejectEnv: ["ANTHROPIC_AUTH_TOKEN"],
-          executableEnvVar: "BB_CLAUDE_CODE_EXECUTABLE",
-        },
+        executableEnvVar: "BB_CLAUDE_CODE_EXECUTABLE",
+      },
+    });
+    if (["profile", "resolved-executable", "direct-codex"].includes(scenario)) {
+      expect(harness.adapter.spawned).toHaveLength(1);
+      expect(harness.adapter.spawned[0]?.args).toMatchObject({
+        file:
+          scenario === "resolved-executable"
+            ? "/native/claude"
+            : scenario === "direct-codex"
+              ? "codex"
+              : "/tools/failed-thread-cli",
+        args:
+          scenario === "direct-codex"
+            ? ["login", "--device-auth"]
+            : ["auth", "login"],
+        env: { CLAUDE_CONFIG_DIR: "/profiles/failed-thread" },
+        cwd: "/tmp/terminal-workspace",
       });
-      if (scenario === "profile") {
-        expect(harness.adapter.spawned).toHaveLength(1);
-        expect(harness.adapter.spawned[0]?.args).toMatchObject({
-          file: "/tools/failed-thread-cli",
-          args: ["auth", "login"],
-          env: { CLAUDE_CONFIG_DIR: "/profiles/failed-thread" },
-          cwd: "/tmp/terminal-workspace",
-        });
-        await harness.manager.handleMessage({
-          type: "terminal.close",
-          terminalId: "login-terminal",
-          reason: "user",
-        });
-        expect(harness.adapter.spawned[0]?.pty.killCalls).toEqual([null]);
-      } else {
-        expect(harness.adapter.spawned).toEqual([]);
-        expect(harness.messages).toContainEqual(
-          expect.objectContaining({
-            type: "terminal.error",
-            code: "terminal_open_failed",
-            message: expect.stringContaining(
-              scenario === "proxy"
+      await harness.manager.handleMessage({
+        type: "terminal.close",
+        terminalId: "login-terminal",
+        reason: "user",
+      });
+      expect(harness.adapter.spawned[0]?.pty.killCalls).toEqual([null]);
+    } else {
+      expect(harness.adapter.spawned).toEqual([]);
+      expect(JSON.stringify(harness.messages)).not.toContain(
+        "private-pool-value",
+      );
+      expect(harness.messages).toContainEqual(
+        expect.objectContaining({
+          type: "terminal.error",
+          code: "terminal_open_failed",
+          message: expect.stringContaining(
+            scenario.startsWith("CODEX_")
+              ? scenario
+              : scenario === "proxy"
                 ? "ANTHROPIC_AUTH_TOKEN"
                 : "No default account was used",
-            ),
-          }),
-        );
-      }
-      expect(harness.runtime.runTurn).not.toHaveBeenCalled();
-      expect(harness.runtime.stopThread).not.toHaveBeenCalled();
-      await harness.manager.shutdownAll();
-      await harness.runtimeManager.shutdownAll();
-    },
-  );
+          ),
+        }),
+      );
+    }
+    expect(harness.runtime.runTurn).not.toHaveBeenCalled();
+    expect(harness.runtime.stopThread).not.toHaveBeenCalled();
+    await harness.manager.shutdownAll();
+    await harness.runtimeManager.shutdownAll();
+  });
 });
 
 describe("TerminalManager", () => {
@@ -799,6 +838,9 @@ describe("TerminalManager", () => {
       reason: "user",
     });
 
+    expect(JSON.stringify(harness.messages)).not.toContain(
+      "private-pool-value",
+    );
     expect(harness.adapter.spawned).toHaveLength(0);
     shell.resolve("/bin/zsh");
     await Promise.all([openPromise, closePromise]);
