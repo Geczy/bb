@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { turnProviderSchema } from "./provider-telemetry.js";
 import {
   featureUsedPropertiesSchema,
   telemetryTriggerSchema,
@@ -61,7 +62,7 @@ const finishedSchema = z
       "host_lost",
       "other",
     ]),
-    provider: z.string(),
+    provider: turnProviderSchema,
     first_turn: z.boolean(),
   })
   .strict();

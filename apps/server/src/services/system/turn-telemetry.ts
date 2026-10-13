@@ -21,10 +21,9 @@ import {
 import type { AppDeps } from "../../types.js";
 import { buildTurnFailedEvent } from "../threads/turn-failed.js";
 import type { TurnErrorCategory, TurnFinishedOutcome } from "./telemetry.js";
+import { turnProviderSchema } from "./provider-telemetry.js";
 
-export type TurnTelemetryDeps = Pick<AppDeps, "db" | "logger" | "telemetry"> & {
-  builtInProviderIds(): ReadonlySet<string>;
-};
+export type TurnTelemetryDeps = Pick<AppDeps, "db" | "logger" | "telemetry">;
 
 const SYSTEM_ERROR_CATEGORIES: Readonly<Record<string, TurnErrorCategory>> = {
   provider_process_exited: "process_exited",
@@ -67,11 +66,8 @@ export function turnErrorCategory(
   }
 }
 
-export function reportedProviderId(
-  providerId: string,
-  builtInProviderIds: ReadonlySet<string>,
-): string {
-  return builtInProviderIds.has(providerId) ? providerId : "other";
+export function reportedProviderId(providerId: string): string {
+  return turnProviderSchema.safeParse(providerId).data ?? "other";
 }
 
 export function turnFinishedOutcome(
@@ -177,10 +173,7 @@ export function recordAppliedWorkLifecycle(
       ...identity,
       ...workOriginProperties(db, threadId, requestId),
       outcome,
-      provider: reportedProviderId(
-        thread.providerId,
-        deps.builtInProviderIds(),
-      ),
+      provider: reportedProviderId(thread.providerId),
       error_category:
         outcome === "failed"
           ? failureCategory(deps.db, threadId)
