@@ -602,7 +602,6 @@ function ThreadRowComponent({
           !shortcut &&
             !isEditing &&
             !isCustomizingActions &&
-            !crossProjectName &&
             (reserveActionSpace
               ? "pr-(--bb-sidebar-hover-actions-inset) [@media(hover:none)]:pr-0"
               : SIDEBAR_HOVER_ACTIONS_INSET_CLASS),
@@ -645,7 +644,8 @@ function ThreadRowComponent({
         <span
           className={cn(
             "pointer-events-none relative flex min-w-0 items-center self-stretch",
-            (!parentOptions || !hasChildren || isEditing) && "flex-1",
+            (!parentOptions || !hasChildren || isEditing) &&
+              (crossProjectName && !isEditing ? "flex-auto" : "flex-1"),
           )}
         >
           {provider ? (
@@ -702,11 +702,8 @@ function ThreadRowComponent({
             data-sidebar-thread-cross-project=""
             title={`In project ${crossProjectName}`}
             className={cn(
-              "pointer-events-none ml-auto max-w-[40%] shrink-0 truncate pl-1.5 text-right text-xs text-subtle-foreground",
-              !shortcut && [
-                SIDEBAR_HOVER_ACTIONS_FADE_CLASS,
-                "min-w-(--bb-sidebar-hover-actions-inset) [@media(hover:none)]:min-w-0",
-              ],
+              "pointer-events-none ml-auto min-w-0 max-w-[40%] shrink-[1000] truncate pl-1.5 text-right text-xs text-subtle-foreground/60",
+              "group-hover/thread-row:shrink-0 group-hover/thread-row:text-subtle-foreground",
               (isEditing || isCustomizingActions) && "hidden",
             )}
           >
