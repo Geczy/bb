@@ -22,7 +22,9 @@ import {
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedTurnStarted,
 } from "../helpers/seed.js";
+import { createUserQuestionPayload } from "../helpers/pending-interactions.js";
 import { textInput } from "../helpers/prompt-input.js";
 
 afterEach(() => {
@@ -251,6 +253,63 @@ describe("work analytics lineage", () => {
       );
       expect(JSON.stringify(childIdentity)).not.toContain(child.id);
       expect(JSON.stringify(parentIdentity)).not.toContain(thread.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("exports one user wait until the final interaction clears, and discards rolled-back clears", async () => {
+    const { harness, thread, capture, request } = await setup();
+    try {
+      request();
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        turnId: "waiting-turn",
+        providerThreadId: "provider-waiting",
+      });
+      const register = (providerRequestId: string) => {
+        const result =
+          harness.deps.pendingInteractions.registerPendingInteraction({
+            interaction: {
+              threadId: thread.id,
+              turnId: "waiting-turn",
+              providerId: thread.providerId,
+              providerThreadId: "provider-waiting",
+              providerRequestId,
+              payload: createUserQuestionPayload(),
+            },
+          });
+        if (result.outcome === "rejected") throw new Error(result.reason);
+        return result.interaction.id;
+      };
+      const first = register("question-one");
+      const second = register("question-two");
+      const transitions = () =>
+        capture.mock.calls.flatMap(([event]) =>
+          event.name === "thread_lifecycle" &&
+          event.properties.transition.startsWith("waiting_")
+            ? [event.properties.transition]
+            : [],
+        );
+      expect(transitions()).toEqual(["waiting_on_user"]);
+      const clear = (interactionId: string) =>
+        harness.db.transaction((db) =>
+          harness.deps.pendingInteractions.interruptPendingInteractionInTransaction(
+            { db, hub: harness.deps.hub },
+            { interactionId, reason: "Provider ended" },
+          ),
+        );
+      clear(first);
+      expect(transitions()).toEqual(["waiting_on_user"]);
+      expect(() =>
+        harness.db.transaction(() => {
+          clear(second);
+          throw new Error("rollback clear");
+        }),
+      ).toThrow("rollback clear");
+      expect(transitions()).toEqual(["waiting_on_user"]);
+      clear(second);
+      expect(transitions()).toEqual(["waiting_on_user", "waiting_cleared"]);
     } finally {
       await harness.cleanup();
     }

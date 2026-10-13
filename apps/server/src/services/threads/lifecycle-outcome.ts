@@ -72,6 +72,13 @@ export function applyLoggedThreadLifecycleEvent(
 ): ApplyThreadLifecycleEventOutcome {
   const previousStatus = getThread(deps.db, args.threadId)?.status ?? null;
   const outcome = applyThreadLifecycleEvent(deps.db, args);
+  if (outcome.applied && previousStatus !== null)
+    recordAppliedWorkLifecycle(
+      deps.db,
+      args.threadId,
+      args.event,
+      previousStatus,
+    );
   if (outcome.applied) {
     deps.hub.notifyThread(
       args.threadId,
@@ -82,13 +89,6 @@ export function applyLoggedThreadLifecycleEvent(
   logUnappliedThreadLifecycleEvent(deps.logger, args, outcome);
   emitPluginThreadLifecycleOutcome(outcome);
   announceTurnFailed(args, outcome);
-  if (outcome.applied && previousStatus !== null)
-    recordAppliedWorkLifecycle(
-      deps.db,
-      args.threadId,
-      args.event,
-      previousStatus,
-    );
   return outcome;
 }
 
@@ -98,9 +98,6 @@ export function applyLoggedThreadLifecycleEventInTransaction(
 ): ApplyThreadLifecycleEventOutcome {
   const previousStatus = getThread(deps.db, args.threadId)?.status ?? null;
   const outcome = applyThreadLifecycleEventInTransaction(deps.db, args);
-  logUnappliedThreadLifecycleEvent(deps.logger, args, outcome);
-  emitPluginThreadLifecycleOutcome(outcome);
-  announceTurnFailed(args, outcome);
   if (outcome.applied && previousStatus !== null)
     recordAppliedWorkLifecycle(
       deps.db,
@@ -108,5 +105,8 @@ export function applyLoggedThreadLifecycleEventInTransaction(
       args.event,
       previousStatus,
     );
+  logUnappliedThreadLifecycleEvent(deps.logger, args, outcome);
+  emitPluginThreadLifecycleOutcome(outcome);
+  announceTurnFailed(args, outcome);
   return outcome;
 }
