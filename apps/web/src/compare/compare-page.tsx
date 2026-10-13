@@ -354,12 +354,18 @@ export function FaqSection({
   );
 }
 
-export function Closer({ closer }: { closer: Comparison["closer"] }) {
+export function Closer({
+  closer,
+  install = <InstallOptions placement="closer" />,
+}: {
+  closer: Comparison["closer"];
+  install?: ReactNode;
+}) {
   return (
     <section className="closer" data-reveal>
       <h2 className="sec-title">{brandProse(closer.title)}</h2>
       <p>{brandProse(closer.body)}</p>
-      <InstallOptions placement="closer" />
+      {install}
       <div className="cmp-team">
         <h3>Built by alumni from</h3>
         <ul className="company-proof-logos cmp-team-logos">
@@ -381,12 +387,14 @@ export function PageHero({
   sub,
   afterSub,
   visual,
+  install = <InstallOptions placement="hero" />,
 }: {
   top: ReactNode;
   headline: string;
   sub: string;
   afterSub: ReactNode;
   visual: ReactElement;
+  install?: ReactNode;
 }) {
   return (
     <header className="hero cmp-hero">
@@ -394,7 +402,7 @@ export function PageHero({
       <h1>{brandProse(headline)}</h1>
       <p className="sub">{brandProse(sub)}</p>
       {afterSub}
-      <InstallOptions placement="hero" />
+      {install}
       <div className="cmp-hero-visual">{visual}</div>
     </header>
   );

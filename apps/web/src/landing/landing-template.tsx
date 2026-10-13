@@ -1,7 +1,11 @@
 import type { ReactElement } from "react";
 
 import { useInitAnalytics } from "./analytics";
-import { ProviderChips, useScrollReveal } from "./landing-visuals";
+import {
+  MacInstallOptions,
+  ProviderChips,
+  useScrollReveal,
+} from "./landing-visuals";
 import { SiteFooter, SiteNav } from "./site-chrome";
 import {
   Closer,
@@ -31,6 +35,7 @@ export type LandingPage = LandingMeta & {
   sections: CompareHighlight[];
   faq: CompareFaqGroup[];
   closer: string;
+  macOnly?: boolean;
 };
 
 const CLOSER_BODY =
@@ -68,6 +73,9 @@ export function LandingTemplate({ page }: { page: LandingPage }) {
           </div>
         }
         visual={page.heroVisual}
+        install={
+          page.macOnly ? <MacInstallOptions placement="hero" /> : undefined
+        }
       />
 
       {withPluginsSlot(page.heroVisual, page.sections, PLUGINS_COPY).map(
@@ -78,7 +86,12 @@ export function LandingTemplate({ page }: { page: LandingPage }) {
 
       <FaqSection title="Common questions" faq={page.faq} />
 
-      <Closer closer={{ title: page.closer, body: CLOSER_BODY }} />
+      <Closer
+        closer={{ title: page.closer, body: CLOSER_BODY }}
+        install={
+          page.macOnly ? <MacInstallOptions placement="closer" /> : undefined
+        }
+      />
 
       <SiteFooter current={landingPagePath(page)} />
     </div>

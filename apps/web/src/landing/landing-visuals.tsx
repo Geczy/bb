@@ -87,6 +87,29 @@ export function InstallOptions({ placement }: { placement: CtaPlacement }) {
   );
 }
 
+export function MacInstallOptions({ placement }: { placement: CtaPlacement }) {
+  return (
+    <div className="install-options">
+      <div className="install-actions">
+        <span className="install-choice">
+          <DesktopDownloadButton
+            placement={placement}
+            platform="macos"
+            className="btn btn-primary btn-install install-download"
+          />
+          <SendToComputerButton placement={placement} />
+          <span className="install-note install-note-desktop">
+            {DESKTOP_DOWNLOADS.macos.note}
+          </span>
+          <span className="install-note install-note-touch">
+            bb runs on Macs with Apple Silicon
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function useScrollReveal() {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
