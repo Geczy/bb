@@ -31,9 +31,9 @@ export const MACOS_CHROME_CONTROL_AXIS_CLASS =
   "[transform:translateY(var(--bb-macos-chrome-control-y,calc(var(--bb-macos-traffic-light-center-y)_-_var(--bb-app-chrome-row-height)/2)))]";
 export const MACOS_TITLE_BAR_ROW_CLASS = "h-(--bb-window-title-bar-height)";
 export const MACOS_TITLE_BAR_TRAILING_TOGGLE_CLASS =
-  "w-6 -mr-(--bb-panel-chrome-padding)";
+  "w-7 -mr-[calc(var(--bb-panel-chrome-padding)+2px)]";
 export const MACOS_TITLE_BAR_CONTROL_SIZE_CLASS =
-  "[&_button]:h-6 [&_[data-tab-pill]]:h-6";
+  "[&_button]:h-7 [&_[data-tab-pill]]:h-7";
 export const MACOS_TITLE_BAR_BAND_CLASS = `${MACOS_TITLE_BAR_ROW_CLASS} box-content pb-px`;
 export const MACOS_TITLE_BAR_COLLAPSED_SIDEBAR_RESERVE_CLASS =
   "pl-[calc(var(--bb-window-title-bar-controls-end)_+_12px_-_var(--bb-sidebar-control-size)_-_2*var(--bb-sidebar-rail-padding)_-_1px_-_1rem)]";
@@ -72,8 +72,6 @@ export function shouldReserveMacosTrafficLights({
 const MACOS_TRAFFIC_LIGHT_CLEARANCE_PX = 12;
 const WINDOW_CARD_RADIUS_PX = 12;
 const MACOS_CHROME_CONTROL_SIZE_PX = 28;
-const TITLE_BAR_CONTROL_HEIGHT_PX = 24;
-const TITLE_BAR_HOVER_GAP_PX = 2;
 const COLLAPSED_SIDEBAR_TRIGGER_GAP_PX = 8;
 const TITLE_BAR_CONTROL_COUNT = 3;
 const TITLE_BAR_CONTROL_GAP_PX = 4;
@@ -100,10 +98,7 @@ export function getMacosWindowChromeGeometry(
     MACOS_TRAFFIC_LIGHT_CLEARANCE_PX;
   return {
     trafficLightCenterY,
-    titleBarHeight:
-      trafficLightCenterY +
-      TITLE_BAR_CONTROL_HEIGHT_PX / 2 +
-      TITLE_BAR_HOVER_GAP_PX,
+    titleBarHeight: 2 * trafficLightCenterY,
     trafficLightReserve,
     titleBarControlsEnd:
       trafficLightReserve +
