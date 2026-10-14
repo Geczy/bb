@@ -39,7 +39,7 @@ export function AppLayoutSidebar({
       isResizing={isResizing}
       isBodyHidden={renderedMode !== "app"}
       renderRail={(customize) => (
-        <AppNavRail isAppMode={mode === "app"} customize={customize} />
+        <AppNavRail customize={customize} />
       )}
       railFooter={
         <NavRailSettingsButton

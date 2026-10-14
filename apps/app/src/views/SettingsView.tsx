@@ -53,7 +53,7 @@ import { useHostDaemon, useLocalHostDaemonAccess } from "@/hooks/useHostDaemon";
 import { useAppThemePreview } from "@/hooks/useAppThemePreview";
 import { ProvidersSettingsSection } from "@/components/settings/ProvidersSettingsSection";
 import { CodeRendererSettings } from "@/components/settings/CodeRendererSettings";
-import { StartPageSetting } from "@/components/settings/StartPageSetting";
+import { HomepageSetting } from "@/components/settings/HomepageSetting";
 import { SidebarThreadListSetting } from "@/components/settings/SidebarThreadListSetting";
 import { SidebarFooterSettings } from "@/components/settings/SidebarFooterSettings";
 import { SplitDimmingSetting } from "@/components/settings/SplitDimmingSetting";
@@ -877,7 +877,7 @@ export function GeneralSettingsSection({
   );
   return (
     <>
-      <StartPageSetting />
+      <HomepageSetting />
       <SettingsSection title="Threads & editing">
         <div className="space-y-5">
           <SettingsWithControl

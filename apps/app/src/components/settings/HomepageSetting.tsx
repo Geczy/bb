@@ -5,16 +5,16 @@ import { usePluginSlots } from "@/lib/plugin-slots";
 import { SettingsSection } from "@/components/ui/settings-section";
 import { ChoiceDropdownSetting } from "./ChoiceDropdownSetting";
 
-const desktopStartPageAtom = createSyncedPreferenceAtom("startPage.desktop");
-const mobileStartPageAtom = createSyncedPreferenceAtom("startPage.mobile");
+const desktopHomepageAtom = createSyncedPreferenceAtom("homepage.desktop");
+const mobileHomepageAtom = createSyncedPreferenceAtom("homepage.mobile");
 
-export function StartPageSetting() {
-  const [desktop, setDesktop] = useAtom(desktopStartPageAtom);
-  const [mobile, setMobile] = useAtom(mobileStartPageAtom);
+export function HomepageSetting() {
+  const [desktop, setDesktop] = useAtom(desktopHomepageAtom);
+  const [mobile, setMobile] = useAtom(mobileHomepageAtom);
   const { navPanels } = usePluginSlots();
   const pluginsSettled = usePluginFrontendsSettled();
   const options = [
-    { key: "/", title: "Home", description: "Start a new thread." },
+    { key: "/", title: "bb Home (default)", description: "Start a new thread." },
     {
       key: "threads",
       title: "Thread list",
@@ -27,16 +27,16 @@ export function StartPageSetting() {
     })),
   ];
   return (
-    <SettingsSection title="Start page">
+    <SettingsSection title="Homepage">
       <p className="mb-5 text-sm text-muted-foreground">
-        Choose where bb opens when there is no restored layout. Links open
-        their destination. Unavailable plugin pages open Home.
+        Choose where the Home button takes you and where bb opens without a
+        restored layout. Unavailable plugin pages open bb Home.
       </p>
       <div className="space-y-5">
         <ChoiceDropdownSetting
           label="Desktop"
-          description="Desktop app and browser windows 768px or wider."
-          triggerAriaLabel="Desktop start page"
+          description="Desktop app and all web browsers, including phone browsers."
+          triggerAriaLabel="Desktop homepage"
           options={options}
           selected={
             options.find((option) => option.key === desktop) ?? {
@@ -47,9 +47,9 @@ export function StartPageSetting() {
           onSelect={setDesktop}
         />
         <ChoiceDropdownSetting
-          label="Mobile"
-          description="Mobile app and browser windows below 768px."
-          triggerAriaLabel="Mobile start page"
+          label="Mobile app"
+          description="The bb mobile app, at any window size."
+          triggerAriaLabel="Mobile app homepage"
           options={options}
           selected={
             options.find((option) => option.key === mobile) ?? {

@@ -37,7 +37,7 @@ export const SETTINGS_SEARCH_INDEX: Record<
     keywords: ["preferences"],
     settings: [
       {
-        title: "Start page",
+        title: "Homepage",
         keywords: ["launch", "home", "desktop", "mobile", "plugin", "thread list"],
       },
       {

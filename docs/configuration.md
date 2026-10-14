@@ -2255,17 +2255,22 @@ sign-in and has the same trust as the `bb` CLI on that machine. See the
 [MCP skill](../plugins/mcp/skills/mcp/SKILL.md) for the tools and the few
 commands that cannot run over MCP.
 
-## Start page
+## Homepage
 
-Settings → General → Start page selects separate synced `startPage.desktop` and
-`startPage.mobile` preferences. Both default to `/` (Home); `threads` opens the
-sidebar thread list, and `/plugins/<id>/<path>` opens a plugin page. Native mobile
-and web viewports below 768px use Mobile; other clients use Desktop. The choice
-is made once on a fresh `/` launch without a saved layout. Explicit URLs and
-restored layouts take precedence; Home navigation and resizing do not redirect.
-Unavailable or crashed start pages fall back to Home without changing the setting.
+Settings → General → Homepage selects separate synced `homepage.desktop` and
+`homepage.mobile` preferences. Both default to `/` (bb Home); `threads` opens the
+sidebar thread list, and `/plugins/<id>/<path>` opens a plugin page. Only the bb
+mobile app uses Mobile app, detected through its native shell bridge. All web
+browsers, including phone browsers and narrow windows, use Desktop.
 
-Use `bb settings ui set startPage.mobile /plugins/automations/automations`,
-`bb settings ui get startPage.mobile`, or `bb settings ui reset startPage.mobile`.
+Home navigation opens this client's homepage and shows Home as active there.
+Fresh `/` launches use it only without a saved layout; explicit URLs and restored
+layouts take precedence. Resizing and preference changes do not navigate.
+Unavailable or crashed plugin homepages fall back to bb Home without changing
+the setting. The host command palette's Open bb Home action always opens the
+default `/` view; Settings and the command palette remain reachable.
+
+Use `bb settings ui set homepage.mobile /plugins/automations/automations`,
+`bb settings ui get homepage.mobile`, or `bb settings ui reset homepage.mobile`.
 The SDK uses `sdk.system.uiPreferences.list/set/reset`; writes supply the current
 `expectedRevision`.

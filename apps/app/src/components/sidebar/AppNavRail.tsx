@@ -1,13 +1,12 @@
 import {
   forwardRef,
-  useEffect,
   useRef,
   useState,
   type ComponentProps,
   type ReactNode,
   type RefObject,
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@bb/shared-ui/button";
 import {
   ContextMenu,
@@ -37,7 +36,7 @@ import {
   MACOS_WINDOW_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
-import { getRootComposeRoutePath } from "@/lib/route-paths";
+import { useHomepageNavigation } from "@/lib/homepage";
 import { NAV_RAIL_WIDTH_CLASS } from "./navRailWidth";
 import { useSidebarHeaderControlAxisClass } from "./SidebarChrome";
 import { SidebarNavigationCustomize } from "./SidebarNavigationCustomize";
@@ -246,31 +245,17 @@ function RailMoreMenu({
 }
 
 export function AppNavRail({
-  isAppMode,
   customize,
 }: {
-  isAppMode: boolean;
   customize: NavRailCustomizeState;
 }) {
-  const { items, activeItemId } = useSidebarNavigation();
+  const { items } = useSidebarNavigation();
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const customizeAfterMenuCloseRef = useRef(false);
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { openHomepage, isHomeActive } = useHomepageNavigation();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const isFramed = useIsSidebarFramed();
   const isCompactViewport = useIsCompactViewport();
-
-  const isHomeActive =
-    isAppMode &&
-    (activeItemId === null || activeItemId === NEW_THREAD_NAVIGATION_ITEM_ID);
-  const currentRoutePath = `${location.pathname}${location.search}${location.hash}`;
-  const homeRoutePathRef = useRef(
-    isHomeActive ? currentRoutePath : getRootComposeRoutePath(),
-  );
-  useEffect(() => {
-    if (isHomeActive) homeRoutePathRef.current = currentRoutePath;
-  }, [currentRoutePath, isHomeActive]);
 
   const destinations = items.filter(
     (item) => item.action.kind !== "new-thread",
@@ -325,7 +310,7 @@ export function AppNavRail({
                 label="Home"
                 active={isHomeActive}
                 onClick={() => {
-                  if (!isHomeActive) void navigate(homeRoutePathRef.current);
+                  openHomepage();
                 }}
               >
                 <Icon name="Home" aria-hidden="true" />

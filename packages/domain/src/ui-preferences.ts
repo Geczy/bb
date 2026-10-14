@@ -33,7 +33,7 @@ const sidebarHiddenGroupsSchema = z
   .max(UI_PREFERENCE_LIST_MAX_LENGTH)
   .transform((value) => [...new Set(value)]);
 
-const startPageSchema = uiPreferenceStringSchema.refine(
+const homepageSchema = uiPreferenceStringSchema.refine(
   (value) =>
     value === "/" ||
     value === "threads" ||
@@ -43,8 +43,8 @@ const startPageSchema = uiPreferenceStringSchema.refine(
 );
 
 export const UI_PREFERENCE_KEYS = [
-  "startPage.desktop",
-  "startPage.mobile",
+  "homepage.desktop",
+  "homepage.mobile",
   "sidebar.organizationMode",
   "sidebar.threadGrouping.environment",
   "sidebar.chronologicalSort",
@@ -82,15 +82,15 @@ function defineUiPreference<Schema extends z.ZodTypeAny>(
 }
 
 export const uiPreferenceDefinitions = {
-  "startPage.desktop": defineUiPreference(
-    startPageSchema,
+  "homepage.desktop": defineUiPreference(
+    homepageSchema,
     "/",
-    "Start page for fresh desktop launches without a restored layout: /, threads, or a plugin page path. Missing or failed plugin pages fall back to Home.",
+    "Homepage for the desktop app and all web browsers, including phone browsers. Home and launches without restored layouts open / (bb Home), threads, or a plugin page path. Unavailable plugin pages fall back to bb Home.",
   ),
-  "startPage.mobile": defineUiPreference(
-    startPageSchema,
+  "homepage.mobile": defineUiPreference(
+    homepageSchema,
     "/",
-    "Start page for fresh native mobile or compact (below 768px) launches without a restored layout: /, threads, or a plugin page path.",
+    "Homepage for the bb mobile app only, detected through the native shell bridge. Home and launches without restored layouts open / (bb Home), threads, or a plugin page path. Unavailable plugin pages fall back to bb Home.",
   ),
   "sidebar.organizationMode": defineUiPreference(
     sidebarOrganizationModeSchema,

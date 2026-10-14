@@ -606,15 +606,15 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
   },
   {
     id: "home",
-    title: "Home page",
+    title: "Default bb Home view",
     fixtureKind: "spatial",
     blurb:
-      "The screen bb opens on, holding the new-thread composer and a side panel. A plugin can add a section below the composer, and an action in that panel that opens its own tab.",
+      "The default bb Home view, holding the new-thread composer and a side panel. A plugin can add a section below the composer, and an action in that panel that opens its own tab.",
     surfaces: [
       {
         id: "homepage-section",
         title: "Home-screen sections",
-        summary: "Add a section to bb's home page. With this, a plugin can:",
+        summary: "Add a section to the default bb Home view. With this, a plugin can:",
         bullets: [
           "Show shortcuts, pinned work, or recent activity before any thread exists",
           "Span the full width below the composer on desktop",
@@ -649,13 +649,14 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       "The settings page bb creates for every installed plugin. A plugin can declare fields for bb to render and add its own section below them.",
     surfaces: [
       {
-        id: "start-page-preferences",
-        title: "Start page preferences",
-        summary: "Read and update the synced desktop and mobile launch destinations.",
+        id: "homepage-preferences",
+        title: "Homepage preferences",
+        summary: "Read and update the synced Desktop and Mobile app homepages.",
         bullets: [
-          "Use startPage.desktop and startPage.mobile with sdk.system.uiPreferences.list, set, and reset; set requires the current expectedRevision",
-          "Choose / for Home, threads for the sidebar thread list, or /plugins/<id>/<path> for a registered navigation page",
-          "Explicit links and restored layouts take precedence; missing or crashed launch pages fall back to Home",
+          "Use homepage.desktop and homepage.mobile with sdk.system.uiPreferences.list, set, and reset; set requires the current expectedRevision",
+          "Choose / for bb Home (default), threads for the sidebar thread list, or /plugins/<id>/<path> for a registered navigation page",
+          "Only the bb mobile app uses homepage.mobile, detected through its native shell bridge; every web browser uses homepage.desktop",
+          "Home opens the current client’s homepage; launches respect explicit links and restored layouts. Unavailable plugin pages fall back to bb Home, and Open bb Home in the command palette bypasses the homepage",
         ],
         apiSymbols: ["BbPluginApi.sdk"],
         firstParty: ["General settings"],

@@ -1,4 +1,4 @@
-import { StartPageLaunch } from "./lib/start-page";
+import { HomepageLaunch } from "./lib/homepage";
 import { PluginUpdateJobsHost } from "./components/plugin/PluginUpdateJobsHost";
 import { LazyThreadDetailView } from "./views/thread-detail/LazyThreadDetailView";
 import { LazyRootComposeView } from "./views/LazyRootComposeView";
@@ -297,7 +297,7 @@ export function AppRoutes() {
   }, [isRootComposeView]);
   return (
     <AppLayout>
-      <StartPageLaunch>
+      <HomepageLaunch>
         <Suspense fallback={null}>
           <Routes>
             <Route
@@ -437,7 +437,7 @@ export function AppRoutes() {
           </Routes>
           <RouteContentPaintSignal />
         </Suspense>
-      </StartPageLaunch>
+      </HomepageLaunch>
     </AppLayout>
   );
 }

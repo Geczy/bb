@@ -2227,6 +2227,7 @@ export interface PluginMachineProviderInputsRegistration {
 // ---------------------------------------------------------------------------
 
 export interface PluginAppSlots {
+  /** Adds a section to the default bb Home view, regardless of the configured homepage. */
   homepageSection(registration: PluginHomepageSectionRegistration): void;
   settingsSection(registration: PluginSettingsSectionRegistration): void;
   /**

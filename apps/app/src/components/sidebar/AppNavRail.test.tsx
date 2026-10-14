@@ -45,7 +45,6 @@ import {
   AUTOMATIONS_PLUGIN_ID,
   getPluginPanelRoutePath,
   getThreadRoutePath,
-  isPluginsRoutePath,
   SETTINGS_ROUTE_PATH,
 } from "@/lib/route-paths";
 import { makePluginRegistrationSet as registrationSet } from "@/test/fixtures/plugins";
@@ -112,6 +111,9 @@ vi.mock("@/hooks/useUpdateInventory", () => ({
 }));
 vi.mock("@/hooks/queries/system-queries", () => ({
   useSystemProviders: () => ({ data: [] }),
+  useUiPreferences: () => ({
+    data: { preferences: { "homepage.desktop": { value: "/" } } },
+  }),
 }));
 vi.mock("@/hooks/useMachineAttention", () => ({
   useMachineAttention: () => ({ label: null }),
@@ -138,7 +140,6 @@ function RailHarness({ useLayout = false }: { useLayout?: boolean }) {
   const closeMobileSidebar = useCloseMobileSidebar();
   const location = useLocation();
   const isSettings = location.pathname.startsWith(SETTINGS_ROUTE_PATH);
-  const isAppMode = !isSettings && !isPluginsRoutePath(location.pathname);
   const [isCustomizing, setCustomizing] = useState(false);
   return (
     <SidebarNavigationModelProvider
@@ -160,7 +161,6 @@ function RailHarness({ useLayout = false }: { useLayout?: boolean }) {
       ) : (
         <>
           <AppNavRail
-            isAppMode={isAppMode}
             customize={{ isOpen: isCustomizing, onOpenChange: setCustomizing }}
           />
           <NavRailSettingsButton
@@ -287,10 +287,10 @@ describe("AppNavRail", () => {
       "More",
       "Settings",
     ]);
-    expect(currentRailLabels()).toEqual(["Home"]);
+    expect(currentRailLabels()).toEqual([]);
   });
 
-  it("moves the highlight from Home to a plugin panel and to Settings as the route changes", () => {
+  it("highlights a plugin panel and Settings as the route changes", () => {
     renderRail(THREAD_PATH);
 
     fireEvent.click(railButton("Docs"));
@@ -388,18 +388,18 @@ describe("AppNavRail", () => {
     expect(railLabels()).not.toContain("Ghost board");
   });
 
-  it("returns Home to the last thread, skipping plugin panels and Settings visited since", () => {
+  it("opens the homepage after visiting plugin panels and Settings", () => {
     renderRail(THREAD_PATH);
 
     fireEvent.click(railButton("Docs"));
     fireEvent.click(railButton("Settings"));
     fireEvent.click(railButton("Home"));
 
-    expect(pathname()).toBe(THREAD_PATH);
+    expect(pathname()).toBe("/");
     expect(currentRailLabels()).toEqual(["Home"]);
   });
 
-  it("returns Home to the last thread after settings navigation closes the compact sidebar", () => {
+  it("opens the homepage after settings navigation closes the compact sidebar", () => {
     vi.useFakeTimers();
     renderRail(THREAD_PATH, { isCompactViewport: true, useLayout: true });
     fireEvent.click(screen.getByRole("button", { name: "Toggle Sidebar" }));
@@ -413,7 +413,7 @@ describe("AppNavRail", () => {
     act(() => vi.advanceTimersByTime(250));
     fireEvent.click(railButton("Home"));
 
-    expect(pathname()).toBe(THREAD_PATH);
+    expect(pathname()).toBe("/");
     expect(currentRailLabels()).toEqual(["Home"]);
   });
 
@@ -433,7 +433,7 @@ describe("AppNavRail", () => {
     fireEvent.click(railButton("Skills"));
     fireEvent.click(railButton("Settings"));
     fireEvent.click(railButton("Home"));
-    expect(pathname()).toBe(THREAD_PATH);
+    expect(pathname()).toBe("/");
     expect(mocks.onNavigate).not.toHaveBeenCalled();
 
     fireEvent.click(railButton("Docs"));

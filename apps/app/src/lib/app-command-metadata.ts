@@ -102,6 +102,11 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
         "Back to app",
         "Return from Settings, Plugins, or Skills to the app.",
       ),
+      command(
+        "homepage.openDefault",
+        "Open bb Home",
+        "Open the default bb Home view, bypassing your homepage.",
+      ),
       command("settings.open", "Open settings", "Open bb settings."),
       command(
         "settings.openServers",
