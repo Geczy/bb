@@ -93,7 +93,7 @@ describe("desktop chrome geometry", () => {
   );
 
   it("puts the close button above the rail icons on the current desktop", () => {
-    const RAIL_PADDING = 7;
+    const RAIL_PADDING = 11;
     const RAIL_CONTROL_SIZE = 24;
 
     expect(MACOS_TRAFFIC_LIGHT_INSET_PX + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2).toBe(
@@ -115,8 +115,8 @@ describe("desktop chrome geometry", () => {
       macosTrafficLightInset: MACOS_TRAFFIC_LIGHT_INSET_PX,
       macosTrafficLightTopInset: MACOS_TRAFFIC_LIGHT_TOP_INSET_PX,
     });
-    expect(properties.get("--bb-window-title-bar-height")).toBe("40px");
-    expect(properties.get("--bb-macos-traffic-light-reserve")).toBe("84px");
+    expect(properties.get("--bb-window-title-bar-height")).toBe("44px");
+    expect(properties.get("--bb-macos-traffic-light-reserve")).toBe("88px");
 
     properties.clear();
     applyMacosWindowChromeGeometry(root, null);
