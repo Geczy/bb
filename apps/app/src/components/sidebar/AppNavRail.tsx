@@ -312,7 +312,7 @@ export function AppNavRail({
         aria-label="Primary navigation"
         className={cn(
           "flex min-h-0 flex-1 flex-col items-center gap-1 pb-2",
-          isFramed && "pt-2",
+          isFramed && "pt-2.5",
         )}
       >
         <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-1 overflow-y-auto py-0.5 [scrollbar-width:none]">
