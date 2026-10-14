@@ -1,0 +1,10 @@
+import {createConnection,createEnvironment,createThread,noopNotifier} from './packages/db/src/index.ts';
+import {writeFileSync,readFileSync,mkdirSync} from 'node:fs';
+const setup=JSON.parse(readFileSync('.moss-viewer-session.json','utf8'));
+const db=createConnection(`${setup.data}/bb.db`);
+const environment=createEnvironment(db,noopNotifier,{projectId:'proj_dywaieptst',hostId:'host_xuwxk5kbrg',path:process.cwd()+'/.moss-viewer-work',status:'ready',providerOwnsPath:false});
+const thread=createThread(db,noopNotifier,{projectId:'proj_dywaieptst',environmentId:environment.id,providerId:'codex',title:'Reading notes',status:'idle'});
+const dir=setup.evidence+'/Reading notes';mkdirSync(dir,{recursive:true});
+writeFileSync(dir+'/Reading notes.md',`# Reading notes\n\nA quiet place to review the next iteration.\n\n\`\`\`moss-callout\n{"type":"info","title":"Review focus","content":"Keep controls compact and the note easy to read."}\n\`\`\`\n\n## Plan the next iteration\n\nStart with the reader’s next action. Keep the title and note controls in view while leaving room for the work below.\n\n- Align the header rows.\n- Keep the floating toolbar readable.\n- Choose a touch interaction before building it.\n\n## Working notes\n\n${Array.from({length:10},(_,i)=>`### Observation ${i+1}\n\nReading works best when the controls feel calm and predictable. Use a clear surface behind each control so the text underneath never competes for attention.\n\n- Review the open state.\n- Collapse the toolbar.\n- Return to the note.\n`).join('\n')}`);
+Object.assign(setup,{projectId:'proj_dywaieptst',environmentId:environment.id,threadId:thread.id,fixture:dir+'/Reading notes.md'});
+writeFileSync('.moss-viewer-session.json',JSON.stringify(setup,null,2));console.log({environment:environment.id,thread:thread.id,fixture:setup.fixture});

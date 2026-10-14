@@ -1,0 +1,20 @@
+const p=await browser.getPage('main');
+await p.click('[aria-label="Note actions"]');
+console.log('NARROW MENU',(await p.snapshot()).split('\n').filter(l=>/menuitem|dialog.*Note/.test(l)).join('\n'));
+await p.keyboard.press('Escape');
+await p.click('[aria-label="Maximize pane"]');
+await p.mouse.move(750,450);
+await new Promise(r=>setTimeout(r,400));
+const measurements=await p.evaluate(()=>{
+ const first=document.querySelector('[data-testid="thread-secondary-panel-top-chrome"]');const path=document.querySelector('[aria-label="Copy file path"]');const second=path.parentElement.parentElement;
+ const tab=[...first.querySelectorAll('button')].find(x=>x.getAttribute('aria-pressed')==='true');
+ const m=e=>{const c=getComputedStyle(e),r=e.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,padding:c.padding,gap:c.gap,fontSize:c.fontSize,fontWeight:c.fontWeight,lineHeight:c.lineHeight,background:c.backgroundColor}};
+ return {host:m(first),note:m(second),tabText:m(tab),pathText:m(path),hostActionGap:getComputedStyle(first.lastElementChild).gap,noteActionGap:getComputedStyle(second.lastElementChild).gap,noteLabelGap:getComputedStyle(path.parentElement).gap,noteIcons:[...second.querySelectorAll('svg')].map(x=>x.getBoundingClientRect().width),noteButtons:[...second.querySelectorAll('button')].filter(x=>x!==path).map(m),input:{hover:matchMedia('(hover: hover)').matches,fine:matchMedia('(pointer:fine)').matches},dpr:devicePixelRatio};
+});p._desktop=measurements;
+console.log('MEASUREMENTS',JSON.stringify(measurements));
+await p.click('[aria-label="Hide header"]');await p.mouse.move(750,450);await new Promise(r=>setTimeout(r,650));
+console.log('COLLAPSED',await p.evaluate(()=>({stored:localStorage.getItem('moss-viewer:header-collapsed'),transform:getComputedStyle(document.querySelector('[aria-label="Copy file path"]').parentElement.parentElement.parentElement).transform})));
+await p.mouse.move(750,52);await new Promise(r=>setTimeout(r,450));
+console.log('REVEALED',await p.evaluate(()=>({transform:getComputedStyle(document.querySelector('[aria-label="Copy file path"]').parentElement.parentElement.parentElement).transform,background:getComputedStyle(document.querySelector('[aria-label="Copy file path"]').parentElement.parentElement).backgroundColor})));
+await p.mouse.move(750,450);await new Promise(r=>setTimeout(r,650));
+console.log('HIDDEN AGAIN',await p.evaluate(()=>getComputedStyle(document.querySelector('[aria-label="Copy file path"]').parentElement.parentElement.parentElement).transform));

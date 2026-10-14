@@ -1,0 +1,41 @@
+const p = await browser.getPage('main');
+const dir = '/Users/brsbl/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_sz2twxjkai-2/bb/.moss-viewer-evidence-ucyehod0';
+const pause = () => new Promise(r => setTimeout(r, 400));
+const tap = async selector => {
+  const box = await (await p.$(selector)).boundingBox();
+  await p.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+};
+let f = p.frames().find(frame => frame.url().includes('/viewer/'));
+await f.evaluate(() => {getSelection().removeAllRanges();document.querySelector('.canvas-scroll').scrollTop=0});
+await p.emulateMediaFeatures([{name:'prefers-color-scheme',value:'light'}]);
+await p.mouse.move(100, 400);
+await pause();
+await p.screenshot({path:dir+'/mobile-collapsed-0cf4ecf-light.png',type:'png'});
+await tap('[aria-label="Note actions"][aria-haspopup="dialog"]');
+await pause();
+await p.screenshot({path:dir+'/mobile-sheet-0cf4ecf-light.png',type:'png'});
+await p.emulateMediaFeatures([{name:'prefers-color-scheme',value:'dark'}]);
+await pause();
+await p.screenshot({path:dir+'/mobile-sheet-0cf4ecf-dark.png',type:'png'});
+console.log('DARK',await p.evaluate(()=>({surface:getComputedStyle(document.querySelector('[data-persistent-drawer-content][data-state="open"]')).backgroundColor,rootHidden:document.querySelector('#root')?.getAttribute('aria-hidden'),rootInert:document.querySelector('#root')?.inert,overflow:document.documentElement.scrollWidth>innerWidth})));
+await p.keyboard.press('Escape');await pause();
+console.log('ESCAPE CLOSED',await p.evaluate(()=>document.querySelector('[aria-label="Note actions"][aria-haspopup="dialog"]').getAttribute('aria-expanded')));
+await tap('[aria-label="Note actions"][aria-haspopup="dialog"]');await pause();
+const keep = await p.evaluate(()=>{
+ const e=[...document.querySelectorAll('[data-persistent-drawer-content][data-state="open"] button')].find(e=>e.textContent.trim()==='Keep header shown');
+ const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};
+});
+await p.touchscreen.tap(keep.x,keep.y);await pause();
+console.log('EXPANDED',await p.evaluate(()=>({shown:!!document.querySelector('[aria-label="Hide header"]'),persisted:localStorage.getItem('moss-viewer:header-collapsed')})));
+await tap('[aria-label="Hide header"]');await pause();
+await p.setViewport({width:1440,height:900,deviceScaleFactor:2,isMobile:false,hasTouch:false});
+await pause();
+console.log('DESKTOP MODE',await p.evaluate(()=>({coarse:matchMedia('(pointer:coarse)').matches,mobileTrigger:!!document.querySelector('[aria-label="Note actions"][aria-haspopup="dialog"]')})));
+const edge=await p.evaluate(()=>{
+ const path=document.querySelector('[aria-label="Copy file path"]');
+ const box=path.closest('.absolute').parentElement.getBoundingClientRect();
+ return {x:box.x+100,y:box.y+4};
+});
+await p.mouse.move(edge.x,edge.y);await pause();
+console.log('DESKTOP HOVER',await p.evaluate(()=>{const e=document.querySelector('[aria-label="Copy file path"]').closest('.absolute');return {translate:getComputedStyle(e).translate,rect:e.getBoundingClientRect().toJSON()}}));
+console.log('ERRORS',p._mobileErrors);
