@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BbDesktopInfo } from "@bb/desktop-contract";
 import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
@@ -28,14 +29,16 @@ async function renderReservesTrafficLights({
 }): Promise<boolean> {
   await act(async () => {
     render(
-      <CompactViewportOverrideProvider isCompactViewport={isCompactViewport}>
-        <SidebarProvider framed>
-          <SidebarTopReserveRow
-            testId="reserve-row"
-            headerSlot={<button type="button">New thread</button>}
-          />
-        </SidebarProvider>
-      </CompactViewportOverrideProvider>,
+      <MemoryRouter>
+        <CompactViewportOverrideProvider isCompactViewport={isCompactViewport}>
+          <SidebarProvider framed>
+            <SidebarTopReserveRow
+              testId="reserve-row"
+              headerSlot={<button type="button">New thread</button>}
+            />
+          </SidebarProvider>
+        </CompactViewportOverrideProvider>
+      </MemoryRouter>,
     );
   });
   const classNames = screen.getByTestId("reserve-row").className.split(" ");
