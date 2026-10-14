@@ -29,6 +29,10 @@ export const CHROME_ROW_CLASS = `flex ${CHROME_ROW_HEIGHT_CLASS} items-center`;
 
 export const MACOS_CHROME_CONTROL_AXIS_CLASS =
   "[transform:translateY(var(--bb-macos-chrome-control-y,calc(var(--bb-macos-traffic-light-center-y)_-_var(--bb-app-chrome-row-height)/2)))]";
+export const MACOS_TITLE_BAR_ROW_CLASS = "h-(--bb-window-title-bar-height)";
+export const MACOS_TITLE_BAR_BAND_CLASS = `${MACOS_TITLE_BAR_ROW_CLASS} box-content pb-px`;
+export const MACOS_TITLE_BAR_COLLAPSED_SIDEBAR_RESERVE_CLASS =
+  "pl-[calc(var(--bb-window-title-bar-controls-end)_+_12px_-_var(--bb-sidebar-control-size)_-_2*var(--bb-sidebar-rail-padding)_-_1px_-_1rem)]";
 export const MACOS_TITLE_BAR_CONTROL_AXIS_CLASS =
   "[--bb-macos-chrome-control-y:calc(var(--bb-macos-traffic-light-center-y)_-_var(--bb-window-title-bar-height)/2)]";
 export const MACOS_CHROME_CONTROL_NO_DRAG_CLASS = `${MACOS_WINDOW_NO_DRAG_CLASS} ${MACOS_CHROME_CONTROL_AXIS_CLASS}`;
@@ -64,12 +68,15 @@ export function shouldReserveMacosTrafficLights({
 const MACOS_TRAFFIC_LIGHT_CLEARANCE_PX = 12;
 const MACOS_CHROME_CONTROL_SIZE_PX = 28;
 const COLLAPSED_SIDEBAR_TRIGGER_GAP_PX = 8;
+const TITLE_BAR_CONTROL_COUNT = 3;
+const TITLE_BAR_CONTROL_GAP_PX = 4;
 const PAGE_HEADER_BASE_INSET_PX = 16;
 
 export interface MacosWindowChromeGeometry {
   trafficLightCenterY: number;
   titleBarHeight: number;
   trafficLightReserve: number;
+  titleBarControlsEnd: number;
   collapsedTopLeftReserve: number;
 }
 
@@ -88,6 +95,10 @@ export function getMacosWindowChromeGeometry(
     trafficLightCenterY,
     titleBarHeight: 2 * trafficLightCenterY,
     trafficLightReserve,
+    titleBarControlsEnd:
+      trafficLightReserve +
+      TITLE_BAR_CONTROL_COUNT * MACOS_CHROME_CONTROL_SIZE_PX +
+      (TITLE_BAR_CONTROL_COUNT - 1) * TITLE_BAR_CONTROL_GAP_PX,
     collapsedTopLeftReserve:
       trafficLightReserve +
       MACOS_CHROME_CONTROL_SIZE_PX +
@@ -117,6 +128,10 @@ export function applyMacosWindowChromeGeometry(
   root.style.setProperty(
     "--bb-macos-traffic-light-reserve",
     `${geometry.trafficLightReserve}px`,
+  );
+  root.style.setProperty(
+    "--bb-window-title-bar-controls-end",
+    `${geometry.titleBarControlsEnd}px`,
   );
   root.style.setProperty(
     "--bb-macos-collapsed-top-left-reserve",
