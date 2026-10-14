@@ -48,7 +48,6 @@ import {
   MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
-import { useIsSidebarFramed } from "@/components/ui/sidebar.js";
 import { PluginComposerHostProvider } from "@/components/plugin/plugin-composer-host";
 import { usePanelResizeSnap } from "@/components/secondary-panel/usePanelResizeSnap";
 import {
@@ -155,7 +154,6 @@ export function SplitWorkspaceSecondaryPanelHost({
   });
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-  const isSidebarFramed = useIsSidebarFramed();
 
   const setPanelWidthPercent = useSetAtom(secondaryPanelWidthPercentAtom);
   const lastEmptyPanelSizeRef = useRef(0);
@@ -208,7 +206,7 @@ export function SplitWorkspaceSecondaryPanelHost({
             !showsCornerToggle && "hidden",
             MACOS_APP_REGION_NO_DRAG_CLASS,
             usesDesktopChrome && MACOS_CHROME_CONTROL_AXIS_CLASS,
-            isSidebarFramed && [
+            usesDesktopChrome && [
               "flex h-7 items-center",
               MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
             ],

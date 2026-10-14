@@ -69,6 +69,8 @@ export function shouldReserveMacosTrafficLights({
 
 const MACOS_TRAFFIC_LIGHT_CLEARANCE_PX = 12;
 const MACOS_CHROME_CONTROL_SIZE_PX = 28;
+const TITLE_BAR_CONTROL_HEIGHT_PX = 24;
+const TITLE_BAR_HOVER_GAP_PX = 2;
 const COLLAPSED_SIDEBAR_TRIGGER_GAP_PX = 8;
 const TITLE_BAR_CONTROL_COUNT = 3;
 const TITLE_BAR_CONTROL_GAP_PX = 4;
@@ -95,7 +97,10 @@ export function getMacosWindowChromeGeometry(
     MACOS_TRAFFIC_LIGHT_CLEARANCE_PX;
   return {
     trafficLightCenterY,
-    titleBarHeight: 2 * trafficLightCenterY,
+    titleBarHeight:
+      trafficLightCenterY +
+      TITLE_BAR_CONTROL_HEIGHT_PX / 2 +
+      TITLE_BAR_HOVER_GAP_PX,
     trafficLightReserve,
     titleBarControlsEnd:
       trafficLightReserve +

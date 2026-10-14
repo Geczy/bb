@@ -293,6 +293,7 @@ function SidebarTriggerOverlay({
             ? MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS
             : ["left-0", BROWSER_SIDEBAR_TRIGGER_INSET_CLASS],
           MACOS_WINDOW_DRAG_CLASS,
+          MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
         )}
       >
         <SidebarTrigger

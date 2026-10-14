@@ -105,11 +105,7 @@ export function AppPageHeader({
       }
       className={cn(
         isInTitleBar
-          ? [
-              MACOS_TITLE_BAR_BAND_CLASS,
-              MACOS_TITLE_BAR_CONTROL_AXIS_CLASS,
-              MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
-            ]
+          ? [MACOS_TITLE_BAR_BAND_CLASS, MACOS_TITLE_BAR_CONTROL_AXIS_CLASS]
           : [
               CHROME_ROW_HEIGHT_CLASS,
               HEADER_SEAM_CLASS,
@@ -135,7 +131,10 @@ export function AppPageHeader({
           isInTitleBar && MACOS_TITLE_BAR_ROW_CLASS,
           "relative z-10 gap-1 md:gap-2",
           isCompactViewport && "pointer-events-none",
-          usesDesktopChrome && MACOS_CHROME_CONTROL_AXIS_CLASS,
+          usesDesktopChrome && [
+            MACOS_CHROME_CONTROL_AXIS_CLASS,
+            MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
+          ],
           "transition-[padding] duration-200 ease-linear",
           windowTopLeftReserveClassName,
         )}

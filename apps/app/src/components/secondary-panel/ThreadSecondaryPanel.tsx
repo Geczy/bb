@@ -828,12 +828,13 @@ function ThreadSecondaryPanelContent({
               renderAsDrawer ? "px-2" : "px-(--bb-panel-chrome-padding)",
               usesDesktopChrome && usesWindowChrome && MACOS_WINDOW_DRAG_CLASS,
               usesDesktopChrome &&
-                usesWindowChrome &&
-                MACOS_CHROME_CONTROL_AXIS_CLASS,
+                usesWindowChrome && [
+                  MACOS_CHROME_CONTROL_AXIS_CLASS,
+                  MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
+                ],
               isPanelInFrame &&
                 usesWindowChrome && [
                   MACOS_TITLE_BAR_BAND_CLASS,
-                  MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
                   MACOS_TITLE_BAR_CONTROL_AXIS_CLASS,
                 ],
             )}

@@ -70,6 +70,8 @@ describe("desktop chrome geometry", () => {
         macosTrafficLightTopInset: topInset,
       });
       const CONTROL_SIZE = 28;
+      const TITLE_BAR_CONTROL_HEIGHT = 24;
+      const HOVER_GAP_ABOVE_PANELS = 2;
       const TRAFFIC_LIGHT_CLEARANCE = 12;
       const COLLAPSED_TRIGGER_GAP = 8;
       const PAGE_HEADER_BASE_INSET = 16;
@@ -77,10 +79,11 @@ describe("desktop chrome geometry", () => {
       expect(geometry.trafficLightCenterY).toBe(
         reportedTopInset + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2,
       );
-      expect(geometry.titleBarHeight).toBe(2 * geometry.trafficLightCenterY);
-      expect(geometry.trafficLightCenterY + CONTROL_SIZE / 2).toBeLessThan(
-        geometry.titleBarHeight,
-      );
+      expect(
+        geometry.titleBarHeight -
+          TITLE_BAR_CONTROL_HEIGHT / 2 -
+          HOVER_GAP_ABOVE_PANELS,
+      ).toBe(geometry.trafficLightCenterY);
       expect(geometry.trafficLightReserve).toBe(
         reportedInset +
           MACOS_TRAFFIC_LIGHT_CLUSTER_WIDTH_PX +
@@ -115,7 +118,7 @@ describe("desktop chrome geometry", () => {
       macosTrafficLightInset: MACOS_TRAFFIC_LIGHT_INSET_PX,
       macosTrafficLightTopInset: MACOS_TRAFFIC_LIGHT_TOP_INSET_PX,
     });
-    expect(properties.get("--bb-window-title-bar-height")).toBe("44px");
+    expect(properties.get("--bb-window-title-bar-height")).toBe("36px");
     expect(properties.get("--bb-macos-traffic-light-reserve")).toBe("88px");
 
     properties.clear();
