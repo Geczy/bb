@@ -28,6 +28,9 @@ export function useSidebarHeaderControlAxisClass(): string | undefined {
     : undefined;
 }
 
+export const MACOS_DRAWER_HEADER_RESERVE_CLASS =
+  "pl-[calc(88px_-_2_*_var(--bb-sidebar-rail-padding))]";
+
 export function SidebarTopReserveRow({
   testId,
   headerSlot,
