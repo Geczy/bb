@@ -1,0 +1,37 @@
+name: Diagnose environment startup
+
+on:
+  push:
+    branches:
+      - bb/retry-thread-creation-thr_6dz8z56vaw
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [desktop-v0.46.0, main]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Apply the diagnostic to the selected revision
+        env:
+          REVISION: ${{ matrix.revision }}
+        run: |
+          cp apps/server/test/threads/environment-startup-options.test.ts "$RUNNER_TEMP/environment-startup-options.test.ts"
+          git fetch --depth=1 origin "$REVISION"
+          git checkout --detach FETCH_HEAD
+          cp "$RUNNER_TEMP/environment-startup-options.test.ts" apps/server/test/threads/environment-startup-options.test.ts
+          git rev-parse HEAD
+      - uses: ./.github/actions/setup-workspace
+        with:
+          node-version: 22.x
+          pnpm-version: 9.15.0
+          cache-prefix: diagnose-environment-startup
+      - name: Exercise startup and existing lifecycle regressions
+        run: pnpm exec turbo run test --filter=@bb/server --output-logs=new-only -- test/threads/environment-startup-options.test.ts test/services/environments/provider-orchestration.test.ts
