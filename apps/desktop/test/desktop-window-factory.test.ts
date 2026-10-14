@@ -327,8 +327,8 @@ describe("desktop window factory", () => {
       true,
     ]);
     expect(createdWindows[0]?.options.trafficLightPosition).toEqual({
-      x: 11,
-      y: 11,
+      x: 12,
+      y: 12,
     });
     expect(createdWindows[0]?.loadedUrls).toEqual(["http://127.0.0.1:38886"]);
     expect(createdWindows[1]?.loadedUrls).toEqual(["http://127.0.0.1:38886"]);
