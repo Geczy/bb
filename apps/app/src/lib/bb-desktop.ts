@@ -78,14 +78,15 @@ export function getMacosWindowChromeGeometry(
 ): MacosWindowChromeGeometry {
   const inset =
     desktopInfo?.macosTrafficLightInset ?? MACOS_LEGACY_TRAFFIC_LIGHT_INSET_PX;
-  const trafficLightCenterY = inset + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2;
+  const topInset = desktopInfo?.macosTrafficLightTopInset ?? inset;
+  const trafficLightCenterY = topInset + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2;
   const trafficLightReserve =
     inset +
     MACOS_TRAFFIC_LIGHT_CLUSTER_WIDTH_PX +
     MACOS_TRAFFIC_LIGHT_CLEARANCE_PX;
   return {
     trafficLightCenterY,
-    titleBarHeight: trafficLightCenterY + MACOS_CHROME_CONTROL_SIZE_PX / 2,
+    titleBarHeight: 2 * trafficLightCenterY,
     trafficLightReserve,
     collapsedTopLeftReserve:
       trafficLightReserve +

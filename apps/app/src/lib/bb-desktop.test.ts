@@ -4,6 +4,7 @@ import {
   MACOS_TRAFFIC_LIGHT_CLUSTER_WIDTH_PX,
   MACOS_TRAFFIC_LIGHT_INSET_PX,
   MACOS_TRAFFIC_LIGHT_SIZE_PX,
+  MACOS_TRAFFIC_LIGHT_TOP_INSET_PX,
   type BbDesktopInfo,
 } from "@bb/desktop-contract";
 import { createBbDesktopApi } from "@/test/bb-desktop-test-utils";
@@ -52,15 +53,21 @@ describe("desktop chrome geometry", () => {
   });
 
   it.each([
-    { name: "current desktop", inset: MACOS_TRAFFIC_LIGHT_INSET_PX },
-    { name: "older desktop", inset: undefined },
+    {
+      name: "current desktop",
+      inset: MACOS_TRAFFIC_LIGHT_INSET_PX,
+      topInset: MACOS_TRAFFIC_LIGHT_TOP_INSET_PX,
+    },
+    { name: "older desktop", inset: undefined, topInset: undefined },
   ])(
     "keeps $name chrome clear of and centered on the traffic lights",
-    ({ inset }) => {
+    ({ inset, topInset }) => {
       const reportedInset = inset ?? MACOS_LEGACY_TRAFFIC_LIGHT_INSET_PX;
+      const reportedTopInset = topInset ?? reportedInset;
       const geometry = getMacosWindowChromeGeometry({
         ...macosDesktopApi,
         macosTrafficLightInset: inset,
+        macosTrafficLightTopInset: topInset,
       });
       const CONTROL_SIZE = 28;
       const TRAFFIC_LIGHT_CLEARANCE = 12;
@@ -68,10 +75,11 @@ describe("desktop chrome geometry", () => {
       const PAGE_HEADER_BASE_INSET = 16;
 
       expect(geometry.trafficLightCenterY).toBe(
-        reportedInset + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2,
+        reportedTopInset + MACOS_TRAFFIC_LIGHT_SIZE_PX / 2,
       );
-      expect(geometry.titleBarHeight - CONTROL_SIZE / 2).toBe(
-        geometry.trafficLightCenterY,
+      expect(geometry.titleBarHeight).toBe(2 * geometry.trafficLightCenterY);
+      expect(geometry.trafficLightCenterY + CONTROL_SIZE / 2).toBeLessThan(
+        geometry.titleBarHeight,
       );
       expect(geometry.trafficLightReserve).toBe(
         reportedInset +
@@ -105,8 +113,9 @@ describe("desktop chrome geometry", () => {
     applyMacosWindowChromeGeometry(root, {
       ...macosDesktopApi,
       macosTrafficLightInset: MACOS_TRAFFIC_LIGHT_INSET_PX,
+      macosTrafficLightTopInset: MACOS_TRAFFIC_LIGHT_TOP_INSET_PX,
     });
-    expect(properties.get("--bb-window-title-bar-height")).toBe("33px");
+    expect(properties.get("--bb-window-title-bar-height")).toBe("40px");
     expect(properties.get("--bb-macos-traffic-light-reserve")).toBe("84px");
 
     properties.clear();
