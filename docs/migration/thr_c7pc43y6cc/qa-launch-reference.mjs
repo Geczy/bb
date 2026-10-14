@@ -1,0 +1,11 @@
+import {spawn} from 'node:child_process';
+import {writeFileSync,readFileSync} from 'node:fs';
+import {resolve,join} from 'node:path';
+const root=resolve('/root/.bb-machines/brsbl.getbb.app/plugins/environment-git-worktree/host-data/worktrees/thr_c7pc43y6cc-1/bb/.health-qa-Lsl7YL');
+const cfg=JSON.parse(readFileSync(join(root,'instance.json'),'utf8'));
+const selected=JSON.parse(readFileSync(join(root,'case.env.json'),'utf8'));
+const env={HOME:cfg.homeDir,PATH:join(root,'bin')+':/usr/bin:/bin',SHELL:'/bin/bash',LANG:'C.UTF-8',TERM:'xterm-256color',NODE_OPTIONS:'--max-old-space-size=768',BB_CLAUDE_CODE_EXECUTABLE:join(root,'bin/claude'),CLAUDE_CONFIG_DIR:selected.configDir??join(cfg.homeDir,'custom-claude'),...(selected.storageOverride===undefined?{}:{CLAUDE_SECURESTORAGE_CONFIG_DIR:selected.storageOverride}),CI:'1'};
+const child=spawn('/usr/bin/pnpm',['dev'],{env,cwd:cfg.repoRoot,stdio:'inherit'});
+writeFileSync(join(root,'launcher-pids.json'),JSON.stringify({launcher:process.pid,pnpm:child.pid}));
+for(const s of ['SIGTERM','SIGINT']) process.on(s,()=>child.kill(s));
+child.on('exit',code=>process.exit(code??1));

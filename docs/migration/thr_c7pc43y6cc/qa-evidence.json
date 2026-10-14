@@ -1,0 +1,211 @@
+{
+  "verdict": "PASS",
+  "scope": "Claude credential-profile health fix, synthetic Linux credential-file path and provider status card",
+  "head": "eb57495b8ba1c7453022bcd840dee06ed60d8905",
+  "base": "c6aef9658628fea3f3356517dc6710e20d0a13ab",
+  "environment": {
+    "environmentId": "env_khtnyhv38a",
+    "hostId": "host_q7quxdditd",
+    "worktree": "/root/.bb-machines/brsbl.getbb.app/plugins/environment-git-worktree/host-data/worktrees/thr_c7pc43y6cc-1/bb",
+    "taskDirectory": "/root/.bb-machines/brsbl.getbb.app/plugins/environment-git-worktree/host-data/worktrees/thr_c7pc43y6cc-1/bb/.health-qa-Lsl7YL",
+    "appRoute": "http://127.0.0.1:12150/settings",
+    "apiRoute": "http://127.0.0.1:20150/api/v1/system/providers/state?hostId=host_rc2wgrkf66",
+    "ports": {
+      "app": 12150,
+      "server": 20150,
+      "hostDaemon": 28150
+    },
+    "dataHome": "/root/.bb-machines/brsbl.getbb.app/plugins/environment-git-worktree/host-data/worktrees/thr_c7pc43y6cc-1/bb/.health-qa-Lsl7YL/isolated-home",
+    "launchCommand": "/usr/bin/node .health-qa-Lsl7YL/launch.mjs (launches documented pnpm dev with case.env.json inherited by host daemon/bridge)",
+    "browserSession": "59355e08-6ce4-4a63-9ad1-0152cc116405",
+    "browserBackend": "BB Browser Automation local headless on host_q7quxdditd",
+    "browserVersion": "HeadlessChrome/155.0.0.0",
+    "deviceScaleFactor": 2,
+    "theme": "light/default",
+    "scroll": [
+      0,
+      0
+    ],
+    "interactionState": "Claude provider status card on setup guide, Agent step",
+    "terminalIds": [
+      "term_9ct987bb3n",
+      "term_kqmeqs4khi",
+      "term_bkfa24xjwe",
+      "term_r8srscn4d9",
+      "term_4qha4ke2cj",
+      "term_x8ejnfthra",
+      "term_s8pjs54hhr"
+    ],
+    "lastObservedOwnedPidsBeforeCleanup": {
+      "launcher": 1701459,
+      "pnpm": 1701469
+    },
+    "cleanup": "App terminal term_s8pjs54hhr exited; browser session 59355e08-6ce4-4a63-9ad1-0152cc116405 is closed; ports 12150/20150/28150 refuse connections; restored branch bb/check-health-for-the-active-claude-profile-thr_c7pc43y6cc at exact head; tracked diff clean.",
+    "cleanupVerified": {
+      "appHttpStatus": 0,
+      "serverHttpStatus": 0,
+      "browserState": "closed",
+      "activeEnvironmentTerminals": 0,
+      "activeBrowserSessions": 0,
+      "restoredBranch": "bb/check-health-for-the-active-claude-profile-thr_c7pc43y6cc",
+      "restoredHead": "eb57495b8ba1c7453022bcd840dee06ed60d8905",
+      "trackedDiffClean": true
+    }
+  },
+  "ui": {
+    "before": {
+      "status": "expired",
+      "accountEmail": "default@example.test",
+      "text": "Installed · your session expired"
+    },
+    "after": {
+      "status": "ready",
+      "accountEmail": "custom@example.test",
+      "planLabel": "Max (5x)",
+      "text": "custom@example.test · Max (5x) / Ready"
+    },
+    "hardNavigation": "settled on /settings after full page navigation; waited for provider health and account card to resolve",
+    "refresh": "Check again retained Ready/custom@example.test",
+    "clientNavigation": "Provider settings then General, followed by Show setup guide; returned to Ready/custom@example.test",
+    "browserErrors": [],
+    "oauthOrUsageClaim": false
+  },
+  "rpcChecks": [
+    {
+      "case": "a-base",
+      "revision": "c6aef9658628fea3f3356517dc6710e20d0a13ab",
+      "configDir": "isolated-home/custom-claude",
+      "storageOverride": "unset",
+      "fixtures": "custom future-expiry/custom@example.test; default expired/default@example.test",
+      "result": {
+        "status": "expired",
+        "accountEmail": "default@example.test",
+        "installedVersion": "2.1.238"
+      }
+    },
+    {
+      "case": "a-head",
+      "revision": "eb57495b8ba1c7453022bcd840dee06ed60d8905",
+      "configDir": "isolated-home/custom-claude",
+      "storageOverride": "unset",
+      "fixtures": "custom future-expiry/custom@example.test; default expired/default@example.test",
+      "result": {
+        "status": "ready",
+        "accountEmail": "custom@example.test",
+        "planLabel": "Max (5x)",
+        "installedVersion": "2.1.238"
+      }
+    },
+    {
+      "case": "b-missing-custom",
+      "configDir": "isolated-home/missing-custom",
+      "storageOverride": "unset",
+      "fixtures": "custom credentials absent; default future-expiry/ready",
+      "result": {
+        "status": "unauthenticated",
+        "accountEmail": null,
+        "installedVersion": "2.1.238"
+      }
+    },
+    {
+      "case": "c-explicit-empty-storage",
+      "configDir": "isolated-home/custom-claude",
+      "storageOverride": "explicit empty string",
+      "fixtures": "default future-expiry/ready; settings credentials expired; settings account custom@example.test",
+      "result": {
+        "status": "ready",
+        "accountEmail": "custom@example.test",
+        "planLabel": "Max (5x)",
+        "installedVersion": "2.1.238"
+      }
+    },
+    {
+      "case": "d-third-store-present",
+      "configDir": "isolated-home/custom-claude",
+      "storageOverride": "isolated-home/third-store",
+      "fixtures": "default and settings future-expiry/ready; third-store expired",
+      "result": {
+        "status": "expired",
+        "accountEmail": "custom@example.test",
+        "installedVersion": "2.1.238"
+      }
+    },
+    {
+      "case": "d-third-store-absent",
+      "configDir": "isolated-home/custom-claude",
+      "storageOverride": "isolated-home/third-store",
+      "fixtures": "default and settings future-expiry/ready; third-store credentials removed",
+      "result": {
+        "status": "unauthenticated",
+        "accountEmail": null,
+        "installedVersion": "2.1.238"
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "label": "before desktop",
+      "revision": "c6aef9658628fea3f3356517dc6710e20d0a13ab",
+      "path": ".health-qa-Lsl7YL/before-desktop-1440x900-2x.png",
+      "viewportCss": [
+        1440,
+        900
+      ],
+      "pixels": [
+        2880,
+        1800
+      ],
+      "sha256": "c625e68e309ff0f871772c41ab8f73854a4004cd08fd5aaf7214ef17e9cde7ab"
+    },
+    {
+      "label": "after desktop",
+      "revision": "eb57495b8ba1c7453022bcd840dee06ed60d8905",
+      "path": ".health-qa-Lsl7YL/after-desktop-1440x900-2x.png",
+      "viewportCss": [
+        1440,
+        900
+      ],
+      "pixels": [
+        2880,
+        1800
+      ],
+      "sha256": "da997a6f151ea9daa1fee0add4192d5b32d94b2f1d65bf8c7015806c3a251071"
+    },
+    {
+      "label": "before phone",
+      "revision": "c6aef9658628fea3f3356517dc6710e20d0a13ab",
+      "path": ".health-qa-Lsl7YL/before-mobile-390x844-2x.png",
+      "viewportCss": [
+        390,
+        844
+      ],
+      "pixels": [
+        780,
+        1688
+      ],
+      "sha256": "3a5e0b8877e5d33bceb366237f627db52ddda8e8a365f98c6718bb9b689a2d4b"
+    },
+    {
+      "label": "after phone",
+      "revision": "eb57495b8ba1c7453022bcd840dee06ed60d8905",
+      "path": ".health-qa-Lsl7YL/after-mobile-390x844-2x.png",
+      "viewportCss": [
+        390,
+        844
+      ],
+      "pixels": [
+        780,
+        1688
+      ],
+      "sha256": "3afeb92d91891bb5bfbc7dfca0c9b9948c35eb80255bda66c22787f332ff4c66"
+    }
+  ],
+  "limitations": [
+    "Synthetic token/file results do not establish live OAuth login, renewal, subscription health, or usage success.",
+    "macOS Keychain runtime was not exercised; no personal credential store was accessed."
+  ],
+  "harnessCorrections": [
+    "The first b-case launch used the original hard-coded custom config path and its result was discarded; task-local launcher was corrected to apply case.env.json in the host daemon/bridge environment before b-d cases.",
+    "The first base capture was blank during cold Vite module compilation; it was excluded and valid exact-base captures were taken after the page settled."
+  ]
+}

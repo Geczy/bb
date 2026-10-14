@@ -1,0 +1,16 @@
+[
+  {
+    "name": "@anthropic-ai/claude-code-linux-x64",
+    "version": "2.1.296",
+    "tarball": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.296.tgz",
+    "integrity": "sha512-+m01urgelnI+VJxPaKPEK0wixgq42uZ8PeCaUk5tX/8YoDBvSmC/REVQG2jQfJAr8dxunpjJ600FvLrcj1WWTw==",
+    "binary_sha256": "24972e3bc859fab2b46ed4c1e51f7d6130f06d3bd550811a114640de3370d0de"
+  },
+  {
+    "name": "@anthropic-ai/claude-code-darwin-arm64",
+    "version": "2.1.296",
+    "tarball": "https://registry.npmjs.org/@anthropic-ai/claude-code-darwin-arm64/-/claude-code-darwin-arm64-2.1.296.tgz",
+    "integrity": "sha512-vqtx3kS3r1hNLMk+N8JMG5J4kcLHIbI3t/NSIdcFQZrRVCFA6NtcxJyn/B+Sf3GxJaFJOCEfoBQXsFo10+Oj9A==",
+    "binary_sha256": "c9b5341637becbd423ddffc5b254afb645682a3868cb708bbc6cc0e7bb419937"
+  }
+]
