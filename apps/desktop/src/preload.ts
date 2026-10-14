@@ -73,6 +73,7 @@ import {
   BB_DESKTOP_BROWSER_SCOPED_OPEN_TAB_CHANNEL,
   BB_DESKTOP_BROWSER_SET_BOUNDS_CHANNEL,
   BB_DESKTOP_BROWSER_SET_VISIBLE_CHANNEL,
+  BB_DESKTOP_BROWSER_SET_COVERED_CHANNEL,
   BB_DESKTOP_BROWSER_SET_VISIBLE_WITHOUT_FOCUS_CHANNEL,
   BB_DESKTOP_BROWSER_SNAPSHOT_CHANNEL,
   BB_DESKTOP_BROWSER_STATE_CHANNEL,
@@ -336,6 +337,9 @@ const bbBrowserApi: BbDesktopBrowserApi = {
       BB_DESKTOP_BROWSER_SET_VISIBLE_WITHOUT_FOCUS_CHANNEL,
       request,
     );
+  },
+  setCovered(request): void {
+    ipcRenderer.send(BB_DESKTOP_BROWSER_SET_COVERED_CHANNEL, request);
   },
   onState(listener): BbDesktopBrowserUnsubscribe {
     return addListener(browserStateListeners, listener);

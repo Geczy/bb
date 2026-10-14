@@ -172,7 +172,13 @@ interface FakeWebContentsEventMap {
   "context-menu": FakeContextMenuListener;
   "render-process-gone": FakeRenderProcessGoneListener;
   "found-in-page": FakeFoundInPageListener;
+  "input-event": FakeInputEventListener;
 }
+
+type FakeInputEventListener = (
+  event: FakeWebContentsEvent,
+  input: { type: string },
+) => void;
 
 interface FakeDebuggerEventMap {
   detach: () => void;
@@ -395,6 +401,7 @@ const electronMock = vi.hoisted(() => {
       "context-menu": [],
       "render-process-gone": [],
       "found-in-page": [],
+      "input-event": [],
     };
     private title = "";
     private url = "";
@@ -489,6 +496,12 @@ const electronMock = vi.hoisted(() => {
     ): void {
       const index = this.listeners[eventName].indexOf(listener);
       if (index !== -1) this.listeners[eventName].splice(index, 1);
+    }
+
+    emitInputEvent(type: string): void {
+      for (const listener of this.listeners["input-event"]) {
+        listener(fakeWebContentsEvent, { type });
+      }
     }
 
     emitDidStartNavigation(): void {
@@ -3099,6 +3112,138 @@ describe("DesktopBrowserViewManager", () => {
 
     electronMock.fakeWindows[0]?.destroy();
     expect(openPopup().action).toBe("allow");
+    manager.destroyAll();
+  });
+
+  it("snapshots a covered view before hiding it and clears the placeholder when uncovered", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 41,
+    });
+    manager.attach({
+      hostWindow,
+      request: {
+        threadId: "thread-1",
+        tabId: "browser:a",
+        url: "",
+        bounds: { x: 100, y: 50, width: 500, height: 350 },
+        visible: true,
+      },
+    });
+    const view = electronMock.fakeViews[0];
+    if (view === undefined) {
+      throw new Error("Expected the browser view to be created.");
+    }
+
+    manager.setCovered({
+      hostWindow,
+      request: { tabId: "browser:a", covered: true },
+    });
+    expect(view.visible).toBe(true);
+    await settlePendingCaptures(view);
+    expect(view.visible).toBe(false);
+    expect(snapshotPushesOf(hostWindow)).toEqual([
+      {
+        tabId: "browser:a",
+        dataUrl: `data:image/jpeg;base64,${Buffer.from("jpeg-bytes").toString("base64")}`,
+      },
+    ]);
+
+    manager.beginWindowResize(hostWindow);
+    manager.endWindowResize(hostWindow);
+    expect(view.visible).toBe(false);
+    expect(snapshotPushesOf(hostWindow)).toHaveLength(1);
+
+    manager.setCovered({
+      hostWindow,
+      request: { tabId: "browser:a", covered: false },
+    });
+    expect(view.visible).toBe(true);
+    expect(snapshotPushesOf(hostWindow).at(-1)).toEqual({
+      tabId: "browser:a",
+      dataUrl: null,
+    });
+
+    manager.setVisible({
+      hostWindow,
+      request: { tabId: "browser:a", visible: false },
+    });
+    manager.setCovered({
+      hostWindow,
+      request: { tabId: "browser:a", covered: true },
+    });
+    manager.setVisible({
+      hostWindow,
+      request: { tabId: "browser:a", visible: true },
+    });
+    expect(view.visible).toBe(false);
+    expect(snapshotPushesOf(hostWindow)).toHaveLength(2);
+    manager.destroyAll();
+  });
+
+  it("reuses a fresh cached snapshot to hide a covered view without capturing again", async () => {
+    const manager = createDesktopBrowserViewManager({
+      partition: "persist:test",
+    });
+    const hostWindow = new FakeHostWindow({
+      contentBounds: { width: 700, height: 450 },
+      webContentsId: 41,
+    });
+    manager.attach({
+      hostWindow,
+      request: {
+        threadId: "thread-1",
+        tabId: "browser:a",
+        url: "",
+        bounds: { x: 100, y: 50, width: 500, height: 350 },
+        visible: true,
+      },
+    });
+    const view = electronMock.fakeViews[0];
+    if (view === undefined) {
+      throw new Error("Expected the browser view to be created.");
+    }
+    const jpegDataUrl = `data:image/jpeg;base64,${Buffer.from("jpeg-bytes").toString("base64")}`;
+
+    manager.setCovered({
+      hostWindow,
+      request: { tabId: "browser:a", covered: false },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(view.webContents.pendingCaptureResolvers).toHaveLength(1);
+    await settlePendingCaptures(view);
+
+    manager.setCovered({
+      hostWindow,
+      request: { tabId: "browser:a", covered: true },
+    });
+    expect(snapshotPushesOf(hostWindow)).toEqual([
+      { tabId: "browser:a", dataUrl: jpegDataUrl },
+    ]);
+    expect(view.webContents.pendingCaptureResolvers).toHaveLength(0);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(view.visible).toBe(false);
+
+    manager.setCovered({
+      hostWindow,
+      request: { tabId: "browser:a", covered: false },
+    });
+    view.webContents.emitInputEvent("mouseWheel");
+    manager.setCovered({
+      hostWindow,
+      request: { tabId: "browser:a", covered: true },
+    });
+    expect(snapshotPushesOf(hostWindow).at(-1)).toEqual({
+      tabId: "browser:a",
+      dataUrl: jpegDataUrl,
+    });
+    expect(view.visible).toBe(true);
+    expect(view.webContents.pendingCaptureResolvers).toHaveLength(1);
+    await settlePendingCaptures(view);
+    expect(view.visible).toBe(false);
     manager.destroyAll();
   });
 

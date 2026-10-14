@@ -217,6 +217,8 @@ class RecordingDesktopBrowserViewManager implements DesktopBrowserViewManager {
     this.setVisibleWithoutFocusCalls.push(args);
   }
 
+  setCovered(): void {}
+
   stop(args: TabCommandCall): void {
     this.stopCalls.push(args);
   }

@@ -160,6 +160,16 @@ export type BbDesktopBrowserSetVisibleRequest = z.infer<
   typeof bbDesktopBrowserSetVisibleRequestSchema
 >;
 
+export const bbDesktopBrowserSetCoveredRequestSchema = z
+  .object({
+    tabId: z.string().min(1),
+    covered: z.boolean(),
+  })
+  .strict();
+export type BbDesktopBrowserSetCoveredRequest = z.infer<
+  typeof bbDesktopBrowserSetCoveredRequestSchema
+>;
+
 export const bbDesktopBrowserTabRefSchema = z
   .object({
     tabId: z.string().min(1),
@@ -349,6 +359,7 @@ export interface BbDesktopBrowserApi {
   setBounds(request: BbDesktopBrowserSetBoundsRequest): void;
   setVisible(request: BbDesktopBrowserSetVisibleRequest): void;
   setVisibleWithoutFocus?(request: BbDesktopBrowserSetVisibleRequest): void;
+  setCovered?(request: BbDesktopBrowserSetCoveredRequest): void;
   onState(listener: BbDesktopBrowserStateHandler): BbDesktopBrowserUnsubscribe;
   onOpenTab(
     listener: BbDesktopBrowserOpenTabHandler,

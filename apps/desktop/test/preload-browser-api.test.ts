@@ -231,6 +231,7 @@ describe("desktop preload browser API", () => {
       "releaseControl",
       "reload",
       "setBounds",
+      "setCovered",
       "setVisible",
       "setVisibleWithoutFocus",
       "stop",

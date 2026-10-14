@@ -6,6 +6,7 @@ import {
   bbDesktopBrowserFindInPageRequestSchema,
   bbDesktopBrowserNavigateRequestSchema,
   bbDesktopBrowserSetBoundsRequestSchema,
+  bbDesktopBrowserSetCoveredRequestSchema,
   bbDesktopBrowserSetVisibleRequestSchema,
   bbDesktopBrowserStopFindInPageRequestSchema,
   bbDesktopBrowserTabRefSchema,
@@ -22,6 +23,7 @@ import {
   BB_DESKTOP_BROWSER_NAVIGATE_CHANNEL,
   BB_DESKTOP_BROWSER_RELOAD_CHANNEL,
   BB_DESKTOP_BROWSER_SET_BOUNDS_CHANNEL,
+  BB_DESKTOP_BROWSER_SET_COVERED_CHANNEL,
   BB_DESKTOP_BROWSER_SET_VISIBLE_CHANNEL,
   BB_DESKTOP_BROWSER_SET_VISIBLE_WITHOUT_FOCUS_CHANNEL,
   BB_DESKTOP_BROWSER_STOP_CHANNEL,
@@ -80,6 +82,11 @@ export function registerDesktopBrowserIpc(
     BB_DESKTOP_BROWSER_SET_VISIBLE_WITHOUT_FOCUS_CHANNEL,
     bbDesktopBrowserSetVisibleRequestSchema,
     (args) => manager.setVisibleWithoutFocus(args),
+  );
+  registerRequestCommand(
+    BB_DESKTOP_BROWSER_SET_COVERED_CHANNEL,
+    bbDesktopBrowserSetCoveredRequestSchema,
+    (args) => manager.setCovered(args),
   );
   registerRequestCommand(
     BB_DESKTOP_BROWSER_FIND_IN_PAGE_CHANNEL,

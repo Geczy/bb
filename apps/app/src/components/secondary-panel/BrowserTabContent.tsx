@@ -37,6 +37,7 @@ import {
 import { useBrowserHistory } from "@/lib/browser-history";
 import { BROWSER_VIEW_BOUNDS_SYNC_EVENT } from "@/lib/browser-view-bounds-sync";
 import { useIsBrowserDimmingModalOpen } from "@/hooks/useBrowserDimmingModal";
+import { usePortaledOverlayCoversElement } from "@/hooks/usePortaledOverlayCoversElement";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import {
@@ -455,9 +456,7 @@ export function BrowserTabContent({
   const [findMatches, setFindMatches] = useState<BrowserFindMatches | null>(
     null,
   );
-  const [resizeSnapshotUrl, setResizeSnapshotUrl] = useState<string | null>(
-    null,
-  );
+  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
 
   const onUpdateRef = useRef(onUpdate);
   const recordVisitRef = useRef(recordVisit);
@@ -482,6 +481,12 @@ export function BrowserTabContent({
   const pageLoadErrorText = state?.errorText ?? null;
   const hasPageLoadError = pageLoadErrorText !== null && hasPage;
   const isBrowserDimmingModalOpen = useIsBrowserDimmingModalOpen();
+  const isCoveredByOverlay = usePortaledOverlayCoversElement(
+    contentRef,
+    desktopBrowser !== null && hasPage,
+  );
+  const isBrowserViewCovered = isBrowserDimmingModalOpen || isCoveredByOverlay;
+  const supportsCoverPlaceholder = desktopBrowser?.setCovered !== undefined;
   const lastSentBoundsRef = useRef<BbDesktopBrowserViewBounds | null>(null);
 
   const readBounds = useCallback(() => {
@@ -589,7 +594,7 @@ export function BrowserTabContent({
       if (snapshot.tabId !== tabId) {
         return;
       }
-      setResizeSnapshotUrl(snapshot.dataUrl);
+      setSnapshotUrl(snapshot.dataUrl);
     });
 
     const unsubscribeFindResult = desktopBrowser.onFindResult?.((result) => {
@@ -660,7 +665,19 @@ export function BrowserTabContent({
     hasPage &&
     !hasPageLoadError &&
     isBrowserViewAttached &&
-    !isBrowserDimmingModalOpen;
+    (supportsCoverPlaceholder || !isBrowserViewCovered);
+  useLayoutEffect(() => {
+    if (!supportsCoverPlaceholder || !isBrowserViewAttached) {
+      return;
+    }
+    desktopBrowser?.setCovered?.({ tabId, covered: isBrowserViewCovered });
+  }, [
+    desktopBrowser,
+    isBrowserViewAttached,
+    isBrowserViewCovered,
+    supportsCoverPlaceholder,
+    tabId,
+  ]);
   useLayoutEffect(() => {
     if (visibilityCoordinator === null) {
       return;
@@ -682,7 +699,7 @@ export function BrowserTabContent({
       !canShowNativeBrowserView ||
       !canHandleBrowserCommands ||
       hasPageLoadError ||
-      isBrowserDimmingModalOpen
+      isBrowserViewCovered
     ) {
       setIsPageFocusPending(false);
       return;
@@ -695,7 +712,7 @@ export function BrowserTabContent({
     canShowNativeBrowserView,
     canHandleBrowserCommands,
     hasPageLoadError,
-    isBrowserDimmingModalOpen,
+    isBrowserViewCovered,
     isViewVisible,
     desktopBrowser,
     tabId,
@@ -958,16 +975,22 @@ export function BrowserTabContent({
             onRetry={handleReloadOrStop}
             url={currentUrl}
           />
-        ) : hasPage && !isBrowserDimmingModalOpen ? null : (
+        ) : hasPage ? null : (
           <BrowserNewTabScreen
             onNavigateInput={navigateToInput}
             recent={recent}
             onClearRecent={clearRecent}
           />
         )}
-        {hasPage && resizeSnapshotUrl !== null ? (
+        {hasPage && !hasPageLoadError && isBrowserViewCovered ? (
+          <div
+            data-testid="browser-cover-placeholder"
+            className="absolute inset-0 bg-background"
+          />
+        ) : null}
+        {hasPage && snapshotUrl !== null ? (
           <img
-            src={resizeSnapshotUrl}
+            src={snapshotUrl}
             alt=""
             draggable={false}
             className="absolute inset-0 size-full"

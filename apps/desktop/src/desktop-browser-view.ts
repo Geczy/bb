@@ -26,6 +26,7 @@ import {
   type BbDesktopBrowserOpenTabRequest,
   type BbDesktopBrowserScopedOpenTabRequest,
   type BbDesktopBrowserSetBoundsRequest,
+  type BbDesktopBrowserSetCoveredRequest,
   type BbDesktopBrowserSetVisibleRequest,
   type BbDesktopBrowserSnapshot,
   type BbDesktopBrowserState,
@@ -71,6 +72,14 @@ const POPUP_MAX_HEIGHT = 900;
 
 const RESIZE_SNAPSHOT_HIDE_CAP_MS = 80;
 const RESIZE_SNAPSHOT_JPEG_QUALITY = 70;
+const COVER_SNAPSHOT_HIDE_CAP_MS = 80;
+const COVER_SNAPSHOT_CACHED_HIDE_DELAY_MS = 32;
+const COVER_SNAPSHOT_WARM_DELAY_MS = 400;
+const COVER_SNAPSHOT_IGNORED_INPUT_TYPES = new Set([
+  "mouseMove",
+  "mouseEnter",
+  "mouseLeave",
+]);
 const RENDERER_RECOVERY_DELAY_MS = 250;
 const RENDERER_RECOVERY_MAX_ATTEMPTS = 2;
 
@@ -167,6 +176,12 @@ interface NativeTabRef extends NativeTabScope {
   generation: string;
 }
 
+interface CoverSnapshot {
+  dataUrl: string;
+  height: number;
+  width: number;
+}
+
 interface BrowserViewEntry {
   webContents: WebContents;
   view: WebContentsView;
@@ -182,6 +197,12 @@ interface BrowserViewEntry {
   rendererRecoveryTimer: ReturnType<typeof setTimeout> | null;
   suppressNextFocusNotification: boolean;
   visible: boolean;
+  covered: boolean;
+  coverHidden: boolean;
+  coverSnapshot: CoverSnapshot | null;
+  coverSnapshotStale: boolean;
+  coverSnapshotsEnabled: boolean;
+  coverSnapshotWarmTimer: ReturnType<typeof setTimeout> | null;
   activeFindRequestId: number | null;
 }
 
@@ -305,6 +326,9 @@ export interface DesktopBrowserViewManager {
   ): void;
   setVisibleWithoutFocus(
     args: HostScopedRequestArgs<BbDesktopBrowserSetVisibleRequest>,
+  ): void;
+  setCovered(
+    args: HostScopedRequestArgs<BbDesktopBrowserSetCoveredRequest>,
   ): void;
   findInPage(
     args: HostScopedRequestArgs<BbDesktopBrowserFindInPageRequest>,
@@ -451,10 +475,18 @@ export function createDesktopBrowserViewManager(
     if (entry.webContents.isDestroyed()) {
       return;
     }
-    entry.view.setVisible(
+    entry.view.setVisible(isEntryShown(entry, hostWindow));
+  }
+
+  function isEntryShown(
+    entry: BrowserViewEntry,
+    hostWindow: DesktopBrowserHostWindow,
+  ): boolean {
+    return (
       entry.visible &&
-        entry.rendererRecoveryState === "healthy" &&
-        !isHostResizing(hostWindow),
+      entry.rendererRecoveryState === "healthy" &&
+      !isHostResizing(hostWindow) &&
+      !entry.coverHidden
     );
   }
 
@@ -534,6 +566,150 @@ export function createDesktopBrowserViewManager(
         clearTimeout(hideCap);
         applyEntryVisibility(entry, hostWindow);
       });
+  }
+
+  function isCoverSnapshotFresh(entry: BrowserViewEntry): boolean {
+    const snapshot = entry.coverSnapshot;
+    return (
+      snapshot !== null &&
+      !entry.coverSnapshotStale &&
+      snapshot.width === entry.desiredBounds.width &&
+      snapshot.height === entry.desiredBounds.height
+    );
+  }
+
+  function captureCoverSnapshot(
+    entry: BrowserViewEntry,
+  ): Promise<CoverSnapshot | null> {
+    const { width, height } = entry.desiredBounds;
+    entry.coverSnapshotStale = false;
+    return entry.webContents
+      .capturePage()
+      .then((image) => {
+        if (image.isEmpty()) {
+          entry.coverSnapshotStale = true;
+          return null;
+        }
+        const snapshot = {
+          dataUrl: `data:image/jpeg;base64,${image
+            .toJPEG(RESIZE_SNAPSHOT_JPEG_QUALITY)
+            .toString("base64")}`,
+          width,
+          height,
+        };
+        entry.coverSnapshot = snapshot;
+        return snapshot;
+      })
+      .catch(() => {
+        entry.coverSnapshotStale = true;
+        return null;
+      });
+  }
+
+  function clearCoverSnapshotWarmTimer(entry: BrowserViewEntry): void {
+    if (entry.coverSnapshotWarmTimer !== null) {
+      clearTimeout(entry.coverSnapshotWarmTimer);
+      entry.coverSnapshotWarmTimer = null;
+    }
+  }
+
+  function scheduleCoverSnapshotWarm(
+    hostWindow: DesktopBrowserHostWindow,
+    entry: BrowserViewEntry,
+  ): void {
+    clearCoverSnapshotWarmTimer(entry);
+    if (!entry.coverSnapshotsEnabled) {
+      return;
+    }
+    entry.coverSnapshotWarmTimer = setTimeout(() => {
+      entry.coverSnapshotWarmTimer = null;
+      if (
+        entry.webContents.isDestroyed() ||
+        entry.covered ||
+        !isEntryShown(entry, hostWindow) ||
+        isCoverSnapshotFresh(entry)
+      ) {
+        return;
+      }
+      void captureCoverSnapshot(entry);
+    }, COVER_SNAPSHOT_WARM_DELAY_MS);
+  }
+
+  function markCoverSnapshotStale(
+    hostWindow: DesktopBrowserHostWindow,
+    entry: BrowserViewEntry,
+  ): void {
+    entry.coverSnapshotStale = true;
+    scheduleCoverSnapshotWarm(hostWindow, entry);
+  }
+
+  function startCoverSnapshot(
+    hostWindow: DesktopBrowserHostWindow,
+    tabId: string,
+    entry: BrowserViewEntry,
+  ): void {
+    const hide = () => {
+      if (!entry.covered || entry.coverHidden) {
+        return;
+      }
+      entry.coverHidden = true;
+      applyEntryVisibility(entry, hostWindow);
+    };
+    clearCoverSnapshotWarmTimer(entry);
+    const cached = entry.coverSnapshot;
+    if (cached !== null) {
+      send(hostWindow, BB_DESKTOP_BROWSER_SNAPSHOT_CHANNEL, {
+        tabId,
+        dataUrl: cached.dataUrl,
+      });
+    }
+    if (isCoverSnapshotFresh(entry)) {
+      setTimeout(hide, COVER_SNAPSHOT_CACHED_HIDE_DELAY_MS);
+      return;
+    }
+    const hideCap = setTimeout(hide, COVER_SNAPSHOT_HIDE_CAP_MS);
+    void captureCoverSnapshot(entry).then((snapshot) => {
+      clearTimeout(hideCap);
+      if (snapshot !== null && entry.covered) {
+        send(hostWindow, BB_DESKTOP_BROWSER_SNAPSHOT_CHANNEL, {
+          tabId,
+          dataUrl: snapshot.dataUrl,
+        });
+      }
+      hide();
+    });
+  }
+
+  function setEntryCovered({
+    hostWindow,
+    request,
+  }: HostScopedRequestArgs<BbDesktopBrowserSetCoveredRequest>): void {
+    withEntry({ hostWindow, tabId: request.tabId }, (entry) => {
+      if (!entry.coverSnapshotsEnabled) {
+        entry.coverSnapshotsEnabled = true;
+        scheduleCoverSnapshotWarm(hostWindow, entry);
+      }
+      if (entry.covered === request.covered) {
+        return;
+      }
+      entry.covered = request.covered;
+      if (!request.covered) {
+        entry.coverHidden = false;
+        applyEntryVisibility(entry, hostWindow);
+        markCoverSnapshotStale(hostWindow, entry);
+        send(hostWindow, BB_DESKTOP_BROWSER_SNAPSHOT_CHANNEL, {
+          tabId: request.tabId,
+          dataUrl: null,
+        });
+        return;
+      }
+      if (!isEntryShown(entry, hostWindow)) {
+        entry.coverHidden = true;
+        applyEntryVisibility(entry, hostWindow);
+        return;
+      }
+      startCoverSnapshot(hostWindow, request.tabId, entry);
+    });
   }
 
   function ensureHardenedSession(): Session {
@@ -824,13 +1000,22 @@ export function createDesktopBrowserViewManager(
       refresh();
     });
     webContents.on("did-start-loading", refresh);
-    webContents.on("did-stop-loading", refresh);
+    webContents.on("did-stop-loading", () => {
+      refresh();
+      markCoverSnapshotStale(hostWindow, entry);
+    });
+    webContents.on("input-event", (_event, input) => {
+      if (!COVER_SNAPSHOT_IGNORED_INPUT_TYPES.has(input.type)) {
+        markCoverSnapshotStale(hostWindow, entry);
+      }
+    });
     webContents.on("did-navigate", () => {
       entry.lastErrorText = null;
       refresh();
     });
     webContents.on("did-navigate-in-page", () => {
       refresh();
+      markCoverSnapshotStale(hostWindow, entry);
     });
     webContents.on("did-start-navigation", () => {
       entry.lastErrorText = null;
@@ -875,6 +1060,12 @@ export function createDesktopBrowserViewManager(
       rendererRecoveryState: "healthy",
       rendererRecoveryTimer: null,
       suppressNextFocusNotification: false,
+      covered: false,
+      coverHidden: false,
+      coverSnapshot: null,
+      coverSnapshotStale: true,
+      coverSnapshotsEnabled: false,
+      coverSnapshotWarmTimer: null,
       visible: false,
       activeFindRequestId: null,
     };
@@ -901,6 +1092,7 @@ export function createDesktopBrowserViewManager(
   function disposeEntry(key: string, entry: BrowserViewEntry): void {
     entries.delete(key);
     clearEntryRendererRecoveryTimer(entry);
+    clearCoverSnapshotWarmTimer(entry);
     for (const popupWindow of [...entry.popupWindows]) {
       if (!popupWindow.isDestroyed()) popupWindow.destroy();
     }
@@ -1030,6 +1222,9 @@ export function createDesktopBrowserViewManager(
       entry.visible = request.visible;
       applyEntryVisibility(entry, hostWindow);
       scheduleEntryRendererRecovery(entry, hostWindow, request.tabId);
+      if (request.visible && !wasVisible) {
+        scheduleCoverSnapshotWarm(hostWindow, entry);
+      }
       if (
         focusOnShow &&
         request.visible &&
@@ -1171,6 +1366,9 @@ export function createDesktopBrowserViewManager(
       setEntryDesiredBounds({ bounds: request.bounds, entry, hostWindow });
       entry.visible = request.visible;
       applyEntryVisibility(entry, hostWindow);
+      if (request.visible && !wasVisible) {
+        scheduleCoverSnapshotWarm(hostWindow, entry);
+      }
       if (
         request.visible &&
         !wasVisible &&
@@ -1281,6 +1479,9 @@ export function createDesktopBrowserViewManager(
     setVisibleWithoutFocus({ hostWindow, request }) {
       setEntryVisibility({ hostWindow, request }, false);
     },
+    setCovered(args) {
+      setEntryCovered(args);
+    },
     beginWindowResize(hostWindow) {
       if (isHostResizing(hostWindow)) {
         return;
@@ -1291,7 +1492,7 @@ export function createDesktopBrowserViewManager(
         if (!key.startsWith(prefix) || entry.webContents.isDestroyed()) {
           continue;
         }
-        if (entry.visible) {
+        if (entry.visible && !entry.covered) {
           startResizeSnapshot(hostWindow, key.slice(prefix.length), entry);
         }
       }
@@ -1310,6 +1511,9 @@ export function createDesktopBrowserViewManager(
           applyEntryDesiredBounds(entry, hostWindow);
         }
         applyEntryVisibility(entry, hostWindow);
+        if (entry.covered) {
+          continue;
+        }
         send(hostWindow, BB_DESKTOP_BROWSER_SNAPSHOT_CHANNEL, {
           tabId: key.slice(prefix.length),
           dataUrl: null,
