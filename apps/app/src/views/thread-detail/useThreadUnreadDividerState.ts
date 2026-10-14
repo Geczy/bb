@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { useMutationState, type Mutation } from "@tanstack/react-query";
 import type { ThreadTimelineUnreadDividerPlacement } from "@/components/thread/timeline";
+import {
+  isDocumentVisible,
+  subscribeToDocumentVisibility,
+} from "@/lib/document-visibility";
 
 interface ThreadUnreadDividerThreadState {
   id: string;
@@ -11,6 +16,7 @@ interface ThreadUnreadDividerSnapshot {
   attentionAt: number;
   autoScroll: boolean;
   placement: ThreadTimelineUnreadDividerPlacement | null;
+  sentThrough: number;
   threadId: string;
 }
 
@@ -38,6 +44,35 @@ const NO_UNREAD_DIVIDER_STATE: ThreadUnreadDividerState = {
   autoScroll: false,
   placement: null,
 };
+
+const THREAD_SEND_LIFECYCLE_OPERATIONS = new Set([
+  "send_message",
+  "queue_message",
+]);
+
+function isSendToThread(mutation: Mutation, threadId: string): boolean {
+  const variables: unknown = mutation.state.variables;
+  return (
+    THREAD_SEND_LIFECYCLE_OPERATIONS.has(
+      String(mutation.meta?.lifecycleOperation),
+    ) &&
+    typeof variables === "object" &&
+    variables !== null &&
+    "id" in variables &&
+    variables.id === threadId
+  );
+}
+
+function useLatestThreadSendAt(threadId: string | undefined): number {
+  const submittedAts = useMutationState({
+    filters: {
+      predicate: (mutation) =>
+        threadId !== undefined && isSendToThread(mutation, threadId),
+    },
+    select: (mutation) => mutation.state.submittedAt,
+  });
+  return submittedAts.reduce((latest, at) => Math.max(latest, at), 0);
+}
 
 function shouldTrackThreadUnreadDivider({
   routeThreadId,
@@ -80,7 +115,20 @@ export function useThreadUnreadDividerState({
     null,
   );
   const trackedThreadIdRef = useRef<string | null>(null);
+  const hiddenSinceSnapshotRef = useRef(false);
+  const snapshotAttentionAtRef = useRef<number | null>(null);
   const threadId = thread?.id;
+  const latestSendAt = useLatestThreadSendAt(threadId);
+
+  useEffect(
+    () =>
+      subscribeToDocumentVisibility(() => {
+        if (!isDocumentVisible()) {
+          hiddenSinceSnapshotRef.current = true;
+        }
+      }),
+    [],
+  );
   const threadLastReadAt = thread?.lastReadAt;
   const threadLatestAttentionAt = thread?.latestAttentionAt;
 
@@ -101,6 +149,15 @@ export function useThreadUnreadDividerState({
 
     const isFirstTrackedThreadState = trackedThreadIdRef.current !== threadId;
     trackedThreadIdRef.current = threadId;
+    const watchedSinceSnapshot =
+      !hiddenSinceSnapshotRef.current && isDocumentVisible();
+    if (
+      isFirstTrackedThreadState ||
+      snapshotAttentionAtRef.current !== threadLatestAttentionAt
+    ) {
+      snapshotAttentionAtRef.current = threadLatestAttentionAt;
+      hiddenSinceSnapshotRef.current = !isDocumentVisible();
+    }
     const threadState: ThreadUnreadDividerThreadState = {
       id: threadId,
       lastReadAt: threadLastReadAt,
@@ -108,6 +165,18 @@ export function useThreadUnreadDividerState({
     };
 
     setSnapshot((currentSnapshot) => {
+      if (
+        currentSnapshot?.threadId === threadId &&
+        latestSendAt > currentSnapshot.sentThrough
+      ) {
+        return {
+          attentionAt: threadLatestAttentionAt,
+          autoScroll: false,
+          placement: null,
+          sentThrough: latestSendAt,
+          threadId,
+        };
+      }
       if (
         currentSnapshot?.threadId === threadId &&
         currentSnapshot.attentionAt === threadLatestAttentionAt
@@ -119,10 +188,23 @@ export function useThreadUnreadDividerState({
             attentionAt: threadLatestAttentionAt,
             autoScroll,
             placement: { kind: "before-first" },
+            sentThrough: currentSnapshot.sentThrough,
             threadId,
           };
         }
         return currentSnapshot;
+      }
+
+      if (
+        !isFirstTrackedThreadState &&
+        watchedSinceSnapshot &&
+        currentSnapshot?.threadId === threadId
+      ) {
+        return {
+          ...currentSnapshot,
+          attentionAt: threadLatestAttentionAt,
+          autoScroll: false,
+        };
       }
 
       const placement = buildUnreadDividerPlacement(threadState);
@@ -130,10 +212,17 @@ export function useThreadUnreadDividerState({
         attentionAt: threadLatestAttentionAt,
         autoScroll: isFirstTrackedThreadState && placement !== null,
         placement,
+        sentThrough: latestSendAt,
         threadId,
       };
     });
-  }, [routeThreadId, threadId, threadLastReadAt, threadLatestAttentionAt]);
+  }, [
+    latestSendAt,
+    routeThreadId,
+    threadId,
+    threadLastReadAt,
+    threadLatestAttentionAt,
+  ]);
 
   if (
     !shouldTrackThreadUnreadDivider({
@@ -142,6 +231,7 @@ export function useThreadUnreadDividerState({
     }) ||
     snapshot === null ||
     snapshot.threadId !== threadId ||
+    latestSendAt > snapshot.sentThrough ||
     (snapshot.attentionAt !== threadLatestAttentionAt &&
       !isThreadUnread({
         lastReadAt: threadLastReadAt,

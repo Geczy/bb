@@ -2472,7 +2472,10 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
                         value={windowingMeasurements}
                       >
                         <AutoHeightContainer
-                          snapRevision={heightSnapRevision}
+                          snapRevision={joinSignatureParts([
+                            heightSnapRevision,
+                            scopeActive,
+                          ])}
                           animateGrowth={!scopeActive}
                         >
                           <TimelineRowsList

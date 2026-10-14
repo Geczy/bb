@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useStore } from "jotai";
 import { cn } from "@bb/shared-ui/lib/utils";
@@ -21,6 +21,7 @@ import {
   type ScrollAnchor,
 } from "@/lib/thread-timeline-scroll-anchor.js";
 import { layoutAnimationInFlightCountAtom } from "./layoutAnimationAtoms.js";
+import { useSnapHeightGrowth } from "./height-transition.js";
 
 export interface BottomAnchorContextValue {
   getScrollElement: () => HTMLElement | null;
@@ -72,6 +73,11 @@ const SCROLL_ANCHOR_CAPTURE_THROTTLE_MS = 100;
 const COARSE_SCROLL_ANCHOR_CAPTURE_THROTTLE_MS = 250;
 const SCROLL_ANCHOR_RESTORE_MAX_ATTEMPTS = 8;
 const CONTENT_POSITION_HOLD_MS = 250;
+const BOTTOM_FOLLOW_SPRING_RATE = 32;
+const BOTTOM_FOLLOW_MAX_FRAME_SECONDS = 0.05;
+const BOTTOM_FOLLOW_SETTLE_PX = 0.5;
+const BOTTOM_FOLLOW_SETTLE_VELOCITY = 20;
+const BOTTOM_FOLLOW_SENTINEL_STYLE: CSSProperties = { overflowAnchor: "none" };
 const TIMELINE_ROW_ID_SELECTOR = "[data-timeline-row-id]";
 const TOP_LEVEL_TIMELINE_ROW_LIST_SELECTOR =
   '[data-timeline-row-list="top-level"]';
@@ -108,6 +114,47 @@ function getMaxScrollOffset(element: HTMLElement) {
 
 function isScrolledNearBottom(maxScrollOffset: number, scrollTop: number) {
   return maxScrollOffset - scrollTop <= BOTTOM_ANCHOR_THRESHOLD_PX;
+}
+
+interface SpringState {
+  position: number;
+  velocity: number;
+}
+
+interface BottomFollow extends SpringState {
+  frame: number;
+  lastTime: number;
+  written: number;
+}
+
+function isWithinBottomFollowDistance(
+  scrollArea: HTMLElement,
+  maxScrollOffset: number,
+): boolean {
+  const distance = maxScrollOffset - scrollArea.scrollTop;
+  return (
+    distance > BOTTOM_ANCHOR_THRESHOLD_PX && distance <= scrollArea.clientHeight
+  );
+}
+
+function advanceSpring(
+  spring: SpringState,
+  target: number,
+  seconds: number,
+): void {
+  const rate = BOTTOM_FOLLOW_SPRING_RATE;
+  const offset = spring.position - target;
+  const carried = spring.velocity + rate * offset;
+  const decay = Math.exp(-rate * seconds);
+  spring.position = target + (offset + carried * seconds) * decay;
+  spring.velocity = (spring.velocity - rate * carried * seconds) * decay;
+}
+
+function isSpringSettled(spring: SpringState, target: number): boolean {
+  return (
+    Math.abs(target - spring.position) <= BOTTOM_FOLLOW_SETTLE_PX &&
+    Math.abs(spring.velocity) <= BOTTOM_FOLLOW_SETTLE_VELOCITY
+  );
 }
 
 function getScrollOffsetToRevealElement({
@@ -231,6 +278,7 @@ export function BottomAnchoredScrollBody({
 }: BottomAnchoredScrollBodyProps) {
   const store = useStore();
   const isPointerCoarse = usePointerCoarse();
+  const snapBottomFollow = useSnapHeightGrowth();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const scrollContentRef = useRef<HTMLDivElement>(null);
   const shouldStickToBottomRef = useRef(true);
@@ -239,6 +287,8 @@ export function BottomAnchoredScrollBody({
   const userScrollInputPendingRef = useRef(false);
   const pointerScrollIntentRef = useRef(false);
   const restoreFrameRef = useRef<number | null>(null);
+  const bottomFollowRef = useRef<BottomFollow | null>(null);
+
   const restoreFramesRemainingRef = useRef(0);
   const restoreTailLiveReadRef = useRef(false);
   const pendingPrependAnchorRef = useRef<{
@@ -295,14 +345,22 @@ export function BottomAnchoredScrollBody({
     pendingScrollRestoreRef.current = null;
   }, []);
 
+  const cancelBottomFollow = useCallback(() => {
+    const follow = bottomFollowRef.current;
+    if (follow === null) return;
+    window.cancelAnimationFrame(follow.frame);
+    bottomFollowRef.current = null;
+  }, []);
+
   const cancelQueuedRestore = useCallback(() => {
     scrollToTopInProgressRef.current = false;
+    cancelBottomFollow();
     if (restoreFrameRef.current === null) return;
     window.cancelAnimationFrame(restoreFrameRef.current);
     restoreFrameRef.current = null;
     restoreFramesRemainingRef.current = 0;
     restoreTailLiveReadRef.current = false;
-  }, []);
+  }, [cancelBottomFollow]);
 
   const restoreBottomOnce = useCallback(() => {
     const scrollArea = scrollAreaRef.current;
@@ -311,9 +369,10 @@ export function BottomAnchoredScrollBody({
     if (isScrolledNearBottom(maxScrollOffset, scrollArea.scrollTop)) {
       return false;
     }
+    cancelBottomFollow();
     scrollArea.scrollTop = maxScrollOffset;
     return true;
-  }, [refreshMaxScrollOffset]);
+  }, [cancelBottomFollow, refreshMaxScrollOffset]);
 
   const restoreBottomFromCacheOnce = useCallback(() => {
     const scrollArea = scrollAreaRef.current;
@@ -322,9 +381,60 @@ export function BottomAnchoredScrollBody({
     if (isScrolledNearBottom(maxScrollOffset, scrollArea.scrollTop)) {
       return false;
     }
+    cancelBottomFollow();
     scrollArea.scrollTop = maxScrollOffset;
     return true;
-  }, [readMaxScrollOffset]);
+  }, [cancelBottomFollow, readMaxScrollOffset]);
+
+  const followBottom = useCallback(
+    (scrollArea: HTMLElement) => {
+      if (bottomFollowRef.current !== null) return;
+      if (restoreFrameRef.current !== null) {
+        window.cancelAnimationFrame(restoreFrameRef.current);
+        restoreFrameRef.current = null;
+        restoreFramesRemainingRef.current = 0;
+      }
+      const step = (now: number) => {
+        const follow = bottomFollowRef.current;
+        if (follow === null) return;
+        if (!shouldStickToBottomRef.current) {
+          bottomFollowRef.current = null;
+          return;
+        }
+        const externalShift = scrollArea.scrollTop - follow.written;
+        if (Math.abs(externalShift) >= 1) {
+          follow.position += externalShift;
+        }
+        const seconds = Math.min(
+          BOTTOM_FOLLOW_MAX_FRAME_SECONDS,
+          Math.max(0, (now - follow.lastTime) / 1000),
+        );
+        follow.lastTime = now;
+        const target = refreshMaxScrollOffset(scrollArea);
+        advanceSpring(follow, target, seconds);
+        if (follow.position > target) {
+          follow.position = target;
+          follow.velocity = 0;
+        }
+        if (isSpringSettled(follow, target)) {
+          scrollArea.scrollTop = target;
+          bottomFollowRef.current = null;
+          return;
+        }
+        scrollArea.scrollTop = follow.position;
+        follow.written = scrollArea.scrollTop;
+        follow.frame = window.requestAnimationFrame(step);
+      };
+      bottomFollowRef.current = {
+        frame: window.requestAnimationFrame(step),
+        lastTime: window.performance.now(),
+        position: scrollArea.scrollTop,
+        velocity: 0,
+        written: scrollArea.scrollTop,
+      };
+    },
+    [refreshMaxScrollOffset],
+  );
 
   const queueBottomRestore = useCallback(() => {
     if (!shouldStickToBottomRef.current) return;
@@ -822,9 +932,12 @@ export function BottomAnchoredScrollBody({
       const scrollArea = scrollAreaRef.current;
       scrollAnchorRowsRef.current = null;
       let shrankOntoBottomWhileDetached = false;
+      let followedGeometryBefore = false;
+
       if (scrollArea) {
         const previousMaxScrollOffset = maxScrollOffsetRef.current;
         const cacheWasAuthoritative = resizeObserverHasDeliveredRef.current;
+        followedGeometryBefore = cacheWasAuthoritative;
         const observedGeometry = observedScrollGeometryRef.current;
         for (const entry of entries) {
           if (entry.target === scrollArea) {
@@ -862,14 +975,27 @@ export function BottomAnchoredScrollBody({
         attachToBottom();
         writeScrollAnchor(scrollArea);
       }
+      if (
+        scrollArea &&
+        followedGeometryBefore &&
+        !snapBottomFollow &&
+        shouldStickToBottomRef.current &&
+        (bottomFollowRef.current !== null ||
+          isWithinBottomFollowDistance(scrollArea, maxScrollOffsetRef.current))
+      ) {
+        followBottom(scrollArea);
+        return;
+      }
       queueBottomRestore();
     },
     [
       advancePendingScrollRestore,
       attachToBottom,
+      followBottom,
       queueBottomRestore,
       refreshMaxScrollOffset,
       settleContentPositionHold,
+      snapBottomFollow,
       writeScrollAnchor,
     ],
   );
@@ -1042,7 +1168,14 @@ export function BottomAnchoredScrollBody({
               >
                 {children}
               </div>
-              <div className="scroll-bottom-anchor" aria-hidden />
+              <div
+                className="scroll-bottom-anchor"
+                style={
+                  snapBottomFollow ? undefined : BOTTOM_FOLLOW_SENTINEL_STYLE
+                }
+                aria-hidden
+              />
+
               {footer ? (
                 <div
                   data-scroll-footer=""

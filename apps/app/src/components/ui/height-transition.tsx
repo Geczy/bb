@@ -155,11 +155,17 @@ export function HeightTransition({ visible, children }: HeightTransitionProps) {
     const wrapper = wrapperRef.current;
     const inner = innerRef.current;
     if (!wrapper || !inner) return;
-    wrapper.style.height = visible ? `${inner.offsetHeight}px` : "0px";
-    if (typeof ResizeObserver === "undefined") return;
+    const snapState: SnapState = { savedDuration: null, restoreFrame: null };
+    if (visible) {
+      applyHeight(wrapper, `${inner.offsetHeight}px`, true, snapState);
+    } else {
+      wrapper.style.height = "0px";
+    }
+    if (typeof ResizeObserver === "undefined") {
+      return () => cleanupSnapState(wrapper, snapState);
+    }
     let lastWidth: number | null = null;
     let pendingVisibilitySnap = false;
-    const snapState: SnapState = { savedDuration: null, restoreFrame: null };
     const unobserveInner = observeSharedResize(inner, {
       read: (entry) => {
         const width = entry?.contentRect?.width;
@@ -228,7 +234,7 @@ interface AutoHeightContainerProps {
 const AUTO_HEIGHT_INITIAL_SETTLE_MS = 250;
 const AUTO_HEIGHT_WIDTH_RESIZE_SETTLE_MS = 120;
 
-function useSnapHeightGrowth(): boolean {
+export function useSnapHeightGrowth(): boolean {
   const isPointerCoarse = usePointerCoarse();
   const prefersReducedMotion = usePrefersReducedMotion();
   return isPointerCoarse || prefersReducedMotion || !supportsScrollAnchoring();

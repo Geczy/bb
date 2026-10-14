@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
+import { isRunningThreadRuntimeDisplayStatus } from "@bb/client-core";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import { Button } from "@bb/shared-ui/button";
 import { ConversationTimeline } from "@/components/ui/conversation.js";
@@ -136,6 +137,54 @@ function useTimelineRowsWithPendingStop({
   }, [rows, isStopping, stoppingAnchorAt, threadId]);
 }
 
+interface LiveTurnPresentation {
+  isStopping: boolean;
+  showOngoingIndicator: boolean;
+  stoppingAnchorAt: number;
+  threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
+}
+
+interface HeldLiveTurnPresentation extends LiveTurnPresentation {
+  threadId: string;
+}
+
+interface UseLiveTurnPresentationArgs extends LiveTurnPresentation {
+  isCatchingUpTimeline: boolean;
+  threadId: string;
+}
+
+function useLiveTurnPresentationUntilTimelineCatchesUp({
+  isCatchingUpTimeline,
+  threadId,
+  ...live
+}: UseLiveTurnPresentationArgs): LiveTurnPresentation {
+  const [held, setHeld] = useState<HeldLiveTurnPresentation | null>(null);
+  if (isRunningThreadRuntimeDisplayStatus(live.threadRuntimeDisplayStatus)) {
+    if (
+      held?.threadId !== threadId ||
+      held.isStopping !== live.isStopping ||
+      held.showOngoingIndicator !== live.showOngoingIndicator ||
+      held.stoppingAnchorAt !== live.stoppingAnchorAt ||
+      held.threadRuntimeDisplayStatus !== live.threadRuntimeDisplayStatus
+    ) {
+      setHeld({ ...live, threadId });
+    }
+    return live;
+  }
+  if (held?.threadId === threadId && isCatchingUpTimeline) {
+    return {
+      isStopping: held.isStopping,
+      showOngoingIndicator: held.showOngoingIndicator,
+      stoppingAnchorAt: held.stoppingAnchorAt,
+      threadRuntimeDisplayStatus: held.threadRuntimeDisplayStatus,
+    };
+  }
+  if (held !== null) {
+    setHeld(null);
+  }
+  return live;
+}
+
 export function ThreadTimelineSurface({
   activeThinking,
   canSpawnChild,
@@ -162,19 +211,32 @@ export function ThreadTimelineSurface({
   onTitleAction,
   projectId,
   resolveMentionLink,
-  showOngoingIndicator,
+  showOngoingIndicator: runtimeShowsOngoingIndicator,
   ongoingIndicatorLabel,
-  isStopping = false,
-  stoppingAnchorAt = 0,
+  isStopping: runtimeIsStopping = false,
+  stoppingAnchorAt: runtimeStoppingAnchorAt = 0,
   timelineErrorClassName = "mt-6 text-destructive",
   timelineRows,
   timelineNavigationTargetRowId,
   threadId,
-  threadRuntimeDisplayStatus,
+  threadRuntimeDisplayStatus: runtimeDisplayStatus,
   unreadDividerAutoScroll,
   unreadDividerPlacement,
   workspaceRootPath,
 }: ThreadTimelineSurfaceProps) {
+  const {
+    isStopping,
+    showOngoingIndicator,
+    stoppingAnchorAt,
+    threadRuntimeDisplayStatus,
+  } = useLiveTurnPresentationUntilTimelineCatchesUp({
+    isCatchingUpTimeline,
+    isStopping: runtimeIsStopping,
+    showOngoingIndicator: runtimeShowsOngoingIndicator,
+    stoppingAnchorAt: runtimeStoppingAnchorAt,
+    threadId,
+    threadRuntimeDisplayStatus: runtimeDisplayStatus,
+  });
   const showCatchUpIndicator =
     isCatchingUpTimeline &&
     !isThreadTimelinePending &&
@@ -373,4 +435,3 @@ function DelayedThreadLoadingIndicator() {
 
   return <ThreadTimelineLoadingSkeleton />;
 }
-

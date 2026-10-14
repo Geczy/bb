@@ -25,21 +25,22 @@ function classTokens(className: string | undefined): string[] {
 }
 
 describe("BottomAnchoredScrollBody scroll-anchor exclusion", () => {
-  it("excludes only the content wrapper and keeps the sentinel outside it", () => {
+  it("excludes the content wrapper and the gliding sentinel from scroll anchoring", () => {
     vi.stubGlobal("CSS", {
       supports: (property: string, value: string) =>
         property === "overflow-anchor" && value === "none",
     });
     const markup = renderBody();
     const structure = markup.match(
-      /<div class="([^"]*)"[^>]*><div data-timeline-row-id="row-a">row-a<\/div><\/div><div class="scroll-bottom-anchor" aria-hidden="true"><\/div><div data-scroll-footer="" class="([^"]*)"><div>Footer<\/div><\/div>/,
+      /<div class="([^"]*)"[^>]*><div data-timeline-row-id="row-a">row-a<\/div><\/div><div class="scroll-bottom-anchor" style="([^"]*)" aria-hidden="true"><\/div><div data-scroll-footer="" class="([^"]*)"><div>Footer<\/div><\/div>/,
     );
 
     expect(classTokens(structure?.[1])).toContain(
       "scroll-bottom-anchor-content",
     );
     expect(markup.split("scroll-bottom-anchor-content")).toHaveLength(2);
-    expect(classTokens(structure?.[2])).toContain("[overflow-anchor:none]");
+    expect(structure?.[2]).toBe("overflow-anchor:none");
+    expect(classTokens(structure?.[3])).toContain("[overflow-anchor:none]");
   });
 
   it("never applies the exclusion class where scroll anchoring is unsupported", () => {
@@ -47,7 +48,9 @@ describe("BottomAnchoredScrollBody scroll-anchor exclusion", () => {
     const markup = renderBody();
 
     expect(markup).not.toContain("scroll-bottom-anchor-content");
-    expect(markup).toContain('class="scroll-bottom-anchor"');
+    expect(markup).toContain(
+      '<div class="scroll-bottom-anchor" aria-hidden="true"></div>',
+    );
   });
 });
 

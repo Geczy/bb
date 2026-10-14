@@ -72,6 +72,33 @@ describe("HeightTransition", () => {
     expect(wrapper?.style.height).toBe("80px");
     expect(wrapper?.style.transitionDuration).toBe("0s");
   });
+
+  it("appears in one frame and eases out when hidden", () => {
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(44);
+    const view = render(
+      <HeightTransition visible={false}>
+        <span data-testid="indicator">Working...</span>
+      </HeightTransition>,
+    );
+    const wrapper = view.getByTestId("indicator").parentElement?.parentElement;
+
+    view.rerender(
+      <HeightTransition visible>
+        <span data-testid="indicator">Working...</span>
+      </HeightTransition>,
+    );
+    expect(wrapper?.style.height).toBe("44px");
+    expect(wrapper?.style.transitionDuration).toBe("0s");
+
+    view.rerender(
+      <HeightTransition visible={false}>
+        <span data-testid="indicator">Working...</span>
+      </HeightTransition>,
+    );
+    expect(wrapper?.style.height).toBe("0px");
+    expect(wrapper?.style.transitionDuration).not.toBe("0s");
+  });
 });
 
 function makeResizeEntry(
