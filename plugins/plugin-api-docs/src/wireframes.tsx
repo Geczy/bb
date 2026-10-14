@@ -989,6 +989,12 @@ export function AppShellWireframe({
             at="above"
           />
           <MeasuredBadge
+            id="thread-actions"
+            label="Plugin thread actions, in the thread menu"
+            anchor='[data-guide-region="thread-actions"]'
+            at="above"
+          />
+          <MeasuredBadge
             id="content-scripts"
             label="App-wide plugin scripts, running in the whole window"
             anchor="[data-guide-frame]"
@@ -1115,7 +1121,14 @@ function AppShellWireframeBody({
             <span className="truncate text-foreground">
               Fix flaky checkout tests
             </span>
-            <MiniIcon icon="MoreHorizontal" className="size-3.5" />
+            <Mark
+              id="thread-actions"
+              label="Plugin thread actions, in the thread menu"
+              className="flex h-6.5 items-center px-1"
+              showChip={false}
+            >
+              <MiniIcon icon="MoreHorizontal" className="size-3.5" />
+            </Mark>
             <span className="flex-1" />
             <Mark
               id="thread-header"
@@ -1189,6 +1202,20 @@ function AppShellWireframeBody({
                 <span className="mt-1.5 flex items-center gap-1.5">
                   <PluginGlyph className="size-3.5" />
                   ::your-directive
+                </span>
+              </Mark>
+              <Mark
+                id="code-fence-renderers"
+                label="A plugin component rendering a fenced code block"
+                className="block w-3/5 px-2.5 py-2.5"
+              >
+                <span className="flex gap-1.5" aria-hidden>
+                  <span className="h-5 w-12 rounded-sm bg-muted" />
+                  <span className="h-5 w-8 rounded-sm bg-foreground/40" />
+                </span>
+                <span className="mt-1.5 flex items-center gap-1.5">
+                  <PluginGlyph className="size-3.5" />
+                  ```ui
                 </span>
               </Mark>
               <div className="space-y-1.5">

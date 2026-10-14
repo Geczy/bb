@@ -285,6 +285,12 @@ function pluginAppSurfaceItems(
     ),
     ...namedSlotItems(
       pluginId,
+      slots.threadActions,
+      "thread-action",
+      "Adds an action to thread menus.",
+    ),
+    ...namedSlotItems(
+      pluginId,
       slots.browserToolbarActions,
       "browser-toolbar",
       "Adds an action to Browser tab toolbars.",
@@ -358,6 +364,14 @@ function pluginAppSurfaceItems(
         key: `directive:${slot.id}`,
         label: `::${slot.id}`,
         detail: "Renders plugin-provided content inside thread messages.",
+        mono: true,
+      })),
+    ...slots.codeFenceRenderers
+      .filter((slot) => slot.pluginId === pluginId)
+      .map((slot) => ({
+        key: `code-fence:${slot.id}`,
+        label: slot.languages.map((language) => `\`\`\`${language}`).join(", "),
+        detail: "Renders these fenced code blocks inside assistant messages.",
         mono: true,
       })),
   ];

@@ -25,7 +25,8 @@ import {
   resetPluginFrontendBootStateForTest,
 } from "@/lib/plugin-frontend-boot-state";
 import { resetAllCrashedPluginSlotsForTest } from "../../plugin/PluginSlotMount";
-import { ThreadPendingInteractionBanner } from "./ThreadPendingInteractionBanner";
+import { ThreadPendingInteractionBanners } from "./ThreadPendingInteractionBanner";
+import { InlinePendingInteractionContext } from "./PendingInteractionShell";
 import { makePluginRegistrationSet as registrationSet } from "@/test/fixtures/plugins";
 import { BottomAnchorContext } from "@/components/ui/bottom-anchored-scroll-body";
 
@@ -167,8 +168,8 @@ const commandApproval: PendingInteraction = {
 
 function bannerElement(interaction: PendingInteraction) {
   return (
-    <ThreadPendingInteractionBanner
-      interaction={interaction}
+    <ThreadPendingInteractionBanners
+      interactions={[interaction]}
       threadId="thr_1"
     />
   );
@@ -403,7 +404,7 @@ describe("ThreadPendingInteractionBanner presentation detail images", () => {
 });
 
 describe("ThreadPendingInteractionBanner collapsed strip", () => {
-  it("fits native and plugin interaction shells in the remaining footer space", () => {
+  it("fits an inline question and a plugin card in the remaining footer space", () => {
     const observers = new Set<() => void>();
     vi.stubGlobal(
       "ResizeObserver",
@@ -454,7 +455,11 @@ describe("ThreadPendingInteractionBanner collapsed strip", () => {
               }}
             >
               <div data-scroll-footer="">
-                {bannerElement(question)}
+                <InlinePendingInteractionContext.Provider
+                  value={{ promptShownAbove: "Which path?", close: () => {} }}
+                >
+                  {bannerElement(question)}
+                </InlinePendingInteractionContext.Provider>
                 {bannerElement(pluginRequest)}
               </div>
             </BottomAnchorContext.Provider>
@@ -478,6 +483,7 @@ describe("ThreadPendingInteractionBanner collapsed strip", () => {
       act(() => {
         for (const observer of observers) observer();
       });
+      expect(native.getAttribute("data-presentation")).toBe("inline");
       expect(native.style.maxHeight).toBe("200px");
       expect(plugin.style.maxHeight).toBe("200px");
       const toggle = plugin.querySelector('button[aria-expanded="true"]');
@@ -542,6 +548,7 @@ describe("ThreadPendingInteractionBanner collapsed strip", () => {
     expect(pre?.textContent).toContain("echo '=== watcher untouched ==='");
     expect(pre?.textContent).not.toContain("git diff --stat -- watcher.py");
     expect(preview.textContent).not.toContain("Action:");
+    expect(preview.textContent).not.toContain("Command:");
     expect(preview.textContent).toContain("/home/user/immortal-agents");
     fireEvent.click(screen.getByRole("button", { name: "Show 2 more lines" }));
     expect(preview.querySelector("pre")?.textContent).toContain(
@@ -615,30 +622,30 @@ describe("ThreadPendingInteractionBanner collapsed strip", () => {
     ).toBe(true);
   });
 
-  it("links to the source thread while open", () => {
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter>
-          <ThreadPendingInteractionBanner
-            interaction={commandApproval}
-            sourceThread={{
-              href: "/threads/thr_child",
-              title: "Install tools",
-            }}
-            threadId="thr_child"
-          />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+  it("shows an inline approval's title only when the banner line differs", () => {
+    const renderInline = (promptShownAbove: string) =>
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter>
+            <InlinePendingInteractionContext.Provider
+              value={{ promptShownAbove, close: () => {} }}
+            >
+              {bannerElement(commandApproval)}
+            </InlinePendingInteractionContext.Provider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+    renderInline("Not in allowlist: bash");
     expect(
-      screen
-        .getByRole("link", { name: "From Install tools" })
-        .getAttribute("href"),
-    ).toBe("/threads/thr_child");
-    fireEvent.click(screen.getByRole("button", { name: "Hide details" }));
-    expect(
-      screen.queryByRole("link", { name: "From Install tools" }),
+      screen.queryByRole("heading", { name: "Not in allowlist: bash" }),
     ).toBeNull();
+    cleanup();
+
+    renderInline("Run the test suite?");
+    expect(
+      screen.getByRole("heading", { name: "Not in allowlist: bash" }),
+    ).toBeTruthy();
   });
 
   it("renders a user question open by default and keeps draft answers across collapse", () => {
@@ -692,5 +699,66 @@ describe("ThreadPendingInteractionBanner collapsed strip", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(mocks.stopMutateAsync).toHaveBeenCalledWith("thr_1");
+  });
+});
+
+describe("ThreadPendingInteractionBanners", () => {
+  function questionCard(id: string, prompt: string): PendingInteraction {
+    return {
+      id,
+      threadId: "thr_1",
+      turnId: "turn_1",
+      providerId: "claude-code",
+      providerThreadId: "pt_1",
+      providerRequestId: id,
+      status: "pending",
+      statusReason: null,
+      createdAt: 1,
+      resolvedAt: null,
+      resolution: null,
+      payload: {
+        kind: "user_question",
+        questions: [
+          {
+            id: "path",
+            prompt,
+            multiSelect: false,
+            allowFreeText: true,
+            options: [],
+          },
+        ],
+      },
+    };
+  }
+
+  function cards(interactions: PendingInteraction[]) {
+    return (
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <ThreadPendingInteractionBanners
+            interactions={interactions}
+            threadId="thr_1"
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+  }
+
+  function expandedStates(): boolean[] {
+    return screen
+      .getAllByTestId("user-question-banner")
+      .map((banner) => banner.hasAttribute("data-expanded"));
+  }
+
+  it("expands the next card once the cards above it are answered", () => {
+    const first = questionCard("pint_first", "First?");
+    const second = questionCard("pint_second", "Second?");
+    const view = render(cards([first, second]));
+
+    expect(expandedStates()).toEqual([true, false]);
+
+    view.rerender(cards([second]));
+
+    expect(expandedStates()).toEqual([true]);
   });
 });

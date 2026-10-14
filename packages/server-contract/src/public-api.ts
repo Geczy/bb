@@ -8,10 +8,12 @@ import {
 } from "./api/machine-environment.js";
 import {
   machineEnvironmentReplaceSchema,
+  recordTelemetryEventRequestSchema,
   setAiServiceSelectionRequestSchema,
   systemProviderEnabledRequestSchema,
   testAiServiceRequestSchema,
   type MachineEnvironmentReplace,
+  type RecordTelemetryEventRequest,
   type SetAiServiceSelectionRequest,
   type SystemAiServicesResponse,
   type SystemProviderCatalogEntry,
@@ -221,6 +223,7 @@ import type {
   SystemAppUpdateApplyRequest,
   SystemAppUpdateQuery,
   SystemAppUpdateStatus,
+  SystemCliCommandStatus,
   SystemVersionQuery,
   SystemVersionResponse,
   SystemVoiceTranscriptionForm,
@@ -257,6 +260,12 @@ import type {
   QueuedMessageListQuery,
   ThreadQueuedMessageListResponse,
   ThreadResponse,
+  PluginThreadMetadataListRequest,
+  PluginThreadMetadataListResponse,
+  ThreadAncestorsListRequest,
+  ThreadAncestorsListResponse,
+  ThreadDescendantsListRequest,
+  ThreadDescendantsListResponse,
   ThreadPluginMetadataQuery,
   ThreadPluginMetadataResponse,
   ThreadSearchQuery,
@@ -317,6 +326,9 @@ import {
   createThreadRequestSchema,
   forkThreadRequestSchema,
   updateThreadPluginMetadataRequestSchema,
+  pluginThreadMetadataListRequestSchema,
+  threadAncestorsListRequestSchema,
+  threadDescendantsListRequestSchema,
   threadPluginMetadataQuerySchema,
   deleteThreadRequestSchema,
   environmentActionRequestSchema,
@@ -1372,7 +1384,48 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<ThreadResponse>(),
     }),
+    /**
+     * Each of `threadIds` (1–200) that exists, with its ancestors' ids from
+     * the parent up to the root; archived and deleted threads included.
+     * Unknown ids are omitted.
+     */
+    ancestors: defineRoute({
+      path: "/threads/ancestors",
+      method: "post",
+      request: jsonRequest<EmptyInput, ThreadAncestorsListRequest>(
+        threadAncestorsListRequestSchema,
+      ),
+      response: jsonResponse<ThreadAncestorsListResponse>(),
+    }),
+    /**
+     * Each of `threadIds` (1–200) that exists and is not deleted, with the
+     * ids of every thread below it, children first. Archived and hidden
+     * descendants are omitted unless `includeArchived` / `includeHidden` is
+     * true, but threads below them are still returned; deleted threads and
+     * unknown ids are always omitted.
+     */
+    descendants: defineRoute({
+      path: "/threads/descendants",
+      method: "post",
+      request: jsonRequest<EmptyInput, ThreadDescendantsListRequest>(
+        threadDescendantsListRequestSchema,
+      ),
+      response: jsonResponse<ThreadDescendantsListResponse>(),
+    }),
     pluginMetadata: {
+      /**
+       * `pluginId`'s metadata for each of `threadIds` (1–200) that has any,
+       * archived and deleted threads included. Threads without a namespace
+       * and corrupt records are omitted.
+       */
+      list: defineRoute({
+        path: "/threads/plugin-metadata",
+        method: "post",
+        request: jsonRequest<EmptyInput, PluginThreadMetadataListRequest>(
+          pluginThreadMetadataListRequestSchema,
+        ),
+        response: jsonResponse<PluginThreadMetadataListResponse>(),
+      }),
       get: defineRoute({
         path: "/threads/:id/plugin-metadata",
         method: "get",
@@ -1869,6 +1922,14 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<TestAiServiceResponse>(),
     }),
+    recordTelemetryEvent: defineRoute({
+      path: "/system/telemetry/events",
+      method: "post",
+      request: jsonRequest<EmptyInput, RecordTelemetryEventRequest>(
+        recordTelemetryEventRequestSchema,
+      ),
+      response: jsonResponse<{ ok: true }>(),
+    }),
     generalSettings: defineRoute({
       path: "/settings/general",
       method: "put",
@@ -2074,6 +2135,24 @@ export const publicApiRoutes = {
         systemAppUpdateAcknowledgeRequestSchema,
       ),
       response: jsonResponse<SystemAppUpdateStatus>(),
+    }),
+    cliCommand: defineRoute({
+      path: "/system/cli-command",
+      method: "get",
+      request: noRequest<EmptyInput>(),
+      response: jsonResponse<SystemCliCommandStatus>(),
+    }),
+    installCliCommand: defineRoute({
+      path: "/system/cli-command/install",
+      method: "post",
+      request: noRequest<EmptyInput>(),
+      response: jsonResponse<SystemCliCommandStatus>(),
+    }),
+    removeCliCommand: defineRoute({
+      path: "/system/cli-command/remove",
+      method: "post",
+      request: noRequest<EmptyInput>(),
+      response: jsonResponse<SystemCliCommandStatus>(),
     }),
   },
 };

@@ -1272,6 +1272,87 @@ describe("loadPluginApp", () => {
     ).rejects.toThrow('slots.messageDirective: duplicate id "inline-vis"');
   });
 
+  it("captures experimental_codeFenceRenderer registrations and validates them like the host", async () => {
+    const FenceRenderer = () => null;
+    const captured = await loadPluginApp(
+      definePluginApp((builder) => {
+        builder.slots.experimental_codeFenceRenderer({
+          id: "generative-ui",
+          languages: ["ui", "app"],
+          component: FenceRenderer,
+        });
+        builder.slots.experimental_codeFenceRenderer({
+          id: "charts",
+          languages: ["c++", "chart.v2"],
+          component: FenceRenderer,
+        });
+      }),
+    );
+    expect(captured.codeFenceRenderers).toEqual([
+      {
+        id: "generative-ui",
+        languages: ["ui", "app"],
+        component: FenceRenderer,
+      },
+      {
+        id: "charts",
+        languages: ["c++", "chart.v2"],
+        component: FenceRenderer,
+      },
+    ]);
+
+    const kind = "slots.experimental_codeFenceRenderer";
+    const rejected: [string, Record<string, unknown>[]][] = [
+      [
+        `${kind}: "languages" must be a non-empty array`,
+        [{ id: "ui", languages: [], component: FenceRenderer }],
+      ],
+      [
+        `${kind}: "languages" must be a non-empty array`,
+        [{ id: "ui", languages: "ui", component: FenceRenderer }],
+      ],
+      [
+        `${kind}: languages must match`,
+        [{ id: "ui", languages: ["UI"], component: FenceRenderer }],
+      ],
+      [
+        `${kind}: languages must match`,
+        [{ id: "ui", languages: ["ui block"], component: FenceRenderer }],
+      ],
+      [
+        `${kind}: duplicate language "ui"`,
+        [
+          { id: "first", languages: ["ui"], component: FenceRenderer },
+          { id: "second", languages: ["app", "ui"], component: FenceRenderer },
+        ],
+      ],
+      [
+        `${kind}: duplicate id "ui"`,
+        [
+          { id: "ui", languages: ["ui"], component: FenceRenderer },
+          { id: "ui", languages: ["app"], component: FenceRenderer },
+        ],
+      ],
+      [
+        `${kind}: "component"`,
+        [{ id: "ui", languages: ["ui"], component: undefined }],
+      ],
+    ];
+    for (const [message, registrations] of rejected) {
+      await expect(
+        loadPluginApp(
+          definePluginApp((builder) => {
+            for (const registration of registrations) {
+              builder.slots.experimental_codeFenceRenderer(
+                registration as never,
+              );
+            }
+          }),
+        ),
+      ).rejects.toThrow(message);
+    }
+  });
+
   it("captures messageAction registrations and validates them like the host", async () => {
     expect(app.messageActions).toHaveLength(1);
     expect(app.messageActions[0]).toMatchObject({
@@ -2046,4 +2127,93 @@ it("reacts to attachment-only updates and atomic replacement through the public 
   expect(slot.getByRole("status").textContent).toBe("prefill:1:false");
   fireEvent.click(slot.getByRole("button", { name: "Replace all" }));
   expect(slot.getByRole("status").textContent).toBe(":0:true");
+});
+
+describe("thread actions menu fake", () => {
+  const thread = {
+    id: "thr_menu",
+    projectId: "proj_menu",
+    parentThreadId: null,
+    archivedAt: null,
+    pinnedAt: null,
+    sectionId: null,
+    isUnread: false,
+    status: "idle" as const,
+    environment: null,
+  };
+
+  it("rejects a trigger that drops the props and ref it receives", async () => {
+    const { experimental_ThreadActionsMenu: ThreadActionsMenu } =
+      await import("../../app.js");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    function Probe() {
+      return (
+        <ThreadActionsMenu
+          thread={thread}
+          trigger={() => <button type="button">Thread actions</button>}
+        />
+      );
+    }
+    expect(() => renderSlot({ component: Probe }, {})).toThrow(
+      /must spread the props and ref/,
+    );
+    error.mockRestore();
+  });
+
+  it("rejects a trigger that replaces the host's className", async () => {
+    const { experimental_ThreadActionsMenu: ThreadActionsMenu } =
+      await import("../../app.js");
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    function Probe() {
+      return (
+        <ThreadActionsMenu
+          thread={thread}
+          trigger={(props) => (
+            <button {...props} type="button" className="mine">
+              Thread actions
+            </button>
+          )}
+        />
+      );
+    }
+    expect(() => renderSlot({ component: Probe }, {})).toThrow(
+      /replaced the host's className/,
+    );
+    error.mockRestore();
+  });
+
+  it("opens from a trigger that spreads its props", async () => {
+    const { experimental_ThreadActionsMenu: ThreadActionsMenu } =
+      await import("../../app.js");
+    const run = vi.fn(async () => {});
+    function Probe() {
+      return (
+        <ThreadActionsMenu
+          thread={thread}
+          trigger={(props) => (
+            <button {...props} type="button">
+              Thread actions
+            </button>
+          )}
+        />
+      );
+    }
+    const slot = renderSlot(
+      { component: Probe },
+      {},
+      {
+        threadActions: () => [
+          {
+            key: "bb--core/pin",
+            pluginId: "bb--core",
+            group: "2_organize",
+            action: { label: "Pin", icon: "Pin", run },
+          },
+        ],
+      },
+    );
+    fireEvent.click(slot.getByRole("button", { name: "Thread actions" }));
+    fireEvent.click(slot.getByRole("menuitem", { name: "Pin" }));
+    expect(run).toHaveBeenCalledTimes(1);
+  });
 });

@@ -12,8 +12,8 @@ import {
   SidebarResizeHandle,
   SidebarTopReserveRow,
 } from "@/components/sidebar/SidebarChrome";
-import { PROJECT_LIST_ACTION_BUTTON_CLASS } from "@/components/sidebar/sidebarRowClasses";
-import { SIDEBAR_STANDARD_ROW_PADDING_CLASS } from "@/components/sidebar/sidebarRowClasses";
+import { PROJECT_LIST_ACTION_BUTTON_CLASS } from "@bb/shared-ui/sidebar-row-classes";
+import { SIDEBAR_STANDARD_ROW_PADDING_CLASS } from "@bb/shared-ui/sidebar-row-classes";
 import { CHROME_SECTION_LABEL_CLASS } from "@bb/shared-ui/chrome-style-tokens";
 
 export function SectionSidebarIcon({ name }: { name: IconName }) {
@@ -99,11 +99,13 @@ export function SectionSidebarLabel({ children }: { children: ReactNode }) {
 
 export function SectionSidebar({
   children,
+  headerSlot,
   isResizing,
   onResizeMouseDown,
   testIdPrefix,
 }: {
   children: ReactNode;
+  headerSlot?: ReactNode;
   isResizing: boolean;
   onResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   testIdPrefix: string;
@@ -115,6 +117,16 @@ export function SectionSidebar({
     >
       <SidebarTopReserveRow
         testId={`${testIdPrefix}-sidebar-top-reserve-row`}
+        headerSlot={
+          headerSlot === undefined ? undefined : (
+            <div
+              data-sidebar-header-slot=""
+              className="flex h-full min-w-0 flex-1 items-center"
+            >
+              {headerSlot}
+            </div>
+          )
+        }
       />
       <SidebarContent>
         <div className="min-w-0 px-2">{children}</div>

@@ -109,11 +109,9 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginSidebarThreadsState",
           "PluginSidebarThread",
           "PluginSidebarSection",
-          "experimental_useSidebarThreadActions",
-          "PluginSidebarThreadActions",
-          "PluginSidebarThreadActions.experimental_archiveEnvironmentThreads",
-          "PluginSidebarThreadActions.openNewThread",
-          "PluginSidebarThreadActions.openNewThread.experimental_placement",
+          "experimental_useArchiveEnvironmentThreads",
+          "BbNavigate.toThread",
+          "BbNavigate.toCompose",
           "experimental_useSidebarThreadPullRequest",
           "PluginSidebarThreadPullRequestState",
           "PluginSidebarPullRequest.experimental_autoMerge",
@@ -135,6 +133,8 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginSidebarThreadShortcut",
           "ThreadTitle",
           "PluginThreadTitleProps",
+          "experimental_ThreadStatusGlyph",
+          "PluginThreadStatusGlyphProps",
           "useEnvironmentProviders",
           "PluginEnvironmentProvidersState",
           "useSdk",
@@ -185,6 +185,35 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         experimental: true,
       },
       {
+        id: "thread-actions",
+        title: "Thread menu actions",
+        summary:
+          "Add an action to every thread menu and the sidebar row's quick actions. With this, a plugin can:",
+        bullets: [
+          "Appear in the header menu, the row menu, the right-click menu, and the long-press drawer",
+          "Offer a list of choices that bb renders as a submenu, a drawer step, or a popover",
+          "Read app-wide data once and derive each thread's entry from it",
+          "Render bb's own thread menus in a replacement thread list",
+        ],
+        apiSymbols: [
+          "PluginThreadActionRegistration",
+          "PluginThreadActionDataInput",
+          "PluginThreadActionItemInput",
+          "PluginThreadActionTarget",
+          "PluginThreadAction",
+          "PluginThreadActionChoices",
+          "PluginThreadActionChoice",
+          "PluginThreadActionEntry",
+          "experimental_useThreadActions",
+          "experimental_useThreadActionRegistrations",
+          "experimental_ThreadActionsMenu",
+          "experimental_ThreadActionsContextMenu",
+          "experimental_THREAD_ACTION_GROUPS",
+        ],
+        firstParty: ["Push notifications", "Thread list"],
+        experimental: true,
+      },
+      {
         id: "timeline-renderers",
         title: "Timeline entry content",
         summary:
@@ -221,6 +250,24 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Tasks",
           "Workflows",
         ],
+      },
+      {
+        id: "code-fence-renderers",
+        title: "Inline code-block renderers",
+        summary:
+          "Replace fenced code blocks in an agent's reply with live UI. With this, a plugin can:",
+        bullets: [
+          "Let an agent write a fenced ```ui block that your component renders live as the reply streams",
+          "Keep one component, with its state, per block for the whole reply",
+          "Tell a block that is still streaming from one that closed or was cut off",
+          "Fall back to BB's code block when the plugin is off or a block's component throws",
+        ],
+        apiSymbols: [
+          "ExperimentalCodeFenceRendererRegistration",
+          "ExperimentalCodeFenceRendererProps",
+          "ExperimentalCodeFenceStatus",
+        ],
+        experimental: true,
       },
       {
         id: "message-actions",
@@ -609,6 +656,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Declare text, number, toggle, choice, or project fields as data",
           "Get validation and autosave without extra code",
+          "Have each field found by Settings search through its label, key, or description",
           "Keep secret values on the server, never sent to the browser",
         ],
         apiSymbols: [
@@ -917,7 +965,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         summary:
           "Run server code when threads change state or environments are removed. With this, a plugin can:",
         bullets: [
-          "React when threads start, finish, fail, are archived or unarchived, or are deleted",
+          "React when threads start, finish, fail, change parent, are archived or unarchived, or are deleted",
           "Follow queued messages, including ones cancelled before dispatch",
           "Get the provider's error and rate-limit windows when a turn fails",
           "Observe successful environment removal with its previous machine and path",
@@ -1151,6 +1199,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "AcpLaunchSpec",
           "experimental_acpLaunchSpecSchema",
           "experimental_probeAcpAgent",
+          "experimental_registerAcpDialect",
           "AcpDialect",
           "experimental_nativeRootsHostContract",
           "experimental_filterResolvedNativeRoots",
@@ -1228,6 +1277,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginBbSdk.plugins.experimental_updateJobs",
           "PluginBbSdk.threads.queuedMessages.experimental_holdForEdit",
           "PluginBbSdk.threads.queuedMessages.experimental_releaseEditHold",
+          "PluginBbSdk.threads.experimental_listDescendants",
         ],
         firstParty: [
           "Account Pooler [Experimental]",
@@ -1269,6 +1319,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Keep plugin data with the thread it belongs to, hidden from the model",
           "Seed it when spawning or forking a thread",
           "Read it when configuring that thread's agent",
+          "Read it for many threads at once, along with each thread's ancestors",
         ],
         apiSymbols: [
           "PluginBbSdk",
@@ -1276,7 +1327,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "ReadonlyJsonValue",
           "BbPluginApi",
         ],
-        firstParty: ["Workflows"],
+        firstParty: ["Push notifications", "Workflows"],
       },
       {
         id: "desktop-browsers",
@@ -1328,7 +1379,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Use bb's own chat, prompt box, and pickers inside plugin pages. With this, a plugin can:",
         bullets: [
           "Embed a thread, a new-thread prompt box, or a textarea with editable voice input",
-          "Render Markdown, code, diffs, and file links, and copy text, the way bb does",
+          "Render Markdown, code, diffs, and file links, and copy text and save files, the way bb does",
           "Add or override app icons",
           "Match bb's styling with no extra work",
         ],
@@ -1358,6 +1409,9 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginCodeThemeState",
           "experimental_copyToClipboard",
           "ExperimentalClipboardContent",
+          "experimental_saveFile",
+          "ExperimentalSaveFileRequest",
+          "ExperimentalSaveFileOutcome",
           "UrlLink",
           "UrlLinkProps",
           "experimental_FileLink",

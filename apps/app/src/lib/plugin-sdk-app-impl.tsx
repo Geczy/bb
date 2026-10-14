@@ -15,6 +15,7 @@ import { PluginPermissionModePicker } from "@/components/plugin/PluginPermission
 import { PluginSourceCode } from "@/components/plugin/PluginSourceCode";
 import { LazyPluginThreadChat } from "@/components/plugin/LazyPluginThreadChat";
 import { PluginThreadTitle } from "@/components/plugin/PluginThreadTitle";
+import { ThreadStatusGlyph } from "@/components/thread/ThreadStatusGlyph";
 import { PluginUrlLink } from "@/components/plugin/PluginUrlLink";
 import { ExperimentalFileLink } from "@/components/plugin/ExperimentalFileLink";
 import { MarkdownPreview } from "@/components/ui/markdown-preview";
@@ -57,8 +58,25 @@ import {
   useSidebarThreadSplit,
 } from "./plugin-sidebar-split";
 import { useAppNavigationHost } from "./app-navigation-host";
+import { experimental_THREAD_ACTION_GROUPS } from "@get-bb/plugin-sdk";
+import {
+  ThreadActionsContextMenu,
+  ThreadActionsMenu,
+} from "@/components/thread/ThreadActionsMenu";
+import { useThreadActions } from "@/components/thread/ThreadActionsProvider";
+import {
+  useThreadActionEntries,
+  useThreadActionRegistrationInfos,
+} from "./thread-actions/thread-action-registry";
 import { useCodeTheme } from "./plugin-code-theme";
 import { copyToClipboard } from "./clipboard";
+import { saveFile } from "./save-file";
+
+function useArchiveEnvironmentThreads(): (
+  environmentId: string,
+) => Promise<void> {
+  return useThreadActions().archiveEnvironmentThreads;
+}
 
 export const pluginSdkAppImplementation = {
   definePluginApp,
@@ -92,6 +110,12 @@ export const pluginSdkAppImplementation = {
   experimental_Diff: PluginDiff,
   experimental_useSidebarThreads: useSidebarThreads,
   experimental_useSidebarThreadActions: useSidebarThreadActions,
+  experimental_useThreadActions: useThreadActionEntries,
+  experimental_useArchiveEnvironmentThreads: useArchiveEnvironmentThreads,
+  experimental_useThreadActionRegistrations: useThreadActionRegistrationInfos,
+  experimental_ThreadActionsMenu: ThreadActionsMenu,
+  experimental_ThreadActionsContextMenu: ThreadActionsContextMenu,
+  experimental_THREAD_ACTION_GROUPS,
   experimental_useSidebarThreadPullRequest: useSidebarThreadPullRequest,
   experimental_useSidebarThreadSplit: useSidebarThreadSplit,
   useSidebarThreadDraft,
@@ -101,11 +125,13 @@ export const pluginSdkAppImplementation = {
   useSidebarSplitLayout,
   useSidebarThreadShortcut,
   ThreadTitle: PluginThreadTitle,
+  experimental_ThreadStatusGlyph: ThreadStatusGlyph,
   useEnvironmentProviders,
   useSdk,
   experimental_useProviders: useProviders,
   experimental_useCodeTheme: useCodeTheme,
   experimental_copyToClipboard: copyToClipboard,
+  experimental_saveFile: saveFile,
 } satisfies PluginSdkApp;
 
 function PluginMarkdown({
