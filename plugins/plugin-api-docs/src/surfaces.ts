@@ -649,6 +649,18 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       "The settings page bb creates for every installed plugin. A plugin can declare fields for bb to render and add its own section below them.",
     surfaces: [
       {
+        id: "start-page-preferences",
+        title: "Start page preferences",
+        summary: "Read and update the synced desktop and mobile launch destinations.",
+        bullets: [
+          "Use startPage.desktop and startPage.mobile with sdk.system.uiPreferences.list, set, and reset; set requires the current expectedRevision",
+          "Choose / for Home, threads for the sidebar thread list, or /plugins/<id>/<path> for a registered navigation page",
+          "Explicit links and restored layouts take precedence; missing or crashed launch pages fall back to Home",
+        ],
+        apiSymbols: ["BbPluginApi.sdk"],
+        firstParty: ["General settings"],
+      },
+      {
         id: "declarative-settings",
         title: "Settings fields",
         summary:

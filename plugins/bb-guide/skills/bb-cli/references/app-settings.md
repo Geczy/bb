@@ -346,3 +346,18 @@ Missing or unreadable inputs fall back automatically; a missing preference alone
 is informational. Sustained silence warns without switching devices or stopping
 capture. Device selection remains browser-local; server voice-service settings
 and file transcription commands are unchanged.
+
+## Start page
+
+Settings → General → Start page selects separate synced `startPage.desktop` and
+`startPage.mobile` preferences. Both default to `/` (Home); `threads` opens the
+sidebar thread list, and `/plugins/<id>/<path>` opens a plugin page. Native mobile
+and web viewports below 768px use Mobile; other clients use Desktop. The choice
+is made once on a fresh `/` launch without a saved layout. Explicit URLs and
+restored layouts take precedence; Home navigation and resizing do not redirect.
+Unavailable or crashed start pages fall back to Home without changing the setting.
+
+Use `bb settings ui set startPage.mobile /plugins/automations/automations`,
+`bb settings ui get startPage.mobile`, or `bb settings ui reset startPage.mobile`.
+The SDK uses `sdk.system.uiPreferences.list/set/reset`; writes supply the current
+`expectedRevision`.

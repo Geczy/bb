@@ -1,3 +1,7 @@
+import { useEffect, useState } from "react";
+import { useAtomValue } from "jotai";
+import { Navigate, useLocation } from "react-router-dom";
+import { launchedStartPageAtom } from "@/lib/start-page";
 import { PageShell } from "@/components/ui/page-shell.js";
 import { EmptyStatePanel } from "@bb/shared-ui/empty-state";
 import { PluginSlotMount } from "@/components/plugin/PluginSlotMount";
@@ -16,6 +20,16 @@ export function PluginPanelView({
   subPath,
 }: PluginPanelViewProps) {
   const { navPanels } = usePluginSlots();
+  const launchedPage = useAtomValue(launchedStartPageAtom);
+  const location = useLocation();
+  const isStartPage =
+    launchedPage !== null && launchedPage === location.pathname;
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isStartPage) return;
+    const timer = window.setTimeout(() => setTimedOut(true), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [isStartPage]);
   const pluginsSettled = usePluginFrontendsSettled();
   const panel =
     navPanels.find(
@@ -24,6 +38,9 @@ export function PluginPanelView({
     ) ?? null;
 
   if (panel === null) {
+    if (isStartPage && (pluginsSettled || timedOut)) {
+      return <Navigate to="/" replace />;
+    }
     if (!pluginsSettled) {
       return (
         <PageShell contentClassName="pt-[calc(var(--bb-app-chrome-row-height)+1rem)] md:pt-[calc(var(--bb-app-chrome-row-height)+1.25rem)]">
@@ -51,6 +68,7 @@ export function PluginPanelView({
         pluginId={panel.pluginId}
         slotKind="navPanel"
         slotId={panel.id}
+        crashFallback={isStartPage ? <Navigate to="/" replace /> : undefined}
       >
         <panel.component subPath={subPath} />
       </PluginSlotMount>

@@ -1,3 +1,4 @@
+import { StartPageLaunch } from "./lib/start-page";
 import { PluginUpdateJobsHost } from "./components/plugin/PluginUpdateJobsHost";
 import { LazyThreadDetailView } from "./views/thread-detail/LazyThreadDetailView";
 import { LazyRootComposeView } from "./views/LazyRootComposeView";
@@ -296,145 +297,147 @@ export function AppRoutes() {
   }, [isRootComposeView]);
   return (
     <AppLayout>
-      <Suspense fallback={null}>
-        <Routes>
-          <Route
-            path="/settings/usage"
-            element={
-              <Navigate
-                to={getPluginConfigurationRoutePath({
-                  pluginId: "bb--provider-usage",
-                })}
-                replace
-              />
-            }
-          />
-          <Route path={SETTINGS_ROUTE_PATH} element={<SettingsView />} />
-          <Route
-            path={SETTINGS_SECTION_ROUTE_PATH}
-            element={<SettingsView />}
-          />
-          <Route
-            path={SETTINGS_PLUGINS_ROUTE_PATH}
-            element={<SettingsView />}
-          />
-          <Route path={SETTINGS_PLUGIN_ROUTE_PATH} element={<SettingsView />} />
-          <Route
-            path={SETTINGS_MACHINE_ROUTE_PATH}
-            element={<MachineSettingsView />}
-          />
-          <Route
-            path={SETTINGS_PROJECT_ROUTE_PATH}
-            element={<ProjectDetailSettingsView />}
-          />
-          <Route
-            path={LEGACY_PROJECT_SETTINGS_ROUTE_PATH}
-            element={<LegacyProjectSettingsRedirect />}
-          />
-          <Route
-            path={PROJECT_ARCHIVED_ROUTE_PATH}
-            element={<Navigate to={getSettingsRoutePath("archived")} replace />}
-          />
-          <Route
-            path={PROJECTLESS_ARCHIVED_ROUTE_PATH}
-            element={<Navigate to={getSettingsRoutePath("archived")} replace />}
-          />
-          <Route
-            path={LEGACY_TOOLS_AUTOMATIONS_ROUTE_PATH}
-            element={<LegacyAutomationCollectionRedirect />}
-          />
-          <Route
-            path={LEGACY_TOOLS_AUTOMATION_BROWSE_ROUTE_PATH}
-            element={<LegacyAutomationCollectionRedirect />}
-          />
-          <Route
-            path={LEGACY_TOOLS_AUTOMATION_DETAIL_ROUTE_PATH}
-            element={<LegacyAutomationDetailRedirect />}
-          />
-          <Route
-            path={LEGACY_TOOLS_AUTOMATION_EDIT_ROUTE_PATH}
-            element={<LegacyAutomationDetailRedirect />}
-          />
-          <Route
-            path={LEGACY_AUTOMATIONS_ROUTE_PATH}
-            element={<LegacyAutomationCollectionRedirect />}
-          />
-          <Route
-            path={LEGACY_AUTOMATION_DETAIL_ROUTE_PATH}
-            element={<LegacyAutomationDetailRedirect />}
-          />
-          <Route
-            path={TOOLS_ROUTE_PATH}
-            element={
-              <NavigatePreservingLocation pathname={PLUGINS_ROUTE_PATH} />
-            }
-          />
-          <Route
-            path={TOOLS_PLUGINS_ROUTE_PATH}
-            element={<LegacyPluginsPathRedirect />}
-          />
-          <Route
-            path={TOOLS_PLUGIN_BROWSE_ROUTE_PATH}
-            element={<LegacyPluginsPathRedirect />}
-          />
-          <Route
-            path={TOOLS_PLUGIN_DETAIL_ROUTE_PATH}
-            element={<LegacyPluginsPathRedirect />}
-          />
-          <Route
-            path={TOOLS_SKILLS_ROUTE_PATH}
-            element={<LegacySkillsPathRedirect />}
-          />
-          <Route
-            path={TOOLS_SKILL_DETAIL_ROUTE_PATH}
-            element={<LegacySkillsPathRedirect />}
-          />
-          <Route
-            path={LEGACY_TOOLS_SKILL_DETAIL_ROUTE_PATH}
-            element={<LegacySkillsPathRedirect />}
-          />
-          <Route
-            path={TOOLS_REGISTRY_SKILLS_ROUTE_PATH}
-            element={<LegacySkillsPathRedirect />}
-          />
-          <Route
-            path={TOOLS_REGISTRY_SKILL_DETAIL_ROUTE_PATH}
-            element={<LegacySkillsPathRedirect />}
-          />
-          <Route
-            path={LEGACY_TOOLS_PREFIX_ROUTE_PATH}
-            element={<LegacyToolsPathRedirect />}
-          />
-          <Route
-            path={LEGACY_TOOLS_SPLAT_ROUTE_PATH}
-            element={<LegacyToolsPathRedirect />}
-          />
-          <Route path={SKILLS_ROUTE_PATH} element={<SkillsView />} />
-          <Route path={SKILL_DETAIL_ROUTE_PATH} element={<SkillsView />} />
-          <Route path={REGISTRY_SKILLS_ROUTE_PATH} element={<SkillsView />} />
-          <Route
-            path={REGISTRY_SKILL_DETAIL_ROUTE_PATH}
-            element={<SkillsView />}
-          />
-          <Route path={PLUGINS_ROUTE_PATH} element={<PluginsRoute />} />
-          <Route path={PLUGIN_DETAIL_ROUTE_PATH} element={<PluginsRoute />} />
-          <Route
-            path="*"
-            element={
-              <Suspense
-                fallback={
-                  <RouteLoadingSkeleton isBoundedPane={false}>
-                    {isThreadView ? <ThreadTimelineLoadingSkeleton /> : null}
-                  </RouteLoadingSkeleton>
-                }
-              >
-                <SplitWorkspaceRoute />
-              </Suspense>
-            }
-          />
-        </Routes>
-        <RouteContentPaintSignal />
-      </Suspense>
+      <StartPageLaunch>
+        <Suspense fallback={null}>
+          <Routes>
+            <Route
+              path="/settings/usage"
+              element={
+                <Navigate
+                  to={getPluginConfigurationRoutePath({
+                    pluginId: "bb--provider-usage",
+                  })}
+                  replace
+                />
+              }
+            />
+            <Route path={SETTINGS_ROUTE_PATH} element={<SettingsView />} />
+            <Route
+              path={SETTINGS_SECTION_ROUTE_PATH}
+              element={<SettingsView />}
+            />
+            <Route
+              path={SETTINGS_PLUGINS_ROUTE_PATH}
+              element={<SettingsView />}
+            />
+            <Route path={SETTINGS_PLUGIN_ROUTE_PATH} element={<SettingsView />} />
+            <Route
+              path={SETTINGS_MACHINE_ROUTE_PATH}
+              element={<MachineSettingsView />}
+            />
+            <Route
+              path={SETTINGS_PROJECT_ROUTE_PATH}
+              element={<ProjectDetailSettingsView />}
+            />
+            <Route
+              path={LEGACY_PROJECT_SETTINGS_ROUTE_PATH}
+              element={<LegacyProjectSettingsRedirect />}
+            />
+            <Route
+              path={PROJECT_ARCHIVED_ROUTE_PATH}
+              element={<Navigate to={getSettingsRoutePath("archived")} replace />}
+            />
+            <Route
+              path={PROJECTLESS_ARCHIVED_ROUTE_PATH}
+              element={<Navigate to={getSettingsRoutePath("archived")} replace />}
+            />
+            <Route
+              path={LEGACY_TOOLS_AUTOMATIONS_ROUTE_PATH}
+              element={<LegacyAutomationCollectionRedirect />}
+            />
+            <Route
+              path={LEGACY_TOOLS_AUTOMATION_BROWSE_ROUTE_PATH}
+              element={<LegacyAutomationCollectionRedirect />}
+            />
+            <Route
+              path={LEGACY_TOOLS_AUTOMATION_DETAIL_ROUTE_PATH}
+              element={<LegacyAutomationDetailRedirect />}
+            />
+            <Route
+              path={LEGACY_TOOLS_AUTOMATION_EDIT_ROUTE_PATH}
+              element={<LegacyAutomationDetailRedirect />}
+            />
+            <Route
+              path={LEGACY_AUTOMATIONS_ROUTE_PATH}
+              element={<LegacyAutomationCollectionRedirect />}
+            />
+            <Route
+              path={LEGACY_AUTOMATION_DETAIL_ROUTE_PATH}
+              element={<LegacyAutomationDetailRedirect />}
+            />
+            <Route
+              path={TOOLS_ROUTE_PATH}
+              element={
+                <NavigatePreservingLocation pathname={PLUGINS_ROUTE_PATH} />
+              }
+            />
+            <Route
+              path={TOOLS_PLUGINS_ROUTE_PATH}
+              element={<LegacyPluginsPathRedirect />}
+            />
+            <Route
+              path={TOOLS_PLUGIN_BROWSE_ROUTE_PATH}
+              element={<LegacyPluginsPathRedirect />}
+            />
+            <Route
+              path={TOOLS_PLUGIN_DETAIL_ROUTE_PATH}
+              element={<LegacyPluginsPathRedirect />}
+            />
+            <Route
+              path={TOOLS_SKILLS_ROUTE_PATH}
+              element={<LegacySkillsPathRedirect />}
+            />
+            <Route
+              path={TOOLS_SKILL_DETAIL_ROUTE_PATH}
+              element={<LegacySkillsPathRedirect />}
+            />
+            <Route
+              path={LEGACY_TOOLS_SKILL_DETAIL_ROUTE_PATH}
+              element={<LegacySkillsPathRedirect />}
+            />
+            <Route
+              path={TOOLS_REGISTRY_SKILLS_ROUTE_PATH}
+              element={<LegacySkillsPathRedirect />}
+            />
+            <Route
+              path={TOOLS_REGISTRY_SKILL_DETAIL_ROUTE_PATH}
+              element={<LegacySkillsPathRedirect />}
+            />
+            <Route
+              path={LEGACY_TOOLS_PREFIX_ROUTE_PATH}
+              element={<LegacyToolsPathRedirect />}
+            />
+            <Route
+              path={LEGACY_TOOLS_SPLAT_ROUTE_PATH}
+              element={<LegacyToolsPathRedirect />}
+            />
+            <Route path={SKILLS_ROUTE_PATH} element={<SkillsView />} />
+            <Route path={SKILL_DETAIL_ROUTE_PATH} element={<SkillsView />} />
+            <Route path={REGISTRY_SKILLS_ROUTE_PATH} element={<SkillsView />} />
+            <Route
+              path={REGISTRY_SKILL_DETAIL_ROUTE_PATH}
+              element={<SkillsView />}
+            />
+            <Route path={PLUGINS_ROUTE_PATH} element={<PluginsRoute />} />
+            <Route path={PLUGIN_DETAIL_ROUTE_PATH} element={<PluginsRoute />} />
+            <Route
+              path="*"
+              element={
+                <Suspense
+                  fallback={
+                    <RouteLoadingSkeleton isBoundedPane={false}>
+                      {isThreadView ? <ThreadTimelineLoadingSkeleton /> : null}
+                    </RouteLoadingSkeleton>
+                  }
+                >
+                  <SplitWorkspaceRoute />
+                </Suspense>
+              }
+            />
+          </Routes>
+          <RouteContentPaintSignal />
+        </Suspense>
+      </StartPageLaunch>
     </AppLayout>
   );
 }

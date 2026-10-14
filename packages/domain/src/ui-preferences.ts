@@ -33,7 +33,18 @@ const sidebarHiddenGroupsSchema = z
   .max(UI_PREFERENCE_LIST_MAX_LENGTH)
   .transform((value) => [...new Set(value)]);
 
+const startPageSchema = uiPreferenceStringSchema.refine(
+  (value) =>
+    value === "/" ||
+    value === "threads" ||
+    (/^\/plugins\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+(?:\/[^?#\\]*)?$/.test(value) &&
+      new URL(value, "https://bb.invalid").pathname === value),
+  "Choose /, threads, or a /plugins/<id>/<path> page",
+);
+
 export const UI_PREFERENCE_KEYS = [
+  "startPage.desktop",
+  "startPage.mobile",
   "sidebar.organizationMode",
   "sidebar.threadGrouping.environment",
   "sidebar.chronologicalSort",
@@ -71,6 +82,16 @@ function defineUiPreference<Schema extends z.ZodTypeAny>(
 }
 
 export const uiPreferenceDefinitions = {
+  "startPage.desktop": defineUiPreference(
+    startPageSchema,
+    "/",
+    "Start page for fresh desktop launches without a restored layout: /, threads, or a plugin page path. Missing or failed plugin pages fall back to Home.",
+  ),
+  "startPage.mobile": defineUiPreference(
+    startPageSchema,
+    "/",
+    "Start page for fresh native mobile or compact (below 768px) launches without a restored layout: /, threads, or a plugin page path.",
+  ),
   "sidebar.organizationMode": defineUiPreference(
     sidebarOrganizationModeSchema,
     "chronological",

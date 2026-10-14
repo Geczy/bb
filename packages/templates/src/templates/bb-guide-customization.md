@@ -621,3 +621,18 @@ stops the sampler and flushes the in-flight profile; existing files remain.
 The launch flag only grants permission and still requires a restart to change.
 
 Storage cleanup can run in the background with `bb storage cleanup --machine HOST_ID --kind orphans|development|worktrees --yes`. Inspect `maintenance` with `bb storage usage`; failures release the machine lock and can be retried. Archived storage cleanup waits through the archive undo grace and rechecks eligibility before each batch.
+
+## Start page
+
+Settings → General → Start page selects separate synced `startPage.desktop` and
+`startPage.mobile` preferences. Both default to `/` (Home); `threads` opens the
+sidebar thread list, and `/plugins/<id>/<path>` opens a plugin page. Native mobile
+and web viewports below 768px use Mobile; other clients use Desktop. The choice
+is made once on a fresh `/` launch without a saved layout. Explicit URLs and
+restored layouts take precedence; Home navigation and resizing do not redirect.
+Unavailable or crashed start pages fall back to Home without changing the setting.
+
+Use `bb settings ui set startPage.mobile /plugins/automations/automations`,
+`bb settings ui get startPage.mobile`, or `bb settings ui reset startPage.mobile`.
+The SDK uses `sdk.system.uiPreferences.list/set/reset`; writes supply the current
+`expectedRevision`.
