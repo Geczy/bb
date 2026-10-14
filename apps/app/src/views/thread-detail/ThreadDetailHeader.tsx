@@ -21,9 +21,11 @@ import {
 import type { ThreadGitActionDialogTarget } from "@/components/dialogs/ThreadGitActionDialog";
 import {
   getBbDesktopInfo,
+  MACOS_TITLE_BAR_TRAILING_TOGGLE_CLASS,
   MACOS_WINDOW_NO_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
+import { useIsSidebarFramed } from "@/components/ui/sidebar.js";
 import { cn } from "@bb/shared-ui/lib/utils";
 import {
   useAppCommandHandler,
@@ -118,6 +120,7 @@ export function ThreadDetailHeader({
   const dimsInactiveSplits = useAtomValue(dimInactiveSplitsAtom);
   const panelShortcut = useAppCommandShortcut("panel.toggle");
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
+  const isSidebarFramed = useIsSidebarFramed();
   const headerRef = useRef<HTMLElement>(null!);
   const {
     beginPaneDrag,
@@ -297,6 +300,9 @@ export function ThreadDetailHeader({
               className={cn(
                 HEADER_ICON_BUTTON_CLASS,
                 CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+                isTopRow &&
+                  isSidebarFramed &&
+                  MACOS_TITLE_BAR_TRAILING_TOGGLE_CLASS,
               )}
               aria-label={
                 panelShortcut

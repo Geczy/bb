@@ -119,6 +119,18 @@ describe("desktop chrome geometry", () => {
       macosTrafficLightTopInset: MACOS_TRAFFIC_LIGHT_TOP_INSET_PX,
     });
     expect(properties.get("--bb-window-title-bar-height")).toBe("36px");
+    const cardMask = decodeURIComponent(
+      properties.get("--bb-window-card-mask") ?? "",
+    );
+    expect(cardMask).toContain("<rect width='100%' height='36'/>");
+    expect(cardMask).toContain(
+      "<rect y='36' width='100%' height='100%' rx='12'/>",
+    );
+    expect(
+      decodeURIComponent(
+        properties.get("--bb-window-card-mask-square-left") ?? "",
+      ),
+    ).toContain("<rect y='36' width='12' height='12'/>");
     expect(properties.get("--bb-macos-traffic-light-reserve")).toBe("88px");
 
     properties.clear();

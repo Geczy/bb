@@ -30,6 +30,8 @@ export const CHROME_ROW_CLASS = `flex ${CHROME_ROW_HEIGHT_CLASS} items-center`;
 export const MACOS_CHROME_CONTROL_AXIS_CLASS =
   "[transform:translateY(var(--bb-macos-chrome-control-y,calc(var(--bb-macos-traffic-light-center-y)_-_var(--bb-app-chrome-row-height)/2)))]";
 export const MACOS_TITLE_BAR_ROW_CLASS = "h-(--bb-window-title-bar-height)";
+export const MACOS_TITLE_BAR_TRAILING_TOGGLE_CLASS =
+  "w-6 -mr-(--bb-panel-chrome-padding)";
 export const MACOS_TITLE_BAR_CONTROL_SIZE_CLASS =
   "[&_button]:h-6 [&_[data-tab-pill]]:h-6";
 export const MACOS_TITLE_BAR_BAND_CLASS = `${MACOS_TITLE_BAR_ROW_CLASS} box-content pb-px`;
@@ -68,6 +70,7 @@ export function shouldReserveMacosTrafficLights({
 }
 
 const MACOS_TRAFFIC_LIGHT_CLEARANCE_PX = 12;
+const WINDOW_CARD_RADIUS_PX = 12;
 const MACOS_CHROME_CONTROL_SIZE_PX = 28;
 const TITLE_BAR_CONTROL_HEIGHT_PX = 24;
 const TITLE_BAR_HOVER_GAP_PX = 2;
@@ -114,6 +117,17 @@ export function getMacosWindowChromeGeometry(
   };
 }
 
+export function getWindowCardMask(
+  titleBarHeight: number,
+  squareTopLeft: boolean,
+): string {
+  const corner = squareTopLeft
+    ? `<rect y='${titleBarHeight}' width='${WINDOW_CARD_RADIUS_PX}' height='${WINDOW_CARD_RADIUS_PX}'/>`
+    : "";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'><rect width='100%' height='${titleBarHeight}'/><rect y='${titleBarHeight}' width='100%' height='100%' rx='${WINDOW_CARD_RADIUS_PX}'/>${corner}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
 interface StyleTarget {
   style: Pick<CSSStyleDeclaration, "setProperty">;
 }
@@ -131,6 +145,14 @@ export function applyMacosWindowChromeGeometry(
   root.style.setProperty(
     "--bb-window-title-bar-height",
     `${geometry.titleBarHeight}px`,
+  );
+  root.style.setProperty(
+    "--bb-window-card-mask",
+    getWindowCardMask(geometry.titleBarHeight, false),
+  );
+  root.style.setProperty(
+    "--bb-window-card-mask-square-left",
+    getWindowCardMask(geometry.titleBarHeight, true),
   );
   root.style.setProperty(
     "--bb-macos-traffic-light-reserve",

@@ -111,6 +111,7 @@ import {
   MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
+import { useIsSidebarFramed } from "@/components/ui/sidebar.js";
 import {
   useFixedPanelTabsState,
   useFixedPanelTabsStorageMaintenance,
@@ -1378,6 +1379,7 @@ function RootComposeSurface({
   );
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
+  const isSidebarFramed = useIsSidebarFramed();
   const showPinnedToggle =
     (paneContext?.secondaryPanelHost ?? null) === null &&
     (!isSecondaryPanelOpen || isCompactViewport);
@@ -1391,6 +1393,7 @@ function RootComposeSurface({
           "flex h-7 items-center",
           MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
         ],
+        isSidebarFramed && "right-0 [&_button]:w-6",
         isSecondaryPanelOpen && "pointer-events-none invisible",
       )}
     >

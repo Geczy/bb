@@ -84,6 +84,7 @@ import {
   MACOS_TITLE_BAR_BAND_CLASS,
   MACOS_TITLE_BAR_CONTROL_AXIS_CLASS,
   MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
+  MACOS_TITLE_BAR_TRAILING_TOGGLE_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
   MACOS_WINDOW_NO_DRAG_CLASS,
   shouldReserveMacosTrafficLights,
@@ -534,6 +535,7 @@ function ThreadSecondaryPanelContent({
         CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
         "relative",
         usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
+        isPanelInFrame && MACOS_TITLE_BAR_TRAILING_TOGGLE_CLASS,
       )}
       onClick={onClose}
       aria-label={
