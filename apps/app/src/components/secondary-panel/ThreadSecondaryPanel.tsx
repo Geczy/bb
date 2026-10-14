@@ -89,6 +89,7 @@ import {
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
 import { useDesktopWindowState } from "@/hooks/useDesktopWindowState";
+import { SecondaryPanelAtWindowTopContext } from "./secondaryPanelWindowTopContext";
 import {
   useIsSidebarFramed,
   useOptionalIsSidebarShowing,
@@ -163,8 +164,6 @@ export function resolveCollapsedPanelTrafficLightReserveClassName({
   sidebarKeepsCollapsedRail,
   reserveMacosTrafficLights,
 }: CollapsedPanelTrafficLightReserveArgs): string | false {
-  if (!reserveMacosTrafficLights) return false;
-  if (renderAsDrawer) return MACOS_COLLAPSED_TOP_LEFT_RESERVE_CLASS;
   if (isPanelInFrame) {
     return (
       isConversationCollapsed &&
@@ -172,6 +171,8 @@ export function resolveCollapsedPanelTrafficLightReserveClassName({
       MACOS_TITLE_BAR_COLLAPSED_SIDEBAR_RESERVE_CLASS
     );
   }
+  if (!reserveMacosTrafficLights) return false;
+  if (renderAsDrawer) return MACOS_COLLAPSED_TOP_LEFT_RESERVE_CLASS;
   return (
     isConversationCollapsed &&
     isSidebarShowing === false &&
@@ -446,7 +447,8 @@ function ThreadSecondaryPanelContent({
   const desktopWindowState = useDesktopWindowState();
   const isSidebarShowing = useOptionalIsSidebarShowing();
   const isFramed = useIsSidebarFramed();
-  const isPanelInFrame = isFramed && !renderAsDrawer;
+  const isAtWindowTop = useContext(SecondaryPanelAtWindowTopContext);
+  const isPanelInFrame = isFramed && isAtWindowTop && !renderAsDrawer;
   const sidebarKeepsCollapsedRail = useSidebarKeepsCollapsedRail();
   const collapsedPanelTrafficLightReserveClassName =
     resolveCollapsedPanelTrafficLightReserveClassName({
@@ -1306,7 +1308,9 @@ function SecondaryPanelResizeHandle({
   hitTargetRef,
 }: SecondaryPanelResizeHandleProps) {
   const isResizing = useAtomValue(threadSecondaryPanelResizingAtom);
-  const isFramed = useIsSidebarFramed();
+  const isSidebarFramed = useIsSidebarFramed();
+  const isAtWindowTop = useContext(SecondaryPanelAtWindowTopContext);
+  const isFramed = isSidebarFramed && isAtWindowTop;
   return (
     <PanelResizeHandle
       id="thread-detail-secondary-panel-handle"

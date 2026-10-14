@@ -72,6 +72,17 @@ describe("resolveCollapsedPanelTrafficLightReserveClassName", () => {
     ).toBe(false);
   });
 
+  it("still clears the title bar controls in full screen, where the lights hide but the controls stay", () => {
+    expect(
+      resolveCollapsedPanelTrafficLightReserveClassName({
+        ...base,
+        isPanelInFrame: true,
+        sidebarKeepsCollapsedRail: true,
+        reserveMacosTrafficLights: false,
+      }),
+    ).toBe(MACOS_TITLE_BAR_COLLAPSED_SIDEBAR_RESERVE_CLASS);
+  });
+
   it("does not reserve when the main sidebar is showing (it hosts the lights)", () => {
     expect(
       resolveCollapsedPanelTrafficLightReserveClassName({
