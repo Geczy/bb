@@ -91,6 +91,7 @@ import {
 } from "@/lib/bb-desktop";
 import { useDesktopWindowState } from "@/hooks/useDesktopWindowState";
 import { SecondaryPanelAtWindowTopContext } from "./secondaryPanelWindowTopContext";
+import { TitleBarScrollFade } from "@/components/ui/title-bar-scroll-fade";
 import {
   useIsSidebarFramed,
   useOptionalIsSidebarShowing,
@@ -916,7 +917,10 @@ function ThreadSecondaryPanelContent({
             />
           ) : null}
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-sidebar">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-sidebar">
+          {isPanelInFrame && usesWindowChrome ? (
+            <TitleBarScrollFade tone="sidebar" />
+          ) : null}
           {browserSurface}
           {isBrowserSurfaceActive ? null : hasActiveSurfaceTab ? (
             <div
