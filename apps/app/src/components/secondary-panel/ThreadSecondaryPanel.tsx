@@ -142,8 +142,6 @@ export function getSecondaryPanelChromeStackClassName(
   );
 }
 
-const FRAMED_PANEL_DIVIDER_CLIP_CLASS =
-  "bg-clip-content pt-[calc(var(--bb-window-title-bar-height)+1px)]";
 const FRAMED_PANEL_SURFACE_CLASS =
   "isolate bg-transparent before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:top-[calc(var(--bb-window-title-bar-height)+1px)] before:-z-10 before:rounded-tr-xl before:bg-sidebar";
 
@@ -1308,9 +1306,6 @@ function SecondaryPanelResizeHandle({
   hitTargetRef,
 }: SecondaryPanelResizeHandleProps) {
   const isResizing = useAtomValue(threadSecondaryPanelResizingAtom);
-  const isSidebarFramed = useIsSidebarFramed();
-  const isAtWindowTop = useContext(SecondaryPanelAtWindowTopContext);
-  const isFramed = isSidebarFramed && isAtWindowTop;
   return (
     <PanelResizeHandle
       id="thread-detail-secondary-panel-handle"
@@ -1326,7 +1321,6 @@ function SecondaryPanelResizeHandle({
         matchesSplitDividers
           ? [
               "bg-border-seam hover:bg-ring/40",
-              isFramed && FRAMED_PANEL_DIVIDER_CLIP_CLASS,
               isOpen && !isConversationCollapsed
                 ? "w-px opacity-100"
                 : "pointer-events-none w-0 opacity-0",
@@ -1352,7 +1346,6 @@ function SecondaryPanelResizeHandle({
         <span
           className={cn(
             "pointer-events-none absolute inset-y-0 left-full z-10 w-px transition-colors",
-            isFramed && "top-[calc(var(--bb-window-title-bar-height)+1px)]",
             isResizing
               ? "bg-accent-foreground/50"
               : "bg-border-seam group-hover:bg-accent-foreground/35",

@@ -48,6 +48,8 @@ const SIDEBAR_FRAMED_PANEL_CLASS =
 const SIDEBAR_FRAMED_CARD_EDGE_CLASS = "border-y border-l border-border-seam";
 const SIDEBAR_FRAMED_INSET_CLASS =
   "isolate -mt-(--bb-window-title-bar-height) h-[calc(100%+var(--bb-window-title-bar-height))] bg-transparent [clip-path:inset(0_round_0_0_0.75rem_0)] before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:top-(--bb-window-title-bar-height) before:-z-10 before:rounded-tr-xl before:rounded-br-xl before:border-y before:border-r before:border-l before:border-border-seam before:bg-background";
+const SIDEBAR_FRAMED_EXPANDED_INSET_CLASS =
+  "after:pointer-events-none after:absolute after:top-0 after:left-0 after:h-(--bb-window-title-bar-height) after:w-px after:bg-border-seam";
 const SIDEBAR_FRAMED_COLLAPSED_INSET_CLASS =
   "[clip-path:inset(0_round_0_0_0.75rem_0.75rem)] before:rounded-tl-xl before:rounded-bl-xl [transition:clip-path_0s_linear_200ms] before:[transition:border-top-left-radius_0s_linear_200ms,border-bottom-left-radius_0s_linear_200ms]";
 
@@ -1708,6 +1710,7 @@ const SidebarInset = React.forwardRef<
         "data-[sidebar-shelf=open]:translate-x-(--sidebar-width-mobile) data-[sidebar-shelf]:will-change-[translate]",
         "data-[panel-shelf=full]:-translate-x-full data-[panel-shelf]:will-change-[translate]",
         isFramed && SIDEBAR_FRAMED_INSET_CLASS,
+        isFramed && open && SIDEBAR_FRAMED_EXPANDED_INSET_CLASS,
         isFramed && !open && SIDEBAR_FRAMED_COLLAPSED_INSET_CLASS,
         className,
       )}
