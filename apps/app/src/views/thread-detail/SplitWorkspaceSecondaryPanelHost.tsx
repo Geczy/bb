@@ -212,7 +212,8 @@ export function SplitWorkspaceSecondaryPanelHost({
               "flex h-7 items-center",
               MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
             ],
-            isSidebarFramed && "right-0 [&_button]:w-7 [&_svg]:translate-x-0.5",
+            isSidebarFramed &&
+              "right-0 [&_button]:w-7 [&_[data-icon-root]]:translate-x-0.5",
           )}
         >
           <AppCommandShortcutHint
