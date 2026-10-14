@@ -108,8 +108,10 @@ import {
   getBbDesktopInfo,
   isDesktopBrowserAvailable,
   MACOS_CHROME_CONTROL_AXIS_CLASS,
+  MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
+import { useIsSidebarFramed } from "@/components/ui/sidebar.js";
 import {
   useFixedPanelTabsState,
   useFixedPanelTabsStorageMaintenance,
@@ -1377,6 +1379,7 @@ function RootComposeSurface({
   );
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
+  const isSidebarFramed = useIsSidebarFramed();
   const showPinnedToggle =
     (paneContext?.secondaryPanelHost ?? null) === null &&
     (!isSecondaryPanelOpen || isCompactViewport);
@@ -1386,6 +1389,10 @@ function RootComposeSurface({
         "fixed z-40 mr-(--bb-window-frame-lip)",
         ROOT_COMPOSE_PINNED_PANEL_TOGGLE_POSITION_CLASS,
         usesDesktopChrome && MACOS_CHROME_CONTROL_AXIS_CLASS,
+        isSidebarFramed && [
+          "flex h-7 items-center",
+          MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
+        ],
         isSecondaryPanelOpen && "pointer-events-none invisible",
       )}
     >

@@ -76,6 +76,7 @@ import {
   MACOS_CHROME_CONTROL_AXIS_CLASS,
   MACOS_CHROME_CONTROL_NO_DRAG_CLASS,
   MACOS_TITLE_BAR_CONTROL_AXIS_CLASS,
+  MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS,
   MACOS_TRAFFIC_LIGHT_RESERVE_PADDING_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
@@ -253,6 +254,7 @@ function SidebarTriggerOverlay({
           "pointer-events-none fixed top-0 left-0",
           "flex h-(--bb-window-title-bar-height) items-center",
           MACOS_TITLE_BAR_CONTROL_AXIS_CLASS,
+          MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
           reserveMacosTrafficLights
             ? MACOS_TRAFFIC_LIGHT_RESERVE_PADDING_CLASS
             : BROWSER_SIDEBAR_TRIGGER_INSET_CLASS,

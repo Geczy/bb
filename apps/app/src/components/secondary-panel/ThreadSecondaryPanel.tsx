@@ -83,6 +83,7 @@ import {
   MACOS_TITLE_BAR_COLLAPSED_SIDEBAR_RESERVE_CLASS,
   MACOS_TITLE_BAR_BAND_CLASS,
   MACOS_TITLE_BAR_CONTROL_AXIS_CLASS,
+  MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
   MACOS_WINDOW_DRAG_CLASS,
   MACOS_WINDOW_NO_DRAG_CLASS,
   shouldReserveMacosTrafficLights,
@@ -832,6 +833,7 @@ function ThreadSecondaryPanelContent({
               isPanelInFrame &&
                 usesWindowChrome && [
                   MACOS_TITLE_BAR_BAND_CLASS,
+                  MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
                   MACOS_TITLE_BAR_CONTROL_AXIS_CLASS,
                 ],
             )}

@@ -30,6 +30,8 @@ export const CHROME_ROW_CLASS = `flex ${CHROME_ROW_HEIGHT_CLASS} items-center`;
 export const MACOS_CHROME_CONTROL_AXIS_CLASS =
   "[transform:translateY(var(--bb-macos-chrome-control-y,calc(var(--bb-macos-traffic-light-center-y)_-_var(--bb-app-chrome-row-height)/2)))]";
 export const MACOS_TITLE_BAR_ROW_CLASS = "h-(--bb-window-title-bar-height)";
+export const MACOS_TITLE_BAR_CONTROL_SIZE_CLASS =
+  "[&_button]:h-6 [&_[data-tab-pill]]:h-6";
 export const MACOS_TITLE_BAR_BAND_CLASS = `${MACOS_TITLE_BAR_ROW_CLASS} box-content pb-px`;
 export const MACOS_TITLE_BAR_COLLAPSED_SIDEBAR_RESERVE_CLASS =
   "pl-[calc(var(--bb-window-title-bar-controls-end)_+_12px_-_var(--bb-sidebar-control-size)_-_2*var(--bb-sidebar-rail-padding)_-_1px_-_1rem)]";
