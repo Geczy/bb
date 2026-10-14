@@ -388,7 +388,6 @@ export function NavRailSettingsButton({
         settingsShortcut ? `Settings (${settingsShortcut.label})` : "Settings"
       }
       active={isSettingsActive}
-      className="h-8 max-md:pointer-coarse:h-9"
       aria-keyshortcuts={settingsShortcut?.ariaKeyshortcuts}
       onClick={() => {
         if (!isSettingsActive) void navigate(settingsRoutePath);
