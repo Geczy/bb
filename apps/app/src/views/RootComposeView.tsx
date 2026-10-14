@@ -1393,7 +1393,7 @@ function RootComposeSurface({
           "flex h-7 items-center",
           MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
         ],
-        isSidebarFramed && "-right-0.5 [&_button]:w-7",
+        isSidebarFramed && "right-0 [&_button]:w-7 [&_svg]:translate-x-0.5",
         isSecondaryPanelOpen && "pointer-events-none invisible",
       )}
     >

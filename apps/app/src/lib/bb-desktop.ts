@@ -31,7 +31,7 @@ export const MACOS_CHROME_CONTROL_AXIS_CLASS =
   "[transform:translateY(var(--bb-macos-chrome-control-y,calc(var(--bb-macos-traffic-light-center-y)_-_var(--bb-app-chrome-row-height)/2)))]";
 export const MACOS_TITLE_BAR_ROW_CLASS = "h-(--bb-window-title-bar-height)";
 export const MACOS_TITLE_BAR_TRAILING_TOGGLE_CLASS =
-  "w-7 -mr-[calc(var(--bb-panel-chrome-padding)+2px)]";
+  "w-7 -mr-(--bb-panel-chrome-padding) [&_svg]:translate-x-0.5";
 export const MACOS_TITLE_BAR_CONTROL_SIZE_CLASS =
   "[&_button]:h-7 [&_[data-tab-pill]]:h-7";
 export const MACOS_TITLE_BAR_BAND_CLASS = `${MACOS_TITLE_BAR_ROW_CLASS} box-content pb-px`;
