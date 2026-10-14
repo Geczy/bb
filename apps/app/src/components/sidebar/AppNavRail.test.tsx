@@ -8,7 +8,8 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import type { ExperimentalBadge } from "@get-bb/plugin-sdk";
 import { createStore, Provider } from "jotai";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import {
@@ -238,6 +239,44 @@ function currentRailLabels(): (string | null)[] {
   );
 }
 
+function railBadgeText(name: string): string | null | undefined {
+  return railButton(name).querySelector('[data-nav-rail-badge="count"]')
+    ?.textContent;
+}
+
+function registerDocsBadge(initial: ExperimentalBadge | null) {
+  let value = initial;
+  const listeners = new Set<() => void>();
+  const subscribe = (listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  function useBadge() {
+    return useSyncExternalStore(subscribe, () => value);
+  }
+  setPluginSlotRegistrations(
+    "garden",
+    registrationSet({
+      navPanels: [
+        {
+          id: "docs",
+          title: "Docs",
+          icon: "BookOpen",
+          path: "docs",
+          component: () => null,
+          experimental_useBadge: useBadge,
+        },
+      ],
+    }),
+  );
+  return {
+    set(next: ExperimentalBadge | null) {
+      value = next;
+      for (const listener of listeners) listener();
+    },
+  };
+}
+
 function pathname(): string | null {
   return screen.getByTestId("pathname").textContent;
 }
@@ -441,32 +480,60 @@ describe("AppNavRail", () => {
     expect(mocks.onNavigate).toHaveBeenCalledTimes(1);
   });
 
-  it("does not mount a plugin panel's sidebar accessory", () => {
-    const accessoryMounted = vi.fn();
-    setPluginSlotRegistrations(
-      "garden",
-      registrationSet({
-        navPanels: [
-          {
-            id: "docs",
-            title: "Docs",
-            icon: "BookOpen",
-            path: "docs",
-            component: () => null,
-            experimental_sidebarAccessory: () => {
-              accessoryMounted();
-              return <span>492/1</span>;
-            },
-          },
-        ],
-      }),
-    );
+  it("draws a plugin panel's rail badge and names it in the destination's label", () => {
+    const badge = registerDocsBadge({ count: 3, label: "3 open pages" });
 
     renderRail(THREAD_PATH);
 
-    expect(railButton("Docs")).toBeDefined();
-    expect(accessoryMounted).not.toHaveBeenCalled();
-    expect(rail().textContent).not.toContain("492/1");
+    expect(railButton("Docs, 3 open pages")).toBeDefined();
+    expect(railBadgeText("Docs, 3 open pages")).toBe("3");
+
+    act(() => badge.set({ count: 9, label: "9 open pages" }));
+    expect(railBadgeText("Docs, 9 open pages")).toBe("9");
+
+    act(() => badge.set({ count: 10, label: "10 open pages" }));
+    expect(railBadgeText("Docs, 10 open pages")).toBe("9+");
+
+    act(() => badge.set({ label: "Sync failed" }));
+    expect(
+      railButton("Docs, Sync failed").querySelector(
+        '[data-nav-rail-badge="dot"]',
+      ),
+    ).not.toBeNull();
+
+    act(() => badge.set(null));
+    expect(
+      railButton("Docs").querySelector("[data-nav-rail-badge]"),
+    ).toBeNull();
+  });
+
+  it("marks More and the More menu item for a badged destination hidden under More", async () => {
+    registerDocsBadge({ count: 2, label: "2 open pages" });
+
+    renderRail(THREAD_PATH, {
+      visibleKeys: ["__bb__/new-thread", "__bb__/extensions"],
+    });
+
+    const more = railButton("More, Docs: 2 open pages");
+    expect(more.querySelector('[data-nav-rail-badge="dot"]')).not.toBeNull();
+    fireEvent.keyDown(more, { key: "Enter" });
+    const item = await screen.findByRole("menuitem", {
+      name: "Docs, 2 open pages",
+    });
+    expect(
+      item.querySelector('[data-nav-rail-badge="count"]')?.textContent,
+    ).toBe("2");
+  });
+
+  it("shows no badge for an invalid rail badge value and keeps the destination usable", () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    registerDocsBadge({ count: 0, label: "none" });
+
+    renderRail(THREAD_PATH);
+
+    expect(rail().querySelector("[data-nav-rail-badge]")).toBeNull();
+    fireEvent.click(railButton("Docs"));
+    expect(pathname()).toBe(DOCS_PATH);
   });
 
   it("keeps hidden destinations out of the rail", () => {

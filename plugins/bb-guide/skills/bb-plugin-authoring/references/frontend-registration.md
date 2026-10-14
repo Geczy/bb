@@ -65,7 +65,7 @@ export default definePluginApp((app) => {
         layout: "flush",
       },
     ],
-    experimental_sidebarAccessory: OpenIssueCount,
+    experimental_useBadge: useOpenIssueBadge,
   });
   app.slots.threadPanelAction({
     id: "issue",

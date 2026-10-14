@@ -1225,39 +1225,31 @@ Docs: `frontend-core-slots.md`, `frontend-components.md`.
 5. Keep core and plugin destinations on the same resolver and verify the
    controller never learns Changes, file, task, or document target shapes.
 
-## `PluginNavPanelRegistration.experimental_sidebarAccessory`
+## `PluginNavPanelRegistration.experimental_useBadge`
 
-**Kept experimental (2026-08-22).** It has one consumer (the tasks plugin), and
-item 1 below would change the API shape.
+**Added 2026-10-14 (SDK 0.6.48), replacing `experimental_sidebarAccessory`.**
+One consumer: the Tasks plugin's open-task count.
 
-A no-props, presentational component for a live value beside a nav panel's
-navigation entry. The SDK accepts it, but no host surface mounts it, because
-the navigation rail is icon-only.
+A nav panel hook returning `ExperimentalBadge` (`{ count?, label }`) or
+`null`. The rail runs it in the plugin's slot scope and crash boundary and
+draws a count (capped at `9+`) or a dot on the icon, with `label` in the
+tooltip and accessible name. A plugin that still passes
+`experimental_sidebarAccessory` keeps loading; the field is dropped with a
+warning. Remove that compatibility once released plugins have migrated.
 
 Docs: `frontend-core-slots.md`.
 
 **Audit before stabilizing.**
 
-1. **Component versus value.** Confirm real consumers need component-owned
-   live state, rather than a narrower string/number/badge value plus a separate
-   host update primitive. Installed plugins are trusted, but a component can
-   still render controls or markup that is inappropriate for row chrome.
-2. **Budget.** Revisit the 4rem by 1.25rem cap against counts, short statuses,
-   localization, browser zoom, and multiple plugin rows. Decide whether the
-   host should expose a fixed badge treatment instead of accepting plugin
-   styling.
-3. **Host surface.** No host surface mounts the component. Decide where a
-   live value belongs beside an icon-only rail destination (a badge, a
-   tooltip, or nowhere) before stabilizing, or remove the field.
-4. **Overflow and portals.** The wrapper clips ordinary descendants but cannot
-   constrain content portalled elsewhere in the document. Confirm the
-   presentational-only contract is sufficient, or enforce a non-component
-   value before stabilization.
-5. **Accessibility.** Accessory text is exposed beside the navigation button
-   without changing that button's stable accessible name. Confirm that reading
-   order and the focus-triggered accessory/options swap work for counts and
-   short statuses, and decide whether a dedicated label prop or host-rendered
-   status semantics are needed.
+1. **Core parity.** Decide whether a core destination needs a badge and, if
+   so, route it through the same `RailBadgeMark` and label path.
+2. **Tone.** Confirm one neutral treatment is enough, or add a host-owned
+   `tone` (such as attention) without plugin styling.
+3. **Hook lifetime.** The hook runs for every registered panel while the rail
+   is mounted, including hidden ones. Confirm that cost is acceptable for
+   plugins with expensive queries, or add visibility to the hook's inputs.
+4. **More summary.** The More button's accessible name lists every hidden
+   badge. Check that this stays usable with many badged hidden panels.
 
 ## `PluginContentScriptContext.experimental_setThreadRowStatus`
 

@@ -53,10 +53,12 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Build a whole page, such as a dashboard, a board, or an inbox",
           "Give the page a URL that can be shared and works with back and forward",
           "Add fixed tabs beside Browser and Terminal, and open terminals it started in any folder",
+          "Show a live count or dot on its rail icon",
         ],
         apiSymbols: [
           "PluginNavPanelRegistration",
           "PluginNavPanelProps",
+          "ExperimentalBadge",
           "PluginFixedTabRegistration",
           "PluginFixedTabDeclaration",
           "ExperimentalPluginFixedTabReference",

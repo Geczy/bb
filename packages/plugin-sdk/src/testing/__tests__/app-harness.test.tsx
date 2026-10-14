@@ -937,21 +937,19 @@ describe("loadPluginApp", () => {
             icon: "FileText",
             path: "panel",
             component: Panel,
-            experimental_sidebarAccessory: "nope" as never,
+            experimental_useBadge: "nope" as never,
           });
         }),
       ),
-    ).rejects.toThrow(
-      '"experimental_sidebarAccessory" must be a React component',
-    );
+    ).rejects.toThrow('"experimental_useBadge" must be a React hook');
     await expect(loadPluginApp({ default: { nope: true } })).rejects.toThrow(
       "not definePluginApp(...)",
     );
   });
 
-  it("captures a nav panel experimental sidebar accessory", async () => {
-    function SidebarAccessory() {
-      return <span>12</span>;
+  it("captures a nav panel experimental badge hook", async () => {
+    function useBadge() {
+      return { count: 12, label: "12 open tasks" };
     }
     const captured = await loadPluginApp(
       definePluginApp((builder) => {
@@ -961,14 +959,12 @@ describe("loadPluginApp", () => {
           icon: "ListTodo",
           path: "tasks",
           component: Panel,
-          experimental_sidebarAccessory: SidebarAccessory,
+          experimental_useBadge: useBadge,
         });
       }),
     );
 
-    expect(captured.navPanels[0]?.experimental_sidebarAccessory).toBe(
-      SidebarAccessory,
-    );
+    expect(captured.navPanels[0]?.experimental_useBadge).toBe(useBadge);
   });
 
   it("validates and captures nav panel fixed tabs", async () => {

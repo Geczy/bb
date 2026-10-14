@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@bb/shared-ui/dropdown-menu";
 import { Icon } from "@bb/shared-ui/icon";
+import type { ExperimentalBadge } from "@get-bb/plugin-sdk";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { Popover, PopoverAnchor, PopoverContent } from "@bb/shared-ui/popover";
@@ -44,8 +45,15 @@ import { SidebarNavigationCustomize } from "./SidebarNavigationCustomize";
 import {
   SidebarNavigationIcon,
   useSidebarNavigation,
+  useSidebarNavigationModel,
   useSidebarNavigationSplit,
 } from "./SidebarNavigationModel";
+import {
+  RailBadgeMark,
+  RailBadgeSources,
+  railBadgeAccessibleLabel,
+  type RailBadges,
+} from "./RailBadges";
 import {
   NEW_THREAD_NAVIGATION_ITEM_ID,
   type SidebarNavigationItem,
@@ -61,7 +69,7 @@ const RAIL_ICON_CLASS = "size-(--bb-sidebar-control-icon-size)";
 const RAIL_MENU_SIDE_OFFSET = 12;
 
 const RAIL_BUTTON_CLASS = cn(
-  "size-(--bb-sidebar-control-size) shrink-0 rounded-md p-0 text-muted-foreground ring-sidebar-ring",
+  "relative size-(--bb-sidebar-control-size) shrink-0 rounded-md p-0 text-muted-foreground ring-sidebar-ring",
   "hover:bg-state-hover hover:text-sidebar-foreground focus-visible:ring-2",
   "aria-[current=page]:bg-state-active aria-[current=page]:text-sidebar-foreground",
   "data-[state=open]:bg-state-active data-[state=open]:text-sidebar-foreground",
@@ -102,10 +110,12 @@ RailButton.displayName = "RailButton";
 
 function RailItem({
   item,
+  badge,
   onCustomize,
   onMenuCloseAutoFocus,
 }: {
   item: SidebarNavigationItem;
+  badge: ExperimentalBadge | undefined;
   onCustomize: () => void;
   onMenuCloseAutoFocus: (event: Event) => void;
 }) {
@@ -113,17 +123,14 @@ function RailItem({
   const split = useSidebarNavigationSplit(item.id);
   const [disablePending, setDisablePending] = useState(false);
   const isPluginItem = item.pluginId !== null;
+  const label = railBadgeAccessibleLabel(item.label, badge);
 
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <span className="flex" data-nav-rail-item={item.id}>
           <RailButton
-            label={
-              item.shortcut
-                ? `${item.label} (${item.shortcut.label})`
-                : item.label
-            }
+            label={item.shortcut ? `${label} (${item.shortcut.label})` : label}
             active={item.id === activeItemId}
             disabled={item.isDisabled}
             aria-busy={item.isLoading || undefined}
@@ -140,6 +147,17 @@ function RailItem({
               icon={item.icon}
               className={RAIL_ICON_CLASS}
             />
+            {badge ? (
+              <RailBadgeMark
+                count={badge.count}
+                className={cn(
+                  "pointer-events-none absolute",
+                  badge.count === undefined
+                    ? "top-1 right-1"
+                    : "-top-0.5 -right-0.5",
+                )}
+              />
+            ) : null}
           </RailButton>
         </span>
       </ContextMenuTrigger>
@@ -202,20 +220,39 @@ function RailItem({
 function RailMoreMenu({
   buttonRef,
   hidden,
+  badges,
   onCustomize,
   onMenuCloseAutoFocus,
 }: {
   buttonRef: RefObject<HTMLButtonElement | null>;
   hidden: readonly SidebarNavigationItem[];
+  badges: RailBadges;
   onCustomize: () => void;
   onMenuCloseAutoFocus: (event: Event) => void;
 }) {
   const { actions } = useSidebarNavigation();
+  const hiddenBadgeLabels = hidden.flatMap((item) => {
+    const badge = badges.get(item.id);
+    return badge ? [`${item.label}: ${badge.label}`] : [];
+  });
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <RailButton ref={buttonRef} label="More">
+        <RailButton
+          ref={buttonRef}
+          label={
+            hiddenBadgeLabels.length > 0
+              ? `More, ${hiddenBadgeLabels.join(", ")}`
+              : "More"
+          }
+        >
           <Icon name="MoreHorizontal" aria-hidden="true" />
+          {hiddenBadgeLabels.length > 0 ? (
+            <RailBadgeMark
+              count={undefined}
+              className="pointer-events-none absolute top-1 right-1"
+            />
+          ) : null}
         </RailButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -225,16 +262,25 @@ function RailMoreMenu({
         data-testid="nav-rail-more-menu"
         onCloseAutoFocus={onMenuCloseAutoFocus}
       >
-        {hidden.map((item) => (
-          <DropdownMenuItem
-            key={item.id}
-            disabled={item.isDisabled || item.isLoading}
-            onSelect={() => actions.activate(item.id, { openInSplit: false })}
-          >
-            <SidebarNavigationIcon icon={item.icon} />
-            {item.label}
-          </DropdownMenuItem>
-        ))}
+        {hidden.map((item) => {
+          const badge = badges.get(item.id);
+          return (
+            <DropdownMenuItem
+              key={item.id}
+              disabled={item.isDisabled || item.isLoading}
+              onSelect={() => actions.activate(item.id, { openInSplit: false })}
+            >
+              <SidebarNavigationIcon icon={item.icon} />
+              {item.label}
+              {badge ? (
+                <>
+                  <span className="sr-only">, {badge.label}</span>
+                  <RailBadgeMark count={badge.count} className="ml-auto" />
+                </>
+              ) : null}
+            </DropdownMenuItem>
+          );
+        })}
         {hidden.length > 0 ? <DropdownMenuSeparator /> : null}
         <DropdownMenuItem onSelect={onCustomize}>
           <Icon name="SlidersHorizontal" aria-hidden="true" />
@@ -252,7 +298,9 @@ export function AppNavRail({
   isAppMode: boolean;
   customize: NavRailCustomizeState;
 }) {
-  const { items, activeItemId } = useSidebarNavigation();
+  const { state, rowsById } = useSidebarNavigationModel();
+  const { items, activeItemId } = state;
+  const [badges, setBadges] = useState<RailBadges>(() => new Map());
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const customizeAfterMenuCloseRef = useRef(false);
   const location = useLocation();
@@ -277,6 +325,10 @@ export function AppNavRail({
   );
   const visible = destinations.filter((item) => item.isVisible);
   const hidden = destinations.filter((item) => !item.isVisible);
+  const badgedPanels = destinations.flatMap((item) => {
+    const panel = rowsById.get(item.id)?.panelEntry?.panel;
+    return panel ? [{ itemId: item.id, panel }] : [];
+  });
 
   const requestCustomize = () => {
     customizeAfterMenuCloseRef.current = true;
@@ -335,6 +387,7 @@ export function AppNavRail({
               <RailItem
                 key={item.id}
                 item={item}
+                badge={badges.get(item.id)}
                 onCustomize={requestCustomize}
                 onMenuCloseAutoFocus={handleMenuCloseAutoFocus}
               />
@@ -342,6 +395,7 @@ export function AppNavRail({
             <RailMoreMenu
               buttonRef={moreButtonRef}
               hidden={hidden}
+              badges={badges}
               onCustomize={
                 isCompactViewport
                   ? () => customize.onOpenChange(true)
@@ -369,6 +423,7 @@ export function AppNavRail({
           </Popover>
         </div>
       </nav>
+      <RailBadgeSources panels={badgedPanels} setBadges={setBadges} />
     </div>
   );
 }

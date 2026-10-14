@@ -120,6 +120,7 @@ Read the installed SDK declarations for the exact current signatures.
 - `PluginFixedTabRegistration`
 - `PluginFixedTabDeclaration`
 - `PluginNavPanelRegistration`
+- `ExperimentalBadge`
 - `PluginPanelActionOpenOptions`
 - `PluginThreadPanelActionContext`
 - `PluginThreadPanelActionRegistration`

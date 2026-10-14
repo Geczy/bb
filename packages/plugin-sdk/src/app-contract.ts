@@ -641,6 +641,25 @@ export type PluginFixedTabDeclaration =
   | PluginFixedTabRegistration
   | PluginFixedTabRegistration<JsonValue>;
 
+/**
+ * A live value the host draws on a nav panel's rail icon.
+ *
+ * Experimental: see docs/api_to_audit.md.
+ */
+export interface ExperimentalBadge {
+  /**
+   * Positive integer drawn on the icon, shown as `9+` above 9. Omit it to
+   * draw a dot for a status that is not a count.
+   */
+  count?: number;
+  /**
+   * Short text for the destination's tooltip and accessible name, such as
+   * "3 open tasks". Required because the drawn badge is hidden from assistive
+   * technology.
+   */
+  label: string;
+}
+
 export interface PluginNavPanelRegistration {
   /** Unique within the plugin; letters, digits, `-`, `_`. */
   id: string;
@@ -662,16 +681,17 @@ export interface PluginNavPanelRegistration {
    */
   fixedTabs?: readonly PluginFixedTabDeclaration[];
   /**
-   * Optional presentational component for a narrow live value next to this
-   * panel's entry in the sidebar. It receives no props so it can own that
-   * value through the ordinary SDK hooks without coupling its state to the
-   * host sidebar. The host still validates it, but no host surface currently
-   * mounts it. Keep it to a small, single-line box; do not render controls or
-   * rely on unbounded content here.
+   * Optional React hook that returns this panel's rail badge, or `null` for
+   * none. The host calls it in your plugin's scope for every registered panel,
+   * including ones hidden under More, so it can own an RPC query and realtime
+   * subscription through the ordinary SDK hooks. BB draws the badge: a count
+   * or a dot on the icon, a dot on More while the panel is hidden there, and
+   * `label` in the tooltip and accessible name. A hook that throws or returns
+   * an invalid badge is treated as a crashed slot and shows no badge.
    *
    * Experimental: see docs/api_to_audit.md.
    */
-  experimental_sidebarAccessory?: ComponentType;
+  experimental_useBadge?: () => ExperimentalBadge | null;
   /**
    * Optional component rendered on the right side of the shared title bar
    * (e.g. a sync button or a count). Contained separately from the body: a
