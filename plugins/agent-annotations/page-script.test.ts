@@ -137,7 +137,6 @@ describe("agent annotations page script", () => {
     expect(messages.at(-1)).toEqual({
       type: "annotation-update",
       id: created.annotation.id,
-      number: 1,
       comment: "Updated",
     });
     expect(pin.title).toBe("Updated");
@@ -193,11 +192,27 @@ describe("agent annotations page script", () => {
     expect(messages.at(-1)).toEqual({
       type: "annotation-update",
       id: first.annotation.id,
-      number: 1,
       comment: "Make this blue",
     });
     expect(root.querySelector(".editor")).toBeNull();
     expect(root.querySelectorAll(".pin")).toHaveLength(2);
+  });
+
+  it("discards an open draft when dismissed without saving", () => {
+    const messages: unknown[] = [];
+    const bridge: Bridge = { postMessage: (data) => messages.push(data) };
+    evaluate(buildActivateExpression({}), bridge);
+    button.click();
+    const root = shadowRoot();
+    requireElement(root.querySelector("textarea")).value = "Not finished";
+
+    expect(evaluate(buildControllerExpression("dismiss"), bridge)).toEqual({
+      active: false,
+      count: 0,
+    });
+    expect(messages).toEqual([]);
+    expect(root.querySelector(".editor")).toBeNull();
+    expect(root.querySelector(".pin")).toBeNull();
   });
 
   it("deletes a pin and its element marker without leaving an editor", () => {

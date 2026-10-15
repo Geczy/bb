@@ -69,7 +69,7 @@ function rewriteAnnotation(
   draft: ComposerDraftSnapshot,
   pluginId: string,
   id: string,
-  label: string | null,
+  relabel: ((label: string) => string) | null,
 ): ComposerDraftSnapshot {
   const matches = draft.mentions
     .filter(
@@ -80,9 +80,15 @@ function rewriteAnnotation(
         mention.id === id,
     )
     .sort((a, b) => b.from - a.from);
-  const replacement = label ?? "";
   let next = draft;
   for (const match of matches) {
+    const label = relabel?.(match.label) ?? null;
+    const replacement =
+      label === null
+        ? ""
+        : next.text
+            .slice(match.from, match.to)
+            .replace(match.label, () => label);
     const shift = replacement.length - (match.to - match.from);
     next = {
       ...next,
@@ -120,7 +126,9 @@ export function AnnotateAction({
   const showState = useCallback(
     (next: PageState) => {
       if (wasActive.current && !next.active && next.count > 0) {
-        composer.focus();
+        pendingSaves.current = pendingSaves.current.then(() =>
+          composer.focus(),
+        );
       }
       wasActive.current = next.active;
       setState(next);
@@ -188,12 +196,12 @@ export function AnnotateAction({
               comment: message.comment,
             });
             composer.replace((draft) =>
-              rewriteAnnotation(
-                draft,
-                pluginId,
-                message.id,
-                annotationMentionLabel(message.number, message.comment),
-              ),
+              rewriteAnnotation(draft, pluginId, message.id, (label) => {
+                const number = /^(\d+)\. /.exec(label)?.[1];
+                return number === undefined
+                  ? label
+                  : annotationMentionLabel(Number(number), message.comment);
+              }),
             );
           } else {
             await addToPrompt(message.annotation);
@@ -218,7 +226,7 @@ export function AnnotateAction({
   useEffect(
     () => () => {
       page
-        ?.evaluate(buildControllerExpression("deactivate"))
+        ?.evaluate(buildControllerExpression("dismiss"))
         .catch(() => undefined);
     },
     [page],

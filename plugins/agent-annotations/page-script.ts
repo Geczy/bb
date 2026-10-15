@@ -9,7 +9,7 @@ interface AnnotationPageState {
 
 interface AnnotationController {
   activate(): AnnotationPageState;
-  deactivate(): AnnotationPageState;
+  deactivate(save?: boolean): AnnotationPageState;
   state(): AnnotationPageState;
   setTheme(theme: Record<string, string>): void;
   clear(): AnnotationPageState;
@@ -409,12 +409,7 @@ function installAgentAnnotations(
     annotation.pin.title = trimmed;
     closeEditor();
     showHover(null);
-    post({
-      type: "annotation-update",
-      id: annotation.id,
-      number: annotation.number,
-      comment: trimmed,
-    });
+    post({ type: "annotation-update", id: annotation.id, comment: trimmed });
   }
 
   function openEditor(
@@ -579,8 +574,11 @@ function installAgentAnnotations(
     return state();
   }
 
-  function deactivate(): AnnotationPageState {
+  function deactivate(save = true): AnnotationPageState {
     if (active) {
+      if (save) {
+        settleEditor();
+      }
       active = false;
       window.removeEventListener("pointermove", onPointerMove, true);
       window.removeEventListener("pointerdown", swallow, true);
@@ -588,7 +586,7 @@ function installAgentAnnotations(
       window.removeEventListener("mouseup", swallow, true);
       window.removeEventListener("click", onClick, true);
       window.removeEventListener("keydown", onKeyDown, true);
-      settleEditor();
+      closeEditor();
       showHover(null);
       reposition();
       syncLoop();
@@ -697,9 +695,10 @@ export function buildActivateExpression(theme: Record<string, string>): string {
 }
 
 export function buildControllerExpression(
-  method: "deactivate" | "state" | "clear",
+  method: "deactivate" | "dismiss" | "state" | "clear",
 ): string {
-  return `globalThis.${ANNOTATION_CONTROLLER_KEY} ? globalThis.${ANNOTATION_CONTROLLER_KEY}.${method}() : { active: false, count: 0 }`;
+  const call = method === "dismiss" ? "deactivate(false)" : `${method}()`;
+  return `globalThis.${ANNOTATION_CONTROLLER_KEY} ? globalThis.${ANNOTATION_CONTROLLER_KEY}.${call} : { active: false, count: 0 }`;
 }
 
 export function buildReactProbeExpression(annotationId: string): string {

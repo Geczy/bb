@@ -67,10 +67,7 @@ export const pageMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   annotationUpdateSchema
-    .extend({
-      type: z.literal("annotation-update"),
-      number: z.number().int().positive(),
-    })
+    .extend({ type: z.literal("annotation-update") })
     .strict(),
   pageStateSchema.extend({ type: z.literal("state") }).strict(),
   z
