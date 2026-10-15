@@ -1,12 +1,12 @@
 # Community forms
 
-`/community/survey` and `/community/merch` serve standalone documents and accept URL-encoded POSTs on the same paths. They do not load the site analytics client, React hydration or external resources. Both use `noindex, nofollow`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer` and a restrictive Content Security Policy. Neither is added to site navigation or the sitemap. The survey confirmation does not link to the address form.
+`/community/survey` and `/community/merch` serve standalone documents and accept URL-encoded POSTs on the same paths. They do not load the site analytics client, React hydration or external resources. Both use `noindex, nofollow`, `Cache-Control: no-store`, `Referrer-Policy: same-origin` and a restrictive Content Security Policy. Neither is added to site navigation or the sitemap. The survey confirmation does not link to the address form.
 
 ## Launch gate
 
 Collection is off unless `COMMUNITY_FORMS_ENABLED=true`. Do not set it in production until the owner approves the copy, screenshots and data plan. Apply the generated connect-db migration before enabling collection. No Google Form is published or used by this implementation.
 
-Local preview uses the same Worker and a local D1 database. Put `COMMUNITY_FORMS_ENABLED=true` in the local, gitignored `apps/web/.dev.vars` only while exercising synthetic submissions. Keep the shared review preview in its default collection-off state.
+Local preview uses the same Worker and a local D1 database. Inject `COMMUNITY_FORMS_ENABLED="true"` and synthetic invitation codes through a local, untracked Cloudflare Vite configuration only while exercising synthetic submissions. The existing Wrangler secrets allowlist ignores undeclared `.dev.vars` entries. Keep the shared review preview in its default collection-off state.
 
 ## Storage and access
 
@@ -16,12 +16,18 @@ There is no public response-reading endpoint. Read access is limited by the exis
 
 A short-lived Cloudflare rate-limit counter uses the connection IP; it is not copied into response tables. Application code does not log request bodies or responses. Cloudflare still handles ordinary infrastructure request metadata. Check account-level logging settings before launch.
 
+## Personal merch links
+
+Configure `COMMUNITY_MERCH_INVITES` as a private Worker secret containing an object such as `{"a-random-recipient-code":{"hat":true}}`. Each founder DM uses `/community/merch?c=<code>`. Keep the code-to-recipient mapping in the private DM plan; it is not stored with addresses. Use unpredictable codes (for example 12 random bytes encoded as hex), not sequential codes. The code grants permission to submit, not to read any stored address.
+
+Missing, unknown and revoked codes show an unavailable-link page. Hat eligibility comes from the server's invitation map; a URL flag cannot grant it. Non-hat recipients see only the name, shipping address and country fields. The response stores its code and stores `hat=null` when no hat was offered. Treat codes as private: they can appear in infrastructure URL logs, although the page sends no cross-origin referrer and loads no trackers. Remove a code from the secret after shipping to revoke further submissions.
+
 ## Shipping and deletion
 
-The shipping owner reads the four fields through the existing Cloudflare D1 console. Use the row ID to delete an address immediately after sending its package:
+The shipping owner reads the submitted fields and recipient code through the existing Cloudflare D1 console. Use the row ID to delete an address immediately after sending its package:
 
 ```sql
-SELECT id, created_at, name, address, country, hat
+SELECT id, created_at, recipient_code, name, address, country, hat
 FROM community_merch_address
 ORDER BY created_at;
 

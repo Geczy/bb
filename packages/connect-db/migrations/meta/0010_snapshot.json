@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8328094c-da3f-4220-88ae-58db691ba8e7",
+  "id": "536b88fd-2df8-44c5-9338-4ee2aba703be",
   "prevId": "bf50a157-b091-4e3b-850b-c7074a755dbe",
   "tables": {
     "account": {
@@ -421,6 +421,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "recipient_code": {
+          "name": "recipient_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "name": {
           "name": "name",
           "type": "text",
@@ -446,7 +453,7 @@
           "name": "hat",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         }
       },

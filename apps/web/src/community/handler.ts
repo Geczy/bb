@@ -12,8 +12,31 @@ const addressSchema = z.object({
   name: z.string().trim().min(1).max(250),
   address: z.string().trim().min(1).max(1000),
   country: z.string().trim().min(1).max(250),
-  hat: z.enum(["Yes", "No"]),
+  hat: z.enum(["Yes", "No"]).optional(),
 });
+
+const invitationSchema = z.record(
+  z.string().regex(/^[a-zA-Z0-9_-]{3,64}$/),
+  z.object({ hat: z.boolean() }),
+);
+
+function getInvitation(
+  request: Request,
+  env: Env,
+): { code: string; hat: boolean } | null {
+  const codes = new URL(request.url).searchParams.getAll("c");
+  const code = codes.length === 1 ? codes[0] : undefined;
+  if (!code || !env.COMMUNITY_MERCH_INVITES) return null;
+  try {
+    const parsed = invitationSchema.safeParse(
+      JSON.parse(env.COMMUNITY_MERCH_INVITES),
+    );
+    if (!parsed.success || !Object.hasOwn(parsed.data, code)) return null;
+    return { code, hat: parsed.data[code]!.hat };
+  } catch {
+    return null;
+  }
+}
 
 async function readValues(request: Request): Promise<FormValues | null> {
   if (
@@ -57,8 +80,11 @@ export async function handleCommunityForm(
 ): Promise<Response> {
   const enabled = env.COMMUNITY_FORMS_ENABLED === "true";
   let id: string = crypto.randomUUID();
+  const invitation = kind === "merch" ? getInvitation(request, env) : null;
   const page = (extra: Partial<Parameters<typeof formPage>[0]> = {}) =>
-    formPage({ kind, enabled, id, ...extra });
+    formPage({ kind, enabled, id, invitation, ...extra });
+  if (kind === "merch" && !invitation)
+    return page({ status: 404, unavailable: true });
   if (request.method === "GET") return page();
   if (!enabled)
     return page({
@@ -96,7 +122,13 @@ export async function handleCommunityForm(
               : [question.name],
           ),
         ]
-      : ["submission_id", "name", "address", "country", "hat"],
+      : [
+          "submission_id",
+          "name",
+          "address",
+          "country",
+          ...(invitation?.hat ? ["hat"] : []),
+        ],
   );
   if (!values || Object.keys(values).some((key) => !allowed.has(key)))
     return page({
@@ -140,7 +172,11 @@ export async function handleCommunityForm(
         values[name]?.length === 1 ? values[name][0] : undefined,
       ]),
     );
-    const parsed = addressSchema.safeParse(fields);
+    const parsed = (
+      invitation?.hat
+        ? addressSchema.extend({ hat: z.enum(["Yes", "No"]) })
+        : addressSchema
+    ).safeParse(fields);
     if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const name = String(issue.path[0]);
@@ -153,14 +189,15 @@ export async function handleCommunityForm(
     }
     const address = parsed.data;
     statement = env.DB.prepare(
-      "INSERT INTO community_merch_address (id, created_at, name, address, country, hat) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+      "INSERT INTO community_merch_address (id, created_at, recipient_code, name, address, country, hat) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
     ).bind(
       id,
       Date.now(),
+      invitation!.code,
       address.name,
       address.address,
       address.country,
-      address.hat === "Yes" ? 1 : 0,
+      invitation?.hat ? (address.hat === "Yes" ? 1 : 0) : null,
     );
   }
   try {

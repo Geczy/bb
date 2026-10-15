@@ -195,6 +195,8 @@ export function formPage({
   message = "",
   complete = false,
   status = 200,
+  invitation = null,
+  unavailable = false,
 }: {
   kind: FormKind;
   id: string;
@@ -204,6 +206,8 @@ export function formPage({
   message?: string;
   complete?: boolean;
   status?: number;
+  invitation?: { code: string; hat: boolean } | null;
+  unavailable?: boolean;
 }): Response {
   const nonce = crypto.randomUUID();
   const title = kind === "survey" ? SURVEY_TITLE : "A little thank-you from bb";
@@ -214,7 +218,7 @@ export function formPage({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title}</title>
         <meta name="robots" content="noindex, nofollow" />
-        <meta name="referrer" content="no-referrer" />
+        <meta name="referrer" content="same-origin" />
         <link rel="icon" href="/favicon-32x32.png" />
         {siteHeadLinks(css).map((link, index) => (
           <link key={index} {...link} />
@@ -247,6 +251,11 @@ export function formPage({
                     : "We'll use them to send your thank-you. No need to do anything else."}
                 </p>
                 <a href="/">Back to bb</a>
+              </section>
+            ) : unavailable ? (
+              <section className="community-thanks">
+                <h1>This personal link isn’t available.</h1>
+                <p>Please ask the person who sent it for a new link.</p>
               </section>
             ) : (
               <>
@@ -297,7 +306,7 @@ export function formPage({
                 )}
                 <form
                   method="post"
-                  action={`/community/${kind}`}
+                  action={`/community/${kind}${invitation ? `?c=${encodeURIComponent(invitation.code)}` : ""}`}
                   autoComplete={kind === "survey" ? "off" : "on"}
                 >
                   <input type="hidden" name="submission_id" value={id} />
@@ -331,26 +340,28 @@ export function formPage({
                         error={errors.country}
                         autoComplete="shipping country-name"
                       />
-                      <fieldset id="hat">
-                        <legend>Want a hat?</legend>
-                        <div className="community-options">
-                          {["Yes", "No"].map((option) => (
-                            <label className="community-option" key={option}>
-                              <input
-                                type="radio"
-                                name="hat"
-                                value={option}
-                                required
-                                defaultChecked={values.hat?.includes(option)}
-                              />
-                              <span>{option}</span>
-                            </label>
-                          ))}
-                        </div>
-                        {errors.hat && (
-                          <p className="community-error">{errors.hat}</p>
-                        )}
-                      </fieldset>
+                      {invitation?.hat && (
+                        <fieldset id="hat">
+                          <legend>Want a hat?</legend>
+                          <div className="community-options">
+                            {["Yes", "No"].map((option) => (
+                              <label className="community-option" key={option}>
+                                <input
+                                  type="radio"
+                                  name="hat"
+                                  value={option}
+                                  required
+                                  defaultChecked={values.hat?.includes(option)}
+                                />
+                                <span>{option}</span>
+                              </label>
+                            ))}
+                          </div>
+                          {errors.hat && (
+                            <p className="community-error">{errors.hat}</p>
+                          )}
+                        </fieldset>
+                      )}
                     </div>
                   )}
                   <div className="community-submit">
@@ -390,7 +401,7 @@ export function formPage({
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
-      "referrer-policy": "no-referrer",
+      "referrer-policy": "same-origin",
       "x-robots-tag": "noindex, nofollow",
       "x-content-type-options": "nosniff",
       "content-security-policy": `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
