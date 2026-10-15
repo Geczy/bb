@@ -6,7 +6,7 @@ import {
   useFolders,
   usePresets,
   useProjects,
-  useTasksQuery,
+  useTaskRead,
   useTasksRpc,
 } from "../../shell/data.js";
 import {
@@ -112,13 +112,11 @@ function LabelsSection() {
     null,
   );
   const projectId = selectedProjectId ?? projectList[0]?.id ?? null;
-  const labels = useTasksQuery(
-    async (rpc) =>
-      projectId
-        ? (await rpc.call("listLabels", { projectId })).labels
-        : ([] as Label[]),
-    ["projects:changed"],
-    [projectId],
+  const labels = useTaskRead(
+    "listLabels",
+    { projectId: projectId ?? "" },
+    (value) => value.labels,
+    projectId !== null,
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const { error, run } = useActionError();
@@ -281,10 +279,7 @@ function LabelsSection() {
 function PresetsSection() {
   const rpc = useTasksRpc();
   const presets = usePresets();
-  const machines = useTasksQuery(
-    async (rpc) => (await rpc.call("listMachines", {})).machines,
-    [],
-  );
+  const machines = useTaskRead("listMachines", {}, (value) => value.machines);
   const [dialog, setDialog] = useState<{
     key: number;
     editing: Preset | null;
@@ -293,7 +288,6 @@ function PresetsSection() {
 
   const save = async (editing: Preset | null, draft: PresetDraft) => {
     await savePresetDraft(rpc, editing, draft);
-    presets.refresh();
   };
 
   return (
@@ -389,7 +383,6 @@ function PresetsSection() {
                         setError(null);
                         rpc
                           .call("deletePreset", { presetId: preset.id })
-                          .then(() => presets.refresh())
                           .catch((deleteError: unknown) =>
                             setError(errorMessage(deleteError)),
                           );

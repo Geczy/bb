@@ -271,3 +271,11 @@ Read the installed SDK declarations for the exact current signatures.
 - `StandardSchemaV1InferOutput`
 - `StandardSchemaV1Issue`
 - `StandardSchemaV1Result`
+
+## Live RPC data
+
+- `ExperimentalRpcQueryOptions`
+- `ExperimentalRpcQueryState`
+- `experimental_useRpcQuery`
+- `experimental_useRpcKeyedQuery`
+- `experimental_useRpcRefresh`

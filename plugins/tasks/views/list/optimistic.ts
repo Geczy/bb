@@ -1,4 +1,8 @@
-import type { Task, TaskPriority, TaskStatus } from "../../shared/contract.js";
+import type {
+  TaskSummary,
+  TaskPriority,
+  TaskStatus,
+} from "../../shared/contract.js";
 
 export interface TaskEdit {
   status?: TaskStatus;
@@ -40,12 +44,19 @@ function hasFields(edit: TaskEdit): boolean {
   return EDIT_FIELDS.some((field) => edit[field] !== undefined);
 }
 
-function fieldSettled(task: Task, field: EditField, edit: TaskEdit): boolean {
+function fieldSettled(
+  task: TaskSummary,
+  field: EditField,
+  edit: TaskEdit,
+): boolean {
   if (field === "labelIds") return sameIds(edit.labelIds, task.labelIds);
   return task[field] === edit[field];
 }
 
-export function applyEdit(task: Task, edit: TaskEdit | undefined): Task {
+export function applyEdit(
+  task: TaskSummary,
+  edit: TaskEdit | undefined,
+): TaskSummary {
   if (edit === undefined || !hasFields(edit)) return task;
   return {
     ...task,
@@ -58,15 +69,15 @@ export function applyEdit(task: Task, edit: TaskEdit | undefined): Task {
 }
 
 export function editedTasks(
-  serverTasks: readonly Task[],
+  serverTasks: readonly TaskSummary[],
   entries: TaskEntries,
-): Task[] {
+): TaskSummary[] {
   if (entries.size === 0) return [...serverTasks];
   return serverTasks.map((task) => applyEdit(task, entries.get(task.id)?.edit));
 }
 
 export function matchesFilters(
-  task: Task,
+  task: TaskSummary,
   statuses: readonly TaskStatus[],
   priorities: readonly TaskPriority[],
   labelIds: readonly string[],
@@ -120,7 +131,7 @@ export function settleSuccess(
   taskId: string,
   patch: TaskEdit,
   gen: number,
-  serverTask: Task,
+  serverTask: TaskSummary,
 ): TaskEntries {
   const prev = entries.get(taskId);
   if (prev === undefined) return entries;
@@ -174,7 +185,7 @@ function sameEntries(a: TaskEntries, b: TaskEntries): boolean {
 
 export function reconcileEntries(
   entries: TaskEntries,
-  tasks: readonly Task[],
+  tasks: readonly TaskSummary[],
 ): TaskEntries {
   if (entries.size === 0) return entries;
   const byId = new Map(tasks.map((task) => [task.id, task]));

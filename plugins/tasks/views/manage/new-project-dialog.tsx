@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   useFolders,
   useProjects,
-  useTasksQuery,
+  useTaskRead,
   useTasksRpc,
 } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
@@ -66,9 +66,10 @@ export function NewProjectDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const bbProjects = useTasksQuery(
-    async (rpc) => (await rpc.call("listBbProjects")).bbProjects,
-    [],
+  const bbProjects = useTaskRead(
+    "listBbProjects",
+    null,
+    (value) => value.bbProjects,
   );
   const bbProjectList = bbProjects.data ?? [];
 

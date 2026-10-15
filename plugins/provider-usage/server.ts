@@ -161,7 +161,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     string,
     { value: UsageMeasurement; loadedAt: number }
   >();
-  const failures = new Set<string>();
+  const failures = new Map<string, number>();
   const pending = new Map<
     string,
     { force: boolean; promise: Promise<UsageMeasurement> }
@@ -200,13 +200,142 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     pending.set(key, { force, promise });
     return promise;
   };
+  let sources: Awaited<
+    ReturnType<typeof bb.sdk.plugins.experimental_discoverRpc>
+  > = [];
+  let inventoryUpdatedAt: number | null = null;
+  let discoveryGeneration = 0;
+  let inventoryPending: Promise<void> | null = null;
+  const lifetime = new AbortController();
+  bb.onDispose(() => lifetime.abort());
+  const sourceStops = new Map<string, () => void>();
+  const sourceReady = new Map<string, Promise<void>>();
+  const sourceGenerations = new Map<string, number>();
+  const acceptInventory = (pluginId: string, inventory: UsageResourceList) => {
+    if (!sources.some((source) => source.pluginId === pluginId)) return;
+    const next = {
+      pluginId,
+      label: inventory.label ?? null,
+      resources: inventory.resources,
+      error: null,
+    };
+    if (JSON.stringify(inventories.get(pluginId)) === JSON.stringify(next))
+      return;
+    inventories.set(pluginId, next);
+    bb.rpc.experimental_invalidate(["inventory"]);
+  };
+  const startSource = (id: string) => {
+    sourceStops.get(id)?.();
+    const generation = (sourceGenerations.get(id) ?? 0) + 1;
+    sourceGenerations.set(id, generation);
+    let ready!: () => void;
+    sourceReady.set(
+      id,
+      new Promise<void>((resolve) => {
+        ready = resolve;
+      }),
+    );
+    const stop = bb.sdk.plugins.experimental_watchRpc({
+      pluginId: id,
+      method: usageListMethod,
+      input: {},
+      outputSchema: usageSourceRpcContract[usageListMethod].output,
+      signal: lifetime.signal,
+      onChange: (inventory) => {
+        if (sourceGenerations.get(id) === generation)
+          acceptInventory(id, inventory);
+        ready();
+      },
+      onError: () => {
+        if (
+          sourceGenerations.get(id) === generation &&
+          sources.some((source) => source.pluginId === id)
+        ) {
+          const old = inventories.get(id);
+          inventories.set(id, {
+            pluginId: id,
+            label: old?.label ?? null,
+            resources: old?.resources ?? [],
+            error: "Usage resources could not be listed.",
+          });
+          bb.rpc.experimental_invalidate(["inventory"]);
+        }
+        ready();
+      },
+    });
+    sourceStops.set(id, () => {
+      stop();
+      ready();
+    });
+  };
+  const updateSources = (next: typeof sources) => {
+    discoveryGeneration++;
+    const changed = JSON.stringify(sources) !== JSON.stringify(next);
+    sources = next;
+    const ids = new Set(next.map((source) => source.pluginId));
+    for (const [id, stop] of sourceStops)
+      if (!ids.has(id)) {
+        stop();
+        sourceStops.delete(id);
+        sourceReady.delete(id);
+        sourceGenerations.set(id, (sourceGenerations.get(id) ?? 0) + 1);
+        inventories.delete(id);
+      }
+    for (const id of ids) if (!sourceStops.has(id)) startSource(id);
+    if (changed) bb.rpc.experimental_invalidate(["inventory"]);
+  };
+  const reconcileInventory = (): Promise<void> => {
+    if (inventoryPending) return inventoryPending;
+    inventoryPending = (async () => {
+      const existing = new Set(sourceStops.keys());
+      const started = discoveryGeneration;
+      const discovered = await bb.sdk.plugins.experimental_discoverRpc({
+        method: usageListMethod,
+        signal: lifetime.signal,
+      });
+      if (started === discoveryGeneration) updateSources(discovered);
+      for (const source of sources)
+        if (existing.has(source.pluginId)) startSource(source.pluginId);
+      await Promise.all(
+        sources.map((source) => sourceReady.get(source.pluginId)),
+      );
+      inventoryUpdatedAt = Date.now();
+    })().finally(() => {
+      inventoryPending = null;
+    });
+    return inventoryPending;
+  };
+  bb.background.service("usage-inventories", {
+    async start(signal) {
+      const stop = bb.sdk.plugins.experimental_watchDiscovery({
+        method: usageListMethod,
+        signal,
+        onChange: updateSources,
+      });
+      try {
+        if (!signal.aborted)
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+      } finally {
+        stop();
+        for (const dispose of sourceStops.values()) dispose();
+        sourceStops.clear();
+      }
+    },
+  });
   const readUsage = async (request: UsageRequest): Promise<UsageSnapshot> => {
+    if (
+      request.force ||
+      inventoryUpdatedAt === null ||
+      Date.now() - inventoryUpdatedAt >= 5 * 60_000
+    )
+      await reconcileInventory();
     const hostId = request.machineIds?.find((id) => !id.startsWith("source:"));
-    const [hosts, sources, providers, config] = await Promise.all([
+    const [hosts, providers, config] = await Promise.all([
       bb.sdk.hosts
         .list()
         .then((hosts) => hosts.filter((host) => host.type !== "ephemeral")),
-      bb.sdk.plugins.experimental_discoverRpc({ method: usageListMethod }),
       bb.sdk.providers
         .list(
           hostId === undefined
@@ -224,35 +353,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     for (const id of inventories.keys())
       if (!sources.some((source) => source.pluginId === id))
         inventories.delete(id);
-    for (let offset = 0; offset < sources.length; offset += 3) {
-      await Promise.all(
-        sources.slice(offset, offset + 3).map(async (source) => {
-          try {
-            const inventory = await bb.sdk.plugins.callRpc({
-              pluginId: source.pluginId,
-              method: usageListMethod,
-              input: {},
-              outputSchema: usageSourceRpcContract[usageListMethod].output,
-              signal: AbortSignal.timeout(45_000),
-            });
-            inventories.set(source.pluginId, {
-              pluginId: source.pluginId,
-              label: inventory.label ?? null,
-              resources: inventory.resources,
-              error: null,
-            });
-          } catch {
-            const previous = inventories.get(source.pluginId);
-            inventories.set(source.pluginId, {
-              pluginId: source.pluginId,
-              label: previous?.label ?? null,
-              resources: previous?.resources ?? [],
-              error: "Usage resources could not be listed.",
-            });
-          }
-        }),
-      );
-    }
+
     const keys = new Set(
       [...inventories.values()].flatMap((source) =>
         source.resources.map((resource) => keyOf(source.pluginId, resource.id)),
@@ -292,14 +393,15 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
           const cached = measurements.get(key);
           if (
             !request.force &&
-            cached &&
-            Date.now() - cached.loadedAt < request.maxAgeMs
+            Date.now() -
+              Math.max(cached?.loadedAt ?? 0, failures.get(key) ?? 0) <
+              request.maxAgeMs
           )
             return;
           try {
             await fetchResource(source.pluginId, resource.id, request.force);
           } catch {
-            failures.add(key);
+            failures.set(key, Date.now());
           }
         }),
       );
@@ -372,9 +474,82 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
       );
     return { machines };
   };
-  bb.rpc.register(providerUsageRpcContract, { getUsage: readUsage });
+  bb.rpc.register(providerUsageRpcContract, {
+    getUsage: async (request, context) => {
+      context.experimental_tag(
+        "inventory",
+        ...(request.providerIds.length === 0
+          ? []
+          : [
+              "usage",
+              ...(request.machineIds?.map((id) => `usage:${id}`) ?? [
+                "usage:all",
+              ]),
+            ]),
+      );
+      const result = await readUsage(request);
+      if (request.force)
+        bb.rpc.experimental_invalidate([
+          "usage:all",
+          ...(request.machineIds?.map((id) => `usage:${id}`) ?? []),
+        ]);
+      return result;
+    },
+  });
+  let watchCount = 0;
+  let inventoryTimer: ReturnType<typeof setInterval> | null = null;
+  bb.rpc.experimental_whileWatched("getUsage", (read, signal) => {
+    if (!("input" in read)) return;
+    const parsed = providerUsageRpcContract.getUsage.input.safeParse(
+      read.input,
+    );
+    if (!parsed.success) return;
+    const request = parsed.data;
+    const refreshIntervalMs = Math.max(1_000, request.maxAgeMs * 2);
+    watchCount++;
+    if (watchCount === 1)
+      inventoryTimer = setInterval(() => {
+        void reconcileInventory().catch((error) => bb.log.warn(String(error)));
+      }, 30 * 60_000);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = async () => {
+      try {
+        await readUsage({ ...request, force: false });
+        if (!signal.aborted)
+          bb.rpc.experimental_invalidate([
+            "usage:all",
+            ...(request.machineIds?.map((id) => `usage:${id}`) ?? []),
+          ]);
+      } catch (error) {
+        if (!signal.aborted) bb.log.warn(String(error));
+      } finally {
+        if (!signal.aborted)
+          timer = setTimeout(() => {
+            void refresh();
+          }, refreshIntervalMs);
+      }
+    };
+    if (request.providerIds.length > 0)
+      timer = setTimeout(() => {
+        void refresh();
+      }, refreshIntervalMs);
+    signal.addEventListener(
+      "abort",
+      () => {
+        if (timer) clearTimeout(timer);
+        watchCount--;
+        if (watchCount === 0 && inventoryTimer) {
+          clearInterval(inventoryTimer);
+          inventoryTimer = null;
+        }
+      },
+      { once: true },
+    );
+  });
   const markDirty = () => {
     for (const value of measurements.values()) value.loadedAt = 0;
+    for (const key of failures.keys()) failures.set(key, 0);
+    bb.rpc.experimental_invalidate(["usage"]);
   };
   bb.events.on("thread.idle", markDirty);
   bb.events.on("thread.failed", markDirty);

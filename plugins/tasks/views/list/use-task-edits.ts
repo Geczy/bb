@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Task } from "../../shared/contract.js";
+import type { TaskSummary } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import { useTasksRpc } from "../../shell/data.js";
 import {
@@ -15,11 +15,11 @@ import {
 interface ListTaskEditController {
   entries: TaskEntries;
   pending: ReadonlySet<string>;
-  edit: (task: Task, patch: TaskEdit) => void;
+  edit: (task: TaskSummary, patch: TaskEdit) => void;
 }
 
 export function useListTaskEdits(
-  serverTasks: readonly Task[] | undefined,
+  serverTasks: readonly TaskSummary[] | undefined,
   onError: (message: string) => void,
 ): ListTaskEditController {
   const rpc = useTasksRpc();
@@ -34,7 +34,7 @@ export function useListTaskEdits(
   }, [serverTasks]);
 
   const edit = useCallback(
-    (task: Task, patch: TaskEdit) => {
+    (task: TaskSummary, patch: TaskEdit) => {
       const gen = (genRef.current += 1);
       setEntries((prev) => beginEdit(prev, task.id, patch, gen));
 

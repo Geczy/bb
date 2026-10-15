@@ -65,6 +65,8 @@ function createService(args: {
     db: args.db,
     hub: {
       getDaemonSessionIdForHost: () => null,
+      notifyPlugin: () => {},
+      onPluginWatchChange: () => () => {},
       notifyPluginSignal: () => 0,
       notifySystem: () => {},
     },

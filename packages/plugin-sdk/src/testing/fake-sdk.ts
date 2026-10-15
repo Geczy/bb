@@ -1,3 +1,12 @@
+import { createPluginReadWatcher } from "@bb/sdk/internal/plugin-read-watcher";
+import type {
+  BbRealtimeSubscribeArgsUnion,
+  BbRealtimeEventMap,
+  BbRealtimeEventName,
+  ExperimentalPluginWatchRpcArgs,
+  ExperimentalPluginWatchDiscoveryArgs,
+} from "@bb/sdk";
+import type { PublishedPluginRpcMethod } from "@bb/server-contract";
 import { validatePluginMetadata } from "@bb/domain";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 
@@ -31,6 +40,10 @@ type FakeSdkOverrideTree<T> = {
 export type FakeSdkOverrides = FakeSdkOverrideTree<BbSdk>;
 
 export interface FakeSdkHarness {
+  emitRealtime<Event extends BbRealtimeEventName>(
+    event: Event,
+    payload: BbRealtimeEventMap[Event],
+  ): void;
   /**
    * Every `bb.sdk` call in order, including ones whose stub threw. Calls
    * rejected by argument validation are not recorded.
@@ -140,6 +153,7 @@ export function createFakeSdk(options: {
   overrides?: FakeSdkOverrides;
 }): { sdk: BbSdk; harness: FakeSdkHarness } {
   const calls: FakeSdkCall[] = [];
+  const realtimeListeners = new Set<BbRealtimeSubscribeArgsUnion>();
   const stubs = new Map<string, (...args: unknown[]) => unknown>();
 
   function addOverrides(prefix: string, value: unknown): void {
@@ -163,6 +177,62 @@ export function createFakeSdk(options: {
     }
     calls.push({ path, args });
     const stub = stubs.get(path);
+    if (!stub && path === "subscribe") {
+      const listener = args[0] as BbRealtimeSubscribeArgsUnion;
+      realtimeListeners.add(listener);
+      return () => {
+        realtimeListeners.delete(listener);
+      };
+    }
+    if (
+      !stub &&
+      (path === "plugins.experimental_watchRpc" ||
+        path === "plugins.experimental_watchDiscovery")
+    ) {
+      const input = args[0] as ExperimentalPluginWatchRpcArgs<unknown> &
+        ExperimentalPluginWatchDiscoveryArgs;
+      const discovery = path === "plugins.experimental_watchDiscovery";
+      let previous: string | null = null;
+      const watcher = createPluginReadWatcher({
+        signal: input.signal,
+        onError: input.onError,
+        read: async (signal) =>
+          invoke(
+            discovery ? "plugins.experimental_discoverRpc" : "plugins.callRpc",
+            [{ ...input, signal }],
+          ),
+        onChange(value) {
+          if (discovery) {
+            const key = JSON.stringify(value);
+            if (key === previous) return;
+            previous = key;
+            input.onChange(value as PublishedPluginRpcMethod[]);
+          } else input.onChange(value);
+        },
+      });
+      const stop = () => {
+        watcher.stop();
+        input.signal.removeEventListener("abort", stop);
+        realtimeListeners.delete(listener);
+      };
+      const listener: BbRealtimeSubscribeArgsUnion = discovery
+        ? {
+            event: "system:changed",
+            callback: (event) => {
+              if (event.changes.includes("plugins-changed")) watcher.refresh();
+            },
+          }
+        : {
+            event: "plugin:changed",
+            pluginId: input.pluginId,
+            callback: () => watcher.refresh(),
+          };
+      realtimeListeners.add(listener);
+      input.signal.addEventListener("abort", stop, { once: true });
+      if (input.signal.aborted) stop();
+      else watcher.refresh();
+      return stop;
+    }
     if (!stub) {
       throw new Error(
         `bb.sdk.${path} is not stubbed — pass an implementation via ` +
@@ -192,6 +262,19 @@ export function createFakeSdk(options: {
   }
 
   const harness: FakeSdkHarness = {
+    emitRealtime(event, payload) {
+      for (const listener of realtimeListeners)
+        if (listener.event === event) {
+          if (
+            event === "plugin:changed" &&
+            "pluginId" in listener &&
+            "id" in payload &&
+            listener.pluginId !== payload.id
+          )
+            continue;
+          (listener.callback as (value: typeof payload) => void)(payload);
+        }
+    },
     calls,
     callsTo(path) {
       return calls

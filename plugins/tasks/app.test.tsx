@@ -1,3 +1,4 @@
+import { liveTaskRpcFixtures } from "./test-fixtures.js";
 // @vitest-environment jsdom
 
 import { act, cleanup, waitFor } from "@testing-library/react";
@@ -18,24 +19,19 @@ describe("Tasks nav panel sidebar accessory", () => {
       { component: Accessory! },
       {},
       {
-        rpc: {
+        rpc: liveTaskRpcFixtures({
           sidebarOpenTaskCount: () => ({ openTaskCount }),
-        },
+        }),
       },
     );
 
     expect(await slot.findByText("12")).toBeDefined();
     openTaskCount = 13;
-    await slot.behavior.emitRealtime("tasks:changed", {
-      taskId: "01HZZZZZZZZZZZZZZZZZZZZZT1",
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP1",
-    });
+    await slot.behavior.experimental_invalidateRpc();
 
     await waitFor(() => expect(slot.getByText("13")).toBeDefined());
     openTaskCount = 7;
-    await slot.behavior.emitRealtime("projects:changed", {
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP1",
-    });
+    await slot.behavior.experimental_invalidateRpc();
     await waitFor(() => expect(slot.getByText("7")).toBeDefined());
     expect(
       slot.inspection.rpcCalls.filter(
@@ -52,9 +48,9 @@ describe("Tasks nav panel sidebar accessory", () => {
       { component: Accessory! },
       {},
       {
-        rpc: {
+        rpc: liveTaskRpcFixtures({
           sidebarOpenTaskCount: () => ({ openTaskCount }),
-        },
+        }),
       },
     );
 
@@ -68,17 +64,11 @@ describe("Tasks nav panel sidebar accessory", () => {
     expect(slot.queryByText("0")).toBeNull();
 
     openTaskCount = 1;
-    await slot.behavior.emitRealtime("tasks:changed", {
-      taskId: "01HZZZZZZZZZZZZZZZZZZZZZT1",
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP1",
-    });
+    await slot.behavior.experimental_invalidateRpc();
     expect(await slot.findByText("1")).toBeDefined();
 
     openTaskCount = 0;
-    await slot.behavior.emitRealtime("tasks:changed", {
-      taskId: "01HZZZZZZZZZZZZZZZZZZZZZT1",
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP1",
-    });
+    await slot.behavior.experimental_invalidateRpc();
     await waitFor(() => expect(slot.queryByText("1")).toBeNull());
     expect(slot.queryByText("0")).toBeNull();
   });
@@ -97,27 +87,19 @@ describe("Tasks nav panel sidebar accessory", () => {
       { component: Accessory! },
       {},
       {
-        rpc: {
+        rpc: liveTaskRpcFixtures({
           sidebarOpenTaskCount: () => {
             calls += 1;
             return calls === 1 ? firstRequest : { openTaskCount: 13 };
           },
-        },
+        }),
       },
     );
 
     await waitFor(() => expect(calls).toBe(1));
-    await slot.behavior.emitRealtime("tasks:changed", {
-      taskId: "01HZZZZZZZZZZZZZZZZZZZZZT1",
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP1",
-    });
-    await slot.behavior.emitRealtime("tasks:changed", {
-      taskId: "01HZZZZZZZZZZZZZZZZZZZZZT2",
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP1",
-    });
-    await slot.behavior.emitRealtime("projects:changed", {
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP1",
-    });
+    await slot.behavior.experimental_invalidateRpc();
+    await slot.behavior.experimental_invalidateRpc();
+    await slot.behavior.experimental_invalidateRpc();
     expect(calls).toBe(1);
 
     await act(async () => {

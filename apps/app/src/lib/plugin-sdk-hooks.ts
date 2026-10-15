@@ -160,14 +160,23 @@ export async function callPluginRpc(
   pluginId: string,
   method: string,
   input?: unknown,
+  signal?: AbortSignal,
+  envelope = false,
+  warmKeyedMethods?: readonly string[],
 ): Promise<unknown> {
   const serializedInput = serializePluginRpcInput(input ?? null);
   const response = await fetchImpl(
     `/api/v1/plugins/${encodeURIComponent(pluginId)}/rpc/${encodeURIComponent(method)}`,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(warmKeyedMethods === undefined
+          ? {}
+          : { "x-bb-rpc-warm-keyed": JSON.stringify(warmKeyedMethods) }),
+      },
       body: serializedInput,
+      signal,
     },
   );
   const body = (await response.json().catch(() => null)) as {
@@ -196,7 +205,7 @@ export async function callPluginRpc(
     }
     throw error;
   }
-  return body.result;
+  return envelope ? body : body.result;
 }
 
 export async function fetchPluginSdkSettings(
@@ -254,14 +263,18 @@ export function useRealtime(
   useEffect(() => {
     handlerRef.current = handler;
   });
-  useEffect(
-    () =>
-      wsManager.onPluginSignal((signal) => {
-        if (signal.pluginId !== pluginId || signal.channel !== channel) return;
-        handlerRef.current(signal.payload);
-      }),
-    [pluginId, channel],
-  );
+  useEffect(() => {
+    const target = { kind: "plugin" as const, pluginId };
+    wsManager.subscribe(target);
+    const stop = wsManager.onPluginSignal((signal) => {
+      if (signal.pluginId !== pluginId || signal.channel !== channel) return;
+      handlerRef.current(signal.payload);
+    });
+    return () => {
+      stop();
+      wsManager.unsubscribe(target);
+    };
+  }, [pluginId, channel]);
 }
 
 export function useRealtimeConnectionState(): PluginRealtimeConnectionState {
@@ -928,3 +941,9 @@ export function useComposers(): readonly PluginComposerApi[] {
     [hosts, pluginId],
   );
 }
+
+export {
+  experimental_useRpcRefresh,
+  experimental_useRpcQuery,
+  experimental_useRpcKeyedQuery,
+} from "./plugin-rpc-queries";

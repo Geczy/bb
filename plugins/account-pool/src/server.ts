@@ -39,10 +39,7 @@ import { PoolOperations } from "./operations.js";
 import { accountPoolRpcContract, createRpcHandlers } from "./rpc.js";
 import { ClaudeOAuthLogin } from "./oauth-login.js";
 import { CodexDeviceLogin } from "./codex-device-login.js";
-import {
-  ACCOUNT_POOL_ACCOUNTS_CHANGED,
-  ACCOUNT_POOL_CONFIG_CHANGED,
-} from "./realtime.js";
+
 import {
   AccountStore,
   HubTokenStore,
@@ -116,7 +113,7 @@ export function createAccountPoolPlugin(
         });
         await bb.storage.kv.set("config", next);
         currentSettings = next;
-        bb.realtime.publish(ACCOUNT_POOL_CONFIG_CHANGED, {});
+        bb.rpc.experimental_invalidate(["config", "accounts"]);
         return next;
       },
     };
@@ -168,8 +165,7 @@ export function createAccountPoolPlugin(
         bb.log.warn(
           `Account Pooler ${provider} transport failed: ${transportErrorCode(error)}.`,
         ),
-      onAccountsChanged: () =>
-        bb.realtime.publish(ACCOUNT_POOL_ACCOUNTS_CHANGED, {}),
+      onAccountsChanged: () => bb.rpc.experimental_invalidate(["accounts"]),
       onOAuthRefresh: (provider, accountId, outcome, detail) => {
         const message = `Account Pooler ${provider} account ${accountId} OAuth refresh ${outcome}: ${detail}`;
         if (outcome === "succeeded") bb.log.info(message);
@@ -215,7 +211,7 @@ export function createAccountPoolPlugin(
       async (hostId) =>
         (await bb.sdk.system.providerStates({ hostId })).providers,
       now,
-      () => bb.realtime.publish(ACCOUNT_POOL_ACCOUNTS_CHANGED, {}),
+      () => bb.rpc.experimental_invalidate(["accounts"]),
       (accountId) => hub.refreshUsage(accountId, true),
       parentStatus,
     );

@@ -90,6 +90,8 @@ describe("plugin settings + storage", () => {
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: (kinds) => {
           systemBroadcasts.push([...kinds]);

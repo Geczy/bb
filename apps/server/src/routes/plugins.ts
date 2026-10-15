@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { PluginUpdateJobs } from "../services/plugins/plugin-update-jobs.js";
 import { timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -985,12 +986,36 @@ export function registerPluginRoutes(
         404,
       );
     }
+    const warmHeader = context.req.header("x-bb-rpc-warm-keyed");
+    let warmKeyedMethods: string[] | undefined;
+    if (warmHeader !== undefined) {
+      try {
+        if (warmHeader.length > 8192)
+          throw new Error("Too many warm keyed methods");
+        warmKeyedMethods = z
+          .array(z.string().min(1))
+          .max(128)
+          .parse(JSON.parse(warmHeader));
+      } catch {
+        return context.json(
+          {
+            ok: false,
+            error: {
+              code: "invalid_input",
+              message: "Invalid warm keyed method header",
+            },
+          },
+          400,
+        );
+      }
+    }
     const outcome = await plugins.invokeRpcHandler(
       id,
       method,
       lookup.value,
       input,
       callerResolution.caller,
+      warmKeyedMethods,
     );
     if (!outcome.ok) {
       return context.json(
@@ -998,6 +1023,6 @@ export function registerPluginRoutes(
         outcome.error.code === "invalid_input" ? 400 : 500,
       );
     }
-    return context.json({ ok: true, result: outcome.result });
+    return context.json(outcome);
   });
 }

@@ -3,6 +3,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -12,7 +13,7 @@ import {
   experimental_Icon as PluginIcon,
   experimental_copyToClipboard,
   useBbNavigate,
-  useRealtime,
+  experimental_useRpcQuery,
   useRpc,
   useSdk,
   type PluginNavPanelProps,
@@ -150,39 +151,52 @@ type StorageData = {
 function StoragePanel(props: PluginNavPanelProps) {
   const rpc = useRpc<typeof storageRpc>();
   const sdk = useSdk();
-  const [data, setData] = useState<StorageData | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const stateRevision = useRef(0);
-  const refreshRevision = useRef(0);
-  const updateState = useCallback((state: State) => {
-    stateRevision.current++;
-    setData((current) => (current === null ? null : { ...current, state }));
-  }, []);
+  const stateQuery = experimental_useRpcQuery<typeof storageRpc, "state">({
+    method: "state",
+    input: null,
+  });
+  const hostsQuery = experimental_useRpcQuery<typeof storageRpc, "hosts">({
+    method: "hosts",
+    input: null,
+  });
+  const [hostMetadata, setHostMetadata] = useState<
+    Pick<StorageData, "machines" | "primaryHostId">
+  >({ machines: {}, primaryHostId: null });
+  useEffect(() => {
+    let disposed = false;
+    Promise.all([sdk.hosts.list({ type: "persistent" }), sdk.system.config()])
+      .then(([machines, config]) => {
+        if (!disposed)
+          setHostMetadata({
+            machines: Object.fromEntries(
+              machines.map((host) => [host.id, host]),
+            ),
+            primaryHostId: config.primaryHostId,
+          });
+      })
+      .catch(() => {});
+    return () => {
+      disposed = true;
+    };
+  }, [sdk, hostsQuery.data]);
+  const data = useMemo<StorageData | null>(
+    () =>
+      stateQuery.data === undefined || hostsQuery.data === undefined
+        ? null
+        : {
+            state: stateQuery.data,
+            hosts: hostsQuery.data.hosts,
+            ...hostMetadata,
+          },
+    [stateQuery.data, hostsQuery.data, hostMetadata],
+  );
+  const loadError =
+    stateQuery.error?.message ?? hostsQuery.error?.message ?? null;
+  const refetchState = stateQuery.refetch;
+  const refetchHosts = hostsQuery.refetch;
   const refresh = useCallback(async () => {
-    const revision = stateRevision.current;
-    const request = ++refreshRevision.current;
-    try {
-      const [state, reports, machines, config] = await Promise.all([
-        rpc.call("state", null),
-        rpc.call("hosts", null),
-        sdk.hosts.list({ type: "persistent" }),
-        sdk.system.config(),
-      ]);
-      if (request !== refreshRevision.current) return;
-      setData((current) => ({
-        state:
-          revision === stateRevision.current || current === null
-            ? state
-            : current.state,
-        hosts: reports.hosts,
-        machines: Object.fromEntries(machines.map((host) => [host.id, host])),
-        primaryHostId: config.primaryHostId,
-      }));
-      setLoadError(null);
-    } catch (error) {
-      if (request === refreshRevision.current) setLoadError(message(error));
-    }
-  }, [rpc, sdk]);
+    await Promise.all([refetchState(), refetchHosts()]);
+  }, [refetchState, refetchHosts]);
   const previousJobs = useRef(new Map<string, string>());
   useEffect(() => {
     for (const host of data?.hosts ?? []) {
@@ -230,39 +244,6 @@ function StoragePanel(props: PluginNavPanelProps) {
       }
     }
   }, [data]);
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-  useRealtime("changed", refresh);
-  useRealtime("policy-changed", async () => {
-    const revision = stateRevision.current;
-    try {
-      const state = await rpc.call("state", null);
-      if (revision === stateRevision.current) updateState(state);
-    } catch (error) {
-      toast.error("Couldn’t refresh retention settings", {
-        description: message(error),
-      });
-    }
-  });
-  useEffect(() => {
-    const hosts = sdk.subscribe({
-      event: "host:changed",
-      callback: () => {
-        void refresh();
-      },
-    });
-    const connection = sdk.subscribe({
-      event: "realtime:connection",
-      callback: (event) => {
-        if (event.state === "connected" && event.reconnected) void refresh();
-      },
-    });
-    return () => {
-      hosts();
-      connection();
-    };
-  }, [sdk, refresh]);
   return (
     <StoragePage
       key={props.subPath}
@@ -270,7 +251,6 @@ function StoragePanel(props: PluginNavPanelProps) {
       data={data}
       loadError={loadError}
       refresh={refresh}
-      updateState={updateState}
     />
   );
 }
@@ -280,17 +260,17 @@ function StoragePage({
   data,
   loadError,
   refresh,
-  updateState,
 }: {
   hostId: string | null;
   data: StorageData | null;
   loadError: string | null;
   refresh: () => Promise<void>;
-  updateState: (state: State) => void;
 }) {
   const rpc = useRpc<typeof storageRpc>();
   const navigate = useBbNavigate();
-  const state = data?.state ?? null;
+  const [optimisticState, setOptimisticState] = useState<State | null>(null);
+  const state = optimisticState ?? data?.state ?? null;
+  useEffect(() => setOptimisticState(null), [data?.state]);
   const hosts = data?.hosts ?? [];
   const machines = data?.machines ?? {};
   const primaryHostId = data?.primaryHostId ?? null;
@@ -352,7 +332,6 @@ function StoragePage({
           id,
           description: "Started on all online machines",
         });
-      void refresh();
     } catch (error) {
       toast.error(feedback.failed, {
         id,
@@ -368,7 +347,7 @@ function StoragePage({
     const next = { ...state, policy: { ...state.policy, [key]: value } };
     settingSavePending.current = true;
     setSavingSetting(true);
-    updateState(next);
+    setOptimisticState(next);
     const description = {
       archiveAfterDays: "Archive inactive threads",
       deleteAfterDays: "Delete archived threads",
@@ -377,9 +356,9 @@ function StoragePage({
         "Delete development data when its checkout is removed",
     }[key];
     try {
-      updateState(await rpc.call("configure", next.policy));
+      await rpc.call("configure", next.policy);
     } catch (error) {
-      updateState(previous);
+      setOptimisticState(previous);
       toast.error("Couldn’t save setting", {
         description: `${description} · ${message(error)}`,
       });
@@ -406,7 +385,6 @@ function StoragePage({
           id,
           description: description || feedback.description,
         });
-      void refresh();
     } catch (error) {
       toast.error(feedback.failed, {
         id,

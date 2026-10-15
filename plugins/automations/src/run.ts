@@ -33,10 +33,14 @@ type AgentThreadsSdk = {
     args: Parameters<BbPluginApi["sdk"]["threads"]["spawn"]>[0],
   ): Promise<unknown>;
 };
-export type AgentRunApi = Pick<BbPluginApi, "realtime" | "log"> & {
+export type AgentRunApi = Pick<BbPluginApi, "log"> & {
+  rpc: Pick<BbPluginApi["rpc"], "experimental_invalidate">;
+} & {
   sdk: { threads: AgentThreadsSdk };
 };
-export type ScriptRunApi = Pick<BbPluginApi, "realtime" | "log"> & {
+export type ScriptRunApi = Pick<BbPluginApi, "log"> & {
+  rpc: Pick<BbPluginApi["rpc"], "experimental_invalidate">;
+} & {
   sdk: { projects: ProjectsSdk };
 };
 
@@ -325,7 +329,7 @@ export async function executeScriptRun(
 }
 
 export function closeAutomationRunForSettledThread(
-  bb: Pick<BbPluginApi, "realtime">,
+  bb: { rpc: Pick<BbPluginApi["rpc"], "experimental_invalidate"> },
   db: Db,
   args: { threadId: string; status: "idle" | "failed"; error?: string | null },
 ): void {
@@ -451,7 +455,7 @@ async function reconcileOutcome(
 }
 
 export function disableAutomationsForDeletedThreadEvent(
-  bb: Pick<BbPluginApi, "realtime">,
+  bb: { rpc: Pick<BbPluginApi["rpc"], "experimental_invalidate"> },
   db: Db,
   threadId: string,
 ): void {

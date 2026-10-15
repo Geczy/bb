@@ -10,7 +10,12 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { CronExpressionParser } from "cron-parser";
 import { Hono } from "hono";
-import { deepFreezePluginMetadata, validatePluginMetadata } from "@bb/domain";
+import {
+  canonicalPluginReadInput,
+  pluginReadSubscriptionTargetSchema,
+  deepFreezePluginMetadata,
+  validatePluginMetadata,
+} from "@bb/domain";
 import {
   adoptHttpRouteResponse,
   aiServiceAlreadyRegisteredMessage,
@@ -48,6 +53,7 @@ import {
   validatePluginProviderEnvEntries,
   validateProviderEnvContribution,
   validateRpcValue,
+  createRpcKeyedProvisioner,
   validateScheduleRegistration,
   validateSettingsUpdate,
   type NormalizedPluginProviderDeclaration,
@@ -329,6 +335,30 @@ export interface FakePluginInspectionState {
   readonly logEntries: FakeLogEntry[];
   /** Every `bb.realtime.publish`, payload normalized like the wire. */
   readonly realtimeSignals: FakeRealtimeSignal[];
+  experimental_onRpcInvalidation(
+    listener: (tags: readonly string[] | null) => void,
+  ): () => void;
+  readonly rpcInvalidations: Array<readonly string[] | null>;
+  readonly rpcTags: Map<string, readonly string[]>;
+  readonly experimental_rpcProvidedKeyed: Map<
+    string,
+    Record<
+      string,
+      {
+        result: Record<string, JsonValue>;
+        keyTags: Record<string, string[]>;
+        whileWatched: boolean;
+      }
+    >
+  >;
+  readonly experimental_rpcKeyTags: Map<
+    string,
+    Record<string, readonly string[]>
+  >;
+  holdRpcWatch(
+    method: string,
+    read: { input: import("../json-value.js").JsonValue } | { key: string },
+  ): () => void;
   /** Every `bb.status.needsConfiguration` message, in order. */
   readonly needsConfigurationMessages: string[];
   /**
@@ -381,7 +411,10 @@ export interface FakePluginBehaviorDrivers {
   callRpc(
     method: string,
     input?: unknown,
-    options?: { experimental_caller?: ExperimentalPluginRpcCaller },
+    options?: {
+      experimental_caller?: ExperimentalPluginRpcCaller;
+      experimental_warmKeyedMethods?: readonly string[];
+    },
   ): Promise<unknown>;
   /**
    * Invoke the plugin's CLI command with host semantics: the result's
@@ -853,7 +886,45 @@ function createFakePluginHostInternal(
 
   // --- rpc ---
   const rpcHandlers = new Map<string, FakeRpcRecord>();
+  const rpcInvalidations: Array<readonly string[] | null> = [];
+  const rpcInvalidationListeners = new Set<
+    (tags: readonly string[] | null) => void
+  >();
+  const rpcTags = new Map<string, readonly string[]>();
+  const rpcKeyTags = new Map<string, Record<string, readonly string[]>>();
+  const rpcProvidedKeyed = new Map<
+    string,
+    Awaited<ReturnType<ReturnType<typeof createRpcKeyedProvisioner>["finish"]>>
+  >();
+  const rpcWhileWatchedHandlers = new Map<
+    string,
+    Parameters<PluginRpc["experimental_whileWatched"]>[1]
+  >();
+  const rpcWatches = new Map<
+    string,
+    { count: number; controller: AbortController }
+  >();
   const rpc: PluginRpc = {
+    experimental_invalidate(tags) {
+      assertLive();
+      if (
+        !Array.isArray(tags) ||
+        tags.length === 0 ||
+        tags.some((tag) => typeof tag !== "string" || tag.length === 0)
+      )
+        throw new Error("RPC tags must be nonempty strings");
+      rpcInvalidations.push(tags);
+      for (const listener of rpcInvalidationListeners) listener(tags);
+    },
+    experimental_invalidateAll() {
+      assertLive();
+      rpcInvalidations.push(null);
+      for (const listener of rpcInvalidationListeners) listener(null);
+    },
+    experimental_whileWatched(method, handler) {
+      assertLive();
+      rpcWhileWatchedHandlers.set(method, handler);
+    },
     register(contract, handlers, registrationOptions) {
       assertLive();
       for (const [name, record] of normalizeRpcRegistration(
@@ -978,6 +1049,10 @@ function createFakePluginHostInternal(
     const dispose = (): void => {
       if (disposed) return;
       disposed = true;
+      for (const watch of rpcWatches.values()) watch.controller.abort();
+      rpcWatches.clear();
+      for (const listener of rpcInvalidationListeners) listener(null);
+      rpcInvalidationListeners.clear();
       const index = providerRegistrations.indexOf(normalized);
       if (index !== -1) providerRegistrations.splice(index, 1);
     };
@@ -1011,6 +1086,10 @@ function createFakePluginHostInternal(
       const dispose = (): void => {
         if (disposed) return;
         disposed = true;
+        for (const watch of rpcWatches.values()) watch.controller.abort();
+        rpcWatches.clear();
+        for (const listener of rpcInvalidationListeners) listener(null);
+        rpcInvalidationListeners.clear();
         const index = aiServiceRegistrations.indexOf(registration);
         if (index !== -1) aiServiceRegistrations.splice(index, 1);
       };
@@ -1554,6 +1633,10 @@ function createFakePluginHostInternal(
   async function disposeHost(cleanupStorage: boolean): Promise<void> {
     if (disposed) return;
     disposed = true;
+    for (const watch of rpcWatches.values()) watch.controller.abort();
+    rpcWatches.clear();
+    for (const listener of rpcInvalidationListeners) listener(null);
+    rpcInvalidationListeners.clear();
     for (const [id, pending] of pendingInteractions) {
       clearTimeout(pending.timer);
       pendingInteractions.delete(id);
@@ -1600,6 +1683,44 @@ function createFakePluginHostInternal(
     pluginId,
     logEntries,
     realtimeSignals,
+    rpcInvalidations,
+    experimental_onRpcInvalidation(listener) {
+      rpcInvalidationListeners.add(listener);
+      return () => {
+        rpcInvalidationListeners.delete(listener);
+      };
+    },
+    rpcTags,
+    experimental_rpcKeyTags: rpcKeyTags,
+    experimental_rpcProvidedKeyed: rpcProvidedKeyed,
+    holdRpcWatch(method, read) {
+      const target = pluginReadSubscriptionTargetSchema.parse({
+        kind: "plugin-read",
+        pluginId,
+        method,
+        read,
+      });
+      const key = canonicalPluginReadInput(target);
+      let watch = rpcWatches.get(key);
+      if (!watch) {
+        watch = { count: 0, controller: new AbortController() };
+        rpcWatches.set(key, watch);
+        void rpcWhileWatchedHandlers.get(method)?.(
+          read,
+          watch.controller.signal,
+        );
+      }
+      watch.count++;
+      let held = true;
+      return () => {
+        if (!held) return;
+        held = false;
+        if (--watch.count === 0) {
+          watch.controller.abort();
+          rpcWatches.delete(key);
+        }
+      };
+    },
     needsConfigurationMessages,
     get recheckCount() {
       return requestedDrains;
@@ -1796,9 +1917,39 @@ function createFakePluginHostInternal(
         "input",
         throwRpcError,
       );
+      const tags = new Set<string>();
+      const keyTags: Record<string, readonly string[]> = Object.create(null);
+      const provisioner = createRpcKeyedProvisioner(
+        options.experimental_warmKeyedMethods,
+        (name) => {
+          const record = rpcHandlers.get(name);
+          return record
+            ? {
+                outputSchema: record.outputSchema,
+                whileWatched: rpcWhileWatchedHandlers.has(name),
+              }
+            : undefined;
+        },
+        throwRpcError,
+      );
       let result: unknown;
       try {
         result = await record.handler(validatedInput as never, {
+          experimental_provideKeyed: provisioner.provide,
+          experimental_tagKey(key, ...values) {
+            if (
+              values.some((tag) => typeof tag !== "string" || tag.length === 0)
+            )
+              throw new Error("RPC tags must be nonempty strings");
+            keyTags[key] = [...new Set([...(keyTags[key] ?? []), ...values])];
+          },
+          experimental_tag(...values) {
+            if (
+              values.some((tag) => typeof tag !== "string" || tag.length === 0)
+            )
+              throw new Error("RPC tags must be nonempty strings");
+            for (const tag of values) tags.add(tag);
+          },
           experimental_caller: options.experimental_caller ?? {
             kind: "client",
           },
@@ -1815,6 +1966,9 @@ function createFakePluginHostInternal(
         "output",
         throwRpcError,
       );
+      rpcProvidedKeyed.set(method, await provisioner.finish());
+      rpcTags.set(method, [...tags]);
+      rpcKeyTags.set(method, keyTags);
       return normalizeRpcJsonResult(validatedOutput, throwRpcError);
     },
 

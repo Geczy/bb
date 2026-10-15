@@ -4,7 +4,7 @@ import type {
   Preset,
   Project,
   SidebarProjectSummary,
-  Task,
+  TaskSummary,
 } from "../shared/contract.js";
 import { useTasksRpc } from "./data.js";
 import type { TasksRoute } from "./routes.js";
@@ -161,7 +161,7 @@ interface TasksSidebarProps {
   projects: Project[] | undefined;
   summaries: SidebarProjectSummary[] | undefined;
   presets: Preset[] | undefined;
-  activeTasks: Task[] | undefined;
+  activeTasks: TaskSummary[] | undefined;
   isLoading: boolean;
   onNavigate: (route: TasksRoute) => void;
   onNewProject: () => void;

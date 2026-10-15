@@ -239,9 +239,13 @@ Proposals follow file and folder moves made through Docs and are cleared when
 their document, folder, or vault is removed.
 
 The RPC equivalents are `readProposal`, `proposeNote`, `updateProposal`, and
-`resolveProposal`. `proposal-changed` signals carry `vaultId`, `path`, and
-`version`. `vault-changed` can include `path` for a single-document change and
-`proposalOnly: true` when the matching `proposal-changed` signal covers it.
-Events without a path still invalidate the whole vault (or all vaults when
-`vaultId` is absent), including external filesystem changes. Existing file
-read, save, and sync APIs remain supported.
+`resolveProposal`. Reads declare vault, note, proposal, and path dependencies.
+Saving a note refreshes its content and its vault's notebook listing; it does
+not refresh unrelated documents or other vaults. Proposal writes refresh their
+own proposal. Moves and deletes also invalidate descendants of the affected
+paths. Creating or removing a vault refreshes vault lists, and removing one
+invalidates that vault's reads. Filesystem events use their reported path;
+unknown filenames fall back to the affected vault. A save's matching native
+event is coalesced using filesystem identity and nanosecond timestamps, while
+later external edits still refresh readers. Existing file read, save, and sync
+APIs remain supported.

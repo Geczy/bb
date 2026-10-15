@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CLIENT_NOTIFICATION_CHANNEL,
   listPushSubscriptionsOutputSchema,
-  THREAD_NOTIFICATIONS_CHANNEL,
 } from "./contract.js";
 import {
   parseStoredNotificationLevel,
@@ -262,8 +261,7 @@ async function setup(options: SetupOptions = {}) {
     addSubscription,
     cleanup,
     clientSignals: () => signals(CLIENT_NOTIFICATION_CHANNEL),
-    levelUpdates: () =>
-      signals(THREAD_NOTIFICATIONS_CHANNEL).map((signal) => signal.payload),
+    levelUpdates: () => fake.harness.inspection.rpcInvalidations,
     expo,
     getLevel,
     interactions,
@@ -1053,7 +1051,9 @@ describe("thread notification levels", () => {
         ancestorCap: { level: "muted", threadId: muted.id },
       };
       expect(host.levelUpdates().slice(published)).toEqual([
-        { threads: { [worker.id]: capped, [subWorker.id]: capped } },
+        Object.keys({ [worker.id]: capped, [subWorker.id]: capped }).map(
+          (id) => `thread:${id}`,
+        ),
       ]);
     } finally {
       await host.cleanup();
@@ -1104,9 +1104,11 @@ describe("thread notification levels", () => {
         await new Promise<void>((resolve) => setImmediate(resolve));
         release();
         await Promise.all([older, newer]);
-        expect(host.levelUpdates().at(-1)).toEqual({
-          threads: { child: { own: "inherit", ancestorCap: null } },
-        });
+        expect(host.levelUpdates().at(-1)).toEqual(
+          Object.keys({ child: { own: "inherit", ancestorCap: null } }).map(
+            (id) => `thread:${id}`,
+          ),
+        );
       } finally {
         release();
         await host.cleanup();
@@ -1139,12 +1141,10 @@ describe("thread notification levels", () => {
 
       await host.setLevel(root.id, "muted");
       expect(host.levelUpdates()).toEqual([
-        {
-          threads: {
-            [root.id]: { own: "muted", ancestorCap: null },
-            [worker.id]: capped,
-          },
-        },
+        Object.keys({
+          [root.id]: { own: "muted", ancestorCap: null },
+          [worker.id]: capped,
+        }).map((id) => `thread:${id}`),
       ]);
 
       const unarchived = { ...archived, archivedAt: null };
@@ -1152,9 +1152,11 @@ describe("thread notification levels", () => {
       await host.harness.behavior.emitThreadEvent("thread.unarchived", {
         thread: unarchived,
       });
-      expect(host.levelUpdates().at(-1)).toEqual({
-        threads: { [archived.id]: capped, [worker.id]: capped },
-      });
+      expect(host.levelUpdates().at(-1)).toEqual(
+        Object.keys({ [archived.id]: capped, [worker.id]: capped }).map(
+          (id) => `thread:${id}`,
+        ),
+      );
     } finally {
       await host.cleanup();
     }
@@ -1178,19 +1180,17 @@ describe("thread notification levels", () => {
         threads: { root: { own: "muted", ancestorCap: null }, child: capped },
       });
       expect(host.levelUpdates()).toEqual([
-        {
-          threads: {
-            root: { own: "muted", ancestorCap: null },
-            child: capped,
-          },
-        },
+        Object.keys({
+          root: { own: "muted", ancestorCap: null },
+          child: capped,
+        }).map((id) => `thread:${id}`),
       ]);
 
       await host.setLevel(root.id, "inherit");
       const unset = { own: "inherit", ancestorCap: null };
-      expect(host.levelUpdates().at(-1)).toEqual({
-        threads: { root: unset, child: unset },
-      });
+      expect(host.levelUpdates().at(-1)).toEqual(
+        Object.keys({ root: unset, child: unset }).map((id) => `thread:${id}`),
+      );
       await expect(
         host.listLevels(["root", "child", "other"]),
       ).resolves.toEqual({ threads: {} });

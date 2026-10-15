@@ -6,7 +6,7 @@ import {
   experimental_copyToClipboard,
   UrlLink,
   useBbNavigate,
-  useRealtime,
+  experimental_useRpcQuery,
   useRpc,
   type PluginNavPanelProps,
   type PluginRpcResult,
@@ -98,41 +98,20 @@ function useItems(kind: "issue" | "pr"): {
   items: Item[] | null;
   error: string | null;
 } {
-  const rpc = useRpc<typeof githubRpcContract>();
-  const [state, setState] = useState<{
-    items: Item[] | null;
-    error: string | null;
-  }>({
-    items: null,
-    error: null,
-  });
-  const refetch = useCallback(() => {
-    rpc.call("listItems", { kind }).then(
-      (result) => setState({ items: result.items, error: null }),
-      (error: unknown) => setState({ items: null, error: errorText(error) }),
-    );
-  }, [rpc, kind]);
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-  useRealtime("data-changed", refetch);
-  return state;
+  const query = experimental_useRpcQuery<typeof githubRpcContract, "listItems">(
+    { method: "listItems", input: { kind } },
+  );
+  return {
+    items: query.data?.items ?? null,
+    error: query.error?.message ?? null,
+  };
 }
 
 function useLinks(): LinksMap {
-  const rpc = useRpc<typeof githubRpcContract>();
-  const [links, setLinks] = useState<LinksMap>({});
-  const refetch = useCallback(() => {
-    rpc.call("listLinks").then(
-      (result) => setLinks(result.links),
-      () => {},
-    );
-  }, [rpc]);
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-  useRealtime("links-changed", refetch);
-  return links;
+  const query = experimental_useRpcQuery<typeof githubRpcContract, "listLinks">(
+    { method: "listLinks", input: null },
+  );
+  return query.data?.links ?? {};
 }
 
 function useSpawn(): {
@@ -983,19 +962,15 @@ function IssueDetailView({
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
 
-  const load = useCallback(() => {
-    rpc.call("getIssue", { repo, number }).then(
-      (result) => {
-        setDetail(result.issue);
-        setError(null);
-      },
-      (err: unknown) => setError(errorText(err)),
-    );
-  }, [rpc, repo, number]);
+  const query = experimental_useRpcQuery<typeof githubRpcContract, "getIssue">({
+    method: "getIssue",
+    input: { repo, number },
+  });
+  const load = query.refetch;
   useEffect(() => {
-    setDetail(null);
-    load();
-  }, [load]);
+    setDetail(query.data?.issue ?? null);
+    setError(query.error?.message ?? null);
+  }, [query.data, query.error]);
 
   const changeState = useCallback(
     (next: "open" | "closed") => {
@@ -1055,11 +1030,10 @@ function IssueDetailView({
       .call("commentIssue", { repo, number, body: comment })
       .then(() => {
         setComment("");
-        load();
       })
       .catch((err: unknown) => toast.error(errorText(err)))
       .finally(() => setPosting(false));
-  }, [rpc, repo, number, comment, load]);
+  }, [rpc, repo, number, comment]);
 
   if (error !== null) return <EmptyState message={error} />;
   if (detail === null) {
@@ -1554,15 +1528,7 @@ function PullReviewersList({ pull }: { pull: PullDetail }) {
   );
 }
 
-function PullCommentBox({
-  repo,
-  number,
-  onPosted,
-}: {
-  repo: string;
-  number: number;
-  onPosted: () => void;
-}) {
+function PullCommentBox({ repo, number }: { repo: string; number: number }) {
   const rpc = useRpc<typeof githubRpcContract>();
   const [comment, setComment] = useState("");
   const [posting, setPosting] = useState(false);
@@ -1573,11 +1539,10 @@ function PullCommentBox({
       .call("commentPull", { repo, number, body: comment })
       .then(() => {
         setComment("");
-        onPosted();
       })
       .catch((error: unknown) => toast.error(errorText(error)))
       .finally(() => setPosting(false));
-  }, [rpc, repo, number, comment, onPosted]);
+  }, [rpc, repo, number, comment]);
   return (
     <div className="flex flex-col gap-2">
       <Textarea
@@ -1620,19 +1585,15 @@ function PullDetailView({
   const [pull, setPull] = useState<PullDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    rpc.call("getPull", { repo, number }).then(
-      (result) => {
-        setPull(result.pull);
-        setError(null);
-      },
-      (err: unknown) => setError(errorText(err)),
-    );
-  }, [rpc, repo, number]);
+  const query = experimental_useRpcQuery<typeof githubRpcContract, "getPull">({
+    method: "getPull",
+    input: { repo, number },
+  });
+  const load = query.refetch;
   useEffect(() => {
-    setPull(null);
-    load();
-  }, [load]);
+    setPull(query.data?.pull ?? null);
+    setError(query.error?.message ?? null);
+  }, [query.data, query.error]);
 
   if (error !== null) return <EmptyState message={error} />;
   if (pull === null) {
@@ -1685,7 +1646,7 @@ function PullDetailView({
         </div>
       ) : null}
 
-      <PullCommentBox repo={repo} number={number} onPosted={load} />
+      <PullCommentBox repo={repo} number={number} />
     </div>
   );
 
@@ -1855,22 +1816,14 @@ function PullPanelTab({ threadId }: PluginThreadPanelProps) {
     environmentId: string | null;
   } | null>(null);
 
+  const query = experimental_useRpcQuery<
+    typeof githubRpcContract,
+    "pullForThread"
+  >({ method: "pullForThread", input: { threadId } });
   useEffect(() => {
-    let cancelled = false;
-    rpc.call("pullForThread", { threadId }).then(
-      (result) => {
-        if (cancelled) return;
-        if (result.pull !== null) setSelected(result.pull);
-        setResolved(true);
-      },
-      () => {
-        if (!cancelled) setResolved(true);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [rpc, threadId]);
+    if (query.data !== undefined) setSelected(query.data.pull);
+    if (query.data !== undefined || query.error !== null) setResolved(true);
+  }, [query.data, query.error]);
 
   if (!resolved) {
     return <DetailSkeleton />;
@@ -1971,19 +1924,11 @@ function NewIssueForm({
 }
 
 function useStatus(): { status: Status | null; refetch: () => void } {
-  const rpc = useRpc<typeof githubRpcContract>();
-  const [status, setStatus] = useState<Status | null>(null);
-  const refetch = useCallback(() => {
-    rpc.call("status").then(
-      (result) => setStatus(result),
-      () => {},
-    );
-  }, [rpc]);
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-  useRealtime("data-changed", refetch);
-  return { status, refetch };
+  const query = experimental_useRpcQuery<typeof githubRpcContract, "status">({
+    method: "status",
+    input: null,
+  });
+  return { status: query.data ?? null, refetch: query.refetch };
 }
 
 function PanelHeader() {

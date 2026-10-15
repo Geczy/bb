@@ -2,7 +2,7 @@ import { memo, useState } from "react";
 import type {
   Label,
   Project,
-  Task,
+  TaskSummary,
   TaskThread,
 } from "../../shared/contract.js";
 import { Icon } from "@/components/ui/icon";
@@ -72,7 +72,7 @@ function LabelChips({
   task,
   labelsById,
 }: {
-  task: Task;
+  task: TaskSummary;
   labelsById: Map<string, Label>;
 }) {
   const labels = task.labelIds.flatMap((id) => labelsById.get(id) ?? []);
@@ -90,7 +90,7 @@ function LabelChips({
 }
 
 interface TaskRowProps {
-  task: Task;
+  task: TaskSummary;
   meta: TaskRowMeta | undefined;
   project: Project | undefined;
   showProject: boolean;
@@ -98,7 +98,7 @@ interface TaskRowProps {
   projectLabels: readonly Label[];
   projects: readonly Project[];
   onEdit: EditFn;
-  onMoveToProject: (task: Task, projectId: string) => void;
+  onMoveToProject: (task: TaskSummary, projectId: string) => void;
   onOpen: (taskKey: string) => void;
   pending: boolean;
 }

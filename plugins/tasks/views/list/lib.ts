@@ -1,7 +1,7 @@
 import {
   TASK_STATUSES,
   type Label,
-  type Task,
+  type TaskSummary,
   type TaskPriority,
   type TaskStatus,
 } from "../../shared/contract.js";
@@ -32,11 +32,13 @@ export const SORT_LABELS: Record<TaskSort, string> = {
 
 interface StatusGroup {
   status: TaskStatus;
-  tasks: Task[];
+  tasks: TaskSummary[];
 }
 
-export function groupTasksByStatus(tasks: readonly Task[]): StatusGroup[] {
-  const byStatus = new Map<TaskStatus, Task[]>();
+export function groupTasksByStatus(
+  tasks: readonly TaskSummary[],
+): StatusGroup[] {
+  const byStatus = new Map<TaskStatus, TaskSummary[]>();
   for (const task of tasks) {
     const bucket = byStatus.get(task.status);
     if (bucket) bucket.push(task);

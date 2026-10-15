@@ -848,7 +848,7 @@ export function createTasksStore(db: PluginDatabase) {
     return createTaskTransaction(input);
   }
 
-  function listTasksPage(filters: ListTasksFilters = {}): ListTasksPage {
+  function taskSelection(filters: ListTasksFilters) {
     const clauses: string[] = [];
     const parameters: Record<string, SqlParameter> = {};
 
@@ -927,6 +927,64 @@ export function createTasksStore(db: PluginDatabase) {
       );
     }
 
+    return {
+      parameters,
+      where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
+    };
+  }
+
+  function taskOrder(sort: TaskSort) {
+    return sort === "manual"
+      ? "cursor_project_id, cursor_status, cursor_position, cursor_id"
+      : sort === "priority"
+        ? "cursor_priority, cursor_due_null, cursor_due_date, cursor_project_id, cursor_status, cursor_position, cursor_id"
+        : "cursor_due_null, cursor_due_date, cursor_priority, cursor_project_id, cursor_status, cursor_position, cursor_id";
+  }
+
+  function taskSelectionSql(where: string) {
+    return `
+      SELECT t.*, p.prefix AS project_prefix,
+        CASE t.priority
+          WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2
+          WHEN 'low' THEN 3 WHEN 'none' THEN 4 ELSE 5
+        END AS cursor_priority,
+        CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END AS cursor_due_null,
+        COALESCE(t.due_date, '') AS cursor_due_date,
+        t.project_id AS cursor_project_id, t.status AS cursor_status,
+        t.position AS cursor_position, t.id AS cursor_id
+      FROM tasks t JOIN projects p ON p.id = t.project_id
+      ${where}
+    `;
+  }
+
+  function getTasksByIds(ids: readonly string[]): Task[] {
+    const tasks: Task[] = [];
+    for (let offset = 0; offset < ids.length; offset += 500) {
+      const batch = ids.slice(offset, offset + 500);
+      const rows = db
+        .prepare<string[], TaskRow>(
+          `${taskSelect} WHERE t.id IN (${batch.map(() => "?").join(", ")})`,
+        )
+        .all(...batch);
+      tasks.push(...rows.map(taskFromRow));
+    }
+    return tasks;
+  }
+
+  function listTaskKeys(
+    filters: Omit<ListTasksFilters, "limit" | "cursor" | "sort">,
+  ): string[] {
+    const { parameters, where } = taskSelection(filters);
+    return db
+      .prepare<Record<string, SqlParameter>, { id: string }>(`
+      SELECT t.id FROM tasks t JOIN projects p ON p.id = t.project_id ${where} ORDER BY t.id
+    `)
+      .all(parameters)
+      .map((row) => row.id);
+  }
+
+  function listTasksPage(filters: ListTasksFilters = {}): ListTasksPage {
+    const { parameters, where } = taskSelection(filters);
     const limit = filters.limit ?? TASKS_PAGE_DEFAULT_LIMIT;
     if (!Number.isInteger(limit) || limit < 1 || limit > TASKS_PAGE_MAX_LIMIT) {
       throw new Error(
@@ -950,12 +1008,7 @@ export function createTasksStore(db: PluginDatabase) {
       );
     }
 
-    const orderBy =
-      sort === "manual"
-        ? "cursor_project_id, cursor_status, cursor_position, cursor_id"
-        : sort === "priority"
-          ? "cursor_priority, cursor_due_null, cursor_due_date, cursor_project_id, cursor_status, cursor_position, cursor_id"
-          : "cursor_due_null, cursor_due_date, cursor_priority, cursor_project_id, cursor_status, cursor_position, cursor_id";
+    const orderBy = taskOrder(sort);
     const cursorWhere =
       cursor === null
         ? ""
@@ -974,8 +1027,6 @@ export function createTasksStore(db: PluginDatabase) {
       parameters.cursorId = cursor.key.id;
     }
     parameters.pageLimit = limit + 1;
-    const filteredWhere =
-      clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
 
     const readPage = db.transaction((): ListTasksPage => {
       const revision = db
@@ -996,28 +1047,7 @@ export function createTasksStore(db: PluginDatabase) {
       const rows = db
         .prepare<Record<string, SqlParameter>, TaskPageRow>(
           `
-            WITH filtered_tasks AS (
-              SELECT
-                t.*,
-                p.prefix AS project_prefix,
-                CASE t.priority
-                  WHEN 'urgent' THEN 0
-                  WHEN 'high' THEN 1
-                  WHEN 'medium' THEN 2
-                  WHEN 'low' THEN 3
-                  WHEN 'none' THEN 4
-                  ELSE 5
-                END AS cursor_priority,
-                CASE WHEN t.due_date IS NULL THEN 1 ELSE 0 END AS cursor_due_null,
-                COALESCE(t.due_date, '') AS cursor_due_date,
-                t.project_id AS cursor_project_id,
-                t.status AS cursor_status,
-                t.position AS cursor_position,
-                t.id AS cursor_id
-              FROM tasks t
-              JOIN projects p ON p.id = t.project_id
-              ${filteredWhere}
-            )
+            WITH filtered_tasks AS (${taskSelectionSql(where)})
             SELECT *
             FROM filtered_tasks
             ${cursorWhere}
@@ -1257,7 +1287,7 @@ export function createTasksStore(db: PluginDatabase) {
     projectId: string,
     status: Task["status"],
     excludedTaskId: string,
-  ): void {
+  ): string[] {
     const rows = db
       .prepare<[string, Task["status"], string], { id: string }>(
         `
@@ -1273,10 +1303,11 @@ export function createTasksStore(db: PluginDatabase) {
     rows.forEach((row, index) =>
       update.run((index + 1) * POSITION_STEP, row.id),
     );
+    return rows.map((row) => row.id);
   }
 
   const updatePositionTransaction = db.transaction(
-    (id: string, input: UpdateTaskPositionInput): Task => {
+    (id: string, input: UpdateTaskPositionInput) => {
       const task = requireTask(id);
       if (input.beforeTaskId === id || input.afterTaskId === id) {
         throw new Error("A task cannot be its own reorder neighbor");
@@ -1312,8 +1343,13 @@ export function createTasksStore(db: PluginDatabase) {
           : !before && after
             ? after.position <= MIN_POSITION_GAP
             : false;
+      let repositionedTaskIds: string[] = [];
       if (gapIsExhausted) {
-        renormalizeColumn(task.projectId, input.status, id);
+        repositionedTaskIds = renormalizeColumn(
+          task.projectId,
+          input.status,
+          id,
+        );
         before = readNeighbor(input.beforeTaskId);
         after = readNeighbor(input.afterTaskId);
       }
@@ -1339,11 +1375,11 @@ export function createTasksStore(db: PluginDatabase) {
         UPDATE tasks SET status = ?, position = ?, updated_at = ? WHERE id = ?
       `,
       ).run(input.status, position, nowIso(), id);
-      return requireTask(id);
+      return { task: requireTask(id), repositionedTaskIds };
     },
   );
 
-  function updatePosition(id: string, input: UpdateTaskPositionInput): Task {
+  function updatePosition(id: string, input: UpdateTaskPositionInput) {
     return updatePositionTransaction(id, input);
   }
 
@@ -1598,6 +1634,27 @@ export function createTasksStore(db: PluginDatabase) {
     return requireAttachment(id);
   }
 
+  function listAttachmentsForTasks(
+    ids: readonly string[],
+  ): Map<string, Attachment[]> {
+    const result = new Map<string, Attachment[]>();
+    for (let offset = 0; offset < ids.length; offset += 500) {
+      const batch = ids.slice(offset, offset + 500);
+      const rows = db
+        .prepare<string[], AttachmentRow>(
+          `SELECT * FROM attachments WHERE task_id IN (${batch.map(() => "?").join(", ")}) ORDER BY created_at, id`,
+        )
+        .all(...batch);
+      for (const row of rows) {
+        if (row.task_id === null) continue;
+        const entries = result.get(row.task_id) ?? [];
+        entries.push(attachmentFromRow(row));
+        result.set(row.task_id, entries);
+      }
+    }
+    return result;
+  }
+
   function listAttachmentsForTask(taskId: string): Attachment[] {
     return db
       .prepare<[string], AttachmentRow>(
@@ -1729,6 +1786,26 @@ export function createTasksStore(db: PluginDatabase) {
     const thread = getTaskThreadByThreadId(input.taskId, input.threadId);
     if (!thread) throw new Error("Task thread upsert failed");
     return thread;
+  }
+
+  function listTaskThreadsForTasks(
+    ids: readonly string[],
+  ): Map<string, TaskThread[]> {
+    const result = new Map<string, TaskThread[]>();
+    for (let offset = 0; offset < ids.length; offset += 500) {
+      const batch = ids.slice(offset, offset + 500);
+      const rows = db
+        .prepare<string[], TaskThreadRow>(
+          `SELECT * FROM task_threads WHERE task_id IN (${batch.map(() => "?").join(", ")}) ORDER BY CASE WHEN live_status IN ('completed', 'failed') THEN 1 ELSE 0 END, attached_at DESC, id DESC`,
+        )
+        .all(...batch);
+      for (const row of rows) {
+        const entries = result.get(row.task_id) ?? [];
+        entries.push(taskThreadFromRow(row));
+        result.set(row.task_id, entries);
+      }
+    }
+    return result;
   }
 
   function listTaskThreads(taskId: string): TaskThread[] {
@@ -1912,6 +1989,8 @@ export function createTasksStore(db: PluginDatabase) {
     getTask,
     getTaskByKey,
     listTasksPage,
+    listTaskKeys,
+    getTasksByIds,
     listTasks,
     listSubtasks,
     updateTask,
@@ -1935,6 +2014,7 @@ export function createTasksStore(db: PluginDatabase) {
     createAttachment,
     getAttachment,
     listAttachmentsForTask,
+    listAttachmentsForTasks,
     listAttachmentsForComment,
     listAttachmentsForTaskComments,
     updateAttachment,
@@ -1944,6 +2024,7 @@ export function createTasksStore(db: PluginDatabase) {
     getTaskThreadByThreadId,
     listTaskThreadsByThreadId,
     listTaskThreads,
+    listTaskThreadsForTasks,
     updateTaskThreadStatus,
     deleteTaskThread,
     createPreset,

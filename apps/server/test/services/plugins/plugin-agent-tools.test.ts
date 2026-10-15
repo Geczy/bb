@@ -75,6 +75,8 @@ describe("bb.agents.registerTool", () => {
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: () => {},
       },
@@ -577,6 +579,8 @@ describe("bb.agents.contributeInstructions", () => {
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: () => {},
       },

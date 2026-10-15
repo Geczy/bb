@@ -254,6 +254,7 @@ export class PoolOperations {
     if (host === undefined)
       throw new Error(`Machine ${machine} does not exist.`);
     const token = await this.hubTokens.rotate(host.id);
+    this.onAccountsChanged();
     return { ...token, hostName: host.name };
   }
 
@@ -265,6 +266,7 @@ export class PoolOperations {
     bypassed: boolean;
   }> {
     await this.routing.setBypassed(threadId, bypassed);
+    this.onAccountsChanged();
     return { threadId, bypassed };
   }
 

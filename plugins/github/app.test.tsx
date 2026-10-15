@@ -117,7 +117,7 @@ describe("GitHub app navigation", () => {
     );
 
     await act(async () => {});
-    const removedFile = slot.getByText("removed.ts");
+    const removedFile = await slot.findByText("removed.ts");
     const modifiedFile = slot.getByText("modified.ts");
     expect(removedFile.closest("a")).toBeNull();
     expect(modifiedFile.closest("a")?.getAttribute("href")).toBe(

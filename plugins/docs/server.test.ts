@@ -7,13 +7,9 @@ import {
   createFakePluginHost,
   makeHostResponse,
 } from "@get-bb/plugin-sdk/testing";
-import simpleNotes from "./server";
+import simpleNotes, { docsRpcContract } from "./server";
 
 const temporaryDirectories: string[] = [];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 afterEach(async () => {
   await Promise.all(
@@ -26,6 +22,11 @@ afterEach(async () => {
 async function loadNotebook(
   notes: Record<string, string>,
   watchVault?: NonNullable<Parameters<typeof simpleNotes>[1]>,
+  writeFileImpl?: (input: {
+    path: string;
+    content: string;
+    contentEncoding?: "utf8" | "base64";
+  }) => Promise<{ outcome: "written"; sha256: string; sizeBytes: number }>,
 ) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "bb-simple-notes-"));
   temporaryDirectories.push(directory);
@@ -60,11 +61,13 @@ async function loadNotebook(
             sha256: "test-sha",
           };
         },
-        write: async () => ({
-          outcome: "written" as const,
-          sha256: "written-sha",
-          sizeBytes: 1,
-        }),
+        write:
+          writeFileImpl ??
+          (async () => ({
+            outcome: "written" as const,
+            sha256: "written-sha",
+            sizeBytes: 1,
+          })),
         mkdir: async () => ({ ok: true as const }),
         move: async () => ({ ok: true as const }),
         remove: async () => ({ ok: true as const }),
@@ -1602,11 +1605,8 @@ describe("Docs vault operations", () => {
       ]);
       await waitForSignal(
         () =>
-          harness.realtimeSignals.some(
-            (signal) =>
-              signal.channel === "vault-changed" &&
-              isRecord(signal.payload) &&
-              signal.payload.vaultId === "personal",
+          harness.rpcInvalidations.some(
+            (tags) => tags?.includes("vault:personal") === true,
           ),
         1_000,
       );
@@ -1869,4 +1869,190 @@ describe("Docs proposals", () => {
     });
     await harness.lifecycle.dispose();
   });
+});
+
+describe("watched preview leases", () => {
+  it("invalidates at each lease expiry and stops renewing after the last watcher leaves", async () => {
+    const host = await loadNotebook({ "preview.md": "![image](image.png)" });
+    vi.useFakeTimers();
+    const read = { input: { vaultId: "personal", path: "preview.md" } };
+    let release = () => {};
+    try {
+      release = host.harness.inspection.holdRpcWatch("preparePreview", read);
+      const first = docsRpcContract.preparePreview.output.parse(
+        await host.harness.behavior.callRpc("preparePreview", read.input),
+      );
+      expect(host.harness.inspection.rpcTags.get("preparePreview")).toContain(
+        "preview:personal:preview.md",
+      );
+      const releaseSecond = host.harness.inspection.holdRpcWatch(
+        "preparePreview",
+        read,
+      );
+      release();
+      release = releaseSecond;
+      await vi.advanceTimersByTimeAsync(10_000);
+      await host.harness.behavior.callRpc("preparePreview", read.input);
+      host.harness.inspection.rpcInvalidations.length = 0;
+      await vi.advanceTimersByTimeAsync(first.expiresAtMs - Date.now() - 1);
+      expect(host.harness.inspection.rpcInvalidations).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(host.harness.inspection.rpcInvalidations).toEqual([
+        ["preview:personal:preview.md"],
+      ]);
+      const renewed = docsRpcContract.preparePreview.output.parse(
+        await host.harness.behavior.callRpc("preparePreview", read.input),
+      );
+      expect(renewed.expiresAtMs).toBeGreaterThan(first.expiresAtMs);
+      host.harness.inspection.rpcInvalidations.length = 0;
+      await vi.advanceTimersByTimeAsync(renewed.expiresAtMs - Date.now());
+      expect(host.harness.inspection.rpcInvalidations).toEqual([
+        ["preview:personal:preview.md"],
+      ]);
+      await host.harness.behavior.callRpc("preparePreview", read.input);
+      release();
+      host.harness.inspection.rpcInvalidations.length = 0;
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(host.harness.inspection.rpcInvalidations).toEqual([]);
+    } finally {
+      release();
+      vi.useRealTimers();
+      await host.harness.dispose();
+    }
+  });
+});
+
+describe("Docs write invalidation scope", () => {
+  it.each([
+    [
+      "saveNote",
+      { vaultId: "personal", path: "a.md", content: "# Updated" },
+      ["listA", "noteA"],
+    ],
+    [
+      "movePath",
+      { vaultId: "personal", from: "a.md", to: "renamed.md" },
+      ["listA", "noteA", "proposalA", "previewA"],
+    ],
+    [
+      "deletePath",
+      { vaultId: "personal", path: "a.md" },
+      ["listA", "noteA", "proposalA", "previewA"],
+    ],
+    ["createFolder", { vaultId: "personal", path: "folder" }, ["listA"]],
+    [
+      "reorderFiles",
+      { vaultId: "personal", parent: "", paths: ["b.md", "a.md"] },
+      ["listA"],
+    ],
+    [
+      "createVault",
+      { name: "Third", rootPath: "/tmp/docs-third" },
+      ["listA", "listB"],
+    ],
+    [
+      "removeVault",
+      { vaultId: "other" },
+      ["listA", "listB", "noteOther", "proposalOther", "previewOther"],
+    ],
+  ])(
+    "%s refreshes only the affected reads",
+    async (method, input, affected) => {
+      const { harness, bb } = await loadNotebook({
+        "a.md": "# A",
+        "b.md": "# B",
+      });
+      const otherRoot = await mkdtemp(path.join(os.tmpdir(), "bb-docs-other-"));
+      temporaryDirectories.push(otherRoot);
+      await writeFile(path.join(otherRoot, "a.md"), "# Other");
+      bb.storage
+        .database()
+        .prepare(
+          "INSERT INTO vaults (id, name, host_id, root_path, created_at) VALUES (?, ?, ?, ?, ?)",
+        )
+        .run("other", "Other", null, otherRoot, 0);
+      const reads = new Map<string, readonly string[]>();
+      const capture = async (
+        name: string,
+        read: string,
+        vaultId: string,
+        file = "a.md",
+      ) => {
+        await harness.callRpc(read, {
+          vaultId,
+          ...(read === "listNotes" ? {} : { path: file }),
+        });
+        reads.set(name, harness.rpcTags.get(read) ?? []);
+      };
+      await capture("listA", "listNotes", "personal");
+      await capture("listB", "listNotes", "other");
+      for (const [suffix, vault, file] of [
+        ["A", "personal", "a.md"],
+        ["Peer", "personal", "b.md"],
+        ["Other", "other", "a.md"],
+      ] as const) {
+        await capture(`note${suffix}`, "readNote", vault, file);
+        await capture(`proposal${suffix}`, "readProposal", vault, file);
+        await capture(`preview${suffix}`, "preparePreview", vault, file);
+      }
+      harness.rpcInvalidations.length = 0;
+      await harness.callRpc(String(method), input);
+      expect(harness.rpcInvalidations).not.toContain(null);
+      const tags = harness.rpcInvalidations.flatMap((tags) => tags ?? []);
+      expect(
+        [...reads]
+          .filter(([, dependencies]) =>
+            dependencies.some((tag) => tags.includes(tag)),
+          )
+          .map(([name]) => name)
+          .sort(),
+      ).toEqual([...affected].sort());
+      await harness.dispose();
+    },
+  );
+});
+
+it("coalesces a saved file's native event without losing a later external edit", async () => {
+  let change: ((path?: string) => void) | undefined;
+  let watchedRoot = "";
+  const { harness } = await loadNotebook(
+    { "a.md": "# A" },
+    (root, onChange) => {
+      watchedRoot = root;
+      change = onChange;
+      return { close() {}, on() {} };
+    },
+    async (input) => {
+      const bytes = Buffer.from(
+        input.content,
+        input.contentEncoding === "base64" ? "base64" : "utf8",
+      );
+      await writeFile(input.path, bytes);
+      return {
+        outcome: "written",
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+        sizeBytes: bytes.length,
+      };
+    },
+  );
+  const service = harness.runService("watch-vaults");
+  try {
+    await harness.callRpc("saveNote", {
+      vaultId: "personal",
+      path: "a.md",
+      content: "# Saved",
+    });
+    expect(harness.rpcInvalidations).toHaveLength(1);
+    change?.("a.md");
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(harness.rpcInvalidations).toHaveLength(1);
+    await writeFile(path.join(watchedRoot, "a.md"), "# External");
+    change?.("a.md");
+    await waitForSignal(() => harness.rpcInvalidations.length === 2, 1000);
+    expect(harness.rpcInvalidations.at(-1)).toContain("path:personal:a.md");
+  } finally {
+    service.controller.abort();
+    await service.done;
+    await harness.dispose();
+  }
 });

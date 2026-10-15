@@ -28,7 +28,7 @@ const keys = (tasks: readonly Task[]) => tasks.map((t) => t.key);
 
 describe("sortTasks", () => {
   it("keeps the server order for manual without mutating the input", () => {
-    const input = [task("T-2"), task("T-1")];
+    const input = [task("T-2"), { ...task("T-1"), position: 2048 }];
     const sorted = sortTasks(input, "manual");
     expect(keys(sorted)).toEqual(["T-2", "T-1"]);
     expect(sorted).not.toBe(input);

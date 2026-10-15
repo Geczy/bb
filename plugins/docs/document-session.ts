@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import { useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { experimental_useRpcQuery, useRpc } from "@get-bb/plugin-sdk/app";
 import type { docsRpcContract } from "./server.js";
-import { isRecord } from "./markdown-document.js";
+
 import type { Proposal } from "./proposals.js";
 
 type Rpc = ReturnType<typeof useRpc<typeof docsRpcContract>>;
@@ -14,6 +14,7 @@ type Document = {
 };
 type Action = "accept" | "reject" | "undo" | "redo";
 export type DocumentIO = {
+  liveRead?: { vaultId: string; path: string };
   read(previewBaseUrl: string): Promise<Document>;
   write(
     content: string,
@@ -88,6 +89,30 @@ function createSession(io: DocumentIO) {
     });
     return result;
   };
+  const accept = (file: Document): void => {
+    const proposal = file.proposal;
+    if (state.busy || state.dirty)
+      set({
+        previewBaseUrl: file.previewBaseUrl,
+        previewPath: file.previewPath,
+      });
+    if (state.busy) return;
+    if (state.dirty) {
+      if (
+        file.sha256 !== state.sha256 ||
+        proposal?.version !== state.proposal?.version
+      )
+        throw new DocumentConflict();
+    } else
+      set({
+        ...file,
+        loaded: true,
+        initialContent: file.content,
+        draft: proposal?.status === "pending" ? proposal.content : file.content,
+        error: null,
+        conflict: false,
+      });
+  };
   const refresh = (): Promise<void> => {
     refreshAgain = true;
     if (refreshing) return refreshing;
@@ -95,25 +120,7 @@ function createSession(io: DocumentIO) {
       do {
         refreshAgain = false;
         const file = await io.read(state.previewBaseUrl);
-        const proposal = file.proposal;
-        if (state.busy) continue;
-        if (state.dirty) {
-          if (
-            file.sha256 !== state.sha256 ||
-            proposal?.version !== state.proposal?.version
-          )
-            throw new DocumentConflict();
-        } else {
-          set({
-            ...file,
-            loaded: true,
-            initialContent: file.content,
-            draft:
-              proposal?.status === "pending" ? proposal.content : file.content,
-            error: null,
-            conflict: false,
-          });
-        }
+        accept(file);
       } while (refreshAgain);
     })
       .catch(() => undefined)
@@ -184,6 +191,11 @@ function createSession(io: DocumentIO) {
       .finally(() => set({ busy: false }));
   };
   return {
+    receiveError: (error: Error) => set({ error: error.message }),
+    receive: (file: Document) =>
+      run(async () => {
+        accept(file);
+      }).catch(() => undefined),
     initialize: (content: string) => set({ content, draft: content }),
     reload: async () => {
       if (timer) clearTimeout(timer);
@@ -251,23 +263,57 @@ export function createDocumentSession(rpc: Rpc, vaultId: string, path: string) {
 
 const sessions = new Map<string, ReturnType<typeof createSession>>();
 
-function useSession(session: ReturnType<typeof createSession>) {
+function useSession(session: ReturnType<typeof createSession>, live = false) {
   const state = useSyncExternalStore(
     session.subscribe,
     session.getSnapshot,
     session.getSnapshot,
   );
   useEffect(() => {
-    void session.refresh();
+    if (!live) void session.refresh();
     return () => {
       void session.flush().catch(() => undefined);
     };
-  }, [session]);
+  }, [session, live]);
   return { state, session };
 }
 
 export function useSavedDocument(io: DocumentIO) {
-  return useSession(useMemo(() => createSession(io), [io]));
+  const session = useMemo(() => createSession(io), [io]);
+  const query = experimental_useRpcQuery<typeof docsRpcContract, "readNote">({
+    method: "readNote",
+    input: io.liveRead ?? { vaultId: "", path: "" },
+    enabled: io.liveRead !== undefined,
+  });
+  const preview = experimental_useRpcQuery<
+    typeof docsRpcContract,
+    "preparePreview"
+  >({
+    method: "preparePreview",
+    input: io.liveRead ?? { vaultId: "", path: "" },
+    enabled: io.liveRead !== undefined,
+  });
+  useEffect(() => {
+    if (io.liveRead === undefined) return;
+    const error = query.error ?? preview.error;
+    if (error) session.receiveError(error);
+    else if (query.data !== undefined && preview.data !== undefined)
+      void session.receive({
+        content: query.data.content,
+        sha256: query.data.sha256,
+        proposal: null,
+        previewBaseUrl: preview.data.baseUrl,
+        previewPath: io.liveRead.path,
+      });
+  }, [
+    query.data,
+    query.error,
+    preview.data,
+    preview.error,
+    session,
+    io.liveRead,
+  ]);
+  return useSession(session, io.liveRead !== undefined);
 }
 
 export function useDocumentSession(vaultId: string, path: string) {
@@ -286,19 +332,43 @@ export function useDocumentSession(vaultId: string, path: string) {
     )
       sessions.delete(cachedKey);
   }
-  const result = useSession(session);
-  const changed = useCallback(
-    (payload: unknown) => {
-      if (!isRecord(payload)) return;
-      if (typeof payload.vaultId === "string" && payload.vaultId !== vaultId)
-        return;
-      if (typeof payload.path === "string" && payload.path !== path) return;
-      if (payload.proposalOnly === true) return;
-      void session.refresh();
-    },
-    [session, vaultId, path],
-  );
-  useRealtime("vault-changed", changed);
-  useRealtime("proposal-changed", changed);
+  const result = useSession(session, true);
+  const query = experimental_useRpcQuery<typeof docsRpcContract, "readNote">({
+    method: "readNote",
+    input: { vaultId, path },
+  });
+  const proposal = experimental_useRpcQuery<
+    typeof docsRpcContract,
+    "readProposal"
+  >({ method: "readProposal", input: { vaultId, path } });
+  const preview = experimental_useRpcQuery<
+    typeof docsRpcContract,
+    "preparePreview"
+  >({ method: "preparePreview", input: { vaultId, path } });
+  useEffect(() => {
+    const error = query.error ?? proposal.error ?? preview.error;
+    if (error) session.receiveError(error);
+    else if (
+      query.data !== undefined &&
+      proposal.data !== undefined &&
+      preview.data !== undefined
+    )
+      void session.receive({
+        content: query.data.content,
+        sha256: query.data.sha256,
+        proposal: proposal.data,
+        previewBaseUrl: preview.data.baseUrl,
+        previewPath: path,
+      });
+  }, [
+    query.data,
+    query.error,
+    proposal.data,
+    proposal.error,
+    preview.data,
+    preview.error,
+    session,
+    path,
+  ]);
   return result;
 }

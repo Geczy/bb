@@ -178,10 +178,13 @@ export function hydratePreferencesFromMirror(): boolean {
   return true;
 }
 
-export async function hydratePreferences(rpc: PreferencesRpc): Promise<void> {
+export async function hydratePreferences(
+  rpc: PreferencesRpc,
+  snapshot?: unknown,
+): Promise<void> {
   state.rpc = rpc;
   const generation = ++state.hydrateGeneration;
-  const response = await rpc.call("listPreferences", null);
+  const response = snapshot ?? (await rpc.call("listPreferences", null));
   if (generation !== state.hydrateGeneration) return;
   const preferences =
     typeof response === "object" && response !== null

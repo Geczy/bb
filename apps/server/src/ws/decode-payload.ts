@@ -1,4 +1,26 @@
+import { realtimeSubscriptionTargetSchema } from "@bb/domain";
 import type { z } from "zod";
+
+const subscriptionKinds = new Set<string>(
+  realtimeSubscriptionTargetSchema.options.map(
+    (option) => option.shape.kind.value,
+  ),
+);
+
+function isUnknownSubscription(decoded: unknown): boolean {
+  return (
+    typeof decoded === "object" &&
+    decoded !== null &&
+    "type" in decoded &&
+    (decoded.type === "subscribe" || decoded.type === "unsubscribe") &&
+    "target" in decoded &&
+    typeof decoded.target === "object" &&
+    decoded.target !== null &&
+    "kind" in decoded.target &&
+    typeof decoded.target.kind === "string" &&
+    !subscriptionKinds.has(decoded.target.kind)
+  );
+}
 
 function decodeSocketPayload(raw: unknown): string {
   if (typeof raw === "string") {
@@ -28,6 +50,22 @@ export function parseSocketMessage<T>(
     return null;
   }
 
+  if (isUnknownSubscription(decoded)) return null;
+  if (
+    typeof decoded === "object" &&
+    decoded !== null &&
+    "type" in decoded &&
+    decoded.type === "subscriptions" &&
+    "changes" in decoded &&
+    Array.isArray(decoded.changes)
+  ) {
+    decoded = {
+      ...decoded,
+      changes: decoded.changes.filter(
+        (change: unknown) => !isUnknownSubscription(change),
+      ),
+    };
+  }
   const result = schema.safeParse(decoded);
   if (!result.success) {
     socket.close(1008, "invalid-message");

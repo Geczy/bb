@@ -803,21 +803,36 @@ export default async function plugin(bb: BbPluginApi) {
         "UPDATE items SET labels = ? WHERE repo = ? AND kind = 'issue' AND number = ?",
       ).run(JSON.stringify(patch.labels), repo, number);
     }
-    bb.realtime.publish("data-changed", {});
+    bb.rpc.experimental_invalidate([
+      `issue:${repo}#${number}`,
+      "items:issue",
+      "status",
+    ]);
   }
 
   async function syncAll(
     force = false,
   ): Promise<{ repos: number; items: number }> {
-    await checkAuth();
+    try {
+      await checkAuth();
+    } finally {
+      bb.rpc.experimental_invalidate(["status"]);
+    }
     const repos = await discoverRepos(force);
-    const before = JSON.stringify(
-      db
-        .prepare(
-          "SELECT repo, kind, number, updated_at FROM items ORDER BY repo, kind, number",
+    const itemVersions = () =>
+      z
+        .array(
+          z.object({
+            repo: z.string(),
+            kind: z.enum(["issue", "pr"]),
+            number: z.number(),
+            updated_at: z.string(),
+          }),
         )
-        .all(),
-    );
+        .parse(
+          db.prepare("SELECT repo, kind, number, updated_at FROM items").all(),
+        );
+    const before = itemVersions();
     let total = 0;
     let failed = 0;
     let lastFailure = "";
@@ -837,23 +852,55 @@ export default async function plugin(bb: BbPluginApi) {
         `sync failed for all ${repos.length} repo(s); last error: ${lastFailure}`,
       );
     }
-    const after = JSON.stringify(
-      db
-        .prepare(
-          "SELECT repo, kind, number, updated_at FROM items ORDER BY repo, kind, number",
-        )
-        .all(),
-    );
+    const after = itemVersions();
     await bb.storage.kv.set("sync-cursor", {
       lastSyncedAt: new Date().toISOString(),
     });
-    if (before !== after) {
-      bb.realtime.publish("data-changed", { items: total });
-    }
+    const tag = (item: (typeof before)[number]) =>
+      `${item.kind}:${item.repo}#${item.number}`;
+    const previous = new Map(
+      before.map((item) => [tag(item), item.updated_at]),
+    );
+    const current = new Map(after.map((item) => [tag(item), item.updated_at]));
+    const changed = [
+      ...new Set([...previous.keys(), ...current.keys()]),
+    ].filter((key) => previous.get(key) !== current.get(key));
+    bb.rpc.experimental_invalidate([
+      "status",
+      ...changed,
+      ...new Set(
+        changed.map(
+          (key) => `items:${key.startsWith("issue:") ? "issue" : "pr"}`,
+        ),
+      ),
+    ]);
     bb.log.info(`synced ${total} item(s) across ${repos.length} repo(s)`);
     return { repos: repos.length, items: total };
   }
 
+  bb.background.service("live-metadata", {
+    async start(signal) {
+      const stopThread = bb.sdk.subscribe({
+        event: "thread:changed",
+        callback: (event) =>
+          bb.rpc.experimental_invalidate([`thread:${event.id}`]),
+      });
+      const stopEnvironment = bb.sdk.subscribe({
+        event: "environment:changed",
+        callback: (event) =>
+          bb.rpc.experimental_invalidate([`environment:${event.id}`]),
+      });
+      try {
+        if (!signal.aborted)
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+      } finally {
+        stopThread();
+        stopEnvironment();
+      }
+    },
+  });
   bb.background.service("sync", {
     async start(signal) {
       let failures = 0;
@@ -911,7 +958,7 @@ export default async function plugin(bb: BbPluginApi) {
     const key = linkKey(link.kind, link.repo, link.number);
     const existing = (await bb.storage.kv.get<ThreadLink[]>(key)) ?? [];
     await bb.storage.kv.set(key, [...existing, link]);
-    bb.realtime.publish("links-changed", { key });
+    bb.rpc.experimental_invalidate(["links", `thread:${link.threadId}`]);
   }
 
   async function listAllLinks(): Promise<Record<string, ThreadLink[]>> {
@@ -1050,7 +1097,8 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   bb.rpc.register(githubRpcContract, {
-    async status() {
+    async status(_input, context) {
+      context.experimental_tag("status");
       if (ghState !== "ready") {
         try {
           await checkAuth();
@@ -1073,7 +1121,8 @@ export default async function plugin(bb: BbPluginApi) {
       return await syncAll(true);
     },
 
-    async listItems(input) {
+    async listItems(input, context) {
+      context.experimental_tag(`items:${input.kind}`);
       return {
         items: listCachedItems({
           kind: input.kind,
@@ -1160,7 +1209,8 @@ export default async function plugin(bb: BbPluginApi) {
       return { ok: true, labels: next };
     },
 
-    async getIssue({ repo, number }) {
+    async getIssue({ repo, number }, context) {
+      context.experimental_tag(`issue:${repo}#${number}`);
       const raw = await gh([
         "issue",
         "view",
@@ -1202,7 +1252,8 @@ export default async function plugin(bb: BbPluginApi) {
       };
     },
 
-    async getPull({ repo, number }) {
+    async getPull({ repo, number }, context) {
+      context.experimental_tag(`pr:${repo}#${number}`);
       const prFields =
         "number,title,body,state,isDraft,author,createdAt,updatedAt,labels," +
         "assignees,url,baseRefName,headRefName,additions,deletions," +
@@ -1417,15 +1468,18 @@ export default async function plugin(bb: BbPluginApi) {
 
     async commentPull({ repo, number, body }): Promise<{ ok: true }> {
       await gh(["pr", "comment", String(number), "-R", repo, "--body", body]);
+      bb.rpc.experimental_invalidate([`pr:${repo}#${number}`]);
       return { ok: true };
     },
 
-    async pullForThread({ threadId }) {
+    async pullForThread({ threadId }, context) {
+      context.experimental_tag("links", `thread:${threadId}`);
       let environmentId: string | null = null;
       try {
         const thread = await bb.sdk.threads.get({ threadId });
         if (thread?.environmentId) {
           environmentId = thread.environmentId;
+          context.experimental_tag(`environment:${environmentId}`);
           const result = await bb.sdk.environments.pullRequest({
             environmentId: thread.environmentId,
           });
@@ -1473,6 +1527,7 @@ export default async function plugin(bb: BbPluginApi) {
         "--body",
         body,
       ]);
+      bb.rpc.experimental_invalidate([`issue:${repo}#${number}`]);
       return { ok: true };
     },
 
@@ -1492,7 +1547,7 @@ export default async function plugin(bb: BbPluginApi) {
       const number = match !== null ? Number(match[1]) : null;
       try {
         replaceRepoRows(input.repo, await fetchRepoItems(gh, input.repo));
-        bb.realtime.publish("data-changed", {});
+        bb.rpc.experimental_invalidate(["items:issue", "status"]);
       } catch {}
       return { number, url: stdout.trim() };
     },
@@ -1505,7 +1560,8 @@ export default async function plugin(bb: BbPluginApi) {
       return await spawnOnItem("pr", repo, number);
     },
 
-    async listLinks() {
+    async listLinks(_input, context) {
+      context.experimental_tag("links");
       return { links: await listAllLinks() };
     },
   });

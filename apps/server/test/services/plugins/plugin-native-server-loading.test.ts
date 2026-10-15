@@ -109,6 +109,8 @@ const service = createPluginService({
   db,
   hub: {
     getDaemonSessionIdForHost: () => null,
+    notifyPlugin: () => {},
+    onPluginWatchChange: () => () => {},
     notifyPluginSignal: () => 0,
     notifySystem: () => {}
   },
@@ -208,6 +210,8 @@ const service = createPluginService({
   db,
   hub: {
     getDaemonSessionIdForHost: () => null,
+    notifyPlugin: () => {},
+    onPluginWatchChange: () => () => {},
     notifyPluginSignal: () => 0,
     notifySystem: () => {}
   },
@@ -329,6 +333,8 @@ const service = createPluginService({
   db,
   hub: {
     getDaemonSessionIdForHost: () => null,
+    notifyPlugin: () => {},
+    onPluginWatchChange: () => () => {},
     notifyPluginSignal: () => 0,
     notifySystem: () => {}
   },

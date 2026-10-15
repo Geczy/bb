@@ -1,3 +1,4 @@
+import { realtimeSubscriptionTargetKey } from "@bb/domain";
 import type { MachineEnrollmentService } from "../machines/machine-services.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
@@ -1636,6 +1637,37 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       getAppUrl: deps.getAppUrl ?? (() => null),
       getLoopbackBaseUrl: () => boundLoopbackBaseUrl,
       rpcCaller: rpcCallers.issue(row.id),
+      invalidateRpc: (tags) => deps.hub.notifyPlugin(row.id, tags),
+      whileRpcWatched: (method, handler) => {
+        const active = new Map<string, AbortController>();
+        const stop = deps.hub.onPluginWatchChange((target, watched) => {
+          if (target.pluginId !== row.id || target.method !== method) return;
+          const key = realtimeSubscriptionTargetKey(target);
+          if (!watched) {
+            active.get(key)?.abort();
+            active.delete(key);
+            return;
+          }
+          const controller = new AbortController();
+          active.set(key, controller);
+          Promise.resolve()
+            .then(() => {
+              if (!controller.signal.aborted)
+                return handler(target.read, controller.signal);
+            })
+            .catch((error) => {
+              if (!controller.signal.aborted)
+                deps.logger.warn(
+                  `Plugin ${row.id} whileWatched handler failed: ${String(error)}`,
+                );
+            });
+        });
+        return () => {
+          stop();
+          for (const controller of active.values()) controller.abort();
+          active.clear();
+        };
+      },
       publishSignal: (channel, payload) => {
         deps.hub.notifyPluginSignal(row.id, channel, payload);
       },

@@ -120,7 +120,14 @@ export function createRpcHandlers(
 ): PluginRpcHandlers<typeof accountPoolRpcContract> {
   return {
     "account.add": (input) => operations.add(input),
-    "account.list": () => operations.list(),
+    "account.list": async (_input, context) => {
+      const accounts = await operations.list();
+      context?.experimental_tag(
+        "accounts",
+        ...accounts.map((account) => `account:${account.id}`),
+      );
+      return accounts;
+    },
     "account.remove": async ({ id }) => ({
       removed: await operations.remove(id),
     }),
@@ -144,7 +151,10 @@ export function createRpcHandlers(
       await operations.setRouting(provider, enabled);
       return { provider, enabled };
     },
-    "config.get": () => config.get(),
+    "config.get": (_input, context) => {
+      context?.experimental_tag("config");
+      return config.get();
+    },
     "config.set": (input) => config.set(input),
     "login.start": () => login.start(),
     "login.complete": (input) => login.complete(input),
@@ -153,8 +163,14 @@ export function createRpcHandlers(
     "codexLogin.cancel": (input) => ({
       cancelled: codexLogin.cancel(input),
     }),
-    "status.get": () => operations.status(),
-    "status.routedThreads": () => operations.routedThreadsWithoutLocalLogin(),
+    "status.get": (_input, context) => {
+      context?.experimental_tag("accounts", "config");
+      return operations.status();
+    },
+    "status.routedThreads": (_input, context) => {
+      context?.experimental_tag("accounts");
+      return operations.routedThreadsWithoutLocalLogin();
+    },
     "token.rotate": ({ machine }) => operations.rotateToken(machine),
     "bypass.set": ({ threadId, bypassed }) =>
       operations.setBypass(threadId, bypassed),

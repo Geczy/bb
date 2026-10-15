@@ -724,6 +724,7 @@ describe("Account Pool settings", () => {
       expect(providerOrder()).toEqual(["Reorder Second", "Reorder First"]);
       expect(handle.hasAttribute("disabled")).toBe(true);
       finishSave();
+      await slot.experimental_invalidateRpc();
       await waitFor(() => expect(handle.hasAttribute("disabled")).toBe(false));
       expect(providerOrder()).toEqual(["Reorder Second", "Reorder First"]);
       expect(

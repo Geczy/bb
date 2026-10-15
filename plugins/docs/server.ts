@@ -1,5 +1,6 @@
 import { proposalSchema, type Proposal } from "./proposals.js";
 import { watch } from "node:fs";
+import { stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { isRecord, parseMarkdownDocument } from "./markdown-document.js";
@@ -100,10 +101,17 @@ interface VaultWatcher {
   on(event: "error", listener: () => void): void;
 }
 
-type WatchVault = (rootPath: string, onChange: () => void) => VaultWatcher;
+type WatchVault = (
+  rootPath: string,
+  onChange: (relativePath?: string) => void,
+) => VaultWatcher;
 
 const watchNativeVault: WatchVault = (rootPath, onChange) => {
-  const watcher = watch(rootPath, { recursive: true }, onChange);
+  const watcher = watch(rootPath, { recursive: true }, (_event, filename) =>
+    onChange(
+      filename === null ? undefined : filename.toString().replaceAll("\\", "/"),
+    ),
+  );
   return {
     close: () => watcher.close(),
     on: (event, listener) => {
@@ -111,6 +119,15 @@ const watchNativeVault: WatchVault = (rootPath, onChange) => {
     },
   };
 };
+
+async function localFileStamp(filePath: string): Promise<string | null> {
+  try {
+    const value = await stat(filePath, { bigint: true });
+    return `${value.dev}:${value.ino}:${value.size}:${value.mtimeNs}:${value.ctimeNs}`;
+  } catch {
+    return null;
+  }
+}
 
 interface VaultEntry {
   kind: "file" | "directory";
@@ -723,6 +740,7 @@ export default async function plugin(
   watchVault: WatchVault = watchNativeVault,
 ) {
   const db = bb.storage.database();
+  const writtenFiles = new Map<string, string>();
   bb.storage.migrate(db, [
     `CREATE TABLE IF NOT EXISTS vaults (
       id TEXT PRIMARY KEY,
@@ -972,6 +990,13 @@ export default async function plugin(
     return { ...file, path: relativePath };
   }
 
+  function pathTags(vaultId: string, relativePath: string): string[] {
+    const parts = relativePath.split("/");
+    return parts.map(
+      (_, index) => `path:${vaultId}:${parts.slice(0, index + 1).join("/")}`,
+    );
+  }
+
   async function writeFile(args: {
     vaultId?: string;
     rawPath: unknown;
@@ -979,7 +1004,6 @@ export default async function plugin(
     contentEncoding?: "utf8" | "base64";
     expectedSha256?: unknown;
     createOnly?: boolean;
-    proposalOnly?: boolean;
   }) {
     const vault = getVault(args.vaultId);
     const relativePath = requireVaultPath(args.rawPath);
@@ -1000,12 +1024,20 @@ export default async function plugin(
           : {}),
     });
     if (result.outcome === "written") {
+      if (!vault.hostId) {
+        const stamp = await localFileStamp(absolutePath(vault, relativePath));
+        if (stamp !== null)
+          writtenFiles.set(`${vault.id}:${relativePath}`, stamp);
+        if (writtenFiles.size > 1000) {
+          const oldest = writtenFiles.keys().next().value;
+          if (oldest !== undefined) writtenFiles.delete(oldest);
+        }
+      }
       mentionSummaries.delete(vault.id);
-      bb.realtime.publish("vault-changed", {
-        vaultId: vault.id,
-        path: relativePath,
-        ...(args.proposalOnly ? { proposalOnly: true } : {}),
-      });
+      bb.rpc.experimental_invalidate([
+        `notes:${vault.id}`,
+        `note:${vault.id}:${relativePath}`,
+      ]);
     }
     return result;
   }
@@ -1048,16 +1080,9 @@ export default async function plugin(
     db.prepare(
       "INSERT INTO proposals (vault_id, path, data) VALUES (?, ?, ?) ON CONFLICT(vault_id, path) DO UPDATE SET data = excluded.data",
     ).run(proposal.vaultId, proposal.path, JSON.stringify(proposal));
-    bb.realtime.publish("vault-changed", {
-      vaultId: proposal.vaultId,
-      path: proposal.path,
-      proposalOnly: true,
-    });
-    bb.realtime.publish("proposal-changed", {
-      vaultId: proposal.vaultId,
-      path: proposal.path,
-      version: proposal.version,
-    });
+    bb.rpc.experimental_invalidate([
+      `proposal:${proposal.vaultId}:${proposal.path}`,
+    ]);
     return proposal;
   }
 
@@ -1224,7 +1249,11 @@ export default async function plugin(
         }
       })();
       mentionSummaries.delete(vault.id);
-      bb.realtime.publish("vault-changed", { vaultId: vault.id });
+      bb.rpc.experimental_invalidate([
+        `notes:${vault.id}`,
+        `path:${vault.id}:${from}`,
+        `path:${vault.id}:${to}`,
+      ]);
       return { path: to };
     });
   }
@@ -1251,7 +1280,10 @@ export default async function plugin(
       });
       deleteProposals(vault.id, relativePath);
       mentionSummaries.delete(vault.id);
-      bb.realtime.publish("vault-changed", { vaultId: vault.id });
+      bb.rpc.experimental_invalidate([
+        `notes:${vault.id}`,
+        `path:${vault.id}:${relativePath}`,
+      ]);
       return { ok: true };
     });
   }
@@ -1652,8 +1684,22 @@ export default async function plugin(
     };
   }
 
+  const previewWatches = new Map<
+    string,
+    {
+      count: number;
+      timer: ReturnType<typeof setTimeout> | null;
+      expiresAtMs: number | null;
+    }
+  >();
   const handlers: PluginRpcHandlers<typeof docsRpcContract> = {
-    async readProposal(input) {
+    async readProposal(input, context) {
+      const id = getVault(input.vaultId).id;
+      context?.experimental_tag(
+        `vault:${id}`,
+        `proposal:${id}:${input.path}`,
+        ...pathTags(id, requireVaultPath(input.path)),
+      );
       return readProposal(getVault(input.vaultId).id, input.path);
     },
     async proposeNote(input) {
@@ -1747,7 +1793,6 @@ export default async function plugin(
             rawPath: input.path,
             content: restoring ? proposal.baseContent : proposal.content,
             expectedSha256,
-            proposalOnly: true,
           });
           if (result.outcome === "conflict") throw new Error(conflictMessage);
           next.resolvedSha256 = result.sha256;
@@ -1765,10 +1810,19 @@ export default async function plugin(
     async syncApply(input) {
       return syncApply(input);
     },
-    async listNotes(input) {
+    async listNotes(input, context) {
+      const id = getVault(input.vaultId).id;
+      context?.experimental_tag("vaults", `vault:${id}`, `notes:${id}`);
       return notebookData(input.vaultId);
     },
-    async readNote(input) {
+    async readNote(input, context) {
+      const id = getVault(input.vaultId).id;
+      const relativePath = requireVaultPath(input.path);
+      context?.experimental_tag(
+        `vault:${id}`,
+        `note:${id}:${relativePath}`,
+        ...pathTags(id, relativePath),
+      );
       return readFile(input.vaultId, input.path);
     },
     async saveNote(input) {
@@ -1796,7 +1850,7 @@ export default async function plugin(
         rootPath: vault.rootPath,
         recursive: false,
       });
-      bb.realtime.publish("vault-changed", { vaultId: vault.id });
+      bb.rpc.experimental_invalidate([`notes:${vault.id}`]);
       return { path: relativePath };
     },
     async reorderFiles(input) {
@@ -1842,7 +1896,7 @@ export default async function plugin(
         );
       });
       replaceOrder();
-      bb.realtime.publish("vault-changed", { vaultId: vault.id });
+      bb.rpc.experimental_invalidate([`notes:${vault.id}`]);
       return { paths };
     },
     async movePath(input) {
@@ -1887,7 +1941,7 @@ export default async function plugin(
       db.prepare(
         "INSERT INTO vaults (id, name, host_id, root_path, created_at) VALUES (?, ?, ?, ?, ?)",
       ).run(id, name, hostId, resolvedRoot, Date.now());
-      bb.realtime.publish("vault-changed", { vaultId: id });
+      bb.rpc.experimental_invalidate(["vaults"]);
       return getVault(id);
     },
     async removeVault(input) {
@@ -1901,7 +1955,7 @@ export default async function plugin(
           db.prepare("DELETE FROM vaults WHERE id = ?").run(id);
         })();
         mentionSummaries.delete(id);
-        bb.realtime.publish("vault-changed", { vaultId: id });
+        bb.rpc.experimental_invalidate(["vaults", `vault:${id}`]);
         return { ok: true as const };
       });
     },
@@ -1942,7 +1996,7 @@ export default async function plugin(
         result,
       };
     },
-    async preparePreview(input) {
+    async preparePreview(input, context) {
       const vault = getVault(input.vaultId);
       const relativePath = requireVaultPath(input.path);
       await bb.sdk.files.read({
@@ -1950,10 +2004,33 @@ export default async function plugin(
         path: absolutePath(vault, relativePath),
         rootPath: vault.rootPath,
       });
-      return bb.sdk.files.createPreview({
+      const tag = `preview:${vault.id}:${relativePath}`;
+      context?.experimental_tag(
+        `vault:${vault.id}`,
+        tag,
+        ...pathTags(vault.id, relativePath),
+      );
+      const preview = await bb.sdk.files.createPreview({
         ...hostArgs(vault),
         rootPath: vault.rootPath,
       });
+      const watch = previewWatches.get(tag);
+      if (
+        watch &&
+        (watch.expiresAtMs === null || preview.expiresAtMs < watch.expiresAtMs)
+      ) {
+        if (watch.timer) clearTimeout(watch.timer);
+        watch.expiresAtMs = preview.expiresAtMs;
+        watch.timer = setTimeout(
+          () => {
+            watch.timer = null;
+            watch.expiresAtMs = null;
+            bb.rpc.experimental_invalidate([tag]);
+          },
+          Math.max(0, preview.expiresAtMs - Date.now()),
+        );
+      }
+      return preview;
     },
     async openFile(input) {
       const target = await resolveOpenerFile(input.source, input.path);
@@ -1998,6 +2075,49 @@ export default async function plugin(
   };
 
   bb.rpc.register(docsRpcContract, handlers);
+  bb.rpc.experimental_whileWatched("preparePreview", (read, signal) => {
+    if (!("input" in read)) return;
+    const parsed = docsRpcContract.preparePreview.input.safeParse(read.input);
+    if (!parsed.success) return;
+    const tag = `preview:${getVault(parsed.data.vaultId).id}:${requireVaultPath(parsed.data.path)}`;
+    const watch = previewWatches.get(tag) ?? {
+      count: 0,
+      timer: null,
+      expiresAtMs: null,
+    };
+    previewWatches.set(tag, watch);
+    watch.count++;
+    bb.rpc.experimental_invalidate([tag]);
+    signal.addEventListener(
+      "abort",
+      () => {
+        if (--watch.count === 0) {
+          if (watch.timer) clearTimeout(watch.timer);
+          previewWatches.delete(tag);
+        }
+      },
+      { once: true },
+    );
+  });
+  const watchedVaults = new Map<string, number>();
+  for (const method of ["listNotes", "readNote"] as const) {
+    bb.rpc.experimental_whileWatched(method, (read, signal) => {
+      if (!("input" in read)) return;
+      const parsed = docsRpcContract[method].input.safeParse(read.input);
+      if (!parsed.success) return;
+      const id = getVault(parsed.data.vaultId).id;
+      watchedVaults.set(id, (watchedVaults.get(id) ?? 0) + 1);
+      signal.addEventListener(
+        "abort",
+        () => {
+          const count = (watchedVaults.get(id) ?? 1) - 1;
+          if (count === 0) watchedVaults.delete(id);
+          else watchedVaults.set(id, count);
+        },
+        { once: true },
+      );
+    });
+  }
 
   async function readHttpInput<Schema extends z.ZodType>(
     context: Parameters<Parameters<BbPluginApi["http"]["route"]>[2]>[0],
@@ -3501,7 +3621,8 @@ export default async function plugin(
       const watchers = new Map<string, VaultWatcher>();
       const retryNative = new Set<string>();
       let debounce: NodeJS.Timeout | null = null;
-      let previous = "";
+      const previous = new Map<string, string>();
+      const dirtyVaults = new Map<string, Set<string> | null>();
       try {
         while (!signal.aborted) {
           const vaults = listVaults();
@@ -3517,12 +3638,55 @@ export default async function plugin(
           for (const vault of vaults) {
             if (vault.hostId || watchers.has(vault.id)) continue;
             try {
-              const watcher = watchVault(vault.rootPath, () => {
+              const watcher = watchVault(vault.rootPath, (relativePath) => {
                 mentionSummaries.delete(vault.id);
+                if (relativePath === undefined) dirtyVaults.set(vault.id, null);
+                else if (dirtyVaults.get(vault.id) !== null) {
+                  const paths = dirtyVaults.get(vault.id) ?? new Set<string>();
+                  paths.add(relativePath);
+                  dirtyVaults.set(vault.id, paths);
+                }
                 if (debounce) clearTimeout(debounce);
                 debounce = setTimeout(() => {
-                  bb.realtime.publish("vault-changed", {
-                    vaultId: vault.id,
+                  const changes = new Map(dirtyVaults);
+                  dirtyVaults.clear();
+                  const flush = async () => {
+                    const tags: string[] = [];
+                    for (const [id, paths] of changes) {
+                      if (paths === null) {
+                        tags.push(`vault:${id}`);
+                        continue;
+                      }
+                      const current = listVaults().find(
+                        (vault) => vault.id === id,
+                      );
+                      if (!current) continue;
+                      for (const file of paths) {
+                        const key = `${id}:${file}`;
+                        const written = writtenFiles.get(key);
+                        writtenFiles.delete(key);
+                        if (
+                          written !== undefined &&
+                          written ===
+                            (await localFileStamp(absolutePath(current, file)))
+                        )
+                          continue;
+                        tags.push(
+                          `notes:${id}`,
+                          `note:${id}:${file}`,
+                          `path:${id}:${file}`,
+                        );
+                      }
+                    }
+                    const [first, ...rest] = tags;
+                    if (!signal.aborted && first !== undefined)
+                      bb.rpc.experimental_invalidate([first, ...rest]);
+                  };
+                  void flush().catch((error) => {
+                    if (!signal.aborted)
+                      bb.log.warn(
+                        `Vault change refresh failed: ${errorMessage(error)}`,
+                      );
                   });
                 }, 250);
               });
@@ -3545,7 +3709,11 @@ export default async function plugin(
 
           const snapshots: string[] = [];
           for (const vault of vaults) {
-            if (watchers.has(vault.id)) continue;
+            if (
+              watchers.has(vault.id) ||
+              (vault.hostId && !watchedVaults.has(vault.id))
+            )
+              continue;
             try {
               const { entries } = await listEntries(vault);
               const notes = await listNoteSummaries(vault, entries);
@@ -3564,11 +3732,15 @@ export default async function plugin(
               snapshots.push(`${vault.id}:offline`);
             }
           }
-          const next = snapshots.join("\n");
-          if (previous && previous !== next) {
-            bb.realtime.publish("vault-changed", {});
+          for (const value of snapshots) {
+            const id = value.startsWith("{")
+              ? z.object({ id: z.string() }).parse(JSON.parse(value)).id
+              : value.slice(0, -":offline".length);
+            const old = previous.get(id);
+            if (old !== undefined && old !== value)
+              bb.rpc.experimental_invalidate([`vault:${id}`]);
+            previous.set(id, value);
           }
-          previous = next;
           await waitForDelay(10_000, signal);
         }
       } finally {

@@ -84,6 +84,23 @@ describe("Docs document sessions", () => {
     expect(session.getSnapshot().previewBaseUrl).toBe("/renewed-preview");
   });
 
+  it("accepts renewed preview URLs without replacing unsaved text", async () => {
+    const { session } = await loadedSession();
+    session.edit("Unsaved draft");
+    await session.receive({
+      content: "Original",
+      sha256: "original-sha",
+      proposal: null,
+      previewBaseUrl: "/renewed-preview",
+      previewPath: "letter.md",
+    });
+    expect(session.getSnapshot()).toMatchObject({
+      draft: "Unsaved draft",
+      dirty: true,
+      previewBaseUrl: "/renewed-preview",
+    });
+  });
+
   it("drains edits made during a save using the returned file hash", async () => {
     const { session, call } = await loadedSession();
     const first = deferred<{

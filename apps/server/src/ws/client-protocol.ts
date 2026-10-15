@@ -33,21 +33,19 @@ export function onClientSocketMessage(
     return;
   }
 
-  switch (parsed.type) {
-    case "subscribe":
-      deps.hub.subscribe(socket, parsed.target);
-      deps.watchInterests.subscribe(socket, parsed.target);
-      break;
-    case "unsubscribe":
-      deps.hub.unsubscribe(socket, parsed.target);
-      deps.watchInterests.unsubscribe(socket, parsed.target);
-      break;
-    case "ping":
-      socket.send(JSON.stringify(PONG_MESSAGE));
-      break;
-    default: {
-      const _exhaustive: never = parsed;
-      throw new Error(`Unhandled client message: ${_exhaustive}`);
+  if (parsed.type === "ping") {
+    socket.send(JSON.stringify(PONG_MESSAGE));
+    return;
+  }
+  for (const change of parsed.type === "subscriptions"
+    ? parsed.changes
+    : [parsed]) {
+    if (change.type === "subscribe") {
+      deps.hub.subscribe(socket, change.target);
+      deps.watchInterests.subscribe(socket, change.target);
+    } else {
+      deps.hub.unsubscribe(socket, change.target);
+      deps.watchInterests.unsubscribe(socket, change.target);
     }
   }
 }

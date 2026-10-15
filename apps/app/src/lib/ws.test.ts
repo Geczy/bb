@@ -101,9 +101,10 @@ function installOpenWebSocketConstructor(): void {
 }
 
 function readClientMessages(socket: FakeSocket): readonly ClientMessage[] {
-  return socket.sentMessages.map((message) =>
-    clientMessageSchema.parse(JSON.parse(message)),
-  );
+  return socket.sentMessages.flatMap((message) => {
+    const parsed = clientMessageSchema.parse(JSON.parse(message));
+    return parsed.type === "subscriptions" ? parsed.changes : [parsed];
+  });
 }
 
 function getOnlySocket(): FakeSocket {
@@ -137,12 +138,13 @@ describe("WebSocketManager subscriptions", () => {
     });
   });
 
-  it("ref-counts duplicate subscriptions and unsubscribes only after the final cleanup", () => {
+  it("ref-counts duplicate subscriptions and unsubscribes only after the final cleanup", async () => {
     const { manager, socket } = createConnectedManager();
 
     manager.subscribe(THREAD_TARGET);
     manager.subscribe(THREAD_TARGET);
 
+    await Promise.resolve();
     expect(readClientMessages(socket)).toEqual([
       {
         type: "subscribe",
@@ -152,6 +154,7 @@ describe("WebSocketManager subscriptions", () => {
 
     manager.unsubscribe(THREAD_TARGET);
 
+    await Promise.resolve();
     expect(readClientMessages(socket)).toEqual([
       {
         type: "subscribe",
@@ -161,6 +164,7 @@ describe("WebSocketManager subscriptions", () => {
 
     manager.unsubscribe(THREAD_TARGET);
 
+    await Promise.resolve();
     expect(readClientMessages(socket)).toEqual([
       {
         type: "subscribe",
@@ -173,7 +177,7 @@ describe("WebSocketManager subscriptions", () => {
     ]);
   });
 
-  it("resends active subscriptions when the websocket reconnects", () => {
+  it("resends active subscriptions when the websocket reconnects", async () => {
     const { manager, socket } = createConnectedManager();
 
     manager.subscribe(THREAD_TARGET);
@@ -183,6 +187,7 @@ describe("WebSocketManager subscriptions", () => {
     socket.close();
     socket.open();
 
+    await Promise.resolve();
     expect(readClientMessages(socket)).toEqual([
       {
         type: "subscribe",
@@ -193,6 +198,38 @@ describe("WebSocketManager subscriptions", () => {
         target: PROJECT_TARGET,
       },
     ]);
+  });
+  it("batches subscription changes and drops interests released before the flush", async () => {
+    installOpenWebSocketConstructor();
+    const { manager, socket } = createConnectedManager();
+    try {
+      manager.subscribe(THREAD_TARGET);
+      manager.subscribe(PROJECT_TARGET);
+      manager.subscribe({ kind: "plugin", pluginId: "temporary" });
+      manager.unsubscribe({ kind: "plugin", pluginId: "temporary" });
+      await Promise.resolve();
+      expect(
+        socket.sentMessages.map((message) =>
+          clientMessageSchema.parse(JSON.parse(message)),
+        ),
+      ).toEqual([
+        {
+          type: "subscriptions",
+          changes: [
+            { type: "subscribe", target: THREAD_TARGET },
+            { type: "subscribe", target: PROJECT_TARGET },
+          ],
+        },
+      ]);
+      socket.sentMessages.length = 0;
+      socket.close();
+      socket.open();
+      await Promise.resolve();
+      expect(socket.sentMessages).toHaveLength(1);
+      expect(readClientMessages(socket)).toHaveLength(2);
+    } finally {
+      manager.disconnect();
+    }
   });
 });
 
@@ -603,7 +640,7 @@ describe("WebSocketManager liveness", () => {
     expect(fakeSocketState.instances).toHaveLength(2);
   });
 
-  it("re-sends subscriptions on the replacement socket after a failed probe", () => {
+  it("re-sends subscriptions on the replacement socket after a failed probe", async () => {
     const { manager } = createLiveManager();
     manager.subscribe(THREAD_TARGET);
 
@@ -613,6 +650,7 @@ describe("WebSocketManager liveness", () => {
     const replacement = getSocketAt(1);
     replacement.open();
 
+    await Promise.resolve();
     expect(readClientMessages(replacement)).toEqual([
       { type: "subscribe", target: THREAD_TARGET },
     ]);

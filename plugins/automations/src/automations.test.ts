@@ -230,7 +230,7 @@ function createAutomationServiceBb() {
         },
       },
     },
-    realtime: { publish: () => undefined },
+    rpc: { experimental_invalidate: () => undefined },
     log: {
       debug: () => undefined,
       error: () => undefined,
@@ -364,8 +364,9 @@ describe("startup reconciliation", () => {
             },
           },
         },
-        realtime: {
-          publish: (...args: unknown[]) => void published.push(args),
+        rpc: {
+          experimental_invalidate: (...args: unknown[]) =>
+            void published.push(args),
         },
         log: {
           debug: () => undefined,
@@ -856,7 +857,7 @@ describe("automation data access", () => {
             },
           },
         },
-        realtime: { publish: () => undefined },
+        rpc: { experimental_invalidate: () => undefined },
         log: {
           debug: () => undefined,
           error: () => undefined,
@@ -1290,7 +1291,7 @@ describe("automation service", () => {
           },
         },
       },
-      realtime: { publish: () => undefined },
+      rpc: { experimental_invalidate: () => undefined },
       log: {
         debug: () => undefined,
         error: () => undefined,
@@ -2232,7 +2233,7 @@ describe("script project context", () => {
           }),
         },
       },
-      realtime: { publish: () => undefined },
+      rpc: { experimental_invalidate: () => undefined },
       log: {
         debug: () => undefined,
         error: () => undefined,

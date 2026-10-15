@@ -46,7 +46,8 @@ export function registerUsageSource(bb: BbPluginApi, hub: AccountPoolHub) {
   bb.rpc.register(
     usageSourceRpcContract,
     {
-      async [usageListMethod]() {
+      async [usageListMethod](_input, context) {
+        context.experimental_tag("accounts");
         const { accounts } = await hub.status();
         return {
           label: "Account Pooler",

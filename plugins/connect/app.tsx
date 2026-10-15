@@ -3,8 +3,7 @@ import {
   definePluginApp,
   experimental_copyToClipboard,
   UrlLink as UrlLink,
-  useRealtime,
-  useRealtimeConnectionState,
+  experimental_useRpcQuery,
   useRpc,
   useSdk,
 } from "@get-bb/plugin-sdk/app";
@@ -35,7 +34,7 @@ import {
 import { Icon } from "@bb/shared-ui/icon";
 import { Input } from "@bb/shared-ui/input";
 import { cn } from "@bb/shared-ui/lib/utils";
-import { CONNECT_REALTIME_CHANNEL, type ConnectStatus } from "@/src/types";
+import { type ConnectStatus } from "@/src/types";
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -58,15 +57,6 @@ interface PairErrorCopy {
   lead: string;
   linkLabel: string;
   tail: string;
-}
-
-const LOGIN_POLL_MS = 2_000;
-const LOGIN_POLL_MAX_MS = 30_000;
-
-function loginPollDelay(failures: number): number {
-  return failures === 0
-    ? LOGIN_POLL_MS
-    : Math.min(LOGIN_POLL_MS * 2 ** failures, LOGIN_POLL_MAX_MS);
 }
 
 const PAIR_ERROR_COPY: Record<ConnectPairErrorCode, PairErrorCopy> = {
@@ -1123,40 +1113,18 @@ function useAccountLogin(onSignedIn: () => void) {
   }, [sdk]);
 
   const pendingId = login?.state === "pending" ? login.id : null;
+  const pendingLogin = experimental_useRpcQuery({
+    pluginId: ACCOUNT_PLUGIN_ID,
+    method: "login.poll",
+    input: { loginId: pendingId },
+    enabled: pendingId !== null,
+  });
   useEffect(() => {
-    if (pendingId === null) return;
-    let cancelled = false;
-    let failures = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = () => {
-      sdk.plugins
-        .callRpc({
-          pluginId: ACCOUNT_PLUGIN_ID,
-          method: "login.poll",
-          input: { loginId: pendingId },
-          outputSchema: loginPollOutputSchema,
-        })
-        .then(
-          (result) => {
-            failures = 0;
-            if (cancelled) return;
-            if (result.login !== null) setLogin(result.login);
-            if (result.login?.state === "signed-in") onSignedIn();
-          },
-          () => {
-            failures += 1;
-          },
-        )
-        .finally(() => {
-          if (!cancelled) timer = setTimeout(poll, loginPollDelay(failures));
-        });
-    };
-    timer = setTimeout(poll, LOGIN_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [onSignedIn, pendingId, sdk]);
+    if (pendingLogin.data === undefined) return;
+    const result = loginPollOutputSchema.parse(pendingLogin.data);
+    if (result.login !== null) setLogin(result.login);
+    if (result.login?.state === "signed-in") onSignedIn();
+  }, [pendingLogin.data, onSignedIn]);
 
   const cancel = useCallback(() => {
     if (pendingId !== null) {
@@ -1508,54 +1476,15 @@ function OffContent({
 }
 
 function useConnectStatus() {
-  const rpc = useRpc<typeof connectRpcContract>();
-  const connectionState = useRealtimeConnectionState();
-  const previousConnectionState = useRef(connectionState);
-  const [status, setStatus] = useState<ConnectStatus | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const latestStatusRequest = useRef(0);
-
-  const refetch = useCallback(() => {
-    const request = ++latestStatusRequest.current;
-    rpc.call("status").then(
-      (result) => {
-        if (request !== latestStatusRequest.current) return;
-        const next = asStatus(result);
-        if (next !== null) {
-          setStatus(next);
-          setLoadError(null);
-        } else {
-          setLoadError("Unexpected status payload.");
-        }
-      },
-      (error: unknown) => {
-        if (request !== latestStatusRequest.current) return;
-        setLoadError(errorText(error));
-      },
-    );
-  }, [rpc]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  useEffect(() => {
-    const previous = previousConnectionState.current;
-    previousConnectionState.current = connectionState;
-    if (connectionState === "connected" && previous !== "connected") {
-      refetch();
-    }
-  }, [connectionState, refetch]);
-
-  useRealtime(CONNECT_REALTIME_CHANNEL, (payload) => {
-    const next = asStatus(payload);
-    if (next !== null) {
-      setStatus(next);
-      setLoadError(null);
-    }
+  const query = experimental_useRpcQuery<typeof connectRpcContract, "status">({
+    method: "status",
+    input: null,
   });
-
-  return { status, loadError, refetch };
+  return {
+    status: query.data === undefined ? null : asStatus(query.data),
+    loadError: query.error?.message ?? null,
+    refetch: query.refetch,
+  };
 }
 
 function MobilePairingSection() {

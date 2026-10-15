@@ -38,6 +38,7 @@ import {
   adoptHttpRouteResponse,
   validatePluginProviderEnvEntries,
   validateRpcValue,
+  createRpcKeyedProvisioner,
   validateSettingsUpdate,
 } from "@get-bb/plugin-sdk/internal/host-policy";
 import {
@@ -404,8 +405,24 @@ export interface PluginService {
     handler: PluginRpcHandler,
     input: unknown,
     caller: ExperimentalPluginRpcCaller,
+    warmKeyedMethods?: readonly string[],
   ): Promise<
-    { ok: true; result: JsonValue } | { ok: false; error: PluginRpcError }
+    | {
+        ok: true;
+        result: JsonValue;
+        tags: string[];
+        keyTags: Record<string, string[]>;
+        whileWatched: boolean;
+        providedKeyed?: Record<
+          string,
+          {
+            result: Record<string, JsonValue>;
+            keyTags: Record<string, string[]>;
+            whileWatched: boolean;
+          }
+        >;
+      }
+    | { ok: false; error: PluginRpcError }
   >;
   httpToken(
     id: string,
@@ -2141,7 +2158,27 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
       await invokeWrapped(id, `websocket ${route.path} ${event}`, run);
     },
 
-    async invokeRpcHandler(id, method, handler, input, caller) {
+    async invokeRpcHandler(
+      id,
+      method,
+      handler,
+      input,
+      caller,
+      warmKeyedMethods,
+    ) {
+      const tags = new Set<string>();
+      const keyTags: Record<string, string[]> = Object.create(null);
+      const provisioner = createRpcKeyedProvisioner(
+        warmKeyedMethods,
+        (name) => {
+          const target = wireLookup(id, (plugin) =>
+            plugin.handle.rpcHandlers.get(name),
+          );
+          return target.outcome === "found" ? target.value : undefined;
+        },
+        throwRpcBoundaryError,
+      );
+      let providedKeyed: Awaited<ReturnType<typeof provisioner.finish>> = {};
       const outcome = await invokeWrapped(id, `rpc ${method}`, async () => {
         const parsedInput = await validateRpcValue(
           handler.inputSchema,
@@ -2151,6 +2188,21 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
         );
         const result = await handler.handler(parsedInput, {
           experimental_caller: caller,
+          experimental_provideKeyed: provisioner.provide,
+          experimental_tagKey(key, ...values) {
+            if (
+              values.some((tag) => typeof tag !== "string" || tag.length === 0)
+            )
+              throw new Error("RPC tags must be nonempty strings");
+            keyTags[key] = [...new Set([...(keyTags[key] ?? []), ...values])];
+          },
+          experimental_tag(...values) {
+            for (const tag of values) {
+              if (typeof tag !== "string" || tag.length === 0)
+                throw new Error("RPC tags must be nonempty strings");
+              tags.add(tag);
+            }
+          },
         });
         const parsedOutput = await validateRpcValue(
           handler.outputSchema,
@@ -2158,9 +2210,18 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
           "output",
           throwRpcBoundaryError,
         );
+        providedKeyed = await provisioner.finish();
         return normalizeRpcJsonResult(parsedOutput, throwRpcBoundaryError);
       });
-      if (outcome.ok) return { ok: true, result: outcome.value };
+      if (outcome.ok)
+        return {
+          ok: true,
+          result: outcome.value,
+          tags: [...tags],
+          keyTags,
+          ...(Object.keys(providedKeyed).length > 0 ? { providedKeyed } : {}),
+          whileWatched: handler.whileWatched === true,
+        };
       if (outcome.cause instanceof PluginRpcBoundaryError) {
         return { ok: false, error: outcome.cause.rpcError };
       }

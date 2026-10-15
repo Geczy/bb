@@ -31,7 +31,6 @@ import type {
 import {
   accountStatus,
   blockingResetAt,
-  governingWeeklyResetAt,
   hasExtraUsage,
   isQuotaExhausted,
   isSharedQuotaExhausted,
@@ -587,7 +586,7 @@ export class AccountPoolHub {
             family,
             this.options.now(),
           );
-          this.options.quotas.put(observed);
+          (this.options.quotas.put(observed), this.options.onAccountsChanged());
           if (pacing !== null && !response.ok) {
             this.releasePacing(selected.account.id, pacing);
             pacing = null;
@@ -602,10 +601,11 @@ export class AccountPoolHub {
               this.options.now(),
             );
             const heldUntil = this.options.now() + waitMs;
-            this.options.quotas.put({
+            (this.options.quotas.put({
               ...observed,
               heldUntil,
-            });
+            }),
+              this.options.onAccountsChanged());
             if (!paced && waitMs <= MAX_INLINE_HOLD_MS) {
               paced = true;
               pacing = {
@@ -1110,7 +1110,8 @@ export class AccountPoolHub {
                   `previousExpiresAt=${secret.kind === "oauth" ? secret.expiresAt : null}, expiresAt=${result.secret.kind === "oauth" ? result.secret.expiresAt : null}, forced=${forceRefresh}.`,
                 );
                 const quota = this.options.quotas.get(account.id);
-                this.options.quotas.put({ ...quota, error: null });
+                (this.options.quotas.put({ ...quota, error: null }),
+                  this.options.onAccountsChanged());
               }
               return result.secret;
             } catch (error) {
@@ -1380,7 +1381,8 @@ export class AccountPoolHub {
 
   private markError(accountId: string, message: string): void {
     const quota = this.options.quotas.get(accountId);
-    this.options.quotas.put({ ...quota, error: message.slice(0, 1_000) });
+    (this.options.quotas.put({ ...quota, error: message.slice(0, 1_000) }),
+      this.options.onAccountsChanged());
   }
 
   private releasePacing(accountId: string, pacing: PacingFlight): void {

@@ -93,6 +93,12 @@ export class WebSocketManager {
   private connectionState: WebSocketConnectionState = "connecting";
   private readonly browserEvents: WebSocketManagerBrowserEvents;
   private unsubscribeBrowserEvents: (() => void) | null = null;
+  private readonly sentSubscriptions = new Set<string>();
+  private readonly pendingSubscriptions = new Map<
+    string,
+    RealtimeSubscriptionTarget
+  >();
+  private subscriptionFlushQueued = false;
   private lastServerActivityAt = 0;
   private disconnectedAt: number | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -129,8 +135,9 @@ export class WebSocketManager {
       this.hasConnected = true;
       this.setConnectionState("connected");
       this.startPingLoop();
+      this.sentSubscriptions.clear();
       for (const subscription of this.subscriptions.values()) {
-        this.sendMessage({ type: "subscribe", target: subscription.target });
+        this.queueSubscription(subscription.target);
       }
       const event: WebSocketConnectedEvent = reconnected
         ? { reconnected, disconnectedAt: disconnectedAt ?? Date.now() }
@@ -420,7 +427,7 @@ export class WebSocketManager {
 
     this.subscriptions.set(key, { count: 1, target });
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.sendMessage({ type: "subscribe", target });
+      this.queueSubscription(target);
     }
   }
 
@@ -437,7 +444,7 @@ export class WebSocketManager {
 
     this.subscriptions.delete(key);
     if (this.socket?.readyState === WebSocket.OPEN) {
-      this.sendMessage({ type: "unsubscribe", target });
+      this.queueSubscription(target);
     }
   }
 
@@ -508,6 +515,39 @@ export class WebSocketManager {
 
   getConnectionState(): WebSocketConnectionState {
     return this.connectionState;
+  }
+
+  private queueSubscription(target: RealtimeSubscriptionTarget): void {
+    this.pendingSubscriptions.set(
+      realtimeSubscriptionTargetKey(target),
+      target,
+    );
+    if (this.subscriptionFlushQueued) return;
+    this.subscriptionFlushQueued = true;
+    queueMicrotask(() => {
+      this.subscriptionFlushQueued = false;
+      if (this.socket?.readyState !== WebSocket.OPEN) return;
+      const changes: Extract<
+        ClientMessage,
+        { type: "subscribe" | "unsubscribe" }
+      >[] = [];
+      for (const [key, target] of this.pendingSubscriptions) {
+        const subscribed = this.subscriptions.has(key);
+        if (subscribed === this.sentSubscriptions.has(key)) continue;
+        changes.push({
+          type: subscribed ? "subscribe" : "unsubscribe",
+          target,
+        });
+        if (subscribed) this.sentSubscriptions.add(key);
+        else this.sentSubscriptions.delete(key);
+      }
+      this.pendingSubscriptions.clear();
+      for (let offset = 0; offset < changes.length; offset += 500) {
+        const chunk = changes.slice(offset, offset + 500);
+        if (chunk.length === 1) this.sendMessage(chunk[0]!);
+        else this.sendMessage({ type: "subscriptions", changes: chunk });
+      }
+    });
   }
 
   private sendMessage(msg: ClientMessage): void {

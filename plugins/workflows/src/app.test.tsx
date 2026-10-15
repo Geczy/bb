@@ -199,7 +199,7 @@ describe("workflow composer banner", () => {
     ).toBeTruthy();
 
     current = [];
-    await slot.emitRealtime("workflow-runs", { threadId: "thr_scope" });
+    await slot.experimental_invalidateRpc();
     await waitFor(() =>
       expect(
         slot.queryByRole("button", { name: "Collapse 2 workflows" }),
@@ -207,7 +207,7 @@ describe("workflow composer banner", () => {
     );
 
     current = runs;
-    await slot.emitRealtime("workflow-runs", { threadId: "thr_scope" });
+    await slot.experimental_invalidateRpc();
     expect(
       await slot.findByRole("button", {
         name: "2 workflows running. Show all",
@@ -259,7 +259,7 @@ describe("workflow composer banner", () => {
     expect(document.activeElement).toBe(toggle);
   });
 
-  it("preserves each run's expansion state across polls", async () => {
+  it("preserves each run's expansion state across invalidations", async () => {
     vi.useFakeTimers();
     let polls = 0;
     const slot = renderSlot(
@@ -278,14 +278,18 @@ describe("workflow composer banner", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    });
     const toggle = slot.getByRole("button", {
       name: "Workflow: Review the release",
     });
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
 
-    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(polls).toBe(2);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     slot.unmount();
@@ -307,7 +311,7 @@ describe("workflow composer banner", () => {
     expect(slot.container.childElementCount).toBe(0);
   });
 
-  it("does not poll an idle thread; a workflow-runs signal refreshes it and an active run falls back to a slow poll", async () => {
+  it("refreshes idle and active workflows only on invalidation", async () => {
     vi.useFakeTimers();
     let runs: WorkflowRunView[] = [];
     const slot = renderSlot(
@@ -321,33 +325,30 @@ describe("workflow composer banner", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    });
     expect(slot.rpcCalls).toHaveLength(1);
     await act(async () => vi.advanceTimersByTimeAsync(5_000));
     expect(slot.rpcCalls).toHaveLength(1);
 
-    await slot.emitRealtime("workflow-runs", { threadId: "thr_other" });
-    expect(slot.rpcCalls).toHaveLength(1);
-
     runs = [run];
-    await slot.emitRealtime("workflow-runs", { threadId: "thr_idle" });
-    await act(async () => Promise.resolve());
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(slot.rpcCalls).toHaveLength(2);
     expect(slot.getByText("Review the release")).toBeTruthy();
-    await act(async () => vi.advanceTimersByTimeAsync(14_000));
-    expect(slot.rpcCalls).toHaveLength(2);
-    await act(async () => vi.advanceTimersByTimeAsync(1_000));
-    expect(slot.rpcCalls).toHaveLength(3);
-
-    runs = [];
-    await act(async () => vi.advanceTimersByTimeAsync(15_000));
-    expect(slot.rpcCalls).toHaveLength(4);
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
-    expect(slot.rpcCalls).toHaveLength(4);
+    expect(slot.rpcCalls).toHaveLength(2);
+    runs = [];
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(slot.rpcCalls).toHaveLength(3);
+    expect(slot.container.childElementCount).toBe(0);
     slot.unmount();
   });
 
-  it("pauses polling while the document is hidden and refreshes once when it is visible again", async () => {
+  it("defers invalidations while hidden and refreshes on resume", async () => {
     vi.useFakeTimers();
     const setVisibility = (state: "visible" | "hidden") => {
       Object.defineProperty(document, "visibilityState", {
@@ -367,26 +368,35 @@ describe("workflow composer banner", () => {
       },
     );
     try {
-      await act(async () => Promise.resolve());
+      await act(async () => {
+        await Promise.resolve();
+        if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+      });
       expect(slot.rpcCalls).toHaveLength(1);
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
-      expect(slot.rpcCalls).toHaveLength(2);
+      expect(slot.rpcCalls).toHaveLength(1);
 
       await act(async () => {
         setVisibility("hidden");
       });
       await act(async () => vi.advanceTimersByTimeAsync(60_000));
-      await slot.emitRealtime("workflow-runs", { threadId: "thr_scope" });
-      await act(async () => Promise.resolve());
-      expect(slot.rpcCalls).toHaveLength(2);
+      await slot.experimental_invalidateRpc();
+      await act(async () => {
+        await Promise.resolve();
+        if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(slot.rpcCalls).toHaveLength(1);
 
       await act(async () => {
         setVisibility("visible");
       });
-      await act(async () => Promise.resolve());
-      expect(slot.rpcCalls).toHaveLength(3);
+      await act(async () => {
+        await Promise.resolve();
+        if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(slot.rpcCalls).toHaveLength(2);
       await act(async () => vi.advanceTimersByTimeAsync(15_000));
-      expect(slot.rpcCalls).toHaveLength(4);
+      expect(slot.rpcCalls).toHaveLength(2);
     } finally {
       slot.unmount();
       Object.defineProperty(document, "visibilityState", {
@@ -581,7 +591,7 @@ describe("workflow-preview directive", () => {
     expect(slot.getByText("Unphased verification")).toBeTruthy();
   });
 
-  it("recovers from initial and active polling failures, then settles", async () => {
+  it("recovers from initial and active read failures, then settles", async () => {
     vi.useFakeTimers();
     let attempt = 0;
     const terminalRun: WorkflowRunView = {
@@ -617,20 +627,26 @@ describe("workflow-preview directive", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    });
     expect(slot.getByRole("alert").textContent).toMatch(/initial outage/i);
 
-    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(slot.getByText("Review the release")).toBeTruthy();
     expect(slot.queryByText("Complete")).toBeNull();
 
-    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(slot.getByRole("status").textContent).toMatch(
       /poll outage.*retrying/i,
     );
     expect(slot.getByText("Review the release")).toBeTruthy();
 
-    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(slot.getByText("Complete")).toBeTruthy();
     expect(slot.queryByRole("status")).toBeNull();
     expect(attempt).toBe(4);
@@ -642,7 +658,7 @@ describe("workflow-preview directive", () => {
     expect(attempt).toBe(4);
   });
 
-  it("does not overlap a poll that takes longer than the interval", async () => {
+  it("keeps a workflow visible while its refresh is pending", async () => {
     vi.useFakeTimers();
     let attempt = 0;
     let resolvePoll: ((value: { run: WorkflowRunView }) => void) | null = null;
@@ -682,11 +698,15 @@ describe("workflow-preview directive", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    });
     expect(slot.getByText("Review the release")).toBeTruthy();
     expect(slot.queryByText("Complete")).toBeNull();
 
-    await act(async () => vi.advanceTimersByTimeAsync(15_000));
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(attempt).toBe(2);
     await act(async () => vi.advanceTimersByTimeAsync(30_000));
     expect(attempt).toBe(2);
@@ -694,6 +714,7 @@ describe("workflow-preview directive", () => {
     await act(async () => {
       resolvePoll?.({ run: terminalRun });
       await delayedPoll;
+      await vi.advanceTimersByTimeAsync(0);
     });
     expect(slot.getByText("Complete")).toBeTruthy();
     await act(async () => vi.advanceTimersByTimeAsync(60_000));
@@ -729,12 +750,11 @@ describe("workflow-preview directive", () => {
     await slot.findByText("Review the release");
     expect(attempt).toBe(1);
 
-    await slot.emitRealtime("workflow-runs", { threadId: "thr_other" });
     expect(attempt).toBe(1);
 
-    await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
-    await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
-    await slot.emitRealtime("workflow-runs", { threadId: message.threadId });
+    await slot.experimental_invalidateRpc();
+    await slot.experimental_invalidateRpc();
+    await slot.experimental_invalidateRpc();
     expect(attempt).toBe(2);
 
     await act(async () => {
@@ -742,12 +762,15 @@ describe("workflow-preview directive", () => {
       await firstSignalLoad;
     });
     await waitFor(() => expect(attempt).toBe(3));
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    });
     expect(attempt).toBe(3);
     slot.unmount();
   });
 
-  it("backs off while a run view keeps failing instead of retrying every second", async () => {
+  it("does not poll unavailable workflows and retries after reconnect", async () => {
     vi.useFakeTimers();
     let attempt = 0;
     const slot = renderSlot(
@@ -770,14 +793,20 @@ describe("workflow-preview directive", () => {
       },
     );
 
-    await act(async () => Promise.resolve());
+    await act(async () => {
+      await Promise.resolve();
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    });
     expect(attempt).toBe(1);
     await act(async () => vi.advanceTimersByTimeAsync(2_000));
-    expect(attempt).toBe(2);
+    expect(attempt).toBe(1);
     await act(async () => vi.advanceTimersByTimeAsync(4_000));
-    expect(attempt).toBe(3);
+    expect(attempt).toBe(1);
     await act(async () => vi.advanceTimersByTimeAsync(10 * 60_000));
-    expect(attempt).toBe(15);
+    expect(attempt).toBe(1);
+    await slot.setRealtimeConnectionState("reconnecting");
+    await slot.setRealtimeConnectionState("connected");
+    expect(attempt).toBe(2);
     slot.unmount();
   });
 
@@ -885,6 +914,8 @@ describe("workflow thread panel", () => {
     });
 
     fireEvent.click(slot.getByRole("button", { name: "Stop workflow" }));
+    await waitFor(() => expect(stopped).toBe(true));
+    await slot.experimental_invalidateRpc();
     await waitFor(() => {
       expect(
         slot.rpcCalls.some((call) => call.method === "workflowStopRun"),

@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { Task } from "./shared/contract.js";
 
 export function makeTask(overrides: Partial<Task> = {}): Task {
@@ -47,6 +48,90 @@ export function createMemoryStorage(
     },
     setItem: (key, value) => {
       entries.set(key, String(value));
+    },
+  };
+}
+
+export function liveTaskRpcFixtures(
+  handlers: Record<string, ((input: never) => unknown) | undefined>,
+) {
+  const rows = new Map<string, Task>();
+  let membershipPending: Promise<{ keys: string[] }> | undefined;
+  const invoke = async (method: string, input: unknown) =>
+    handlers[method]?.(input as never);
+  return {
+    ...Object.fromEntries(
+      Object.entries(handlers).map(([method, handler]) => [
+        method,
+        (input: unknown) => handler?.(input as never),
+      ]),
+    ),
+    taskMembership(input: unknown) {
+      membershipPending = (async () => {
+        const result = (await invoke("listTasks", input)) as
+          | { tasks: Task[] }
+          | undefined;
+        const tasks = result?.tasks ?? [];
+        for (const task of tasks) rows.set(task.id, task);
+        return { keys: tasks.map((task) => task.id) };
+      })();
+      return membershipPending;
+    },
+    async getTasksKeyed(input: unknown) {
+      await membershipPending?.catch(() => undefined);
+      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
+      return Object.fromEntries(
+        await Promise.all(
+          keys.map(async (key) => {
+            const result = (await invoke("getTask", { taskId: key })) as
+              | { task: Task | null }
+              | undefined;
+            return [
+              key,
+              result === undefined ? (rows.get(key) ?? null) : result.task,
+            ];
+          }),
+        ),
+      );
+    },
+    async getTaskThreadsKeyed(input: unknown) {
+      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
+      return Object.fromEntries(
+        await Promise.all(
+          keys.map(async (key) => {
+            const result = (await invoke("listTaskThreads", {
+              taskId: key,
+            })) as { taskThreads: unknown[] } | undefined;
+            return [key, result?.taskThreads ?? []];
+          }),
+        ),
+      );
+    },
+    async getTaskAttachmentsKeyed(input: unknown) {
+      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
+      return Object.fromEntries(
+        await Promise.all(
+          keys.map(async (key) => {
+            const result = (await invoke("listAttachments", {
+              taskId: key,
+            })) as { attachments: unknown[] } | undefined;
+            return [key, result?.attachments ?? []];
+          }),
+        ),
+      );
+    },
+    async getLabelsKeyed(input: unknown) {
+      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
+      return Object.fromEntries(
+        await Promise.all(
+          keys.map(async (key) => {
+            const result = (await invoke("listLabels", { projectId: key })) as
+              | { labels: unknown[] }
+              | undefined;
+            return [key, result?.labels ?? []];
+          }),
+        ),
+      );
     },
   };
 }

@@ -675,6 +675,8 @@ describe("mention search time box", () => {
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: () => {},
       },
@@ -753,6 +755,8 @@ describe("mention resolve time box", () => {
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: () => {},
       },

@@ -186,18 +186,8 @@ async function createAgentAutomation(
   );
 }
 
-function signalKinds(host: FakePluginHost) {
-  return host.harness.realtimeSignals
-    .filter((signal) => signal.channel === "automations")
-    .map((signal) => signal.payload)
-    .filter(
-      (payload): payload is { projectId: string; kind: string } =>
-        typeof payload === "object" &&
-        payload !== null &&
-        "projectId" in payload &&
-        "kind" in payload,
-    )
-    .map((payload) => payload.kind);
+function invalidationTags(host: FakePluginHost) {
+  return host.harness.rpcInvalidations.flat();
 }
 
 describe("automations server plugin harness", () => {
@@ -290,7 +280,7 @@ describe("automations server plugin harness", () => {
         await harness.callRpc("automations_list", { projectId: PROJECT_ID }),
       ),
     ).toHaveLength(0);
-    expect(signalKinds(host)).toContain("automations-changed");
+    expect(invalidationTags(host)).toContain("automations");
 
     await harness.dispose();
   });
@@ -1467,11 +1457,8 @@ describe("automations server plugin harness", () => {
       status: "succeeded",
       threadId: "thr_spawned",
     });
-    expect(signalKinds(host)).toEqual(
-      expect.arrayContaining([
-        "automations-changed",
-        "automation-runs-changed",
-      ]),
+    expect(invalidationTags(host)).toEqual(
+      expect.arrayContaining(["automations", `runs:${PROJECT_ID}`]),
     );
 
     await harness.dispose();

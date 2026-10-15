@@ -336,7 +336,7 @@ plugins.
 
 `bb plugin rpc list [plugin-id] [--method <exact-name>] [--json]` lists discoverable methods from running plugins, optionally restricted to one plugin. `bb plugin rpc inspect <plugin-id> [method] [--json]` dumps registration and method descriptions plus input/output JSON Schemas. Copy the relevant schema into your consumer and call the existing plugin RPC endpoint. Discovery is opt-in advertising, not access control; method names may carry versions such as `provider-usage.v1.listResources`.
 
-`bb plugin rpc call <plugin-id> <method> [--input-file <json-path>] [--json]` invokes a method using server-side schema validation. Omitting the input file sends JSON null. Input files avoid putting sensitive values in command arguments.
+`bb plugin rpc call <plugin-id> <method> [--input-file <json-path>] [--watch] [--json]` invokes a method using server-side schema validation. Omitting the input file sends JSON null. Input files avoid putting sensitive values in command arguments. With `--watch`, the read runs immediately and again when its producer invalidates matching tags or the connection returns. Permanent HTTP 4xx errors (except 408/429) end the watch with a nonzero exit; transient errors retry with backoff. Stop with Ctrl+C. `--json` prints one JSON value per line. `bb plugin rpc list --watch` similarly reports the current discovery list and updates only when published methods change.
 
 ### Background updates
 

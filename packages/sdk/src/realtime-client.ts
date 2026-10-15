@@ -48,7 +48,8 @@ type IdScopedChangedEventName =
   | "thread:changed"
   | "project:changed"
   | "environment:changed"
-  | "host:changed";
+  | "host:changed"
+  | "plugin:changed";
 
 type UnscopedChangedEventName = "system:changed" | "system:config-changed";
 
@@ -201,6 +202,14 @@ export class BbRealtimeClient implements BbRealtime {
     args: BbRealtimeSubscribeArgsUnion,
   ): BbRealtimeUnsubscribe {
     switch (args.event) {
+      case "plugin:changed":
+        return this.activateListener({
+          active: true,
+          callback: args.callback,
+          event: args.event,
+          selectorId: args.pluginId,
+          target: { kind: "plugin", pluginId: args.pluginId },
+        });
       case "thread:changed":
         return this.activateListener({
           active: true,
@@ -302,6 +311,21 @@ export class BbRealtimeClient implements BbRealtime {
       this.removeTarget(listener.target);
     }
     this.closeSocketIfIdle();
+  }
+
+  retainTarget(target: RealtimeSubscriptionTarget): () => void {
+    this.addTarget(target);
+    void this.connectSocket().catch((error) =>
+      console.error("bb realtime connection failed", error),
+    );
+    let active = true;
+    return () => {
+      if (active) {
+        active = false;
+        this.removeTarget(target);
+        this.closeSocketIfIdle();
+      }
+    };
   }
 
   private addTarget(target: RealtimeSubscriptionTarget): void {
@@ -442,6 +466,7 @@ export class BbRealtimeClient implements BbRealtime {
     };
 
     socket.onerror = () => {
+      socket.onerror = null;
       socket.close();
     };
 
@@ -524,6 +549,9 @@ export class BbRealtimeClient implements BbRealtime {
 
   private dispatchChangedMessage(message: ChangedMessage): void {
     switch (message.entity) {
+      case "plugin":
+        this.dispatchIdScopedChangedMessage("plugin:changed", message);
+        break;
       case "thread":
         this.dispatchIdScopedChangedMessage("thread:changed", message);
         break;

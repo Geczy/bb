@@ -167,6 +167,66 @@ function createRealtimeEffectsTestContext(
 }
 
 describe("createRealtimeCacheEffects", () => {
+  it.each(["hidden", "reconnect", "resume"] as const)(
+    "refreshes active plugin RPC reads through the production %s registry",
+    async (mode) => {
+      const visibility = createFakeVisibility();
+      const { effects, queryClient } =
+        createRealtimeEffectsTestContext(visibility);
+      let value = 1;
+      const queryFn = vi.fn(async () => ({ result: value, tags: ["item:a"] }));
+      const observer = new QueryObserver(queryClient, {
+        queryKey: ["plugin-rpc", "producer", "read", { input: null }],
+        queryFn,
+        staleTime: Infinity,
+      });
+      const stop = observer.subscribe(() => {});
+      try {
+        await vi.waitFor(() =>
+          expect(observer.getCurrentResult().data?.result).toBe(1),
+        );
+        value = 2;
+        effects.handleChanged({
+          type: "changed",
+          entity: "plugin",
+          id: "other",
+          tags: null,
+        });
+        effects.handleChanged({
+          type: "changed",
+          entity: "plugin",
+          id: "producer",
+          tags: ["item:b"],
+        });
+        expect(queryFn).toHaveBeenCalledTimes(1);
+        if (mode === "hidden") {
+          visibility.setVisible(false);
+          effects.handleChanged({
+            type: "changed",
+            entity: "plugin",
+            id: "producer",
+            tags: ["item:a"],
+          });
+          expect(queryFn).toHaveBeenCalledTimes(1);
+          visibility.setVisible(true);
+        } else if (mode === "reconnect") {
+          effects.handleConnected({
+            reconnected: true,
+            disconnectedAt: Date.now() + 1,
+          });
+        } else effects.handleResumed();
+        await vi.waitFor(() =>
+          expect(observer.getCurrentResult().data?.result).toBe(2),
+        );
+        expect(queryFn).toHaveBeenCalledTimes(2);
+      } finally {
+        stop();
+        effects.dispose();
+        queryClient.clear();
+      }
+    },
+  );
+
   it.each(
     [
       threadStorageFilesQueryKey("thread-1"),

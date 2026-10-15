@@ -1,3 +1,5 @@
+import { canonicalPluginReadInput } from "@bb/domain";
+import { createPluginReadWatcher } from "../plugin-read-watcher.js";
 import {
   pluginUpdateJobResponseSchema,
   pluginUpdateJobListResponseSchema,
@@ -177,6 +179,20 @@ export interface PluginCheckUpdatesArgs {
   signal?: AbortSignal;
 }
 
+export interface ExperimentalPluginWatchRpcArgs<
+  TOutput,
+> extends PluginRpcArgs<TOutput> {
+  onChange(value: TOutput): void;
+  onError?(error: Error): void;
+  signal: AbortSignal;
+}
+
+export interface ExperimentalPluginWatchDiscoveryArgs extends PluginRpcDiscoveryArgs {
+  onChange(methods: PublishedPluginRpcMethod[]): void;
+  onError?(error: Error): void;
+  signal: AbortSignal;
+}
+
 export interface PluginRpcArgs<TOutput> extends PluginIdArgs {
   signal?: AbortSignal;
   input?: JsonValue;
@@ -288,6 +304,12 @@ export interface PluginUpdateJobsArea {
 }
 
 export interface PluginsArea {
+  experimental_watchRpc<TOutput>(
+    args: ExperimentalPluginWatchRpcArgs<TOutput>,
+  ): () => void;
+  experimental_watchDiscovery(
+    args: ExperimentalPluginWatchDiscoveryArgs,
+  ): () => void;
   experimental_discoverRpc(
     args?: PluginRpcDiscoveryArgs,
   ): Promise<PublishedPluginRpcMethod[]>;
@@ -343,8 +365,24 @@ function pluginPath(pluginId: string, suffix = ""): string {
   return `/api/v1/plugins/${encodeURIComponent(id)}${suffix}`;
 }
 
-export function createPluginsArea(args: CreateSdkAreaArgs): PluginsArea {
-  const { transport } = args;
+export function createPluginsArea(
+  args: CreateSdkAreaArgs & {
+    realtime: import("../realtime-client.js").BbRealtimeClient;
+  },
+): PluginsArea {
+  const { transport, realtime } = args;
+  const readEnvelope = (input: PluginRpcArgs<unknown>) =>
+    requestParsed(
+      pluginPath(input.pluginId, `/rpc/${encodeURIComponent(input.method)}`),
+      z.object({
+        ok: z.literal(true),
+        result: jsonValueSchema,
+        tags: z.array(z.string()).default([]),
+        keyTags: z.record(z.string(), z.array(z.string())).default({}),
+        whileWatched: z.boolean().default(false),
+      }),
+      { ...jsonInit("POST", input.input ?? null), signal: input.signal },
+    );
 
   async function requestParsed<TOutput>(
     path: string,
@@ -579,7 +617,7 @@ export function createPluginsArea(args: CreateSdkAreaArgs): PluginsArea {
     },
   };
 
-  return {
+  const result: PluginsArea = {
     async applyUpdate(input) {
       const response = await requestUpdate(input);
       if (!("job" in response)) return response;
@@ -611,6 +649,120 @@ export function createPluginsArea(args: CreateSdkAreaArgs): PluginsArea {
         pluginRpcDiscoveryResponseSchema,
         { signal: input.signal },
       );
+    },
+    experimental_watchRpc(input) {
+      if (input.signal.aborted) return () => {};
+      let tags: string[] | null = null;
+      let release: (() => void) | null = null;
+      const watcher = createPluginReadWatcher({
+        signal: input.signal,
+        onError: input.onError,
+        onStop: () => stop(),
+        read: async (signal) => {
+          const envelope = await readEnvelope({ ...input, signal });
+          if (signal.aborted) throw signal.reason;
+          if (envelope.whileWatched && release === null)
+            release = realtime.retainTarget({
+              kind: "plugin-read",
+              pluginId: input.pluginId,
+              method: input.method,
+              read: { input: input.input ?? null },
+            });
+          else if (!envelope.whileWatched && release !== null) {
+            release();
+            release = null;
+          }
+          return {
+            tags: [
+              ...new Set([
+                ...envelope.tags,
+                ...Object.values(envelope.keyTags).flat(),
+              ]),
+            ],
+            value: input.outputSchema.parse(envelope.result),
+          };
+        },
+        onChange(result) {
+          tags = result.tags;
+          input.onChange(result.value);
+        },
+      });
+      const stopChanged = realtime.subscribe({
+        event: "plugin:changed",
+        pluginId: input.pluginId,
+        callback: (message) => {
+          if (
+            message.tags === null ||
+            tags === null ||
+            message.tags.some((tag) => tags?.includes(tag))
+          )
+            watcher.refresh();
+        },
+      });
+      const stopConnection = realtime.subscribe({
+        event: "realtime:connection",
+        callback: (event) => {
+          if (event.state === "connected") watcher.refresh();
+        },
+      });
+      const stop = () => {
+        release?.();
+        release = null;
+        stopChanged();
+        stopConnection();
+        watcher.stop();
+        input.signal.removeEventListener("abort", stop);
+      };
+      input.signal.addEventListener("abort", stop, { once: true });
+      if (input.signal.aborted) stop();
+      else watcher.refresh();
+      return stop;
+    },
+    experimental_watchDiscovery(input) {
+      if (input.signal.aborted) return () => {};
+      let previous: string | null = null;
+      const watcher = createPluginReadWatcher({
+        signal: input.signal,
+        onError: input.onError,
+        onStop: () => stop(),
+        read: (signal) =>
+          result.experimental_discoverRpc({
+            pluginId: input.pluginId,
+            method: input.method,
+            signal,
+          }),
+        onChange(methods) {
+          const key = canonicalPluginReadInput(
+            methods.map((method) => ({ ...method })),
+          );
+          if (key !== previous) {
+            previous = key;
+            input.onChange(methods);
+          }
+        },
+      });
+      const stopChanged = realtime.subscribe({
+        event: "system:changed",
+        callback: (event) => {
+          if (event.changes.includes("plugins-changed")) watcher.refresh();
+        },
+      });
+      const stopConnection = realtime.subscribe({
+        event: "realtime:connection",
+        callback: (event) => {
+          if (event.state === "connected") watcher.refresh();
+        },
+      });
+      const stop = () => {
+        stopChanged();
+        stopConnection();
+        watcher.stop();
+        input.signal.removeEventListener("abort", stop);
+      };
+      input.signal.addEventListener("abort", stop, { once: true });
+      if (input.signal.aborted) stop();
+      else watcher.refresh();
+      return stop;
     },
     async callRpc(input) {
       const envelope = await requestParsed(
@@ -751,4 +903,5 @@ export function createPluginsArea(args: CreateSdkAreaArgs): PluginsArea {
       );
     },
   };
+  return result;
 }

@@ -1,3 +1,4 @@
+import { liveTaskRpcFixtures } from "../../test-fixtures.js";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -57,7 +58,7 @@ describe("Task directive card", () => {
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-4" }),
       {
-        rpc: { getTaskByKey: () => ({ task }) },
+        rpc: liveTaskRpcFixtures({ getTaskByKey: () => ({ task }) }),
       },
     );
 
@@ -77,7 +78,9 @@ describe("Task directive card", () => {
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-4" }),
       {
-        rpc: { getTaskByKey: () => ({ task: { ...task, priority: "none" } }) },
+        rpc: liveTaskRpcFixtures({
+          getTaskByKey: () => ({ task: { ...task, priority: "none" } }),
+        }),
       },
     );
     const main = await slot.findByRole("button", {
@@ -91,7 +94,10 @@ describe("Task directive card", () => {
     const slot = renderSlot(
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-4" }),
-      { openThreadPanel, rpc: { getTaskByKey: () => ({ task }) } },
+      {
+        openThreadPanel,
+        rpc: liveTaskRpcFixtures({ getTaskByKey: () => ({ task }) }),
+      },
     );
 
     fireEvent.click(await slot.findByText("Ship task embeds"));
@@ -114,7 +120,7 @@ describe("Task directive card", () => {
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-4" }),
       {
-        rpc: { getTaskByKey: () => ({ task }) },
+        rpc: liveTaskRpcFixtures({ getTaskByKey: () => ({ task }) }),
       },
     );
     fireEvent.click(await slot.findByText("Ship task embeds"));
@@ -133,7 +139,7 @@ describe("Task directive card", () => {
     const slot = renderSlot(
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-9", title: "Old embed work" }),
-      { rpc: { getTaskByKey: () => pending } },
+      { rpc: liveTaskRpcFixtures({ getTaskByKey: () => pending }) },
     );
 
     const loading = slot.getByRole("status", { name: "Loading task TSK-9" });
@@ -154,7 +160,7 @@ describe("Task directive card", () => {
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-9" }),
       {
-        rpc: { getTaskByKey: () => ({ task: null }) },
+        rpc: liveTaskRpcFixtures({ getTaskByKey: () => ({ task: null }) }),
       },
     );
     await slot.findByText("Task not found — deleted, or its key changed");
@@ -171,7 +177,7 @@ describe("Task directive card", () => {
         app.messageDirectives[0]!,
         directiveProps(attributes),
         {
-          rpc: {},
+          rpc: liveTaskRpcFixtures({}),
         },
       );
       slot.getByText("Invalid task link. Expected a task key like TSK-4.");
@@ -186,12 +192,12 @@ describe("Task directive card", () => {
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-4" }),
       {
-        rpc: {
+        rpc: liveTaskRpcFixtures({
           getTaskByKey: () => {
             if (fail) throw new Error("boom");
             return { task };
           },
-        },
+        }),
       },
     );
     const retry = await slot.findByRole("button", { name: "Retry" });
@@ -200,12 +206,13 @@ describe("Task directive card", () => {
     await slot.findByText("Ship task embeds");
   });
 
-  it("refetches on matching realtime payloads and ignores unrelated ones", async () => {
+  it("refetches on matching producer tags and ignores unrelated tags", async () => {
     const slot = renderSlot(
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-4" }),
       {
-        rpc: { getTaskByKey: () => ({ task }) },
+        experimental_rpcTags: () => ({ tags: ["task:embed"] }),
+        rpc: liveTaskRpcFixtures({ getTaskByKey: () => ({ task }) }),
       },
     );
     await slot.findByText("Ship task embeds");
@@ -213,22 +220,14 @@ describe("Task directive card", () => {
       slot.rpcCalls.filter((call) => call.method === "getTaskByKey").length;
     const baseline = calls();
 
-    await slot.emitRealtime("tasks:changed", {
-      taskId: "01HZZZZZZZZZZZZZZZZZZZZZT9",
-      projectId: PROJECT_ID,
-    });
-    await slot.emitRealtime("projects:changed", {
-      projectId: "01HZZZZZZZZZZZZZZZZZZZZZP9",
-    });
+    await slot.experimental_invalidateRpc(["task:other"]);
+    await slot.experimental_invalidateRpc(["project:other"]);
     expect(calls()).toBe(baseline);
 
-    await slot.emitRealtime("tasks:changed", {
-      taskId: TASK_ID,
-      projectId: PROJECT_ID,
-    });
+    await slot.experimental_invalidateRpc(["task:embed"]);
     await waitFor(() => expect(calls()).toBe(baseline + 1));
 
-    await slot.emitRealtime("projects:changed", { projectId: PROJECT_ID });
+    await slot.experimental_invalidateRpc(["task:embed"]);
     await waitFor(() => expect(calls()).toBe(baseline + 2));
   });
 
@@ -238,15 +237,14 @@ describe("Task directive card", () => {
       app.messageDirectives[0]!,
       directiveProps({ key: "TSK-4" }),
       {
-        rpc: { getTaskByKey: () => ({ task: created ? task : null }) },
+        rpc: liveTaskRpcFixtures({
+          getTaskByKey: () => ({ task: created ? task : null }),
+        }),
       },
     );
     await slot.findByText("Task not found — deleted, or its key changed");
     created = true;
-    await slot.emitRealtime("tasks:changed", {
-      taskId: TASK_ID,
-      projectId: PROJECT_ID,
-    });
+    await slot.experimental_invalidateRpc();
     await slot.findByText("Ship task embeds");
   });
 });
@@ -256,7 +254,7 @@ describe("Task embed panel", () => {
     const slot = renderSlot(
       app.threadPanelActions[0]!,
       { threadId: "thr_1", params: { taskKey: "OLD-4" } },
-      { rpc: taskDetailRpc(() => ({ task })) },
+      { rpc: liveTaskRpcFixtures(taskDetailRpc(() => ({ task }))) },
     );
     await slot.findByRole("textbox", { name: "Task title" });
     expect(slot.navigateCalls).toEqual([]);
@@ -277,7 +275,9 @@ describe("Task embed panel", () => {
       { threadId: "thr_1", params: { taskKey: "TSK-4" } },
       {
         realtimeConnectionState: "connected",
-        rpc: taskDetailRpc(() => ({ task: { ...task, title } })),
+        rpc: liveTaskRpcFixtures(
+          taskDetailRpc(() => ({ task: { ...task, title } })),
+        ),
       },
     );
     await slot.findByText("Stale embedded detail");
@@ -293,7 +293,7 @@ describe("Task embed panel", () => {
     const slot = renderSlot(
       app.threadPanelActions[0]!,
       { threadId: "thr_1", params: null },
-      { rpc: {} },
+      { rpc: liveTaskRpcFixtures({}) },
     );
     slot.getByText("Open a task card from a message to view it here.");
   });

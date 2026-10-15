@@ -13,11 +13,10 @@ keep your own copy of the Zod schemas (see `src/contract.ts`). bb account
 loads before most plugins but can be disabled or held, so call it lazily and
 treat an HTTP 503 as signed out.
 
-| Method                              | Input                                      | Output                                                          |
-| ----------------------------------- | ------------------------------------------ | --------------------------------------------------------------- |
-| `bb-account.v1.status`              | `{}`                                       | `{state, revision, account}`                                    |
-| `bb-account.v1.waitForStatusChange` | `{afterRevision}`                          | the status once `revision > afterRevision`, or after 25 seconds |
-| `bb-account.v1.fetch`               | `{target, method, path, body, timeoutMs?}` | `{status, body}`                                                |
+| Method                 | Input                                      | Output                       |
+| ---------------------- | ------------------------------------------ | ---------------------------- |
+| `bb-account.v1.status` | `{}`                                       | `{state, revision, account}` |
+| `bb-account.v1.fetch`  | `{target, method, path, body, timeoutMs?}` | `{status, body}`             |
 
 `state` is `signed-in`, `signed-out`, or `profile-pending` (bb holds a server
 credential but hasn't loaded its account yet and keeps retrying). Treat every

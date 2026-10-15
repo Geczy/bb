@@ -467,8 +467,8 @@ describe("Docs nav panel", () => {
     await page.findByText("Personal document");
     await navigation.findByText("Personal note");
 
-    await page.emitRealtime("vault-changed", { vaultId: "personal" });
-    await navigation.emitRealtime("vault-changed", { vaultId: "personal" });
+    await page.experimental_invalidateRpc();
+    await navigation.experimental_invalidateRpc();
     await waitFor(() => expect(pending).toHaveLength(1));
     const latePersonalRequests = pending.splice(0);
     expect(latePersonalRequests.map((request) => request.vaultId)).toEqual([
@@ -522,7 +522,7 @@ describe("Docs nav panel", () => {
     );
 
     await waitFor(() => expect(requests).toHaveLength(1));
-    await slot.emitRealtime("vault-changed", { vaultId: "personal" });
+    await slot.experimental_invalidateRpc();
     expect(requests).toHaveLength(1);
 
     requests[0]!.resolve(
@@ -1437,7 +1437,7 @@ describe("Docs nav panel", () => {
     },
   );
 
-  it("parses rich proposal baselines in an inert document and scopes refreshes", async () => {
+  it("parses rich proposal baselines in an inert document and refreshes live", async () => {
     const parse = vi.spyOn(ProseMirrorDOMParser.prototype, "parse");
     const pending = {
       vaultId: "personal",
@@ -1475,35 +1475,8 @@ describe("Docs nav panel", () => {
     );
     parse.mockRestore();
     readNote.mockClear();
-    await slot.emitRealtime("vault-changed", { vaultId: "other" });
-    await slot.emitRealtime("vault-changed", {
-      vaultId: "personal",
-      path: "other.md",
-    });
-    await slot.emitRealtime("proposal-changed", {
-      vaultId: "personal",
-      path: "other.md",
-      version: 2,
-    });
-    await slot.emitRealtime("vault-changed", {
-      vaultId: "personal",
-      path: pending.path,
-      proposalOnly: true,
-    });
-    expect(readNote).not.toHaveBeenCalled();
-    await slot.emitRealtime("proposal-changed", {
-      vaultId: "personal",
-      path: pending.path,
-      version: 2,
-    });
+    await slot.experimental_invalidateRpc();
     await waitFor(() => expect(readNote).toHaveBeenCalledTimes(1));
-    await slot.emitRealtime("vault-changed", {
-      vaultId: "personal",
-      path: pending.path,
-    });
-    await waitFor(() => expect(readNote).toHaveBeenCalledTimes(2));
-    await slot.emitRealtime("vault-changed", {});
-    await waitFor(() => expect(readNote).toHaveBeenCalledTimes(3));
   });
 
   it("opens a chosen document from the unconfigured Document panel", async () => {

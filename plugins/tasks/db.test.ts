@@ -638,7 +638,7 @@ describe("tasks storage", () => {
         second.id,
       ]);
       expect(tasks.map((task) => task.position)).toEqual([1024, 1536, 2048]);
-      expect(reordered.position).toBe(1536);
+      expect(reordered.task.position).toBe(1536);
     } finally {
       await harness.dispose();
     }

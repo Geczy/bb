@@ -18,31 +18,46 @@ function createProtocolDeps(hub: NotificationHub) {
 }
 
 describe("client websocket protocol", () => {
-  it("subscribes valid client messages parsed through the shared schema", () => {
-    const hub = new NotificationHub();
-    const deps = createProtocolDeps(hub);
-    const socket = createMockHubSocket();
+  it.each(["single", "batch"] as const)(
+    "subscribes valid %s messages parsed through the shared schema",
+    (mode) => {
+      const hub = new NotificationHub();
+      const deps = createProtocolDeps(hub);
+      const socket = createMockHubSocket();
 
-    onClientSocketOpen(hub, socket);
-    onClientSocketMessage(
-      deps,
-      socket,
-      JSON.stringify({
-        type: "subscribe",
-        target: { kind: "thread-detail", threadId: "thread-1" },
-      }),
-    );
-    hub.notifyThread("thread-1", ["events-appended"]);
+      onClientSocketOpen(hub, socket);
+      onClientSocketMessage(
+        deps,
+        socket,
+        JSON.stringify(
+          mode === "single"
+            ? {
+                type: "subscribe",
+                target: { kind: "thread-detail", threadId: "thread-1" },
+              }
+            : {
+                type: "subscriptions",
+                changes: [
+                  {
+                    type: "subscribe",
+                    target: { kind: "thread-detail", threadId: "thread-1" },
+                  },
+                ],
+              },
+        ),
+      );
+      hub.notifyThread("thread-1", ["events-appended"]);
 
-    expect(socket.closed).toHaveLength(0);
-    expect(socket.messages).toHaveLength(1);
-    expect(JSON.parse(socket.messages[0])).toMatchObject({
-      type: "changed",
-      entity: "thread",
-      id: "thread-1",
-      changes: ["events-appended"],
-    });
-  });
+      expect(socket.closed).toHaveLength(0);
+      expect(socket.messages).toHaveLength(1);
+      expect(JSON.parse(socket.messages[0])).toMatchObject({
+        type: "changed",
+        entity: "thread",
+        id: "thread-1",
+        changes: ["events-appended"],
+      });
+    },
+  );
 
   it("rejects subscribe messages whose target id is not a string", () => {
     const hub = new NotificationHub();
@@ -92,7 +107,7 @@ describe("client websocket protocol", () => {
     expect(socket.messages).toHaveLength(0);
   });
 
-  it("rejects subscribe messages for unknown targets", () => {
+  it("ignores subscribe messages for unknown targets", () => {
     const hub = new NotificationHub();
     const deps = createProtocolDeps(hub);
     const socket = createMockHubSocket();
@@ -107,7 +122,7 @@ describe("client websocket protocol", () => {
       }),
     );
 
-    expect(socket.closed).toEqual([{ code: 1008, reason: "invalid-message" }]);
+    expect(socket.closed).toEqual([]);
     expect(socket.messages).toHaveLength(0);
   });
 
@@ -212,4 +227,35 @@ describe("client websocket protocol", () => {
     expect(socket.closed).toEqual([{ code: 1008, reason: "invalid-message" }]);
     expect(deps.watchInterests.subscribe).not.toHaveBeenCalled();
   });
+});
+
+it("applies batched removals, ignores unknown targets, and rejects malformed known targets atomically", () => {
+  const hub = new NotificationHub();
+  const deps = createProtocolDeps(hub);
+  const socket = createMockHubSocket();
+  onClientSocketOpen(hub, socket);
+  const target = { kind: "thread-detail", threadId: "batched" };
+  const send = (changes: unknown[]) =>
+    onClientSocketMessage(
+      deps,
+      socket,
+      JSON.stringify({ type: "subscriptions", changes }),
+    );
+  send([
+    { type: "subscribe", target },
+    { type: "subscribe", target: { kind: "future-target" } },
+  ]);
+  expect(socket.closed).toHaveLength(0);
+  hub.notifyThread("batched", ["status-changed"]);
+  expect(socket.messages).toHaveLength(1);
+  send([{ type: "unsubscribe", target }]);
+  hub.notifyThread("batched", ["status-changed"]);
+  expect(socket.messages).toHaveLength(1);
+  send([
+    { type: "subscribe", target },
+    { type: "subscribe", target: { kind: "thread-detail", threadId: 3 } },
+  ]);
+  expect(socket.closed).toEqual([{ code: 1008, reason: "invalid-message" }]);
+  hub.notifyThread("batched", ["status-changed"]);
+  expect(socket.messages).toHaveLength(1);
 });

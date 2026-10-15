@@ -55,6 +55,7 @@ const maximalThreadMetadata: ThreadChangeMetadata = {
 };
 
 const maximalChangedMessages: ChangedMessage[] = [
+  { type: "changed", entity: "plugin", id: "tasks", tags: ["task:a"] },
   {
     type: "changed",
     entity: "thread",
@@ -150,9 +151,9 @@ describe("lenient changed-message schema parity", () => {
 
   it("keeps the maximal fixtures covering every declared strict field", () => {
     const strictOptions = strictOptionsByEntity();
-    expect(maximalChangedMessages.map((message) => message.entity)).toEqual([
-      ...strictOptions.keys(),
-    ]);
+    expect(
+      maximalChangedMessages.map((message) => message.entity).sort(),
+    ).toEqual([...strictOptions.keys()].sort());
     for (const message of maximalChangedMessages) {
       const strictOption = strictOptions.get(message.entity);
       if (!strictOption) {

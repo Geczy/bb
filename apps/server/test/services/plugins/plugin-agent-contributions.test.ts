@@ -108,6 +108,8 @@ describe("plugin skills tier", () => {
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: () => {},
       },
@@ -216,6 +218,8 @@ describe("plugin agent contributions reach thread runtime config", () => {
       db,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: () => {},
       },

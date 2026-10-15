@@ -115,6 +115,7 @@ export function refetchActiveRealtimeQueriesOnResume({
   queryClient,
 }: QueryClientArg): void {
   for (const queryKey of [
+    ["plugin-rpc"],
     allThreadTimelineQueryKeyPrefix(),
     allThreadQueryKeyPrefix(),
     sidebarNavigationQueryKey(),
@@ -221,6 +222,7 @@ export function resetModelCatalogsAfterStreamerModeChange({
 
 function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
   return [
+    ["plugin-rpc"],
     hostsQueryKey(),
     allHostQueryKeyPrefix(),
     projectsQueryKey(),

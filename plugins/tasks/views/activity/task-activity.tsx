@@ -15,11 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TasksEditor } from "../../editor/tasks-editor.js";
 import { experimental_saveFile, useBbNavigate } from "@get-bb/plugin-sdk/app";
-import {
-  useMentionItems,
-  useTasksQuery,
-  useTasksRpc,
-} from "../../shell/data.js";
+import { useMentionItems, useTaskRead, useTasksRpc } from "../../shell/data.js";
 import { Lightbox } from "../detail/attachments.js";
 import {
   AttachmentChip,
@@ -71,18 +67,28 @@ export function activityFeedEntries(
 }
 
 function useActivityFeed(taskId: string) {
-  return useTasksQuery<FeedEntry[]>(
-    async (rpc) => {
-      const [{ comments }, { attachments }] = await Promise.all([
-        rpc.call("listComments", { taskId }),
-        rpc.call("listAttachments", { commentsOfTaskId: taskId }),
-      ]);
-      return activityFeedEntries(comments, attachments);
-    },
-    ["comments:changed", "tasks:changed"],
-    [taskId],
-    { relevantTaskIds: [taskId] },
+  const comments = useTaskRead(
+    "listComments",
+    { taskId },
+    (value) => value.comments,
   );
+  const attachments = useTaskRead(
+    "listAttachments",
+    { commentsOfTaskId: taskId },
+    (value) => value.attachments,
+  );
+  return {
+    data:
+      comments.data === undefined || attachments.data === undefined
+        ? undefined
+        : activityFeedEntries(comments.data, attachments.data),
+    error: comments.error ?? attachments.error,
+    isLoading: comments.isLoading || attachments.isLoading,
+    refresh: () => {
+      comments.refresh();
+      attachments.refresh();
+    },
+  };
 }
 
 type AgentNotificationTarget =

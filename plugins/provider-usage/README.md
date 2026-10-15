@@ -19,6 +19,11 @@ Settings → Installed plugins → Provider usage contains the usage page, using
 full-size provider groups with email-labeled accounts and fetching only resources in the selected pool or machine. Both surfaces share the plugin’s aggregation and cache. Neither display is required for source
 plugins to publish their usage.
 
+Visible settings collect usage every two minutes and sidebar cards every four
+minutes, matching the effective cadence of the previous client poll and cache.
+Manual reload collects immediately. Collection stops when no visible panel watches
+it; inventory reconciliation continues every thirty minutes while watched.
+
 Use `bb plugin rpc list --method provider-usage.v1.listResources --json` to find sources
 and `bb plugin rpc inspect <plugin-id> provider-usage.v1.listResources --json`
 to inspect their published contracts. RPC calls accept JSON through

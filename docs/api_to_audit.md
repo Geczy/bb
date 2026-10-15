@@ -14,6 +14,44 @@ question.
 [provider-bridge-protocol.md](provider-bridge-protocol.md). An entry without
 a "Docs:" line has no owning doc, so it keeps the essential contract itself.
 
+## Plugin live RPC data
+
+`ExperimentalPluginRpcHandlerContext.experimental_tag` and
+`experimental_tagKey` collect response dependencies. `PluginRpc.experimental_invalidate`
+requires a non-empty tag list; `experimental_invalidateAll` explicitly invalidates all reads. `experimental_whileWatched` starts
+work for canonical normal/keyed watched reads and aborts at the last release.
+`experimental_useRpcQuery`, `experimental_useRpcKeyedQuery`, and
+`experimental_useRpcRefresh` use the core query client. `ExperimentalRpcQueryOptions`
+and `ExperimentalRpcQueryState` describe their inputs and state.
+`PluginBbSdk.plugins.experimental_watchRpc` and `experimental_watchDiscovery`
+provide Node lifetimes through the loopback WebSocket. CLI call/list `--watch`
+use those same SDK paths. The frontend testing host uses the same query owner; `experimental_rpcTags`
+and `experimental_invalidateRpc(tags?, pluginId?)` supply producer metadata
+and changes. Query `timeoutMs` preserves bounded reads such as theme catalogs.
+
+Docs: `backend-live-data.md`. Guide: Plugin backend → wire.
+
+Core callers include the shared realtime cache registry, reconnect/resume cache
+effects, the app's plugin RPC host, and plugin query consumers in tasks, docs,
+provider-usage, connect, bb-account, thread-list, GitHub, automations, workflows,
+concurrency-limit, storage-retention, account-pool, and push-notifications.
+
+Before stabilization, audit tag/key metadata bounds, cancellation and trailing
+reads, watch lifetime and plugin generations, hidden/reconnected consumers,
+caller-specific results, bounded large batches and cross-plugin discovery
+changes. Verify client-version compatibility and the CLI streaming contract.
+`ExperimentalPluginRpcHandlerContext.experimental_provideKeyed(method, producer)`
+adds validated keyed entries to a cold browser read's response. Its lazy producer
+runs only when the requesting cache has no entries for that method; untracked
+RPC calls and warm requests do not run it. Each entry supplies `{ value, tags }`.
+The core query host seeds the same owner used by `experimental_useRpcKeyedQuery`;
+seeds fill missing entries and preserve rows loaded while a response was in flight.
+Tasks membership is the core caller. Fakes expose `experimental_rpcProvidedKeyed`
+and accept `experimental_warmKeyedMethods` for the same cold/warm boundary.
+Before stabilization, audit provided-row bounds, stale-response races, keyed
+schema validation, partial seed coverage, and warm IDs-only refreshes.
+No shared server read cache or replay is implied.
+
 ## Composer popups
 
 `ComposerCustomization.experimental_popups` registers `{ id, label, component }`

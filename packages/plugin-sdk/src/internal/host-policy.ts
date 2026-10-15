@@ -3595,6 +3595,80 @@ function normalizeRpcIssues(
   });
 }
 
+export function createRpcKeyedProvisioner(
+  warmMethods: readonly string[] | undefined,
+  target: (
+    method: string,
+  ) => { outputSchema: StandardSchemaV1; whileWatched: boolean } | undefined,
+  fail: (error: PluginRpcError) => never,
+) {
+  const pending = new Map<
+    string,
+    Record<string, { value: unknown; tags: string[] }>
+  >();
+  return {
+    provide(
+      method: string,
+      entries: () => Readonly<
+        Record<string, { value: unknown; tags: readonly string[] }>
+      >,
+    ) {
+      if (warmMethods === undefined || warmMethods.includes(method)) return;
+      if (target(method) === undefined)
+        throw new Error(`Unknown keyed RPC method: ${method}`);
+      const rows = z
+        .record(
+          z.string(),
+          z.object({ value: z.unknown(), tags: z.array(z.string().min(1)) }),
+        )
+        .parse(entries());
+      if (Object.keys(rows).length > 0)
+        pending.set(method, { ...pending.get(method), ...rows });
+    },
+    async finish() {
+      const provided: Record<
+        string,
+        {
+          result: Record<string, JsonValue>;
+          keyTags: Record<string, string[]>;
+          whileWatched: boolean;
+        }
+      > = Object.create(null);
+      for (const [method, rows] of pending) {
+        const registration = target(method);
+        const schema = registration?.outputSchema;
+        if (schema === undefined || registration === undefined)
+          throw new Error(`Unknown keyed RPC method: ${method}`);
+        const parsed = await validateRpcValue(
+          schema,
+          Object.fromEntries(
+            Object.entries(rows).map(([key, row]) => [key, row.value]),
+          ),
+          "output",
+          fail,
+        );
+        const result = normalizeRpcJsonResult(parsed, fail);
+        if (
+          result === null ||
+          typeof result !== "object" ||
+          Array.isArray(result)
+        )
+          throw new Error(`RPC ${method} must provide keyed rows`);
+        if (Object.keys(rows).some((key) => !Object.hasOwn(result, key)))
+          throw new Error(`RPC ${method} omitted a provided key`);
+        provided[method] = {
+          result,
+          whileWatched: registration.whileWatched,
+          keyTags: Object.fromEntries(
+            Object.entries(rows).map(([key, row]) => [key, row.tags]),
+          ),
+        };
+      }
+      return provided;
+    },
+  };
+}
+
 export async function validateRpcValue(
   schema: StandardSchemaV1,
   value: unknown,
@@ -3676,8 +3750,8 @@ export function normalizeRpcJsonResult(
         });
       }
       const normalized: Record<string, JsonValue> = {};
-      for (const [key, child] of Object.entries(current)) {
-        normalized[key] = visit(child, `${path}.${key}`);
+      for (const key of Object.keys(current)) {
+        normalized[key] = visit(Reflect.get(current, key), `${path}.${key}`);
       }
       return normalized;
     } finally {

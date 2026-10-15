@@ -72,6 +72,9 @@ describe("schema-driven rpc contract", () => {
     expect(
       contextHandlers.ping(null, {
         experimental_caller: { kind: "plugin", pluginId: "other" },
+        experimental_tag() {},
+        experimental_tagKey() {},
+        experimental_provideKeyed() {},
       }),
     ).toEqual({ ok: true });
   });

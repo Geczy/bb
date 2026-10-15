@@ -18,13 +18,10 @@ import { isSideChatShapedThread } from "../shared/side-chat";
 import {
   tasksRpcContract,
   type Attachment as AttachmentMetadata,
-  type ProjectsChangedEvent,
   type SidebarProjectSummary,
   type Task,
   type TaskPullRequest,
-  type TasksChangedEvent,
   type TasksDomainError,
-  type CommentsChangedEvent,
   type CommentProvider,
 } from "../shared/contract";
 
@@ -48,6 +45,7 @@ interface SummaryRow {
 }
 
 const MAX_THREAD_SEARCH_RESULTS = 10;
+const INITIAL_KEYED_TASK_ROWS = 25;
 
 export interface TasksApiStore {
   readonly tasks: TasksStore;
@@ -58,6 +56,8 @@ export interface TasksApiStore {
   openTaskCount(): number;
   sidebarSummary(): SidebarProjectSummary[];
 }
+
+const storesByPlugin = new WeakMap<BbPluginApi, TasksApiStore>();
 
 export function createStore(bb: BbPluginApi): TasksApiStore {
   const database = bb.storage.database();
@@ -170,26 +170,59 @@ function taskFailure(error: TasksDomainFailure) {
   return { ok: false as const, error: error.detail };
 }
 
+function taskRowTags(
+  taskId: string,
+  projectId: string,
+  taskKey: string | null,
+): [string, ...string[]] {
+  return [
+    `task:${taskId}`,
+    `task-list:${projectId}`,
+    "task-list:all",
+    "sidebar",
+    ...(taskKey ? [`task-key:${taskKey.toUpperCase()}`] : []),
+  ];
+}
+
 export function publishTasksChanged(
   bb: BbPluginApi,
   taskId: string,
   projectId: string,
 ): void {
-  const payload: TasksChangedEvent = { taskId, projectId };
-  bb.realtime.publish("tasks:changed", payload);
+  const task = storesByPlugin.get(bb)?.tasks.getTask(taskId);
+  bb.rpc.experimental_invalidate([
+    ...taskRowTags(taskId, projectId, task?.key ?? null),
+    `attachments:${taskId}`,
+    `membership:${projectId}`,
+    "membership:all",
+    ...(task?.parentTaskId ? [`subtasks:${task.parentTaskId}`] : []),
+  ]);
 }
 
 export function publishProjectsChanged(
   bb: BbPluginApi,
   projectId: string | null,
 ): void {
-  const payload: ProjectsChangedEvent = { projectId };
-  bb.realtime.publish("projects:changed", payload);
+  bb.rpc.experimental_invalidate([
+    "projects",
+    "folders",
+    "presets",
+    "sidebar",
+    `project:${projectId}`,
+    `task-project:${projectId}`,
+    "task-keys",
+    "membership:all",
+    `membership:${projectId}`,
+    "task-list:all",
+    `task-list:${projectId}`,
+  ]);
 }
 
 export function publishCommentsChanged(bb: BbPluginApi, taskId: string): void {
-  const payload: CommentsChangedEvent = { taskId };
-  bb.realtime.publish("comments:changed", payload);
+  bb.rpc.experimental_invalidate([
+    `comments:${taskId}`,
+    `attachments:${taskId}`,
+  ]);
 }
 
 function apiTask(store: TasksApiStore, task: StoredTask): Task {
@@ -607,7 +640,8 @@ export function registerHandlers(
       if (result.deleted) publishProjectsChanged(bb, null);
       return result;
     },
-    listFolders() {
+    listFolders(_input, context) {
+      context?.experimental_tag("folders");
       return { folders: store.tasks.listFolders() };
     },
     createProject(input) {
@@ -662,7 +696,8 @@ export function registerHandlers(
         throw error;
       }
     },
-    listProjects(input) {
+    listProjects(input, context) {
+      context?.experimental_tag("projects");
       return { projects: store.tasks.listProjects(input.folderId) };
     },
     createTask(input) {
@@ -689,12 +724,106 @@ export function registerHandlers(
         throw error;
       }
     },
-    getTask(input) {
+    taskMembership(input, context) {
+      const scope = input.parentTaskId
+        ? `subtasks:${input.parentTaskId}`
+        : `membership:${input.projectId ?? "all"}`;
+      context?.experimental_tag(scope);
+      if (input.activeOnly) context?.experimental_tag("active-membership");
+      if (input.search?.trim())
+        context?.experimental_tag(`${scope}:search`, "task-keys");
+      if (input.priorities !== undefined)
+        context?.experimental_tag(`${scope}:priority`);
+      if (input.statuses !== undefined)
+        context?.experimental_tag(`${scope}:status`);
+      if (input.labelIds !== undefined)
+        context?.experimental_tag(`${scope}:labels`);
+      const keys = store.tasks.listTaskKeys(input);
+      context?.experimental_provideKeyed("getTasksKeyed", () =>
+        Object.fromEntries(
+          apiTasks(
+            store,
+            store.tasks.getTasksByIds(keys.slice(0, INITIAL_KEYED_TASK_ROWS)),
+          ).map(
+            (task) => {
+              const { description: _description, ...summary } = task;
+              return [
+                task.id,
+                {
+                  value: summary,
+                  tags: [`task:${task.id}`, `task-project:${task.projectId}`],
+                },
+              ];
+            },
+          ),
+        ),
+      );
+      return { keys };
+    },
+    getLabelsKeyed({ keys }, context) {
+      return Object.fromEntries(
+        keys.map((key) => {
+          context?.experimental_tagKey(key, `project:${key}`);
+          return [key, store.tasks.listLabels(key)];
+        }),
+      );
+    },
+    getTasksKeyed({ keys }, context) {
+      const tasks = new Map(
+        apiTasks(store, store.tasks.getTasksByIds(keys)).map((task) => [
+          task.id,
+          task,
+        ]),
+      );
+      return Object.fromEntries(
+        keys.map((key) => {
+          const task = tasks.get(key);
+          context?.experimental_tagKey(
+            key,
+            `task:${key}`,
+            ...(task ? [`task-project:${task.projectId}`] : []),
+          );
+          if (!task) return [key, null];
+          const { description: _description, ...summary } = task;
+          return [key, summary];
+        }),
+      );
+    },
+    getTaskThreadsKeyed({ keys }, context) {
+      const threads = store.tasks.listTaskThreadsForTasks(keys);
+      return Object.fromEntries(
+        keys.map((key) => {
+          context?.experimental_tagKey(key, `threads:${key}`);
+          return [key, threads.get(key) ?? []];
+        }),
+      );
+    },
+    getTaskAttachmentsKeyed({ keys }, context) {
+      const attachments = store.tasks.listAttachmentsForTasks(keys);
+      return Object.fromEntries(
+        keys.map((key) => {
+          context?.experimental_tagKey(key, `attachments:${key}`);
+          return [key, (attachments.get(key) ?? []).map(attachmentMetadata)];
+        }),
+      );
+    },
+    getTask(input, context) {
+      context?.experimental_tag(`task:${input.taskId}`);
       const task = store.tasks.getTask(input.taskId);
+      if (task) context?.experimental_tag(`task-project:${task.projectId}`);
       return { task: task ? apiTask(store, task) : null };
     },
-    getTaskByKey(input) {
+    getTaskByKey(input, context) {
+      context?.experimental_tag(
+        `task-key:${input.taskKey.toUpperCase()}`,
+        "task-keys",
+      );
       const task = store.tasks.getTaskByKey(input.taskKey);
+      if (task)
+        context?.experimental_tag(
+          `task:${task.id}`,
+          `task-project:${task.projectId}`,
+        );
       return { task: task ? apiTask(store, task) : null };
     },
     updateTask(input) {
@@ -754,7 +883,37 @@ export function registerHandlers(
           };
         });
 
-        publishTasksChanged(bb, result.task.id, result.task.projectId);
+        const updated = result.task;
+        if (updated.parentTaskId !== current.parentTaskId) {
+          publishTasksChanged(bb, updated.id, updated.projectId);
+          if (current.parentTaskId !== null)
+            bb.rpc.experimental_invalidate([
+              `subtasks:${current.parentTaskId}`,
+            ]);
+        } else {
+          bb.rpc.experimental_invalidate(
+            taskRowTags(updated.id, updated.projectId, updated.key),
+          );
+        }
+        const changed = [
+          ...(updated.title !== current.title ||
+          updated.description !== current.description
+            ? ["search"]
+            : []),
+          ...(updated.priority !== current.priority ? ["priority"] : []),
+          ...(updated.status !== current.status ? ["status"] : []),
+          ...(input.labelIds !== undefined ? ["labels"] : []),
+        ];
+        const scopes = [
+          `membership:${updated.projectId}`,
+          "membership:all",
+          ...(updated.parentTaskId ? [`subtasks:${updated.parentTaskId}`] : []),
+        ];
+        const [firstTag, ...remainingTags] = scopes.flatMap((scope) =>
+          changed.map((field) => `${scope}:${field}`),
+        );
+        if (firstTag !== undefined)
+          bb.rpc.experimental_invalidate([firstTag, ...remainingTags]);
         if (result.systemCommentsWritten > 0) {
           publishCommentsChanged(bb, result.task.id);
         }
@@ -770,6 +929,10 @@ export function registerHandlers(
       const attachments = attachmentsForTasks(store.tasks, [input.taskId]);
       const deleted = store.tasks.deleteTask(input.taskId);
       if (deleted && task) {
+        bb.rpc.experimental_invalidate([
+          `subtasks:${task.id}`,
+          ...(task.parentTaskId ? [`subtasks:${task.parentTaskId}`] : []),
+        ]);
         await removeAttachmentBlobs(bb, store.tasks, attachments);
         publishTasksChanged(bb, task.id, task.projectId);
         for (const subtask of subtasks) {
@@ -778,7 +941,8 @@ export function registerHandlers(
       }
       return { deleted };
     },
-    listTasks(input) {
+    listTasks(input, context) {
+      context?.experimental_tag(`task-list:${input.projectId ?? "all"}`);
       const page = store.tasks.listTasksPage({
         projectId: input.projectId,
         statuses: input.statuses,
@@ -805,15 +969,31 @@ export function registerHandlers(
           beforeTaskId: input.beforeTaskId,
           afterTaskId: input.afterTaskId,
         });
-        const statusChanged = moved.status !== current.status;
+        const statusChanged = moved.task.status !== current.status;
         if (statusChanged) {
           writeSystemComments(store, current.id, input.authorName, [
-            `Status changed to ${displayName(moved.status)} by ${input.authorName}`,
+            `Status changed to ${displayName(moved.task.status)} by ${input.authorName}`,
           ]);
         }
-        return { task: apiTask(store, moved), statusChanged };
+        return {
+          task: apiTask(store, moved.task),
+          statusChanged,
+          repositionedTaskIds: moved.repositionedTaskIds,
+        };
       });
-      publishTasksChanged(bb, result.task.id, result.task.projectId);
+      bb.rpc.experimental_invalidate([
+        ...taskRowTags(result.task.id, result.task.projectId, result.task.key),
+        ...result.repositionedTaskIds.map((id) => `task:${id}`),
+        ...(result.statusChanged
+          ? [
+              `membership:${result.task.projectId}:status`,
+              "membership:all:status",
+              ...(result.task.parentTaskId
+                ? [`subtasks:${result.task.parentTaskId}:status`]
+                : []),
+            ]
+          : []),
+      ]);
       if (result.statusChanged) publishCommentsChanged(bb, result.task.id);
       return { ok: true, task: result.task };
     },
@@ -835,8 +1015,11 @@ export function registerHandlers(
       if (result.moved.length > 0) {
         publishTasksChanged(bb, current.id, current.projectId);
         publishTasksChanged(bb, result.task.id, result.task.projectId);
+        if (current.parentTaskId !== null)
+          bb.rpc.experimental_invalidate([`subtasks:${current.parentTaskId}`]);
         publishProjectsChanged(bb, result.task.projectId);
         for (const { task } of result.moved) {
+          publishTasksChanged(bb, task.id, current.projectId);
           publishCommentsChanged(bb, task.id);
         }
       }
@@ -861,7 +1044,8 @@ export function registerHandlers(
       if (deleted && label) publishProjectsChanged(bb, label.projectId);
       return { deleted };
     },
-    listLabels(input) {
+    listLabels(input, context) {
+      context?.experimental_tag(`project:${input.projectId}`);
       return { labels: store.tasks.listLabels(input.projectId) };
     },
     async createComment(input) {
@@ -877,7 +1061,8 @@ export function registerHandlers(
       });
       return { comment };
     },
-    async listComments(input) {
+    async listComments(input, context) {
+      context?.experimental_tag(`comments:${input.taskId}`);
       const comments = store.tasks.listComments(input.taskId);
       const threadInfo = await resolveAgentThreadInfo(bb, comments);
       const providerBadges = await resolveProviderBadges(bb, threadInfo);
@@ -904,7 +1089,10 @@ export function registerHandlers(
         }),
       };
     },
-    listAttachments(input) {
+    listAttachments(input, context) {
+      context?.experimental_tag(
+        `attachments:${"taskId" in input ? input.taskId : "commentsOfTaskId" in input ? input.commentsOfTaskId : (store.tasks.getComment(input.commentId)?.taskId ?? input.commentId)}`,
+      );
       const attachments =
         "taskId" in input
           ? store.tasks.listAttachmentsForTask(input.taskId)
@@ -947,10 +1135,15 @@ export function registerHandlers(
         throw error;
       }
     },
-    listTaskThreads(input) {
+    listTaskThreads(input, context) {
+      context?.experimental_tag(`threads:${input.taskId}`);
       return { taskThreads: store.tasks.listTaskThreads(input.taskId) };
     },
-    async listTaskPullRequests(input) {
+    async listTaskPullRequests(input, context) {
+      context?.experimental_tag(
+        `prs:${input.taskId}`,
+        `threads:${input.taskId}`,
+      );
       return listTaskPullRequests(bb, store, input.taskId);
     },
     createPreset(input) {
@@ -974,7 +1167,8 @@ export function registerHandlers(
       if (deleted) publishProjectsChanged(bb, null);
       return { deleted };
     },
-    listPresets() {
+    listPresets(_input, context) {
+      context?.experimental_tag("presets");
       return { presets: store.tasks.listPresets() };
     },
     async listMachines() {
@@ -1031,15 +1225,42 @@ export function registerHandlers(
         })),
       };
     },
-    sidebarOpenTaskCount() {
+    sidebarOpenTaskCount(_input, context) {
+      context?.experimental_tag("sidebar");
       return { openTaskCount: store.openTaskCount() };
     },
-    sidebarSummary() {
+    sidebarSummary(_input, context) {
+      context?.experimental_tag("sidebar");
       return { projects: store.sidebarSummary() };
     },
   };
 }
 
 export function registerTasksApi(bb: BbPluginApi, store: TasksApiStore): void {
-  bb.rpc.register(tasksRpcContract, registerHandlers(bb, store));
+  storesByPlugin.set(bb, store);
+  const handlers = registerHandlers(bb, store);
+  bb.rpc.register(tasksRpcContract, handlers);
+  bb.rpc.experimental_whileWatched("listTaskPullRequests", (read, signal) => {
+    if (!("input" in read)) return;
+    const parsed = tasksRpcContract.listTaskPullRequests.input.safeParse(
+      read.input,
+    );
+    if (!parsed.success) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const refresh = () => {
+      if (signal.aborted) return;
+      bb.rpc.experimental_invalidate([`prs:${parsed.data.taskId}`]);
+      timer = setTimeout(refresh, 60_000);
+    };
+    timer = setTimeout(() => {
+      void refresh();
+    }, 60_000);
+    signal.addEventListener(
+      "abort",
+      () => {
+        if (timer) clearTimeout(timer);
+      },
+      { once: true },
+    );
+  });
 }

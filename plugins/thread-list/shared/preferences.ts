@@ -280,8 +280,6 @@ export function describePreference(key: PreferenceKey): string {
   return preferenceDefinitions[key].description;
 }
 
-export const PREFERENCES_CHANGED_CHANNEL = "preferences";
-
 export const preferencesChangedSignalSchema = z
   .object({
     key: z.enum(PREFERENCE_KEYS as [PreferenceKey, ...PreferenceKey[]]),

@@ -57,7 +57,8 @@ export function registerUsageSource(bb: BbPluginApi) {
     if (
       !providers.some(
         (provider) =>
-          provider.id === providerId && provider.pluginId === "bb--provider-acp-next",
+          provider.id === providerId &&
+          provider.pluginId === "bb--provider-acp-next",
       )
     )
       throw new Error("Usage resource no longer exists.");
@@ -123,10 +124,36 @@ export function registerUsageSource(bb: BbPluginApi) {
     pending.set(resourceId, { refresh, promise });
     return promise;
   };
+  bb.background.service("usage-inventory", {
+    async start(signal) {
+      const stopHostChanges = bb.sdk.subscribe({
+        event: "host:changed",
+        callback: () => bb.rpc.experimental_invalidate(["usage-inventory"]),
+      });
+      const stopRegistrationChanges = bb.sdk.subscribe({
+        event: "system:changed",
+        callback: (event) => {
+          if (event.changes.includes("provider-registrations-changed"))
+            bb.rpc.experimental_invalidate(["usage-inventory"]);
+        },
+      });
+
+      try {
+        if (!signal.aborted)
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+      } finally {
+        stopHostChanges();
+        stopRegistrationChanges();
+      }
+    },
+  });
   bb.rpc.register(
     usageSourceRpcContract,
     {
-      async [usageListMethod]() {
+      async [usageListMethod](_input, context) {
+        context.experimental_tag("usage-inventory");
         const hosts = await bb.sdk.hosts.list();
         const resources = (
           await Promise.all(
@@ -136,7 +163,9 @@ export function registerUsageSource(bb: BbPluginApi) {
                 capability: "usage",
               });
               return providers
-                .filter((provider) => provider.pluginId === "bb--provider-acp-next")
+                .filter(
+                  (provider) => provider.pluginId === "bb--provider-acp-next",
+                )
                 .map((provider) => {
                   const id = JSON.stringify([host.id, provider.id]);
                   return {

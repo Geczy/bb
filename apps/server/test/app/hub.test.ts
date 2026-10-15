@@ -721,7 +721,7 @@ describe("NotificationHub events-appended thread-list coalescing", () => {
     const otherDetailSocket = createMockHubSocket();
     const seen: string[][] = [];
     hub.onChangedMessage((message) => {
-      seen.push([...message.changes]);
+      if (message.entity !== "plugin") seen.push([...message.changes]);
     });
     hub.subscribe(detailSocket, {
       kind: "thread-detail",
@@ -757,10 +757,73 @@ describe("NotificationHub events-appended thread-list coalescing", () => {
     const hub = new NotificationHub();
     const seen: string[][] = [];
     hub.onChangedMessage((message) => {
-      seen.push([...message.changes]);
+      if (message.entity !== "plugin") seen.push([...message.changes]);
     });
     hub.notifyThread("thread-1", ["events-appended"]);
     hub.notifyThread("thread-1", ["events-appended"]);
     expect(seen).toEqual([["events-appended"], ["events-appended"]]);
+  });
+});
+
+describe("plugin subscriptions", () => {
+  it("coalesces producer tags, bounds them, and sends data and events only to subscribed sockets", async () => {
+    const hub = new NotificationHub();
+    const own = createMockHubSocket();
+    const other = createMockHubSocket();
+    hub.subscribe(own, { kind: "plugin", pluginId: "tasks" });
+    hub.subscribe(other, { kind: "plugin", pluginId: "docs" });
+    hub.notifyPlugin("tasks", ["a"]);
+    hub.notifyPlugin("tasks", ["a", "b"]);
+    await Promise.resolve();
+    expect(own.messages.map((message) => JSON.parse(message))).toEqual([
+      { type: "changed", entity: "plugin", id: "tasks", tags: ["a", "b"] },
+    ]);
+    expect(other.messages).toEqual([]);
+    hub.notifyPlugin(
+      "tasks",
+      Array.from({ length: 201 }, (_, index) => String(index)),
+    );
+    await Promise.resolve();
+    expect(JSON.parse(own.messages[1]!)).toMatchObject({ tags: null });
+    hub.notifyPluginSignal("tasks", "notification", { title: "Hello" });
+    expect(JSON.parse(own.messages[2]!)).toMatchObject({
+      type: "plugin-signal",
+      pluginId: "tasks",
+      channel: "notification",
+    });
+    expect(other.messages).toEqual([]);
+    hub.notifyPlugin("tasks", ["a"]);
+    hub.notifyPlugin("tasks");
+    hub.notifyPlugin("tasks", ["b"]);
+    await Promise.resolve();
+    expect(JSON.parse(own.messages[3]!)).toMatchObject({ tags: null });
+  });
+
+  it("shares canonical input watches and releases them on the last unsubscribe or socket close", () => {
+    const hub = new NotificationHub();
+    const first = createMockHubSocket();
+    const second = createMockHubSocket();
+    const seen: boolean[] = [];
+    const input = {
+      kind: "plugin-read" as const,
+      pluginId: "tasks",
+      method: "read",
+      read: { input: { a: 1, b: 2 } },
+    };
+    hub.onPluginWatchChange((_target, active) => seen.push(active));
+    hub.subscribe(first, input);
+    hub.subscribe(second, { ...input, read: { input: { b: 2, a: 1 } } });
+    expect(seen).toEqual([true]);
+    hub.unsubscribe(first, input);
+    expect(seen).toEqual([true]);
+    const replay: boolean[] = [];
+    const stop = hub.onPluginWatchChange((_target, active) =>
+      replay.push(active),
+    );
+    expect(replay).toEqual([true]);
+    hub.unregisterClient(second);
+    expect(seen).toEqual([true, false]);
+    expect(replay).toEqual([true, false]);
+    stop();
   });
 });

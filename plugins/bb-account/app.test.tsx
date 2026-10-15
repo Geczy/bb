@@ -2,11 +2,7 @@
 import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
-import {
-  ACCOUNT_REALTIME_CHANNEL,
-  type AccountStatus,
-  type LoginView,
-} from "@/src/schemas";
+import { type AccountStatus, type LoginView } from "@/src/schemas";
 
 const app = await loadPluginApp(() => import("./app"));
 
@@ -154,13 +150,20 @@ describe("bb account settings section", () => {
   });
 
   it("starts a browser sign-in, shows the code, and closes once approved", async () => {
+    let approved = false;
     const slot = renderSlot(
       app.settingsSections[0]!,
       {},
       {
         openUrl: () => true,
         rpc: {
-          "login.poll": () => ({ login: null, status: signedOut }),
+          "login.poll": (input: unknown) => ({
+            login:
+              (input as { loginId: string | null }).loginId === null
+                ? null
+                : pendingLogin({ state: approved ? "signed-in" : "pending" }),
+            status: approved ? signedIn : signedOut,
+          }),
           "login.start": () => pendingLogin(),
           "login.cancel": () => ({ login: null }),
         },
@@ -174,10 +177,7 @@ describe("bb account settings section", () => {
         input: { baseUrl: null },
       }),
     );
-    await slot.emitRealtime(ACCOUNT_REALTIME_CHANNEL, {
-      status: signedOut,
-      login: pendingLogin(),
-    });
+    await slot.experimental_invalidateRpc();
 
     await slot.findByText("K7QP-2M4X");
     const link = slot.getByRole("link", {
@@ -187,10 +187,8 @@ describe("bb account settings section", () => {
     expect(link.target).toBe("_blank");
     slot.getByText(/Waiting for you to approve it/);
 
-    await slot.emitRealtime(ACCOUNT_REALTIME_CHANNEL, {
-      status: signedIn,
-      login: pendingLogin({ state: "signed-in" }),
-    });
+    approved = true;
+    await slot.experimental_invalidateRpc();
     await slot.findByText("Sawyer Hood");
     expect(slot.queryByText("K7QP-2M4X")).toBeNull();
     expect(slot.rpcCalls.some((call) => call.method === "login.cancel")).toBe(
@@ -198,7 +196,7 @@ describe("bb account settings section", () => {
     );
   });
 
-  it("backs off the sign-in poll while bb account can't be reached", async () => {
+  it("keeps the sign-in code through a read failure and retries on reconnect", async () => {
     let polls = 0;
     const slot = renderSlot(
       app.settingsSections[0]!,
@@ -223,19 +221,15 @@ describe("bb account settings section", () => {
     const signIn = await slot.findByRole("button", { name: "Sign in" });
     vi.useFakeTimers();
     await act(async () => fireEvent.click(signIn));
-    await slot.emitRealtime(ACCOUNT_REALTIME_CHANNEL, {
-      status: signedOut,
-      login: pendingLogin(),
-    });
+    await slot.experimental_invalidateRpc();
     expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
-    await act(async () => vi.advanceTimersByTimeAsync(1_999));
-    expect(polls).toBe(0);
-    await act(async () => vi.advanceTimersByTimeAsync(1));
-    expect(polls).toBe(1);
-    await act(async () => vi.advanceTimersByTimeAsync(3_999));
-    expect(polls).toBe(1);
-    await act(async () => vi.advanceTimersByTimeAsync(1));
-    expect(polls).toBe(2);
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    const beforeReconnect = polls;
+    await slot.setRealtimeConnectionState("reconnecting");
+    await slot.setRealtimeConnectionState("connected");
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(polls).toBeGreaterThan(beforeReconnect);
+    expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
   });
 
   it("explains a denied sign-in and offers a new code", async () => {
@@ -245,7 +239,13 @@ describe("bb account settings section", () => {
       {},
       {
         rpc: {
-          "login.poll": () => ({ login: null, status: signedOut }),
+          "login.poll": () => ({
+            login: pendingLogin({
+              state: "denied",
+              message: "Sign-in was denied on getbb.app.",
+            }),
+            status: signedOut,
+          }),
           "login.start": () => {
             started += 1;
             return pendingLogin({ id: `login-${started}` });
@@ -256,13 +256,7 @@ describe("bb account settings section", () => {
 
     fireEvent.click(await slot.findByRole("button", { name: "Sign in" }));
     await waitFor(() => expect(started).toBe(1));
-    await slot.emitRealtime(ACCOUNT_REALTIME_CHANNEL, {
-      status: signedOut,
-      login: pendingLogin({
-        state: "denied",
-        message: "Sign-in was denied on getbb.app.",
-      }),
-    });
+    await slot.experimental_invalidateRpc();
 
     await slot.findByText("Sign-in was denied on getbb.app.");
     fireEvent.click(slot.getByRole("button", { name: "Get a new code" }));
@@ -283,10 +277,7 @@ describe("bb account settings section", () => {
     );
 
     fireEvent.click(await slot.findByRole("button", { name: "Sign in" }));
-    await slot.emitRealtime(ACCOUNT_REALTIME_CHANNEL, {
-      status: signedOut,
-      login: pendingLogin(),
-    });
+    await slot.experimental_invalidateRpc();
     await slot.findByText("K7QP-2M4X");
     fireEvent.click(slot.getByRole("button", { name: "Cancel" }));
 

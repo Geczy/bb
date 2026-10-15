@@ -1,17 +1,21 @@
 import {
+  memo,
+  startTransition,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   type Label,
-  type Task,
+  type TaskSummary,
   type TaskStatus,
   type TaskThread,
 } from "../../shared/contract.js";
-import { useTasksQuery, useTasksRpc } from "../../shell/data.js";
+import { useTasksRpc } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
 import { NewTaskDialog } from "../manage/new-task-dialog.js";
 import {
@@ -22,13 +26,7 @@ import {
   visibleBoardStatuses,
 } from "./drop-position.js";
 import { PriorityIcon, StatusIcon } from "./icons.js";
-import {
-  EMPTY_META,
-  fetchBoard,
-  patchBoard,
-  type BoardCardMeta,
-  type BoardData,
-} from "./board-data.js";
+import { EMPTY_META, useBoardData, type BoardCardMeta } from "./board-data.js";
 import { STATUS_LABELS } from "../list/lib.js";
 import { Button } from "@/components/ui/button";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
@@ -38,9 +36,9 @@ import { cn } from "@/lib/utils";
 
 const DRAG_THRESHOLD_PX = 5;
 
-type ColumnMap = Record<TaskStatus, Task[]>;
+type ColumnMap = Record<TaskStatus, TaskSummary[]>;
 
-function groupColumns(tasks: readonly Task[]): ColumnMap {
+function groupColumns(tasks: readonly TaskSummary[]): ColumnMap {
   const columns: ColumnMap = {
     backlog: [],
     todo: [],
@@ -81,36 +79,44 @@ function WorkingAgentsChip({ threads }: { threads: TaskThread[] }) {
   );
 }
 
+interface CardActions {
+  pointerDown(event: ReactPointerEvent<HTMLDivElement>, task: TaskSummary): void;
+  open(task: TaskSummary): void;
+}
+
 interface TaskCardProps {
-  task: Task;
+  task: TaskSummary;
   labelsById: Map<string, Label>;
   meta: BoardCardMeta;
   ghost?: boolean;
   dragging?: boolean;
-  cardRef?: (element: HTMLDivElement | null) => void;
-  onPointerDown?: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onClick?: () => void;
+  cardRefs?: Map<string, HTMLDivElement>;
+  actions?: RefObject<CardActions>;
 }
 
-function TaskCard({
+const TaskCard = memo(function TaskCard({
   task,
   labelsById,
   meta,
   ghost = false,
   dragging = false,
-  cardRef,
-  onPointerDown,
-  onClick,
+  cardRefs,
+  actions,
 }: TaskCardProps) {
   const labels = task.labelIds
     .map((labelId) => labelsById.get(labelId))
     .filter((label): label is Label => label !== undefined);
   return (
     <div
-      ref={cardRef}
+      ref={(element) => {
+        if (element) cardRefs?.set(task.id, element);
+        else cardRefs?.delete(task.id);
+      }}
       data-task-key={task.key}
-      onPointerDown={onPointerDown}
-      onClick={onClick}
+      onPointerDown={
+        actions ? (event) => actions.current.pointerDown(event, task) : undefined
+      }
+      onClick={actions ? () => actions.current.open(task) : undefined}
       className={cn(
         "shrink-0 rounded-lg border border-border bg-card px-2.5 py-2 shadow-2xs select-none",
         ghost
@@ -157,7 +163,7 @@ function TaskCard({
       </div>
     </div>
   );
-}
+});
 
 function BoardSkeleton() {
   return (
@@ -186,22 +192,17 @@ interface BoardViewProps {
 export function BoardView({ projectId }: BoardViewProps) {
   const rpc = useTasksRpc();
   const navigation = useTasksNavigation();
-  const board = useTasksQuery<BoardData>(
-    (queryRpc) => fetchBoard(queryRpc, projectId),
-    ["tasks:changed", "projects:changed", "threads:changed"],
-    [projectId],
-    {
-      applySignals: (queryRpc, current, signals) =>
-        patchBoard(queryRpc, projectId, current, signals),
-    },
-  );
+  const board = useBoardData(projectId);
 
   const [columns, setColumns] = useState<ColumnMap | undefined>(undefined);
   useEffect(() => {
     setColumns(undefined);
   }, [projectId]);
   useEffect(() => {
-    if (board.data) setColumns(groupColumns(board.data.tasks));
+    if (board.data) {
+      const tasks = board.data.tasks;
+      startTransition(() => setColumns(groupColumns(tasks)));
+    }
   }, [board.data]);
   const columnsRef = useRef(columns);
   columnsRef.current = columns;
@@ -281,7 +282,7 @@ export function BoardView({ projectId }: BoardViewProps) {
 
   const handleCardPointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
-    task: Task,
+    task: TaskSummary,
   ) => {
     if (event.button !== 0 || dragCleanupRef.current) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -355,10 +356,17 @@ export function BoardView({ projectId }: BoardViewProps) {
     };
   };
 
-  const openTask = (task: Task) => {
+  const openTask = (task: TaskSummary) => {
     if (suppressClickRef.current) return;
     navigation.go({ kind: "task", taskKey: task.key });
   };
+  const cardActions = useRef<CardActions>({
+    pointerDown: handleCardPointerDown,
+    open: openTask,
+  });
+  useLayoutEffect(() => {
+    cardActions.current = { pointerDown: handleCardPointerDown, open: openTask };
+  });
 
   if (columns === undefined) {
     if (board.error) {
@@ -408,12 +416,8 @@ export function BoardView({ projectId }: BoardViewProps) {
           labelsById={labelsById}
           meta={metaByTaskId.get(task.id) ?? EMPTY_META}
           dragging={drag?.taskId === task.id}
-          cardRef={(element) => {
-            if (element) cardRefs.current.set(task.id, element);
-            else cardRefs.current.delete(task.id);
-          }}
-          onPointerDown={(event) => handleCardPointerDown(event, task)}
-          onClick={() => openTask(task)}
+          cardRefs={cardRefs.current}
+          actions={cardActions}
         />,
       );
     }

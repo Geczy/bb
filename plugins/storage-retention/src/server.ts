@@ -72,8 +72,14 @@ export default function plugin(bb: BbPluginApi) {
   );
   bb.rpc.register(storageRpc, {
     startCleanup: storage.startCleanup,
-    hosts: () => storage.hosts(),
-    host: storage.host,
+    hosts: (_input, context) => {
+      context.experimental_tag("hosts");
+      return storage.hosts();
+    },
+    host: (input, context) => {
+      context.experimental_tag("hosts");
+      return storage.host(input);
+    },
     scanHost: storage.scanHost,
     scanAll: () => storage.scanAll(),
     removeOrphans: (input) => storage.removeOrphans(input),
@@ -84,8 +90,14 @@ export default function plugin(bb: BbPluginApi) {
     clearArchivedFiles: storage.clearArchivedFiles,
     startClearArchivedFiles: storage.startClearArchivedFiles,
     removeDevInstances: (input) => storage.removeDevInstances(input),
-    state: () => service.state(),
-    preview: (policy) => service.preview(policy),
+    state: (_input, context) => {
+      context.experimental_tag("state");
+      return service.state();
+    },
+    preview: (policy, context) => {
+      context.experimental_tag("retention-preview");
+      return service.preview(policy);
+    },
     configure: (policy) => service.configure(policy),
   });
   registerCli(bb, service, storage);

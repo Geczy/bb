@@ -9,7 +9,6 @@ import { z } from "zod";
 import {
   addPushSubscriptionInputSchema,
   CLIENT_NOTIFICATION_CHANNEL,
-  THREAD_NOTIFICATIONS_CHANNEL,
   clientChannelSchema,
   DEFAULT_EXPO_PUSH_URL,
   DEVICE_LABEL_MAX_LENGTH,
@@ -17,7 +16,6 @@ import {
   pushNotificationsRpcContract,
   type ClientNotification,
   type PushSubscriptionSummary,
-  type ThreadNotificationsUpdate,
 } from "./contract.js";
 import {
   createNotificationPreferences,
@@ -177,6 +175,7 @@ export function createPushNotificationsPlugin(
         experimental_schema: z.string().url(),
       },
     });
+    settings.onChange(() => bb.rpc.experimental_invalidateAll());
     const preferences = createNotificationPreferences({
       bb,
       getDefaults: async () => {
@@ -186,10 +185,13 @@ export function createPushNotificationsPlugin(
           childLevel: ownNotificationLevelSchema.parse(childLevel),
         };
       },
-      publish: (threads) =>
-        bb.realtime.publish(THREAD_NOTIFICATIONS_CHANNEL, {
-          threads,
-        } satisfies ThreadNotificationsUpdate),
+      publish: (threads) => {
+        const [first, ...rest] = Object.keys(threads).map(
+          (id) => `thread:${id}`,
+        );
+        if (first !== undefined)
+          bb.rpc.experimental_invalidate([first, ...rest]);
+      },
     });
     const subscriptions = createPushSubscriptionStore(bb, {
       ...(options.now === undefined ? {} : { now: options.now }),
@@ -259,6 +261,11 @@ export function createPushNotificationsPlugin(
           throw new Error(`Push subscription not found: ${id}`);
         }
         return { ok: true as const };
+      },
+      "threadNotifications.keyed": async ({ keys }, context) => {
+        for (const key of keys)
+          context.experimental_tagKey(key, `thread:${key}`);
+        return preferences.list(keys);
       },
       "threadNotifications.list": async ({ threadIds }) => ({
         threads: await preferences.list(threadIds),

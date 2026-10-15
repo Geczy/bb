@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
-import { CONNECT_REALTIME_CHANNEL, type ConnectStatus } from "@/src/types";
+import { type ConnectStatus } from "@/src/types";
 
 const app = await loadPluginApp(() => import("./app"));
 
@@ -161,19 +161,17 @@ describe("connect settings section", () => {
     expect(link.href).toBe("https://getbb.app/link?code=K7QP-2M4X");
     expect(link.target).toBe("_blank");
 
-    await act(async () => vi.advanceTimersByTimeAsync(1_999));
-    expect(polls).toBe(0);
-    await act(async () => vi.advanceTimersByTimeAsync(1));
     expect(polls).toBe(1);
-    expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
-    await act(async () => vi.advanceTimersByTimeAsync(2_000));
+    await slot.experimental_invalidateRpc(undefined, "bb-account");
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(polls).toBe(2);
     currentStatus = connected();
-    await slot.emitRealtime(CONNECT_REALTIME_CHANNEL, currentStatus);
+    await slot.experimental_invalidateRpc();
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(slot.getByText("Connected")).toBeTruthy();
   });
 
-  it("backs off the sign-in poll while bb account can't be reached", async () => {
+  it("retains the sign-in code while bb account cannot be reached", async () => {
     const account = fakeAccountSdk({
       "login.start": () => pendingLogin(),
       "login.poll": () => {
@@ -199,13 +197,10 @@ describe("connect settings section", () => {
     vi.useFakeTimers();
     await act(async () => fireEvent.click(signIn));
     expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
-    await act(async () => vi.advanceTimersByTimeAsync(1_999));
-    expect(polls()).toBe(0);
-    await act(async () => vi.advanceTimersByTimeAsync(1));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(polls()).toBe(1);
-    await act(async () => vi.advanceTimersByTimeAsync(3_999));
-    expect(polls()).toBe(1);
-    await act(async () => vi.advanceTimersByTimeAsync(1));
+    await slot.experimental_invalidateRpc(undefined, "bb-account");
+    await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(polls()).toBe(2);
   });
 
@@ -257,7 +252,7 @@ describe("connect settings section", () => {
     expect(slot.queryByText("https://workstation.getbb.app")).toBeNull();
 
     currentStatus = connected();
-    await slot.emitRealtime(CONNECT_REALTIME_CHANNEL, currentStatus);
+    await slot.experimental_invalidateRpc();
 
     await slot.findByText("Connected");
     slot.getByText("https://workstation.getbb.app");
@@ -365,7 +360,7 @@ describe("connect settings section", () => {
 
   it("groups shares by host and degrades an unreachable host's group", async () => {
     const reason = "sawyer-air is not connected right now.";
-    const currentStatus = connected({
+    let currentStatus = connected({
       shares: [
         {
           hostId: "host-air",
@@ -450,11 +445,12 @@ describe("connect settings section", () => {
     await waitFor(() => expect(reachableRevoke.disabled).toBe(false));
 
     fireEvent.click(machine);
-    await slot.emitRealtime(CONNECT_REALTIME_CHANNEL, {
+    currentStatus = {
       ...currentStatus,
-      shares: currentStatus.shares.filter((share) => share.port !== 8080),
-    });
-    const updatedMachine = slot.getByRole("button", {
+      shares: currentStatus.shares.filter((share) => share.port === 3000),
+    };
+    await slot.experimental_invalidateRpc();
+    const updatedMachine = await slot.findByRole("button", {
       name: "Workstation, 1 shared ports",
     });
     expect(updatedMachine.getAttribute("aria-expanded")).toBe("false");
@@ -561,11 +557,12 @@ describe("connect settings section", () => {
   });
 
   it("only offers phone pairing while bb connect is connected", async () => {
+    let currentStatus = status();
     const slot = renderSlot(
       app.settingsSections[1]!,
       {},
       {
-        rpc: { status: () => status() },
+        rpc: { status: () => currentStatus },
       },
     );
     await waitFor(() =>
@@ -574,19 +571,25 @@ describe("connect settings section", () => {
     expect(
       slot.queryByRole("button", { name: "Add mobile device" }),
     ).toBeNull();
-    await slot.emitRealtime(CONNECT_REALTIME_CHANNEL, connected());
+    currentStatus = connected();
+    await slot.experimental_invalidateRpc();
     await slot.findByRole("button", { name: "Add mobile device" });
-    await slot.emitRealtime(CONNECT_REALTIME_CHANNEL, {
-      ...connected(),
-      enabled: false,
-    });
+    currentStatus = status();
+    await slot.experimental_invalidateRpc();
+    await waitFor(() =>
+      expect(
+        slot.queryByRole("button", { name: "Add mobile device" }),
+      ).toBeNull(),
+    );
     expect(
       slot.queryByRole("button", { name: "Add mobile device" }),
     ).toBeNull();
-    await slot.emitRealtime(CONNECT_REALTIME_CHANNEL, {
-      ...connected(),
-      state: "reconnecting",
-    });
+    await slot.experimental_invalidateRpc();
+    await waitFor(() =>
+      expect(
+        slot.queryByRole("button", { name: "Add mobile device" }),
+      ).toBeNull(),
+    );
     expect(
       slot.queryByRole("button", { name: "Add mobile device" }),
     ).toBeNull();
@@ -734,7 +737,7 @@ describe("connect settings section", () => {
         input: { enabled: false },
       }),
     );
-    await slot.emitRealtime(CONNECT_REALTIME_CHANNEL, currentStatus);
+    await slot.experimental_invalidateRpc();
 
     await slot.findByText("Remote access is off");
     await slot.findByText("Remote access turned off");
@@ -826,9 +829,11 @@ describe("Connect settings realtime recovery", () => {
       },
     );
 
-    await slot.behavior.setRealtimeConnectionState("connected");
-    await slot.findByText("Connected");
+    const connectionUpdate =
+      slot.behavior.setRealtimeConnectionState("connected");
     await act(async () => failFirstLoad(new Error("tunnel dropped")));
+    await connectionUpdate;
+    await slot.findByText("Connected");
 
     expect(slot.queryByText(/Failed to load/)).toBeNull();
     expect(slot.getByText("Connected")).toBeTruthy();

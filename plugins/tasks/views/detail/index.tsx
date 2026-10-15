@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import SmilePlusIcon from "@hugeicons/core-free-icons/SmilePlusIcon";
-import type { Task } from "../../shared/contract.js";
+import type { Task, TaskSummary } from "../../shared/contract.js";
 import { errorMessage } from "../../shared/errors.js";
 import type { DelegationRpcContract } from "../../delegate/contract.js";
 import { useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import {
-  listAllTasks,
   useMentionItems,
-  useTasksQuery,
+  useTaskRead,
+  useTaskRows,
   useTasksRpc,
 } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
@@ -38,13 +38,12 @@ interface DetailViewProps {
 }
 
 const DESCRIPTION_SAVE_DELAY_MS = 800;
-const ACTIVE_PULL_REQUEST_REFRESH_MS = 60_000;
 
 function SubTaskDonut({
   subtasks,
   onClick,
 }: {
-  subtasks: Task[];
+  subtasks: TaskSummary[];
   onClick: () => void;
 }) {
   if (subtasks.length === 0) return null;
@@ -112,7 +111,7 @@ function SubTasksSection({
 }: {
   ref: React.Ref<HTMLElement>;
   task: Task;
-  subtasks: Task[];
+  subtasks: TaskSummary[];
   onCreate: (title: string) => Promise<boolean>;
 }) {
   const navigation = useTasksNavigation();
@@ -221,72 +220,37 @@ function TaskDetail({ task }: { task: Task }) {
     delayMs: DESCRIPTION_SAVE_DELAY_MS,
   });
 
-  const projects = useTasksQuery(
-    async (query) => (await query.call("listProjects", {})).projects,
-    ["projects:changed"],
-  );
+  const projects = useTaskRead("listProjects", {}, (value) => value.projects);
   const project = projects.data?.find((entry) => entry.id === task.projectId);
 
-  const parent = useTasksQuery(
-    async (query) =>
-      task.parentTaskId
-        ? (await query.call("getTask", { taskId: task.parentTaskId })).task
-        : null,
-    ["tasks:changed"],
-    [task.parentTaskId],
-    { relevantTaskIds: task.parentTaskId ? [task.parentTaskId] : [] },
+  const parent = useTaskRead(
+    "getTask",
+    { taskId: task.parentTaskId ?? task.id },
+    (value) => value.task,
+    task.parentTaskId !== null,
   );
-  const subtasks = useTasksQuery(
-    async (query) => listAllTasks(query, { parentTaskId: task.id }),
-    ["tasks:changed"],
-    [task.id],
+  const subtasks = useTaskRows({ parentTaskId: task.id });
+  const labels = useTaskRead(
+    "listLabels",
+    { projectId: task.projectId },
+    (value) => value.labels,
   );
-  const labels = useTasksQuery(
-    async (query) =>
-      (await query.call("listLabels", { projectId: task.projectId })).labels,
-    ["projects:changed"],
-    [task.projectId],
+  const attachments = useTaskRead(
+    "listAttachments",
+    { taskId: task.id },
+    (value) => value.attachments,
   );
-  const attachments = useTasksQuery(
-    async (query) =>
-      (await query.call("listAttachments", { taskId: task.id })).attachments,
-    ["tasks:changed"],
-    [task.id],
-    { relevantTaskIds: [task.id] },
+  const threads = useTaskRead(
+    "listTaskThreads",
+    { taskId: task.id },
+    (value) => value.taskThreads,
   );
-  const threads = useTasksQuery(
-    async (query) =>
-      (await query.call("listTaskThreads", { taskId: task.id })).taskThreads,
-    ["threads:changed"],
-    [task.id],
-    { relevantTaskIds: [task.id] },
+  const presets = useTaskRead("listPresets", null, (value) => value.presets);
+  const pullRequests = useTaskRead(
+    "listTaskPullRequests",
+    { taskId: task.id },
+    (value) => value,
   );
-  const presets = useTasksQuery(
-    async (query) => (await query.call("listPresets")).presets,
-    ["projects:changed"],
-  );
-  const pullRequests = useTasksQuery(
-    async (query) => query.call("listTaskPullRequests", { taskId: task.id }),
-    ["threads:changed"],
-    [task.id],
-    { relevantTaskIds: [task.id] },
-  );
-  const refreshPullRequests = pullRequests.refresh;
-  const hasActivePullRequest = (pullRequests.data?.pullRequests ?? []).some(
-    (pullRequest) =>
-      pullRequest.state === "open" || pullRequest.state === "draft",
-  );
-  useEffect(() => {
-    window.addEventListener("focus", refreshPullRequests);
-    return () => window.removeEventListener("focus", refreshPullRequests);
-  }, [refreshPullRequests]);
-  useEffect(() => {
-    if (!hasActivePullRequest) return;
-    const timer = window.setInterval(() => {
-      if (document.visibilityState !== "hidden") refreshPullRequests();
-    }, ACTIVE_PULL_REQUEST_REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [hasActivePullRequest, refreshPullRequests]);
 
   const updateTask = async (
     input: TaskPropertyUpdate & { title?: string; description?: string },
@@ -333,7 +297,7 @@ function TaskDetail({ task }: { task: Task }) {
 
   const uploadForTask = async (file: File) => {
     const result = await uploadAttachment(file, { taskId: task.id });
-    attachments.refresh();
+
     return result;
   };
 
@@ -345,7 +309,6 @@ function TaskDetail({ task }: { task: Task }) {
         push(errorMessage(error));
       }
     }
-    attachments.refresh();
   };
 
   const createSubtask = async (title: string): Promise<boolean> => {
@@ -360,7 +323,7 @@ function TaskDetail({ task }: { task: Task }) {
         push(result.error.message);
         return false;
       }
-      subtasks.refresh();
+
       return true;
     } catch (error) {
       push(errorMessage(error));
@@ -476,7 +439,6 @@ function TaskDetail({ task }: { task: Task }) {
                 removeDescriptionReferences: true,
               });
               if (!result.ok) throw new Error(result.error.message);
-              attachments.refresh();
             }}
             onError={(message) => push(message)}
           />
@@ -501,8 +463,6 @@ function TaskDetail({ task }: { task: Task }) {
                     taskId: task.id,
                     threadId: thread.threadId,
                   });
-                  threads.refresh();
-                  pullRequests.refresh();
                 }}
                 onError={(message) => push(message)}
               />
@@ -533,11 +493,7 @@ function TaskDetail({ task }: { task: Task }) {
 }
 
 export function DetailView({ taskKey, onCanonicalKey }: DetailViewProps) {
-  const query = useTasksQuery(
-    async (rpc) => (await rpc.call("getTaskByKey", { taskKey })).task,
-    ["tasks:changed"],
-    [taskKey],
-  );
+  const query = useTaskRead("getTaskByKey", { taskKey }, (value) => value.task);
   const canonicalKey = query.data?.key;
   useEffect(() => {
     if (canonicalKey) onCanonicalKey?.(canonicalKey);

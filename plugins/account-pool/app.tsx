@@ -27,7 +27,7 @@ import {
   definePluginApp,
   experimental_copyToClipboard,
   useBbNavigate,
-  useRealtime,
+  experimental_useRpcQuery,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,6 @@ import type {
   FamilyQuota,
   LimitWindow,
   ModelFamily,
-  PoolAvailability,
   PoolProvider,
   PoolStatus,
 } from "./src/contracts.js";
@@ -76,10 +75,6 @@ import {
   statusSchema,
 } from "./src/contracts.js";
 import { blockingResetAt } from "./src/quota.js";
-import {
-  ACCOUNT_POOL_ACCOUNTS_CHANGED,
-  ACCOUNT_POOL_CONFIG_CHANGED,
-} from "./src/realtime.js";
 
 type DialogState =
   | { kind: "account" | "priority" | "remove"; accountId: string }
@@ -908,39 +903,45 @@ function AccountPoolSettings() {
     setConfig(next);
     setDrafts(configDrafts(next));
   }, []);
-  const refresh = useCallback(async () => {
-    try {
-      const next = await rpc.call("status.get", null);
-      writeCachedStatus(next);
-      if (!mounted.current) return;
-      setStatus(next);
+  const statusQuery = experimental_useRpcQuery<
+    typeof accountPoolRpcContract,
+    "status.get"
+  >({ method: "status.get", input: null });
+  const configQuery = experimental_useRpcQuery<
+    typeof accountPoolRpcContract,
+    "config.get"
+  >({ method: "config.get", input: null });
+  const refresh = statusQuery.refetch;
+  const refreshConfig = configQuery.refetch;
+  useEffect(() => {
+    if (statusQuery.data !== undefined) {
+      writeCachedStatus(statusQuery.data);
+      const nextStatus = statusQuery.data;
+      setStatus(nextStatus);
+      setOptimisticOrder((current) => {
+        if (!current) return null;
+        const ids = nextStatus.accounts
+          .filter((account) => account.provider === current.provider)
+          .map((account) => account.id);
+        return ids.length !== current.ids.length ||
+          ids.every((id, index) => id === current.ids[index])
+          ? null
+          : current;
+      });
       setStatusIsCached(false);
-    } catch (loadError) {
-      if (mounted.current) setError(errorText(loadError));
     }
-  }, [rpc]);
-  const refreshConfig = useCallback(async () => {
-    try {
-      const next = await rpc.call("config.get", null);
-      if (mounted.current) applyConfig(next);
-    } catch (loadError) {
-      if (mounted.current) setError(errorText(loadError));
-    }
-  }, [applyConfig, rpc]);
+    if (statusQuery.error !== null) setError(statusQuery.error.message);
+  }, [statusQuery.data, statusQuery.error]);
+  useEffect(() => {
+    if (configQuery.data !== undefined) applyConfig(configQuery.data);
+  }, [configQuery.data, applyConfig]);
   useEffect(() => {
     mounted.current = true;
-    void refresh();
-    void refreshConfig();
     return () => {
       mounted.current = false;
     };
-  }, [refresh, refreshConfig]);
-  useRealtime(ACCOUNT_POOL_ACCOUNTS_CHANGED, () => {
-    void refresh();
-  });
-  useRealtime(ACCOUNT_POOL_CONFIG_CHANGED, () => {
-    void refreshConfig();
-  });
+  }, []);
+
   useEffect(() => {
     if (codexStep === null || loginDone !== null) return;
     const update = () =>
@@ -964,7 +965,6 @@ function AccountPoolSettings() {
         if (result.status === "complete") {
           setLoginDone(result.account.label);
           setCodexStep(null);
-          await refresh();
         } else if (result.status === "error") {
           setCodexStep(null);
           setError(result.message);
@@ -1006,8 +1006,8 @@ function AccountPoolSettings() {
     setError(null);
     try {
       await action();
-      await refresh();
     } catch (actionError) {
+      if (key.startsWith("order-")) setOptimisticOrder(null);
       setError(errorText(actionError));
     } finally {
       clearPending(key);
@@ -1147,14 +1147,11 @@ function AccountPoolSettings() {
     if (from < 0 || to < 0 || from === to) return;
     const accountIds = arrayMove(ids, from, to);
     setOptimisticOrder({ provider, ids: accountIds });
-    try {
-      await run(`order-${provider}`, async () => {
-        await rpc.call("account.reorder", { provider, accountIds });
-      });
-    } finally {
-      setOptimisticOrder(null);
-    }
+    await run(`order-${provider}`, async () => {
+      await rpc.call("account.reorder", { provider, accountIds });
+    });
   }
+
   function closeDialog(): void {
     if (dialog?.kind === "codex-login" && codexStep !== null)
       void rpc.call("codexLogin.cancel", { sessionId: codexStep.sessionId });

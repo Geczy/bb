@@ -851,14 +851,14 @@ describe("Theme Preview", () => {
     });
 
     await waitFor(() => expect(catalogCalls).toBe(1));
-    await slot.behavior.emitRealtime("theme-preview:changed", null);
-    await slot.behavior.emitRealtime("theme-preview:changed", null);
+    await slot.behavior.experimental_invalidateRpc();
+    await slot.behavior.experimental_invalidateRpc();
 
     await act(async () => stale.resolve(DEFAULT_CATALOG));
 
     await waitFor(() => expect(catalogCalls).toBe(2));
     expect(
-      screen.getByRole("combobox", { name: /Endless Color/i }),
+      await screen.findByRole("combobox", { name: /Endless Color/i }),
     ).toBeDefined();
     expect(catalogCalls).toBe(2);
   });
@@ -867,7 +867,7 @@ describe("Theme Preview", () => {
     vi.useFakeTimers();
     const stuck = deferred<Catalog>();
     let catalogCalls = 0;
-    renderPreview({
+    const slot = renderPreview({
       themeCatalog: () => {
         catalogCalls += 1;
         return catalogCalls === 1 ? stuck.promise : ENDLESS_CATALOG;
@@ -880,6 +880,7 @@ describe("Theme Preview", () => {
     });
     expect(catalogCalls).toBe(1);
 
+    await slot.experimental_invalidateRpc();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(20_000);
     });

@@ -124,6 +124,8 @@ const taskSchema = z
   })
   .strict();
 
+const taskSummarySchema = taskSchema.omit({ description: true });
+
 const labelSchema = z
   .object({
     id: idSchema,
@@ -390,6 +392,26 @@ const updatePresetInputSchema = z
     }
   });
 
+const taskListInputSchema = z
+  .object({
+    projectId: idSchema.optional(),
+    statuses: z.array(taskStatusSchema).optional(),
+    priorities: z.array(taskPrioritySchema).optional(),
+    labelIds: z.array(idSchema).optional(),
+    activeOnly: z.boolean().default(false),
+    parentTaskId: idSchema.nullable().optional(),
+    search: z.string().optional(),
+    sort: taskSortSchema.default("manual"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(TASKS_PAGE_MAX_LIMIT)
+      .default(TASKS_PAGE_DEFAULT_LIMIT),
+    cursor: nonBlankStringSchema.optional(),
+  })
+  .strict();
+
 export const tasksRpcContract = defineRpcContract({
   createFolder: {
     input: z
@@ -477,6 +499,26 @@ export const tasksRpcContract = defineRpcContract({
       .strict(),
     output: taskMutationResultSchema,
   },
+  taskMembership: {
+    input: taskListInputSchema.omit({ limit: true, cursor: true, sort: true }),
+    output: z.object({ keys: z.array(z.string()) }),
+  },
+  getLabelsKeyed: {
+    input: z.object({ keys: z.array(idSchema).max(500) }),
+    output: z.record(z.string(), z.array(labelSchema)),
+  },
+  getTasksKeyed: {
+    input: z.object({ keys: z.array(z.string()).max(1000) }),
+    output: z.record(z.string(), taskSummarySchema.nullable()),
+  },
+  getTaskThreadsKeyed: {
+    input: z.object({ keys: z.array(z.string()).max(1000) }),
+    output: z.record(z.string(), z.array(taskThreadSchema)),
+  },
+  getTaskAttachmentsKeyed: {
+    input: z.object({ keys: z.array(z.string()).max(1000) }),
+    output: z.record(z.string(), z.array(attachmentSchema)),
+  },
   getTask: {
     input: z.object({ taskId: idSchema }).strict(),
     output: z.object({ task: taskSchema.nullable() }).strict(),
@@ -494,25 +536,7 @@ export const tasksRpcContract = defineRpcContract({
     output: z.object({ deleted: z.boolean() }).strict(),
   },
   listTasks: {
-    input: z
-      .object({
-        projectId: idSchema.optional(),
-        statuses: z.array(taskStatusSchema).optional(),
-        priorities: z.array(taskPrioritySchema).optional(),
-        labelIds: z.array(idSchema).optional(),
-        activeOnly: z.boolean().default(false),
-        parentTaskId: idSchema.nullable().optional(),
-        search: z.string().optional(),
-        sort: taskSortSchema.default("manual"),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(TASKS_PAGE_MAX_LIMIT)
-          .default(TASKS_PAGE_DEFAULT_LIMIT),
-        cursor: nonBlankStringSchema.optional(),
-      })
-      .strict(),
+    input: taskListInputSchema,
     output: z
       .object({
         tasks: z.array(taskSchema),
@@ -734,6 +758,7 @@ export const tasksRpcContract = defineRpcContract({
 export type TasksRpcContract = typeof tasksRpcContract;
 export type Folder = z.infer<typeof folderSchema>;
 export type Project = z.infer<typeof projectSchema>;
+export type TaskSummary = z.infer<typeof taskSummarySchema>;
 export type Task = z.infer<typeof taskSchema>;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];

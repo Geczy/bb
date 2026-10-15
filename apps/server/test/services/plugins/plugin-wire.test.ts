@@ -554,6 +554,9 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(await oldRpc.json()).toEqual({
       ok: true,
       result: { echoed: { kept: true } },
+      tags: [],
+      keyTags: {},
+      whileWatched: false,
     });
     const candidateRoute = await harness.app.request(
       `${BASE}/api/v1/plugins/wire/http/candidate`,
@@ -572,7 +575,13 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
   it("rpc: happy path, handler error → 500 envelope, unknown method → 404", async () => {
     const ok = await rpc(harness, "echo", { x: 1 });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ ok: true, result: { echoed: { x: 1 } } });
+    expect(await ok.json()).toEqual({
+      ok: true,
+      result: { echoed: { x: 1 } },
+      tags: [],
+      keyTags: {},
+      whileWatched: false,
+    });
 
     const boom = await rpc(harness, "boom", {});
     expect(boom.status).toBe(500);
@@ -659,7 +668,7 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     });
   });
 
-  it("bb.realtime.publish broadcasts a plugin-signal WS frame to connected clients", async () => {
+  it("bb.realtime.publish sends a plugin-signal only to subscribed clients", async () => {
     const systemSocket = createMockHubSocket();
     const threadSocket = createMockHubSocket();
     harness.hub.subscribe(systemSocket, { kind: "system" });
@@ -668,14 +677,22 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
       threadId: "thr_x",
     });
 
+    harness.hub.subscribe(threadSocket, { kind: "plugin", pluginId: "wire" });
     const response = await rpc(harness, "publish", {
       channel: "issues-updated",
       payload: { count: 42 },
     });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, result: "published" });
+    expect(await response.json()).toEqual({
+      ok: true,
+      result: "published",
+      tags: [],
+      keyTags: {},
+      whileWatched: false,
+    });
 
-    for (const socket of [systemSocket, threadSocket]) {
+    expect(systemSocket.messages).toEqual([]);
+    for (const socket of [threadSocket]) {
       expect(socket.messages).toHaveLength(1);
       expect(JSON.parse(socket.messages[0])).toEqual({
         type: "plugin-signal",
@@ -746,6 +763,9 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(await response.json()).toEqual({
       ok: true,
       result: { gen: firstGen + 1 },
+      tags: [],
+      keyTags: {},
+      whileWatched: false,
     });
   });
 });

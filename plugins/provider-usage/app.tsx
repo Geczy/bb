@@ -4,11 +4,12 @@ import {
   useId,
   useMemo,
   useState,
-  useSyncExternalStore,
   type KeyboardEvent,
 } from "react";
 import {
   definePluginApp,
+  experimental_useRpcQuery,
+  useRpc,
   experimental_ProviderIcon as ProviderIcon,
   experimental_useSidebarThreads,
   experimental_usePluginId,
@@ -38,7 +39,6 @@ import {
 import {
   providerUsageTone,
   selectUsageMachine,
-  usageRpcSuccessSchema,
   type UsageMachine,
   type UsageProvider,
   type UsageSnapshot,
@@ -51,6 +51,7 @@ import {
   usageFeedbackMessages,
 } from "./usage-feedback.js";
 
+import type { providerUsageRpcContract, UsageRequest } from "./server.js";
 import { UsageSettings } from "./settings.js";
 
 export interface UsageStoreSnapshot {
@@ -63,14 +64,6 @@ const ALL_PROVIDERS_TAB_ID = "all";
 const CARD_MAX_AGE_MS = 2 * 60_000;
 const FOCUS_MAX_AGE_MS = 5 * 60_000;
 const SAFETY_REFRESH_INTERVAL_MS = 30 * 60_000;
-const storeListeners = new Set<() => void>();
-let storeSnapshot: UsageStoreSnapshot = {
-  data: null,
-  error: null,
-  isRefreshing: false,
-};
-let activeRefreshCount = 0;
-let queuedRefresh: Promise<void> = Promise.resolve();
 let lastMachineId: string | null = null;
 let lastProviderIdByMachine = new Map<string, string>();
 
@@ -83,93 +76,6 @@ function readSelectedMachine(storageKey: string | null): string | null {
     } catch {}
   }
   return lastMachineId;
-}
-
-function updateStore(next: UsageStoreSnapshot): void {
-  storeSnapshot = next;
-  for (const listener of storeListeners) listener();
-}
-
-function subscribeStore(listener: () => void): () => void {
-  storeListeners.add(listener);
-  return () => storeListeners.delete(listener);
-}
-
-function getStoreSnapshot(): UsageStoreSnapshot {
-  return storeSnapshot;
-}
-
-function rpcErrorMessage(body: unknown): string | null {
-  if (typeof body !== "object" || body === null) return null;
-  const error = Reflect.get(body, "error");
-  if (typeof error === "string") return error;
-  if (typeof error !== "object" || error === null) return null;
-  const message = Reflect.get(error, "message");
-  return typeof message === "string" ? message : null;
-}
-
-function refreshUsage({
-  pluginId,
-  force,
-  machineIds,
-  maxAgeMs,
-  providerIds,
-  signal,
-}: {
-  pluginId: string;
-  force: boolean;
-  machineIds: string[] | null;
-  maxAgeMs: number;
-  providerIds: string[];
-  signal?: AbortSignal;
-}): Promise<void> {
-  activeRefreshCount += 1;
-  updateStore({ ...storeSnapshot, error: null, isRefreshing: true });
-  queuedRefresh = queuedRefresh.then(async () => {
-    try {
-      const response = await fetch(
-        `/api/v1/plugins/${encodeURIComponent(pluginId)}/rpc/getUsage`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ force, machineIds, maxAgeMs, providerIds }),
-          signal:
-            signal === undefined
-              ? AbortSignal.timeout(60_000)
-              : AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
-        },
-      );
-      if (!response.ok)
-        throw new Error(`Usage request returned HTTP ${response.status}.`);
-      const body: unknown = await response.json();
-      const parsed = usageRpcSuccessSchema.safeParse(body);
-      if (!parsed.success) {
-        throw new Error(
-          rpcErrorMessage(body) ?? "Provider usage could not be loaded.",
-        );
-      }
-      updateStore({
-        data: parsed.data.result,
-        error: null,
-        isRefreshing: activeRefreshCount > 1,
-      });
-    } catch (cause) {
-      if (signal?.aborted === true) {
-        return;
-      }
-      console.warn("Provider usage refresh failed", cause);
-      updateStore({
-        ...storeSnapshot,
-        error: "Couldn’t refresh usage.",
-      });
-    } finally {
-      activeRefreshCount -= 1;
-      if (activeRefreshCount === 0 && storeSnapshot.isRefreshing) {
-        updateStore({ ...storeSnapshot, isRefreshing: false });
-      }
-    }
-  });
-  return queuedRefresh;
 }
 
 function formatResetCountdown(resetsAt: string | null): string | null {
@@ -515,12 +421,16 @@ export function ProviderUsageStatusContent({
   snapshot,
   threadMachineId,
   refreshEnabled = true,
+  onSelectionChange,
+  onReload,
   machineSelectionStorageKey = null,
 }: ExperimentalSidebarFooterDisclosureProps & {
   pluginId: string;
   snapshot: UsageStoreSnapshot;
   threadMachineId: string | null;
   refreshEnabled?: boolean;
+  onSelectionChange?(request: UsageRequest): void;
+  onReload?(): void;
   machineSelectionStorageKey?: string | null;
 }) {
   const [, refreshCountdowns] = useState(0);
@@ -642,26 +552,15 @@ export function ProviderUsageStatusContent({
   const refreshProviderKey = refreshProviderIds.join("\n");
 
   useEffect(() => {
-    if (!refreshEnabled) return;
-    if (activeMachineId === null || refreshProviderKey === "") return;
-    const refresh = () => {
-      if (document.visibilityState === "hidden") return;
-      void refreshUsage({
-        pluginId,
-        force: false,
-        machineIds: [activeMachineId],
-        providerIds: refreshProviderKey.split("\n"),
-        maxAgeMs: CARD_MAX_AGE_MS,
-      });
-    };
-    refresh();
-    const timer = window.setInterval(refresh, CARD_MAX_AGE_MS);
-    window.addEventListener("focus", refresh);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [activeMachineId, pluginId, refreshProviderKey, refreshEnabled]);
+    if (!refreshEnabled || activeMachineId === null) return;
+    onSelectionChange?.({
+      force: false,
+      machineIds: [activeMachineId],
+      providerIds:
+        refreshProviderKey === "" ? [] : refreshProviderKey.split("\n"),
+      maxAgeMs: CARD_MAX_AGE_MS,
+    });
+  }, [activeMachineId, refreshProviderKey, refreshEnabled, onSelectionChange]);
 
   const selectMachine = useCallback(
     (machineId: string) => {
@@ -689,15 +588,7 @@ export function ProviderUsageStatusContent({
     [activeMachine],
   );
 
-  const reload = () => {
-    void refreshUsage({
-      pluginId,
-      force: true,
-      machineIds: activeMachineId === null ? null : [activeMachineId],
-      maxAgeMs: 0,
-      providerIds: refreshProviderIds,
-    });
-  };
+  const reload = () => onReload?.();
 
   const handleTabKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -916,11 +807,63 @@ export function ProviderUsageStatusContent({
 
 function ProviderUsageStatus(props: ExperimentalSidebarFooterDisclosureProps) {
   const pluginId = experimental_usePluginId();
-  const snapshot = useSyncExternalStore(
-    subscribeStore,
-    getStoreSnapshot,
-    getStoreSnapshot,
+  const rpc = useRpc<typeof providerUsageRpcContract>();
+  const inventory = experimental_useRpcQuery<
+    typeof providerUsageRpcContract,
+    "getUsage"
+  >({
+    method: "getUsage",
+    input: {
+      force: false,
+      machineIds: null,
+      providerIds: [],
+      maxAgeMs: SAFETY_REFRESH_INTERVAL_MS,
+    },
+  });
+  const [request, setRequest] = useState<UsageRequest>({
+    force: false,
+    machineIds: null,
+    providerIds: [],
+    maxAgeMs: CARD_MAX_AGE_MS,
+  });
+  const measurements = experimental_useRpcQuery<
+    typeof providerUsageRpcContract,
+    "getUsage"
+  >({
+    method: "getUsage",
+    input: request,
+    enabled:
+      request.providerIds.length > 0 &&
+      inventory.data?.machines.find((machine) =>
+        request.machineIds?.includes(machine.id),
+      )?.status === "connected",
+  });
+  const [forcing, setForcing] = useState(false);
+  const [forceError, setForceError] = useState<string | null>(null);
+  const snapshot: UsageStoreSnapshot = {
+    data: measurements.data ?? inventory.data ?? null,
+    error:
+      forceError ??
+      measurements.error?.message ??
+      inventory.error?.message ??
+      null,
+    isRefreshing: forcing || measurements.isFetching || inventory.isFetching,
+  };
+  const onSelectionChange = useCallback(
+    (next: UsageRequest) =>
+      setRequest((current) =>
+        JSON.stringify(current) === JSON.stringify(next) ? current : next,
+      ),
+    [],
   );
+  const onReload = useCallback(() => {
+    setForcing(true);
+    setForceError(null);
+    void rpc
+      .call("getUsage", { ...request, force: true, maxAgeMs: 0 })
+      .catch(() => setForceError("Couldn’t refresh usage."))
+      .finally(() => setForcing(false));
+  }, [rpc, request]);
   const { threadId } = useBbContext();
   const sidebarThreads = experimental_useSidebarThreads();
   const threadMachineId = useMemo(
@@ -934,6 +877,8 @@ function ProviderUsageStatus(props: ExperimentalSidebarFooterDisclosureProps) {
       {...props}
       pluginId={pluginId}
       snapshot={snapshot}
+      onSelectionChange={onSelectionChange}
+      onReload={onReload}
       threadMachineId={threadMachineId}
       machineSelectionStorageKey={`bb.${pluginId}.selected-machine.v1`}
     />
@@ -948,75 +893,5 @@ export default definePluginApp((app) => {
     label: "Provider usage",
     icon: "ChartColumn",
     component: ProviderUsageStatus,
-  });
-  app.contentScripts.register({
-    id: "refresh-usage",
-    mount({ pluginId, signal }) {
-      let timer: number | null = null;
-      let hiddenAt = document.visibilityState === "hidden" ? Date.now() : null;
-      let blurredAt: number | null = null;
-      const scheduleSafetyRefresh = () => {
-        if (timer !== null) window.clearTimeout(timer);
-        timer = null;
-        if (signal.aborted || document.visibilityState !== "visible") return;
-        timer = window.setTimeout(runSafetyRefresh, SAFETY_REFRESH_INTERVAL_MS);
-      };
-      const reconcile = (maxAgeMs: number, machineIds: string[] | null) => {
-        void refreshUsage({
-          pluginId,
-          force: false,
-          machineIds,
-          maxAgeMs,
-          providerIds: [],
-          signal,
-        });
-      };
-      const runSafetyRefresh = () => {
-        if (document.visibilityState === "visible") {
-          reconcile(SAFETY_REFRESH_INTERVAL_MS, null);
-        }
-        scheduleSafetyRefresh();
-      };
-      const onActive = () => {
-        const inactiveAt =
-          hiddenAt === null
-            ? blurredAt
-            : blurredAt === null
-              ? hiddenAt
-              : Math.min(hiddenAt, blurredAt);
-        hiddenAt = null;
-        blurredAt = null;
-        if (
-          inactiveAt !== null &&
-          Date.now() - inactiveAt >= FOCUS_MAX_AGE_MS
-        ) {
-          reconcile(FOCUS_MAX_AGE_MS, null);
-        }
-        scheduleSafetyRefresh();
-      };
-      const onVisibilityChange = () => {
-        if (document.visibilityState === "hidden") {
-          hiddenAt ??= Date.now();
-          if (timer !== null) window.clearTimeout(timer);
-          timer = null;
-          return;
-        }
-        onActive();
-      };
-      const onBlur = () => {
-        blurredAt ??= Date.now();
-      };
-      document.addEventListener("visibilitychange", onVisibilityChange);
-      window.addEventListener("blur", onBlur);
-      window.addEventListener("focus", onActive);
-      reconcile(SAFETY_REFRESH_INTERVAL_MS, null);
-      scheduleSafetyRefresh();
-      return () => {
-        if (timer !== null) window.clearTimeout(timer);
-        document.removeEventListener("visibilitychange", onVisibilityChange);
-        window.removeEventListener("blur", onBlur);
-        window.removeEventListener("focus", onActive);
-      };
-    },
   });
 });

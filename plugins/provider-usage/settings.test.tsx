@@ -1,13 +1,14 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { installTestPluginRuntime } from "@get-bb/plugin-sdk/testing/app";
-import type { UsageRequest } from "./server.js";
-import { loadUsage, UsageSettingsContent } from "./settings.js";
-import type {
-  UsageMachine,
-  UsageProvider,
-  UsageSnapshot,
-} from "./usage-schema.js";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  installTestPluginRuntime,
+  renderSlot,
+} from "@get-bb/plugin-sdk/testing/app";
+import type { UsageRequest, providerUsageRpcContract } from "./server.js";
+import { UsageSettings, UsageSettingsContent } from "./settings.js";
+import type { UsageMachine, UsageProvider } from "./usage-schema.js";
 
 installTestPluginRuntime();
 
@@ -45,33 +46,7 @@ const machine = (id: string, providers: UsageProvider[]): UsageMachine => ({
   providers,
 });
 
-function usageState() {
-  const state: { machines: UsageMachine[]; error: boolean } = {
-    machines: [],
-    error: false,
-  };
-  return {
-    state,
-    target: {
-      disposed: () => false,
-      setMachines: (machines: UsageMachine[]) => {
-        state.machines = machines;
-      },
-      setError: (error: boolean) => {
-        state.error = error;
-      },
-    },
-  };
-}
-
-function recordingUsage(respond: (input: UsageRequest) => UsageSnapshot) {
-  const calls: UsageRequest[] = [];
-  const getUsage = async (input: UsageRequest) => {
-    calls.push(input);
-    return respond(input);
-  };
-  return { calls, getUsage };
-}
+afterEach(() => cleanup());
 
 function renderContent(
   props: Partial<Parameters<typeof UsageSettingsContent>[0]>,
@@ -89,92 +64,105 @@ function renderContent(
   );
 }
 
-describe("loadUsage", () => {
-  it("fetches all providers only in the selected source and forwards force", async () => {
-    const machines = [
-      machine("host", [account("local")]),
-      machine("source:pool", [
-        account("first"),
-        account("second"),
-        account("third", "claude-code"),
-      ]),
-    ];
-    const { calls, getUsage } = recordingUsage(() => ({ machines }));
-    const { state, target } = usageState();
-    await loadUsage(getUsage, null, false, target);
-    expect(calls).toEqual([
-      { force: false, machineIds: null, providerIds: [], maxAgeMs: 60_000 },
-      {
-        force: false,
-        machineIds: ["source:pool"],
-        providerIds: ["codex", "claude-code"],
-        maxAgeMs: 60_000,
-      },
-    ]);
-    expect(state.machines).toBe(machines);
-    await loadUsage(getUsage, null, true, target);
-    expect(calls[3]).toMatchObject({
-      force: true,
-      machineIds: ["source:pool"],
-    });
-  });
+describe("UsageSettings live reads", () => {
+  it.each([true, false])(
+    "measures only the selected source and forwards forced refresh (pool=%s)",
+    async (pool) => {
+      const machines = [
+        machine("host", [account("local")]),
+        ...(pool
+          ? [
+              machine("source:pool", [
+                account("first"),
+                account("second", "claude-code"),
+              ]),
+            ]
+          : []),
+      ];
+      const slot = renderSlot<{}, typeof providerUsageRpcContract>(
+        { component: UsageSettings },
+        {},
+        { rpc: { getUsage: () => ({ machines }) } },
+      );
+      const selected = pool ? "source:pool" : "host";
+      await waitFor(() =>
+        expect(
+          slot.rpcCalls.some((call) => {
+            const input = call.input as UsageRequest;
+            return (
+              input.machineIds?.[0] === selected && input.providerIds.length > 0
+            );
+          }),
+        ).toBe(true),
+      );
+      await waitFor(() =>
+        expect(
+          slot
+            .getByRole("button", { name: "Reload usage data" })
+            .hasAttribute("disabled"),
+        ).toBe(false),
+      );
+      fireEvent.click(slot.getByRole("button", { name: "Reload usage data" }));
+      await waitFor(() =>
+        expect(
+          slot.rpcCalls.some((call) => {
+            const input = call.input as UsageRequest;
+            return (
+              input.force &&
+              input.machineIds?.[0] === selected &&
+              input.maxAgeMs === 0
+            );
+          }),
+        ).toBe(true),
+      );
+    },
+  );
 
-  it("uses machine usage when the pool is disabled", async () => {
-    const { calls, getUsage } = recordingUsage(() => ({
-      machines: [machine("host", [account("local")])],
-    }));
-    await loadUsage(getUsage, null, false, usageState().target);
-    expect(calls).toHaveLength(2);
-    expect(calls[1]).toMatchObject({
-      machineIds: ["host"],
-      providerIds: ["codex"],
-    });
-  });
-
-  it("keeps an enabled empty pool selected without fetching machine quotas", async () => {
+  it("keeps an empty enabled pool selected without fetching host measurements", async () => {
     const machines = [
       machine("host", [account("local")]),
       machine("source:pool", []),
     ];
-    const { calls, getUsage } = recordingUsage(() => ({ machines }));
-    const { state, target } = usageState();
-    await loadUsage(getUsage, null, false, target);
-    expect(calls).toHaveLength(1);
-    expect(state.machines).toBe(machines);
-  });
-
-  it("retains measured accounts when reloading fails", async () => {
-    const measured = [machine("source:pool", [account("first")])];
-    let failed = false;
-    const getUsage = async () => {
-      if (failed) throw new Error("private transport detail");
-      return { machines: measured };
-    };
-    const { state, target } = usageState();
-    await loadUsage(getUsage, null, false, target);
-    failed = true;
-    await loadUsage(getUsage, null, true, target);
-    expect(state).toEqual({ machines: measured, error: true });
-    const html = renderContent({ machines: state.machines, error: true });
-    expect(html).toContain("Showing last update");
-    expect(html).toContain("first@example.com");
-    expect(html).toContain("42% used");
-  });
-
-  it("reports a transport failure without keeping the raw error", async () => {
-    const { state, target } = usageState();
-    await loadUsage(
-      async () => {
-        throw new Error("Unexpected token 'b', bb connect...");
-      },
-      null,
-      false,
-      target,
+    const slot = renderSlot<{}, typeof providerUsageRpcContract>(
+      { component: UsageSettings },
+      {},
+      { rpc: { getUsage: () => ({ machines }) } },
     );
-    expect(state).toEqual({ machines: [], error: true });
-    const html = renderContent({ error: true });
-    expect(html).toContain("Couldn’t load usage.");
-    expect(html).not.toContain("Retry usage refresh");
+    await slot.findByText("Account Pooler");
+    expect(
+      slot.rpcCalls.every(
+        (call) => (call.input as UsageRequest).providerIds.length === 0,
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps measured accounts and surfaces a friendly error when forced reload fails", async () => {
+    let failed = false;
+    const slot = renderSlot<{}, typeof providerUsageRpcContract>(
+      { component: UsageSettings },
+      {},
+      {
+        rpc: {
+          getUsage: () => {
+            if (failed) throw new Error("private transport detail");
+            return { machines: [machine("source:pool", [account("first")])] };
+          },
+        },
+      },
+    );
+    await slot.findByText("first@example.com");
+    await waitFor(() =>
+      expect(
+        slot
+          .getByRole("button", { name: "Reload usage data" })
+          .hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    failed = true;
+    fireEvent.click(slot.getByRole("button", { name: "Reload usage data" }));
+    await slot.findByText(/Showing last update/);
+    expect(slot.getByText("first@example.com")).toBeTruthy();
+    expect(slot.queryByText("private transport detail")).toBeNull();
   });
 });
 

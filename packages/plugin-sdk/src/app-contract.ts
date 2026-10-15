@@ -32,6 +32,7 @@ import type {
 } from "@bb/sdk";
 import type { JsonValue } from "./json-value.js";
 import type {
+  StandardSchemaV1InferInput,
   PluginRpcCallArgs,
   PluginRpcContract,
   PluginRpcResult,
@@ -3600,7 +3601,42 @@ export interface BbNavigate {
  * the real implementation and `satisfies` this interface; `bb plugin build`
  * shims the specifier to that object on `globalThis.__bbPluginRuntime`.
  */
+export interface ExperimentalRpcQueryState<T> {
+  data: T | undefined;
+  error: Error | null;
+  isLoading: boolean;
+  isFetching: boolean;
+  refetch(): Promise<void>;
+}
+
+export interface ExperimentalRpcQueryOptions<
+  Contract extends PluginRpcContract,
+  Method extends keyof Contract & string,
+> {
+  pluginId?: string;
+  method: Method;
+  timeoutMs?: number;
+  input: StandardSchemaV1InferInput<Contract[Method]["input"]>;
+  enabled?: boolean;
+}
+
 export interface PluginSdkApp {
+  /** Refresh active RPC reads owned by the calling plugin on this client. */
+  experimental_useRpcRefresh(): { refresh(): void; isRefreshing: boolean };
+  /** Read tagged plugin data through BB's shared query cache and realtime lifecycle. */
+  experimental_useRpcQuery<
+    Contract extends PluginRpcContract = PluginRpcContract,
+    Method extends keyof Contract & string = keyof Contract & string,
+  >(
+    options: ExperimentalRpcQueryOptions<Contract, Method>,
+  ): ExperimentalRpcQueryState<PluginRpcResult<Contract[Method]>>;
+  /** Cache each key independently and batch missing or invalidated keys in the same render. */
+  experimental_useRpcKeyedQuery<T = JsonValue>(options: {
+    pluginId?: string;
+    method: string;
+    keys: readonly string[];
+    enabled?: boolean;
+  }): ExperimentalRpcQueryState<Record<string, T>>;
   experimental_Icon: ComponentType<ExperimentalIconProps>;
   /**
    * Render provider slot override, then its logo, then its glyph, then fallback.

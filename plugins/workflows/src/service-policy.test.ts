@@ -931,10 +931,8 @@ describe("workflow service policy integration", () => {
     const test = setup();
     harnesses.push(test.harness);
     const signalsFor = (threadId: string) =>
-      test.harness.realtimeSignals.filter(
-        (signal) =>
-          signal.channel === "workflow-runs" &&
-          (signal.payload as { threadId?: unknown }).threadId === threadId,
+      test.harness.rpcInvalidations.filter((tags) =>
+        tags?.includes(`runs:${threadId}`),
       );
     const run = await test.start(
       source(`return await agent("never");`, "signal-run"),
@@ -958,10 +956,8 @@ describe("workflow service policy integration", () => {
     const test = setup();
     harnesses.push(test.harness);
     const signalCount = () =>
-      test.harness.realtimeSignals.filter(
-        (signal) =>
-          signal.channel === "workflow-runs" &&
-          (signal.payload as { threadId?: unknown }).threadId === "origin",
+      test.harness.rpcInvalidations.filter((tags) =>
+        tags?.includes(`runs:${"origin"}`),
       ).length;
     const run = await test.start(
       source(`phase("Review"); return await agent("one");`, "progress-run"),

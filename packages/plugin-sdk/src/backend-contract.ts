@@ -871,6 +871,18 @@ export interface PluginHttp {
 }
 
 export interface PluginRpc {
+  /** Invalidate reads matching at least one producer-owned tag. */
+  experimental_invalidate(tags: readonly [string, ...string[]]): void;
+  /** Invalidate every cached read of this plugin. */
+  experimental_invalidateAll(): void;
+  /** Hold producer work while at least one client subscribes to this read. */
+  experimental_whileWatched(
+    method: string,
+    handler: (
+      read: { input: JsonValue } | { key: string },
+      signal: AbortSignal,
+    ) => void | Promise<void>,
+  ): void;
   /**
    * Register a Standard Schema-driven rpc contract and its inferred handlers,
    * served at POST
@@ -893,9 +905,9 @@ export interface PluginRpc {
 
 export interface PluginRealtime {
   /**
-   * Broadcast an ephemeral `plugin-signal` WS message
-   * `{ pluginId, channel, payload }` to every connected client (V1 has no
-   * per-channel subscriptions). `payload` must be JSON-serializable;
+   * Send an ephemeral `plugin-signal` WS event to clients subscribed to this
+   * plugin. Use events for transitions, and RPC invalidation for live data.
+   * `payload` must be JSON-serializable;
    * `undefined` is normalized to `null`. Nothing is persisted.
    */
   publish(channel: string, payload: unknown): void;
@@ -2063,7 +2075,9 @@ export interface PluginStatusApi {
 export type PluginBbSdk = Omit<BbSdk, "threads"> & {
   threads: Omit<
     BbSdk["threads"],
-    "getPluginMetadata" | "updatePluginMetadata" | "experimental_listPluginMetadata"
+    | "getPluginMetadata"
+    | "updatePluginMetadata"
+    | "experimental_listPluginMetadata"
   > & {
     getPluginMetadata(
       args: Omit<ThreadPluginMetadataArgs, "pluginId"> & { pluginId?: string },

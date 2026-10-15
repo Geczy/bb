@@ -1,13 +1,10 @@
+import { usageRpcSuccessSchema } from "./usage-schema.js";
 // @vitest-environment jsdom
-import { cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { UsageProvider } from "./usage-schema.js";
 import type { PluginSidebarThread } from "@get-bb/plugin-sdk/app";
-import {
-  loadPluginApp,
-  mountPluginContentScripts,
-  renderSlot,
-} from "@get-bb/plugin-sdk/testing/app";
+import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 
 afterEach(() => {
   cleanup();
@@ -15,6 +12,15 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+async function getUsage(input: unknown) {
+  const response = await fetch(
+    "/api/v1/plugins/bb--provider-usage/rpc/getUsage",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+  if (!response.ok) throw new Error("Usage unavailable");
+  return usageRpcSuccessSchema.parse(await response.json()).result;
+}
 
 function threadOnMachine(
   hostId: string,
@@ -218,9 +224,6 @@ describe("provider usage footer disclosure", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const app = await loadPluginApp(() => import("./app"));
-    const mounted = await mountPluginContentScripts(app, {
-      pluginId: "bb--provider-usage",
-    });
     const item = app.experimentalSidebarFooterItems[0];
     expect(item).toMatchObject({
       kind: "disclosure",
@@ -230,26 +233,13 @@ describe("provider usage footer disclosure", () => {
     });
     if (item?.kind !== "disclosure") throw new Error("missing disclosure");
 
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/v1/plugins/bb--provider-usage/rpc/getUsage",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({
-            force: false,
-            machineIds: null,
-            maxAgeMs: 30 * 60_000,
-            providerIds: [],
-          }),
-        }),
-      ),
-    );
     const dismiss = vi.fn();
     const slot = renderSlot(
       item,
       { dismiss },
       {
         pluginId: "bb--provider-usage",
+        rpc: { getUsage },
         context: { threadId: "thread-active" },
         sidebarThreads: {
           threads: [threadOnMachine("host-m5", "M5")],
@@ -257,7 +247,9 @@ describe("provider usage footer disclosure", () => {
       },
     );
     expect(
-      slot.getByRole("button", { name: "Usage machine: Account Pooler" }),
+      await slot.findByRole("button", {
+        name: "Usage machine: Account Pooler",
+      }),
     ).toBeTruthy();
     expect(
       slot
@@ -272,17 +264,15 @@ describe("provider usage footer disclosure", () => {
       "Claude Code claude-team@example.com",
     ]);
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/v1/plugins/bb--provider-usage/rpc/getUsage",
-        expect.objectContaining({
-          body: JSON.stringify({
-            force: false,
-            machineIds: ["source:account-pool"],
-            maxAgeMs: 2 * 60_000,
-            providerIds: ["codex", "claude-code"],
-          }),
-        }),
-      ),
+      expect(slot.inspection.rpcCalls).toContainEqual({
+        method: "getUsage",
+        input: {
+          force: false,
+          machineIds: ["source:account-pool"],
+          maxAgeMs: 2 * 60_000,
+          providerIds: ["codex", "claude-code"],
+        },
+      }),
     );
     fireEvent.pointerDown(
       slot.getByRole("button", { name: "Usage machine: Account Pooler" }),
@@ -354,37 +344,18 @@ describe("provider usage footer disclosure", () => {
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledTimes(callsBeforeManualRefresh + 1),
     );
-    expect(fetchMock.mock.calls.at(-1)?.[1]).toEqual(
-      expect.objectContaining({
-        body: JSON.stringify({
-          force: true,
-          machineIds: ["host-intel"],
-          maxAgeMs: 0,
-          providerIds: [],
-        }),
-      }),
-    );
-
-    const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
-    window.dispatchEvent(new Event("blur"));
-    now.mockReturnValue(5 * 60_000 + 1_001);
-    const callsBeforeFocus = fetchMock.mock.calls.length;
-    window.dispatchEvent(new Event("focus"));
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
+      force: true,
+      machineIds: ["host-intel"],
+      maxAgeMs: 0,
+      providerIds: [],
+    });
+    const callsBeforeResume = fetchMock.mock.calls.length;
+    await slot.setRealtimeConnectionState("reconnecting");
+    await slot.setRealtimeConnectionState("connected");
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledTimes(callsBeforeFocus + 1),
+      expect(fetchMock).toHaveBeenCalledTimes(callsBeforeResume + 1),
     );
-    expect(fetchMock.mock.calls.at(-1)?.[1]).toEqual(
-      expect.objectContaining({
-        body: JSON.stringify({
-          force: false,
-          machineIds: null,
-          maxAgeMs: 5 * 60_000,
-          providerIds: [],
-        }),
-      }),
-    );
-
-    now.mockRestore();
     fireEvent.pointerDown(
       slot.getByRole("button", { name: "Usage machine: Intel" }),
       { button: 0 },
@@ -460,8 +431,7 @@ describe("provider usage footer disclosure", () => {
         ).toBeNull(),
       );
     }
-    expect(diagnostics).toHaveBeenCalledTimes(3);
-    await mounted.lifecycle.dispose();
+    diagnostics.mockRestore();
   }, 15_000);
 });
 
@@ -526,15 +496,12 @@ it.each([
     ),
   );
   const app = await loadPluginApp(() => import("./app"));
-  const mounted = await mountPluginContentScripts(app, {
-    pluginId: "bb--provider-usage",
-  });
   const item = app.experimentalSidebarFooterItems[0];
   if (item?.kind !== "disclosure") throw new Error("missing disclosure");
   const slot = renderSlot(
     item,
     { dismiss: vi.fn() },
-    { pluginId: "bb--provider-usage" },
+    { pluginId: "bb--provider-usage", rpc: { getUsage } },
   );
   await waitFor(() =>
     expect(slot.getByText(expected, { exact: false })).toBeTruthy(),
@@ -546,7 +513,6 @@ it.each([
       slot.queryByRole("button", { name: "Retry usage refresh" }),
     ).toBeNull();
   }
-  await mounted.lifecycle.dispose();
 });
 
 it("keeps a measured refresh when an older snapshot response arrives late", async () => {
@@ -606,26 +572,17 @@ it("keeps a measured refresh when an older snapshot response arrives late", asyn
   );
   vi.stubGlobal("fetch", fetchMock);
   const app = await loadPluginApp(() => import("./app"));
-  const mounted = await mountPluginContentScripts(app, {
-    pluginId: "bb--provider-usage",
-  });
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-  const now = vi.spyOn(Date, "now").mockReturnValue(1_000);
-  window.dispatchEvent(new Event("blur"));
-  now.mockReturnValue(5 * 60_000 + 1_001);
-  window.dispatchEvent(new Event("focus"));
-  await waitFor(() => expect(releaseInventory).not.toBeNull());
-  now.mockRestore();
-
   const item = app.experimentalSidebarFooterItems[0];
   if (item?.kind !== "disclosure") throw new Error("missing disclosure");
   const slot = renderSlot(
     item,
     { dismiss: vi.fn() },
-    { pluginId: "bb--provider-usage" },
+    { pluginId: "bb--provider-usage", rpc: { getUsage } },
   );
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  releaseInventory!();
+  await slot.findByText("37%");
+  await slot.experimental_invalidateRpc();
+  await waitFor(() => expect(releaseInventory).not.toBeNull());
+  await act(async () => releaseInventory!());
   await waitFor(() => expect(slot.getByText("37%")).toBeTruthy());
   await waitFor(() =>
     expect(
@@ -636,5 +593,4 @@ it("keeps a measured refresh when an older snapshot response arrives late", asyn
   );
   expect(slot.queryByText("Usage not reported.")).toBeNull();
   expect(slot.getByText("37%")).toBeTruthy();
-  await mounted.lifecycle.dispose();
 });

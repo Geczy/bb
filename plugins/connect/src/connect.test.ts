@@ -48,6 +48,7 @@ function createConnectFakeHost(options?: {
     sdk: {
       plugins: {
         callRpc: account.callRpc as never,
+        experimental_watchRpc: account.watchRpc as never,
       },
       system: {
         config: async () =>

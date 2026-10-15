@@ -1,3 +1,4 @@
+import { invalidatePluginRpcQueries } from "./cache-owners/plugin-rpc-cache-owner";
 import type { QueryClient } from "@tanstack/react-query";
 import { assertNever } from "@bb/core-ui";
 import {
@@ -459,7 +460,15 @@ export function createRealtimeCacheEffects({
     }
   };
 
+  const deferredPluginChanges = new Map<string, Set<string> | null>();
   const flushDeferredChanges = (): void => {
+    for (const [pluginId, tags] of deferredPluginChanges)
+      invalidatePluginRpcQueries(
+        queryClient,
+        pluginId,
+        tags === null ? null : [...tags],
+      );
+    deferredPluginChanges.clear();
     if (hasDeferredNonThreadChanges(deferredNonThreadChanges)) {
       const { environmentKindsById, hostKinds, projectKindsById, systemKinds } =
         deferredNonThreadChanges;
@@ -571,6 +580,20 @@ export function createRealtimeCacheEffects({
           }
           applyProjectChanges(message.id, message.changes);
           break;
+        case "plugin": {
+          if (documentVisible)
+            invalidatePluginRpcQueries(queryClient, message.id, message.tags);
+          else {
+            const previous = deferredPluginChanges.get(message.id);
+            deferredPluginChanges.set(
+              message.id,
+              previous === null || message.tags === null
+                ? null
+                : new Set([...(previous ?? []), ...message.tags]),
+            );
+          }
+          break;
+        }
         case "system":
           if (!documentVisible) {
             addAll(deferredNonThreadChanges.systemKinds, message.changes);

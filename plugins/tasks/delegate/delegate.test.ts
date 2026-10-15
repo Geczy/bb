@@ -115,13 +115,10 @@ describe("task delegation", () => {
         }),
       ]),
     );
-    expect(harness.realtimeSignals).toEqual([
-      { channel: "threads:changed", payload: { taskId: task.id } },
-      {
-        channel: "tasks:changed",
-        payload: { taskId: task.id, projectId: project.id },
-      },
-      { channel: "comments:changed", payload: { taskId: task.id } },
+    expect(harness.rpcInvalidations).toEqual([
+      expect.arrayContaining([`threads:${task.id}`]),
+      expect.arrayContaining([`task:${task.id}`]),
+      expect.arrayContaining([`comments:${task.id}`]),
     ]);
 
     await harness.dispose();
@@ -408,12 +405,9 @@ describe("task delegation", () => {
         liveStatus: "working",
       }),
     ]);
-    expect(harness.realtimeSignals).toEqual([
-      { channel: "threads:changed", payload: { taskId: task.id } },
-      {
-        channel: "tasks:changed",
-        payload: { taskId: task.id, projectId: project.id },
-      },
+    expect(harness.rpcInvalidations).toEqual([
+      expect.arrayContaining([`threads:${task.id}`]),
+      expect.arrayContaining([`task:${task.id}`]),
     ]);
 
     await harness.dispose();
@@ -463,7 +457,7 @@ describe("task thread detach", () => {
       taskId: otherTask.id,
       threadId: "thr_dead",
     });
-    harness.realtimeSignals.length = 0;
+    harness.rpcInvalidations.length = 0;
 
     await expect(
       harness.callRpc("taskThreadsDetach", {
@@ -480,12 +474,9 @@ describe("task thread detach", () => {
         .listTaskThreads(otherTask.id)
         .map((thread) => thread.threadId),
     ).toEqual(["thr_dead"]);
-    expect(harness.realtimeSignals).toEqual([
-      { channel: "threads:changed", payload: { taskId: task.id } },
-      {
-        channel: "tasks:changed",
-        payload: { taskId: task.id, projectId: project.id },
-      },
+    expect(harness.rpcInvalidations).toEqual([
+      expect.arrayContaining([`threads:${task.id}`]),
+      expect.arrayContaining([`task:${task.id}`]),
     ]);
 
     await expect(

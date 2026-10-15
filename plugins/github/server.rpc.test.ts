@@ -1,10 +1,4 @@
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -427,10 +421,10 @@ describe("github plugin RPC behavior", () => {
       context: expect.stringContaining("Live issue body."),
     });
     expect(
-      harness.realtimeSignals.filter(
-        (signal) => signal.channel === "data-changed",
+      harness.rpcInvalidations.filter(
+        (tags) => tags === null || tags.includes("status"),
       ),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
   });
 
   it("normalizes draft state, checks, review threads, and paginated files", async () => {

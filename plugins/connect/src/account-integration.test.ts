@@ -108,6 +108,16 @@ async function loadBoth(
       plugins: { callRpc: callAccountRpc as never },
     },
   });
+  const stopInvalidations = accountHost.harness.experimental_onRpcInvalidation(
+    (tags) =>
+      connectHost.harness.sdk.emitRealtime("plugin:changed", {
+        type: "changed",
+        entity: "plugin",
+        id: "bb-account",
+        tags: tags === null ? null : [...tags],
+      }),
+  );
+  connectHost.bb.onDispose(stopInvalidations);
   await seedConnect?.(connectHost);
   await createConnectPlugin({ accountRetryMinMs: 20 })(
     connectHost.bb as Parameters<ReturnType<typeof createConnectPlugin>>[0],
@@ -186,6 +196,12 @@ describe("connect on top of bb account", () => {
     const socket = stub.tunnelDials[0]!.socket!;
 
     serverMoving = true;
+    connectHost.harness.sdk.emitRealtime("plugin:changed", {
+      type: "changed",
+      entity: "plugin",
+      id: "bb-account",
+      tags: null,
+    });
     await vi.waitFor(
       () => expect(blockedAccountReads).toBeGreaterThanOrEqual(2),
       { timeout: 30_000 },
@@ -199,8 +215,9 @@ describe("connect on top of bb account", () => {
 
     const readsBeforeResume = successfulAccountReads;
     serverMoving = false;
-    await vi.waitFor(() =>
-      expect(successfulAccountReads).toBeGreaterThan(readsBeforeResume),
+    await vi.waitFor(
+      () => expect(successfulAccountReads).toBeGreaterThan(readsBeforeResume),
+      { timeout: 10_000 },
     );
     expect(await connectStatus()).toMatchObject({
       paired: true,
@@ -361,6 +378,12 @@ describe("connect on top of bb account", () => {
     await waitForConnected(1);
 
     accountRunning = false;
+    connectHost.harness.sdk.emitRealtime("plugin:changed", {
+      type: "changed",
+      entity: "plugin",
+      id: "bb-account",
+      tags: null,
+    });
     accountHost = await accountHost.harness.reload(
       createBbAccountPlugin(ACCOUNT_OPTIONS),
     );

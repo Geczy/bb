@@ -3,7 +3,7 @@ import {
   TASK_STATUSES,
   type Label,
   type Project,
-  type Task,
+  type TaskSummary,
   type TaskPriority,
   type TaskStatus,
 } from "../../shared/contract.js";
@@ -38,7 +38,7 @@ import {
   STATUS_LABELS,
 } from "./lib.js";
 
-export type EditFn = (task: Task, patch: TaskEdit) => void;
+export type EditFn = (task: TaskSummary, patch: TaskEdit) => void;
 
 export const PRIORITY_MENU_ORDER: readonly TaskPriority[] = [
   "none",
@@ -128,7 +128,7 @@ export function StatusEditor({
   onOpenChange,
   className,
 }: {
-  task: Task;
+  task: TaskSummary;
   onEdit: EditFn;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -188,7 +188,7 @@ export function PriorityEditor({
   onOpenChange,
   className,
 }: {
-  task: Task;
+  task: TaskSummary;
   onEdit: EditFn;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -249,11 +249,11 @@ export function TaskContextMenu({
   onMoveToProject,
   children,
 }: {
-  task: Task;
+  task: TaskSummary;
   onEdit: EditFn;
   projectLabels: readonly Label[];
   projects: readonly Project[];
-  onMoveToProject: (task: Task, projectId: string) => void;
+  onMoveToProject: (task: TaskSummary, projectId: string) => void;
   children: ReactNode;
 }) {
   const toggleLabel = (labelId: string) => {

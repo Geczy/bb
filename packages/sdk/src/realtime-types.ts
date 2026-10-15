@@ -7,6 +7,7 @@ export type BbRealtimeEventName =
   | "project:changed"
   | "environment:changed"
   | "host:changed"
+  | "plugin:changed"
   | "system:changed"
   | "system:config-changed"
   | "realtime:connection";
@@ -39,6 +40,7 @@ export interface BbRealtimeEventMap {
   "project:changed": ProjectRealtimeEvent;
   "environment:changed": EnvironmentRealtimeEvent;
   "host:changed": HostRealtimeEvent;
+  "plugin:changed": Extract<ChangedMessage, { entity: "plugin" }>;
   "system:changed": SystemRealtimeEvent;
   "system:config-changed": SystemRealtimeEvent;
   "realtime:connection": BbRealtimeConnectionEvent;
@@ -87,7 +89,14 @@ export interface RealtimeConnectionSubscribeArgs {
   event: "realtime:connection";
 }
 
+export interface PluginRealtimeSubscribeArgs {
+  callback: BbRealtimeCallback<"plugin:changed">;
+  event: "plugin:changed";
+  pluginId: string;
+}
+
 export type BbRealtimeSubscribeArgsUnion =
+  | PluginRealtimeSubscribeArgs
   | ThreadRealtimeSubscribeArgs
   | ProjectRealtimeSubscribeArgs
   | EnvironmentRealtimeSubscribeArgs

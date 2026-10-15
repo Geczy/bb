@@ -443,13 +443,14 @@ rejected rather than coerced or silently dropped.
 
 ### bb.realtime
 
-`bb.realtime.publish(channel, payload)` broadcasts an ephemeral
-`{ type: "plugin-signal", pluginId, channel, payload }` message to every
-connected client. The channel must be non-empty. V1 has no server-side channel
-subscriptions. The frontend hook `useRealtime(channel, handler)` filters the
-messages. The payload must be JSON-serializable; `undefined` becomes `null`.
-Nothing is persisted. Publish state-change signals and let the frontend
-refetch through RPC.
+`bb.realtime.publish(channel, payload)` sends an ephemeral
+`{ type: "plugin-signal", pluginId, channel, payload }` event only to clients
+subscribed to this plugin. `useRealtime(channel, handler)` holds that
+subscription and filters the channel. Use it for transitions such as notification
+delivery. Payloads are JSON values; `undefined` becomes `null`. Events have no
+replay. Use live RPC reads for data.
+
+Tagged live RPC reads are described in [backend-live-data.md](backend-live-data.md).
 
 ### bb.background — services and schedules
 

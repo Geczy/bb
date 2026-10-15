@@ -97,19 +97,20 @@ function stubPluginRpcFetch(): void {
       let result: unknown = null;
       if (method === "listPreferences") {
         result = { preferences: {} };
-      } else if (method === "threadNotifications.list") {
-        const { threadIds } = z
-          .object({ threadIds: z.array(z.string()) })
+      } else if (method === "threadNotifications.keyed") {
+        const { keys: threadIds } = z
+          .object({ keys: z.array(z.string()) })
           .parse(JSON.parse(String(init?.body)));
         notificationListRequests.push(threadIds);
-        result = {
-          threads: Object.fromEntries(
-            threadIds.flatMap((id) => {
-              const level = CONFIGURED_NOTIFICATION_LEVELS.get(id);
-              return level === undefined ? [] : [[id, level]];
-            }),
-          ),
-        };
+        result = Object.fromEntries(
+          threadIds.map((id) => [
+            id,
+            CONFIGURED_NOTIFICATION_LEVELS.get(id) ?? {
+              own: "inherit",
+              ancestorCap: null,
+            },
+          ]),
+        );
       } else if (method === "setPreference" || method === "resetPreference") {
         result = JSON.parse(String(init?.body ?? "{}"));
       }

@@ -15,7 +15,7 @@ import {
   useStagedAttachmentRetry,
   type StagedAttachment,
 } from "../../components/staged-attachments.js";
-import { useProjects, useTasksQuery, useTasksRpc } from "../../shell/data.js";
+import { useProjects, useTaskRead, useTasksRpc } from "../../shell/data.js";
 import { useTasksNavigation } from "../../shell/routes.js";
 import { TasksEditor } from "../../editor/tasks-editor.js";
 import {
@@ -221,16 +221,11 @@ export function NewTaskDialog({
     });
   }, [open, draft.projectId, effectiveProjectId]);
 
-  const labelsQuery = useTasksQuery(
-    async (rpc) => ({
-      projectId: effectiveProjectId,
-      labels: effectiveProjectId
-        ? (await rpc.call("listLabels", { projectId: effectiveProjectId }))
-            .labels
-        : [],
-    }),
-    ["projects:changed"],
-    [effectiveProjectId],
+  const labelsQuery = useTaskRead(
+    "listLabels",
+    { projectId: effectiveProjectId ?? "" },
+    (value) => ({ projectId: effectiveProjectId, labels: value.labels }),
+    effectiveProjectId !== null,
   );
   const labels = {
     ...labelsQuery,
@@ -271,7 +266,6 @@ export function NewTaskDialog({
         name,
         color: DEFAULT_COLOR,
       });
-      labels.refresh();
       updateDraft((current) => ({
         labelIds: [...current.labelIds, label.id],
       }));

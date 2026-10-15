@@ -5,7 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -41,16 +40,12 @@ import {
   definePluginApp,
   useBbNavigate,
   useComposer,
-  useRealtime,
-  useRealtimeConnectionState,
+  experimental_useRpcQuery,
   useRpc,
   type PluginMessageDirectiveProps,
   type PluginThreadPanelProps,
 } from "@get-bb/plugin-sdk/app";
-import {
-  WORKFLOW_RUNS_REALTIME_CHANNEL,
-  workflowRunsSignalThreadId,
-} from "./realtime-channel.js";
+
 import type { workflowUiRpcContract } from "./ui-contract.js";
 import type { WorkflowCallView, WorkflowRunView } from "./ui-contract.js";
 
@@ -74,9 +69,6 @@ interface SharedWorkflowView {
   progress: WorkflowProgressSnapshot;
 }
 
-const ACTIVE_FALLBACK_POLL_INTERVAL_MS = 15_000;
-const FAILED_POLL_RETRY_BASE_MS = 2_000;
-const FAILED_POLL_RETRY_MAX_MS = 60_000;
 const WORKFLOW_PANEL_ACTION_ID = "workflow-run";
 const WORKFLOW_CARD_ROW_HEIGHT = 32;
 const WORKFLOW_HEADER_BUTTON_CLASS =
@@ -358,216 +350,33 @@ function useWorkflowRun(
   threadId: string,
   runId: string | null,
 ): { state: RunLoadState; refresh: () => Promise<void> } {
-  const rpc = useRpc<typeof workflowUiRpcContract>();
-  const [state, setState] = useState<RunLoadState>({ status: "loading" });
-  const requestSequence = useRef(0);
-
-  const load = useCallback(async () => {
-    const sequence = ++requestSequence.current;
-    try {
-      const result = await rpc.call("workflowRunView", { threadId, runId });
-      if (sequence === requestSequence.current) {
-        setState({ status: "ready", run: result.run, refreshError: null });
-      }
-      return true;
-    } catch (error) {
-      if (sequence === requestSequence.current) {
-        const message = error instanceof Error ? error.message : String(error);
-        setState((current) =>
-          current.status === "ready" && current.run !== null
-            ? { ...current, refreshError: message }
-            : { status: "error", message },
-        );
-      }
-      return false;
-    }
-  }, [rpc, runId, threadId]);
-  const refresh = useCallback(async () => {
-    await load();
-  }, [load]);
-
-  useEffect(() => {
-    setState({ status: "loading" });
-    void load();
-    return () => {
-      requestSequence.current += 1;
-    };
-  }, [load]);
-
-  const refreshOnSignal = useCoalescedLoad(load);
-  useRealtime(WORKFLOW_RUNS_REALTIME_CHANNEL, (payload) => {
-    if (
-      workflowRunsSignalThreadId(payload) === threadId &&
-      readDocumentVisible()
-    ) {
-      refreshOnSignal();
-    }
-  });
-
-  const failing =
-    state.status === "error" ||
-    (state.status === "ready" && state.refreshError !== null);
-  const shouldPoll =
-    failing ||
-    (state.status === "ready" && state.run !== null && isRunActive(state.run));
-  useVisibleActivePolling(load, shouldPoll, failing);
-
-  return { state, refresh };
-}
-
-function useCoalescedLoad(load: () => Promise<boolean>): () => void {
-  const latestLoad = useRef(load);
-  useEffect(() => {
-    latestLoad.current = load;
-  }, [load]);
-  const pending = useRef({ running: false, queued: false });
-  return useCallback(() => {
-    const state = pending.current;
-    if (state.running) {
-      state.queued = true;
-      return;
-    }
-    state.running = true;
-    const run = () => {
-      void latestLoad.current().finally(() => {
-        if (state.queued) {
-          state.queued = false;
-          run();
-        } else {
-          state.running = false;
+  const query = experimental_useRpcQuery<
+    typeof workflowUiRpcContract,
+    "workflowRunView"
+  >({ method: "workflowRunView", input: { threadId, runId } });
+  const state: RunLoadState =
+    query.data !== undefined
+      ? {
+          status: "ready",
+          run: query.data.run,
+          refreshError: query.error?.message ?? null,
         }
-      });
-    };
-    run();
-  }, []);
-}
-
-function pollDelayMs(consecutiveFailures: number): number {
-  if (consecutiveFailures === 0) return ACTIVE_FALLBACK_POLL_INTERVAL_MS;
-  return Math.min(
-    FAILED_POLL_RETRY_BASE_MS * 2 ** (consecutiveFailures - 1),
-    FAILED_POLL_RETRY_MAX_MS,
-  );
-}
-
-function subscribeDocumentVisibility(onChange: () => void): () => void {
-  document.addEventListener("visibilitychange", onChange);
-  return () => document.removeEventListener("visibilitychange", onChange);
-}
-
-function readDocumentVisible(): boolean {
-  return document.visibilityState !== "hidden";
-}
-
-function useDocumentVisible(): boolean {
-  return useSyncExternalStore(
-    subscribeDocumentVisibility,
-    readDocumentVisible,
-    () => true,
-  );
-}
-
-function useVisibleActivePolling(
-  load: () => Promise<boolean>,
-  active: boolean,
-  failing: boolean,
-): void {
-  const visible = useDocumentVisible();
-  const connection = useRealtimeConnectionState();
-  const wasHidden = useRef(false);
-  const wasDisconnected = useRef(false);
-
-  useEffect(() => {
-    if (!visible) {
-      wasHidden.current = true;
-      return;
-    }
-    if (!wasHidden.current) return;
-    wasHidden.current = false;
-    void load();
-  }, [load, visible]);
-
-  useEffect(() => {
-    if (connection !== "connected") {
-      wasDisconnected.current = true;
-      return;
-    }
-    if (!wasDisconnected.current) return;
-    wasDisconnected.current = false;
-    void load();
-  }, [connection, load]);
-
-  const failingAtStart = useRef(failing);
-  useEffect(() => {
-    failingAtStart.current = failing;
-  }, [failing]);
-  const enabled = active && visible;
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    let timeout: number | null = null;
-    let consecutiveFailures = failingAtStart.current ? 1 : 0;
-    const schedule = () => {
-      timeout = window.setTimeout(() => {
-        void load().then((succeeded) => {
-          consecutiveFailures = succeeded ? 0 : consecutiveFailures + 1;
-          if (!cancelled) schedule();
-        });
-      }, pollDelayMs(consecutiveFailures));
-    };
-    schedule();
-    return () => {
-      cancelled = true;
-      if (timeout !== null) window.clearTimeout(timeout);
-    };
-  }, [enabled, load]);
+      : query.error !== null
+        ? { status: "error", message: query.error.message }
+        : { status: "loading" };
+  return { state, refresh: query.refetch };
 }
 
 function useActiveWorkflowRuns(threadId: string): ActiveRunsLoadState {
-  const rpc = useRpc<typeof workflowUiRpcContract>();
-  const [state, setState] = useState<ActiveRunsLoadState>({
-    status: "loading",
-  });
-  const requestSequence = useRef(0);
-
-  const load = useCallback(async () => {
-    const sequence = ++requestSequence.current;
-    try {
-      const result = await rpc.call("workflowActiveRuns", { threadId });
-      if (sequence === requestSequence.current) {
-        setState({ status: "ready", runs: result.runs });
-      }
-      return true;
-    } catch {
-      if (sequence === requestSequence.current) setState({ status: "error" });
-      return false;
-    }
-  }, [rpc, threadId]);
-
-  useEffect(() => {
-    setState({ status: "loading" });
-    void load();
-    return () => {
-      requestSequence.current += 1;
-    };
-  }, [load]);
-
-  const refreshOnSignal = useCoalescedLoad(load);
-  useRealtime(WORKFLOW_RUNS_REALTIME_CHANNEL, (payload) => {
-    if (
-      workflowRunsSignalThreadId(payload) === threadId &&
-      readDocumentVisible()
-    ) {
-      refreshOnSignal();
-    }
-  });
-
-  const failing = state.status === "error";
-  const shouldPoll =
-    failing || (state.status === "ready" && state.runs.some(isRunActive));
-  useVisibleActivePolling(load, shouldPoll, failing);
-
-  return state;
+  const query = experimental_useRpcQuery<
+    typeof workflowUiRpcContract,
+    "workflowActiveRuns"
+  >({ method: "workflowActiveRuns", input: { threadId } });
+  return query.data !== undefined
+    ? { status: "ready", runs: query.data.runs }
+    : query.error !== null
+      ? { status: "error" }
+      : { status: "loading" };
 }
 
 export function EmptyOrError({ children }: { children: ReactNode }) {
@@ -1026,7 +835,7 @@ function WorkflowRunPanelLoaded({
 }) {
   const navigate = useBbNavigate();
   const rpc = useRpc<typeof workflowUiRpcContract>();
-  const { state, refresh } = useWorkflowRun(threadId, runId);
+  const { state } = useWorkflowRun(threadId, runId);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
   const run = state.status === "ready" ? state.run : null;
@@ -1071,7 +880,6 @@ function WorkflowRunPanelLoaded({
     setStopError(null);
     try {
       await rpc.call("workflowStopRun", { threadId, runId: run.id });
-      await refresh();
     } catch (error) {
       setStopError(error instanceof Error ? error.message : String(error));
     } finally {

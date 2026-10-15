@@ -460,3 +460,46 @@ describe("buildCatalog", () => {
     expect(out.revision).toBe(0);
   });
 });
+
+it("invalidates when an absent theme root is created and recreated", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "theme-late-root-"));
+  const root = join(dir, "missing", "theme");
+  const { bb, harness } = themeHost({
+    theme: {
+      catalog: async () => ({
+        active: { themeId: "default" },
+        custom: [],
+        dir: root,
+      }),
+    },
+  });
+  const controller = new AbortController();
+  let running: Promise<void> | undefined;
+  const invalidated = vi.fn();
+  const stop = harness.experimental_onRpcInvalidation(invalidated);
+  try {
+    await plugin(bb);
+    const service = harness.registrations.services[0]!;
+    running = Promise.resolve(service.start(controller.signal));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      invalidated.mockClear();
+      await mkdir(join(root, "late"), { recursive: true });
+      await writeFile(
+        join(root, "late", "theme.css"),
+        ":root { --canvas: red; }",
+      );
+      await vi.waitFor(() => expect(invalidated).toHaveBeenCalled(), {
+        timeout: 3_000,
+      });
+      await rm(root, { recursive: true });
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  } finally {
+    controller.abort();
+    await running;
+    stop();
+    await harness.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
+});

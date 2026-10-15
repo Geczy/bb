@@ -189,6 +189,8 @@ describe("plugin bb.sdk bind gate", () => {
       ensureSharedPortTunnel,
       hub: {
         getDaemonSessionIdForHost: () => null,
+        notifyPlugin: () => {},
+        onPluginWatchChange: () => () => {},
         notifyPluginSignal: () => 0,
         notifySystem: () => {},
       },
@@ -1009,6 +1011,144 @@ describe("plugin bb.sdk against a running server", () => {
     }
   });
 
+  it("tags loopback RPC reads and cancels watched producer work", async () => {
+    const server = await startTestServer();
+    const workDir = await mkdtemp(join(tmpdir(), "bb-plugin-live-rpc-"));
+    const controller = new AbortController();
+    try {
+      server.pluginService.bindSdk({ baseUrl: server.baseUrl });
+      for (const name of ["live-producer", "live-consumer"]) {
+        const rootDir = await writePlugin(workDir, {
+          name: `bb-plugin-${name}`,
+          serverSource: `export default function plugin() {}`,
+        });
+        expect((await server.pluginService.installPath(rootDir)).status).toBe(
+          "running",
+        );
+      }
+      const api = requireApi(server.pluginService, "live-producer");
+      let value = 1;
+      let provisionCount = 0;
+      let providedValue: unknown = 1;
+      const watchSignals: AbortSignal[] = [];
+      api.rpc.register(
+        defineRpcContract({
+          read: { input: z.object({ id: z.string() }), output: z.number() },
+          keyed: {
+            input: z.object({ keys: z.array(z.string()) }),
+            output: z.record(z.string(), z.number()),
+          },
+        }),
+        {
+          read(_input, context) {
+            context.experimental_tag("item:a");
+            context.experimental_provideKeyed("keyed", () => {
+              provisionCount++;
+              return { a: { value: providedValue, tags: ["item:a"] } };
+            });
+            return value;
+          },
+          keyed({ keys }, context) {
+            for (const key of keys)
+              context.experimental_tagKey(key, `item:${key}`);
+            return Object.fromEntries(keys.map((key) => [key, value]));
+          },
+        },
+      );
+      api.rpc.experimental_whileWatched("read", (_read, signal) => {
+        watchSignals.push(signal);
+      });
+      const watchedResponse = await fetch(
+        `${server.baseUrl}/api/v1/plugins/live-producer/rpc/read`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: "a" }),
+        },
+      );
+      expect(await watchedResponse.json()).toMatchObject({
+        whileWatched: true,
+      });
+      expect(provisionCount).toBe(0);
+      const readWithHint = (warm: unknown) =>
+        fetch(`${server.baseUrl}/api/v1/plugins/live-producer/rpc/read`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-bb-rpc-warm-keyed": JSON.stringify(warm),
+          },
+          body: JSON.stringify({ id: "a" }),
+        });
+      const cold = await readWithHint([]);
+      expect(await cold.json()).toMatchObject({
+        providedKeyed: {
+          keyed: {
+            result: { a: 1 },
+            keyTags: { a: ["item:a"] },
+            whileWatched: false,
+          },
+        },
+      });
+      expect(provisionCount).toBe(1);
+      const warm = await readWithHint(["keyed"]);
+      expect(await warm.json()).not.toHaveProperty("providedKeyed");
+      expect(provisionCount).toBe(1);
+      expect((await readWithHint("keyed")).status).toBe(400);
+      providedValue = "invalid";
+      const invalid = await readWithHint([]);
+      expect(invalid.status).toBe(500);
+      expect(await invalid.json()).toMatchObject({
+        error: { code: "invalid_output" },
+      });
+      for (const tags of [undefined, [], [""]])
+        expect(() =>
+          Reflect.apply(api.rpc.experimental_invalidate, api.rpc, [tags]),
+        ).toThrow();
+      const seen: number[] = [];
+      requireApi(
+        server.pluginService,
+        "live-consumer",
+      ).sdk.plugins.experimental_watchRpc({
+        pluginId: "live-producer",
+        method: "read",
+        input: { id: "a" },
+        outputSchema: z.number(),
+        signal: controller.signal,
+        onChange: (next) => seen.push(next),
+      });
+      await vi.waitFor(() => expect(seen.at(-1)).toBe(1));
+      await vi.waitFor(() => expect(watchSignals).toHaveLength(1));
+      value = 2;
+      api.rpc.experimental_invalidate(["item:a"]);
+      await vi.waitFor(() => expect(seen.at(-1)).toBe(2));
+      value = 3;
+      api.rpc.experimental_invalidateAll();
+      await vi.waitFor(() => expect(seen.at(-1)).toBe(3));
+      const response = await fetch(
+        `${server.baseUrl}/api/v1/plugins/live-producer/rpc/keyed`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ keys: ["a", "b"] }),
+        },
+      );
+      expect(await response.json()).toMatchObject({
+        ok: true,
+        result: { a: 3, b: 3 },
+        tags: [],
+        keyTags: { a: ["item:a"], b: ["item:b"] },
+        whileWatched: false,
+      });
+      controller.abort();
+      await vi.waitFor(() => expect(watchSignals[0]?.aborted).toBe(true));
+    } finally {
+      controller.abort();
+      await server.pluginService.stop();
+      await server.close();
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
   it("tells rpc handlers which plugin called them and treats every other caller as a client", async () => {
     const server = await startTestServer();
     const workDir = await mkdtemp(join(tmpdir(), "bb-plugin-rpc-caller-"));
@@ -1064,6 +1204,9 @@ describe("plugin bb.sdk against a running server", () => {
       expect(await cli.json()).toEqual({
         ok: true,
         result: { kind: "client" },
+        tags: [],
+        keyTags: {},
+        whileWatched: false,
       });
 
       const callsBeforeSpoof = whoami.mock.calls.length;

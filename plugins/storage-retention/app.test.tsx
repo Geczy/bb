@@ -86,11 +86,11 @@ function fixture(subPath = "host_test") {
   });
   const remove = vi.fn(
     async (_input: z.infer<typeof storageRpc.removeDevInstances.input>) => ({
-    running: [] as string[],
-    removedCount: 1,
-    removedBytes: 20,
-    skippedCount: 0,
-    stoppedProcessCount: 1,
+      running: [] as string[],
+      removedCount: 1,
+      removedBytes: 20,
+      skippedCount: 0,
+      stoppedProcessCount: 1,
     }),
   );
   const start = vi.fn(async () => null);
@@ -235,7 +235,7 @@ it("toasts background completion once and keeps completed messages out of the pa
     clearedBytes: 0,
   };
   await act(async () => {
-    await slot.emitRealtime("changed", null);
+    await slot.experimental_invalidateRpc();
   });
   await within(slot.container).findByText(
     /Removing archived files in the background/,
@@ -246,7 +246,7 @@ it("toasts background completion once and keeps completed messages out of the pa
     clearedBytes: 100,
   };
   await act(async () => {
-    await slot.emitRealtime("changed", null);
+    await slot.experimental_invalidateRpc();
   });
   await waitFor(() =>
     expect(
@@ -295,7 +295,7 @@ it("hands an all-machines large-file cleanup toast over to each machine's job un
   await waitFor(() => expect(loadingDescriptions()).toEqual([]));
   hosts[0]!.largeFileCleanup = { state: "running", startedAt: Date.now() };
   await act(async () => {
-    await slot.emitRealtime("changed", null);
+    await slot.experimental_invalidateRpc();
   });
   await waitFor(() => expect(loadingDescriptions()).toEqual(["Test machine"]));
   hosts[0]!.largeFileCleanup = {
@@ -304,7 +304,7 @@ it("hands an all-machines large-file cleanup toast over to each machine's job un
     clearedBytes: 2 * 1024 * 1024 * 1024,
   };
   await act(async () => {
-    await slot.emitRealtime("changed", null);
+    await slot.experimental_invalidateRpc();
   });
   await waitFor(() =>
     expect(
@@ -366,7 +366,7 @@ it("starts orphan cleanup in the background, shows progress, and toasts completi
   ).toEqual({ hostId: "host_test", kind: "orphans" });
   hosts[0]!.maintenance = { state: "running", kind: "orphans" };
   await act(async () => {
-    await slot.emitRealtime("changed", null);
+    await slot.experimental_invalidateRpc();
   });
   await page.findByText("Removing orphaned storage…");
   expect(
@@ -380,7 +380,7 @@ it("starts orphan cleanup in the background, shows progress, and toasts completi
     message: "Removed 1 orphaned storage folder",
   };
   await act(async () => {
-    await slot.emitRealtime("changed", null);
+    await slot.experimental_invalidateRpc();
   });
   await waitFor(() =>
     expect(
@@ -462,7 +462,7 @@ it.each([
       message: "Test machine",
     };
     await act(async () => {
-      await slot.emitRealtime("changed", null);
+      await slot.experimental_invalidateRpc();
     });
     await waitFor(() =>
       expect(

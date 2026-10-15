@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
-  useRealtime,
+  experimental_useRpcQuery,
   useRpc,
   type StandardSchemaV1InferOutput,
 } from "@get-bb/plugin-sdk/app";
@@ -23,7 +23,6 @@ type ConfigurationInput = Pick<
 >;
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-const CONFIGURATION_CHANGED_CHANNEL = "configuration-changed";
 const GLOBAL_FIELD = "global";
 
 function errorMessage(error: unknown): string {
@@ -42,52 +41,52 @@ function draftsFor(view: ConfigurationView): Record<string, string> {
 
 function ConcurrencyLimitSettings() {
   const rpc = useRpc<typeof concurrencyLimitRpcContract>();
-  const [view, setView] = useState<ConfigurationView | null>(null);
+  const query = experimental_useRpcQuery<
+    typeof concurrencyLimitRpcContract,
+    "getConfiguration"
+  >({ method: "getConfiguration", input: null });
+  const view = query.data ?? null;
+  const latestView = useRef(view);
+  const dirty = useRef(new Set<string>());
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setError] = useState<string | null>(null);
+  const error = saveError ?? query.error?.message ?? null;
   const [invalidField, setInvalidField] = useState<string | null>(null);
   const activeRef = useRef(true);
   const savingRef = useRef(false);
 
   const applyView = useCallback((next: ConfigurationView) => {
-    setView(next);
-    setDrafts(draftsFor(next));
+    setDrafts((current) => {
+      const nextDrafts = draftsFor(next);
+      for (const field of dirty.current)
+        if (current[field] !== undefined) nextDrafts[field] = current[field];
+      return nextDrafts;
+    });
   }, []);
 
-  const refetch = useCallback(() => {
-    if (savingRef.current) return;
-    void rpc.call("getConfiguration").then(
-      (configuration) => {
-        if (!activeRef.current || savingRef.current) return;
-        applyView(configuration);
-        setError(null);
-        setSaveState("saved");
-      },
-      (loadError: unknown) => {
-        if (!activeRef.current) return;
-        setError(errorMessage(loadError));
-        setSaveState("error");
-      },
-    );
-  }, [applyView, rpc]);
-
+  useEffect(() => {
+    if (view !== null) {
+      latestView.current = view;
+      applyView(view);
+    }
+  }, [view, applyView]);
   useEffect(() => {
     activeRef.current = true;
-    refetch();
     return () => {
       activeRef.current = false;
     };
-  }, [refetch]);
-  useRealtime(CONFIGURATION_CHANGED_CHANNEL, refetch);
+  }, []);
 
-  async function save(next: ConfigurationInput): Promise<void> {
+  async function save(field: string, next: ConfigurationInput): Promise<void> {
     savingRef.current = true;
     setSaveState("saving");
     setError(null);
     try {
       const saved = await rpc.call("setConfiguration", next);
       if (!activeRef.current) return;
+      dirty.current.delete(field);
+      latestView.current = saved;
       applyView(saved);
       setSaveState("saved");
     } catch (saveError) {
@@ -100,6 +99,7 @@ function ConcurrencyLimitSettings() {
   }
 
   function changeDraft(field: string, value: string): void {
+    dirty.current.add(field);
     setDrafts((current) => ({ ...current, [field]: value }));
     if (invalidField === field) setInvalidField(null);
   }
@@ -109,14 +109,21 @@ function ConcurrencyLimitSettings() {
       setInvalidField(field);
       return;
     }
-    if (commit.kind === "changed") void save(commit.configuration);
+    if (commit.kind === "changed") void save(field, commit.configuration);
+    else {
+      dirty.current.delete(field);
+      if (view !== null) applyView(view);
+    }
   }
 
   function commitGlobal(): void {
     if (view === null) return;
     applyCommit(
       GLOBAL_FIELD,
-      commitGlobalLimitDraft(view, drafts[GLOBAL_FIELD] ?? ""),
+      commitGlobalLimitDraft(
+        latestView.current ?? view,
+        drafts[GLOBAL_FIELD] ?? "",
+      ),
     );
   }
 
@@ -124,7 +131,11 @@ function ConcurrencyLimitSettings() {
     if (view === null) return;
     applyCommit(
       hostId,
-      commitHostLimitDraft(view, hostId, drafts[hostId] ?? ""),
+      commitHostLimitDraft(
+        latestView.current ?? view,
+        hostId,
+        drafts[hostId] ?? "",
+      ),
     );
   }
 

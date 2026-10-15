@@ -350,6 +350,7 @@ export class WatchInterestCoordinator {
           }),
         );
         return keys;
+      case "plugin":
       case "project":
       case "host":
       case "system":

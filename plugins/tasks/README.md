@@ -5,6 +5,35 @@ agents, and keeping the task record connected to the threads doing the work.
 It provides projects and folders, task keys, statuses and priorities, labels,
 subtasks, Markdown comments, attachments, agent presets, and a full CLI.
 
+## Live task reads
+
+`taskMembership` returns stable task IDs for its filters; display order comes
+from keyed row positions, statuses, priorities, and due dates. Task contents come
+from `getTasksKeyed`, which returns summaries without unused Markdown descriptions,
+batches database reads, and shares cached rows across views. Thread and attachment
+metadata also use batched SQL reads. On a cold browser read, membership provides
+up to 25 initial summaries to that same keyed cache alongside its IDs,
+so cards do not wait for a second request. The remaining keys load in normal
+batches. The host skips this lazy producer once the method
+has cached entries. Warm membership refreshes remain IDs-only. `listTasks`
+continues to return paginated full rows for CLI and SDK consumers.
+
+Creation, deletion, and moves invalidate membership. Status edits refresh only
+status-filtered memberships; position edits reorder the cached rows locally.
+Title and description edits refresh membership only for searches; priority,
+and label edits refresh the matching filters. Due dates and all display sorts
+update through keyed rows.
+Every edit still invalidates the task row and full-row `listTasks` reads.
+
+Run the 1,000-task workload with
+`pnpm exec turbo run test --filter=bb-plugin-tasks -- shell/live-performance.test.tsx`.
+It loads the real Tasks plugin against SQLite, renders board and overlapping
+list slots, and records RPC result bytes, requests, SQL statement executions,
+SQL time, and DOM readiness in `bb-tasks-live-performance.json` under the
+platform temporary directory (`node -p 'require("node:os").tmpdir()'`).
+DOM timings include the test harness and settling interval, not browser paint
+or network latency; deterministic assertions bound reads and payload sizes.
+
 ## Install
 
 Install Tasks from the official plugins that BB includes:

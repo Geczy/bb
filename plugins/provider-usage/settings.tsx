@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
   useRpc,
+  experimental_useRpcQuery,
   experimental_ProviderIcon as ProviderIcon,
 } from "@get-bb/plugin-sdk/app";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,6 @@ import {
   type UsageMachine,
   type UsageProvider,
   type ProviderUsage,
-  type UsageSnapshot,
   type UsageWindow,
 } from "./usage-schema.js";
 function SettingsBadge({ children }: { children: ReactNode }) {
@@ -488,85 +488,58 @@ export function UsageSettingsContent({
   );
 }
 
-interface UsageLoadTarget {
-  disposed: () => boolean;
-  setMachines: (machines: UsageMachine[]) => void;
-  setError: (error: boolean) => void;
-}
-
-export async function loadUsage(
-  getUsage: (input: UsageRequest) => Promise<UsageSnapshot>,
-  selectedId: string | null,
-  force: boolean,
-  target: UsageLoadTarget,
-): Promise<void> {
-  target.setError(false);
-  try {
-    const inventory = await getUsage({
+export function UsageSettings() {
+  const rpc = useRpc<typeof providerUsageRpcContract>();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [forcing, setForcing] = useState(false);
+  const [forceError, setForceError] = useState(false);
+  const inventory = experimental_useRpcQuery<
+    typeof providerUsageRpcContract,
+    "getUsage"
+  >({
+    method: "getUsage",
+    input: {
       force: false,
       machineIds: null,
       providerIds: [],
       maxAgeMs: 60_000,
-    });
-    if (target.disposed()) return;
-    target.setMachines(inventory.machines);
-    const selected = selectUsageMachine(inventory.machines, selectedId, null);
-    const providerIds = [
-      ...new Set(selected?.providers.map((provider) => provider.providerId)),
-    ];
-    if (selected && selected.status === "connected" && providerIds.length > 0) {
-      const result = await getUsage({
-        force,
-        machineIds: [selected.id],
-        providerIds,
-        maxAgeMs: 60_000,
-      });
-      if (target.disposed()) return;
-      target.setMachines(result.machines);
-    }
-  } catch {
-    if (!target.disposed()) target.setError(true);
-  }
-}
+    },
+  });
+  const selected = selectUsageMachine(
+    inventory.data?.machines ?? [],
+    selectedId,
+    null,
+  );
+  const input: UsageRequest = {
+    force: false,
+    machineIds: selected === null ? null : [selected.id],
+    providerIds: [
+      ...new Set(
+        selected?.providers.map((provider) => provider.providerId) ?? [],
+      ),
+    ],
+    maxAgeMs: 60_000,
+  };
+  const query = experimental_useRpcQuery<
+    typeof providerUsageRpcContract,
+    "getUsage"
+  >({
+    method: "getUsage",
+    input,
+    enabled: input.providerIds.length > 0 && selected?.status === "connected",
+  });
+  const machines = query.data?.machines ?? inventory.data?.machines ?? [];
+  const loading = forcing || inventory.isLoading || query.isFetching;
+  const error = forceError || inventory.error !== null || query.error !== null;
+  const reload = () => {
+    setForcing(true);
+    setForceError(false);
+    void rpc
+      .call("getUsage", { ...input, force: true, maxAgeMs: 0 })
+      .catch(() => setForceError(true))
+      .finally(() => setForcing(false));
+  };
 
-export function UsageSettings() {
-  const rpc = useRpc<typeof providerUsageRpcContract>();
-  const [machines, setMachines] = useState<UsageMachine[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [refresh, setRefresh] = useState(0);
-  const forceGeneration = useRef(0);
-  useEffect(() => {
-    let disposed = false;
-    let running = false;
-    const force = refresh > forceGeneration.current;
-    forceGeneration.current = refresh;
-    async function load(force: boolean) {
-      if (running) return;
-      running = true;
-      setLoading(true);
-      try {
-        await loadUsage(
-          (input) => rpc.call("getUsage", input),
-          selectedId,
-          force,
-          { disposed: () => disposed, setMachines, setError },
-        );
-      } finally {
-        running = false;
-        if (!disposed) setLoading(false);
-      }
-    }
-    void load(force);
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void load(false);
-    }, 60_000);
-    return () => {
-      disposed = true;
-      window.clearInterval(timer);
-    };
-  }, [rpc, selectedId, refresh]);
   return (
     <UsageSettingsContent
       machines={machines}
@@ -574,7 +547,7 @@ export function UsageSettings() {
       loading={loading}
       error={error}
       onSelect={setSelectedId}
-      onRefresh={() => setRefresh((value) => value + 1)}
+      onRefresh={reload}
     />
   );
 }

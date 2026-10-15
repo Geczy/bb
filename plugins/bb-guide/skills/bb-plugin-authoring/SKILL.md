@@ -98,6 +98,10 @@ the same change.
   own `skills/` directory. The core CLI skill owns generic plugin management,
   not individual plugin behavior.
 - Dispose every service, schedule, listener, content script, and resource.
+- Use tagged RPC queries for live data. Producers invalidate; consumers read.
+  Use keyed queries for batches and whileWatched handlers for demand-driven polling.
+  Reserve realtime events for transitions. See references/backend-live-data.md.
+- Start SDK subscriptions in background services, after the server listens.
 - Use SDK host components and navigation for host-owned behavior.
 - Use vendored UI source for plugin-owned controls.
 - Keep experimental names until the public API audit stabilizes them.

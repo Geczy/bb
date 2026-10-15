@@ -62,13 +62,25 @@ export const automationRpcContract = defineRpcContract({
 
 export function createRpcHandlers(service: AutomationService) {
   return {
-    automations_overview() {
+    automations_overview(
+      _input: unknown,
+      context?: import("@get-bb/plugin-sdk").ExperimentalPluginRpcHandlerContext,
+    ) {
+      context?.experimental_tag("automations");
       return service.overview();
     },
-    automations_list(input: z.output<typeof listAutomationsInputSchema>) {
+    automations_list(
+      input: z.output<typeof listAutomationsInputSchema>,
+      context?: import("@get-bb/plugin-sdk").ExperimentalPluginRpcHandlerContext,
+    ) {
+      context?.experimental_tag(`automations:${input.projectId}`);
       return service.list(input);
     },
-    automations_get(input: z.output<typeof projectAutomationInputSchema>) {
+    automations_get(
+      input: z.output<typeof projectAutomationInputSchema>,
+      context?: import("@get-bb/plugin-sdk").ExperimentalPluginRpcHandlerContext,
+    ) {
+      context?.experimental_tag(`automations:${input.projectId}`);
       return service.get(input);
     },
     automations_create(input: z.output<typeof createAutomationInputSchema>) {
@@ -89,7 +101,11 @@ export function createRpcHandlers(service: AutomationService) {
     automations_run(input: z.output<typeof runAutomationInputSchema>) {
       return service.run(input);
     },
-    automations_runs(input: z.output<typeof automationRunsInputSchema>) {
+    automations_runs(
+      input: z.output<typeof automationRunsInputSchema>,
+      context?: import("@get-bb/plugin-sdk").ExperimentalPluginRpcHandlerContext,
+    ) {
+      context?.experimental_tag(`runs:${input.projectId}`);
       return service.runs(input);
     },
   };

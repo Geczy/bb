@@ -418,3 +418,11 @@ Read the installed declarations for exact current signatures.
 - `ExperimentalCreateHostEntryHarnessOptions`
 - `ExperimentalHostEntryHarness`
 - `ExperimentalHostHarnessSignal`
+
+## Live RPC data
+
+- `ExperimentalRpcQueryOptions`
+- `ExperimentalRpcQueryState`
+- `experimental_useRpcQuery`
+- `experimental_useRpcKeyedQuery`
+- `experimental_useRpcRefresh`

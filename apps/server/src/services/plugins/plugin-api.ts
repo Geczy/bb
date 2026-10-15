@@ -191,6 +191,7 @@ export interface PluginWebSocketRouteRecord {
 }
 
 export interface PluginRpcHandler {
+  whileWatched: boolean;
   publication: ReturnType<typeof publishRpcMethod>;
   inputSchema: StandardSchemaV1;
   outputSchema: StandardSchemaV1;
@@ -352,6 +353,12 @@ function wrapSdkForPlugin(
     ...sdk,
     plugins: {
       ...sdk.plugins,
+      experimental_watchRpc(args) {
+        return rpcCallerSdk.plugins.experimental_watchRpc(args);
+      },
+      experimental_watchDiscovery(args) {
+        return rpcCallerSdk.plugins.experimental_watchDiscovery(args);
+      },
       callRpc(args) {
         return rpcCallerSdk.plugins.callRpc(args);
       },
@@ -493,6 +500,14 @@ export function createPluginApi(options: {
    */
   rpcCaller: PluginRpcCallerCredential;
   publishSignal: (channel: string, payload: unknown) => void;
+  invalidateRpc: (tags: readonly string[] | null) => void;
+  whileRpcWatched: (
+    method: string,
+    handler: (
+      read: { input: import("@bb/domain").JsonValue } | { key: string },
+      signal: AbortSignal,
+    ) => void | Promise<void>,
+  ) => () => void;
   settingsChanged: () => void;
   reportNeedsConfiguration: (message: string) => void;
   isAgentToolNameTaken: (name: string) => string | undefined;
@@ -834,7 +849,29 @@ export function createPluginApi(options: {
     },
   };
 
+  const watchDisposers: Array<() => void> = [];
   const rpc: PluginRpc = {
+    experimental_invalidate(tags) {
+      assertLive();
+      if (
+        !Array.isArray(tags) ||
+        tags.length === 0 ||
+        tags.some((tag) => typeof tag !== "string" || tag.length === 0)
+      )
+        throw new Error("RPC tags must be nonempty strings");
+      options.invalidateRpc(tags);
+    },
+    experimental_invalidateAll() {
+      assertLive();
+      options.invalidateRpc(null);
+    },
+    experimental_whileWatched(method, handler) {
+      assertLive();
+      if (!rpcHandlers.has(method))
+        throw new Error(`Unknown RPC method: ${method}`);
+      rpcHandlers.get(method)!.whileWatched = true;
+      watchDisposers.push(options.whileRpcWatched(method, handler));
+    },
     register(contract, handlers, options) {
       assertLive();
       for (const [name, record] of normalizeRpcRegistration(
@@ -843,7 +880,7 @@ export function createPluginApi(options: {
         rpcHandlers,
         options,
       )) {
-        rpcHandlers.set(name, record);
+        rpcHandlers.set(name, { ...record, whileWatched: false });
       }
     },
   };
@@ -1409,6 +1446,7 @@ export function createPluginApi(options: {
     },
     mentionProviders,
     activate() {
+      options.invalidateRpc(null);
       if (activated) return;
       assertLive();
       replaceDeclaredSharedPorts(
@@ -1448,6 +1486,8 @@ export function createPluginApi(options: {
     },
     invalidate() {
       invalidated = true;
+      for (const dispose of watchDisposers) dispose();
+      options.invalidateRpc(null);
       rpcCaller.revoke();
     },
   };

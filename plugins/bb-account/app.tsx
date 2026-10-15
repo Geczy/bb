@@ -8,7 +8,7 @@ import {
 import {
   definePluginApp,
   UrlLink,
-  useRealtime,
+  experimental_useRpcQuery,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import { Button } from "@bb/shared-ui/button";
@@ -25,22 +25,11 @@ import { Input } from "@bb/shared-ui/input";
 import { cn } from "@bb/shared-ui/lib/utils";
 import type { accountPrivateRpcContract } from "./src/contract.js";
 import {
-  ACCOUNT_REALTIME_CHANNEL,
-  accountRealtimePayloadSchema,
   type Account,
   type AccountStatus,
   type LoginView,
   type SignOutResult,
 } from "./src/schemas.js";
-
-const LOGIN_POLL_MS = 2_000;
-const LOGIN_POLL_MAX_MS = 30_000;
-
-function loginPollDelay(failures: number): number {
-  return failures === 0
-    ? LOGIN_POLL_MS
-    : Math.min(LOGIN_POLL_MS * 2 ** failures, LOGIN_POLL_MAX_MS);
-}
 
 const DANGER_QUIET_CLASS =
   "text-destructive-text hover:text-destructive-text hover:bg-surface-destructive";
@@ -101,38 +90,17 @@ interface AccountState {
 function useAccountState(): {
   state: AccountState | null;
   loadError: string | null;
-  apply(next: AccountState): void;
   refetch(): void;
 } {
-  const rpc = useRpc<typeof accountPrivateRpcContract>();
-  const [state, setState] = useState<AccountState | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const apply = useCallback((next: AccountState) => {
-    setState((previous) =>
-      previous !== null && previous.status.revision > next.status.revision
-        ? { status: previous.status, login: next.login }
-        : next,
-    );
-    setLoadError(null);
-  }, []);
-
-  const refetch = useCallback(() => {
-    rpc
-      .call("login.poll", { loginId: null })
-      .then(apply, (error: unknown) => setLoadError(errorText(error)));
-  }, [apply, rpc]);
-
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
-
-  useRealtime(ACCOUNT_REALTIME_CHANNEL, (payload) => {
-    const parsed = accountRealtimePayloadSchema.safeParse(payload);
-    if (parsed.success) apply(parsed.data);
-  });
-
-  return { state, loadError, apply, refetch };
+  const query = experimental_useRpcQuery<
+    typeof accountPrivateRpcContract,
+    "login.poll"
+  >({ method: "login.poll", input: { loginId: null } });
+  return {
+    state: query.data ?? null,
+    loadError: query.error?.message ?? null,
+    refetch: query.refetch,
+  };
 }
 
 function Avatar({ account }: { account: Account }) {
@@ -511,15 +479,13 @@ function SignInDialog({
   onOpenChange,
   rpc,
   login,
-  onLogin,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rpc: AccountRpc;
   login: LoginView | null;
-  onLogin: (state: AccountState) => void;
 }) {
-  const [loginId, setLoginId] = useState<string | null>(null);
+  const [startedLogin, setStartedLogin] = useState<LoginView | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const startedForOpen = useRef(false);
@@ -530,7 +496,7 @@ function SignInDialog({
     rpc.call("login.start", { baseUrl: null }).then(
       (view) => {
         setStarting(false);
-        setLoginId(view.id);
+        setStartedLogin(view);
       },
       (error: unknown) => {
         setStarting(false);
@@ -549,36 +515,19 @@ function SignInDialog({
     start();
   }, [open, start]);
 
-  const current = login !== null && login.id === loginId ? login : null;
-  const pendingId = current?.state === "pending" ? current.id : null;
+  const pendingId = startedLogin?.state === "pending" ? startedLogin.id : null;
 
-  useEffect(() => {
-    if (pendingId === null) return;
-    let cancelled = false;
-    let failures = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const poll = () => {
-      rpc
-        .call("login.poll", { loginId: pendingId })
-        .then(
-          (result) => {
-            failures = 0;
-            if (!cancelled) onLogin(result);
-          },
-          () => {
-            failures += 1;
-          },
-        )
-        .finally(() => {
-          if (!cancelled) timer = setTimeout(poll, loginPollDelay(failures));
-        });
-    };
-    timer = setTimeout(poll, LOGIN_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [onLogin, pendingId, rpc]);
+  const pendingLogin = experimental_useRpcQuery<
+    typeof accountPrivateRpcContract,
+    "login.poll"
+  >({
+    method: "login.poll",
+    input: { loginId: pendingId },
+    enabled: pendingId !== null,
+  });
+  const current =
+    pendingLogin.data?.login ??
+    (login?.id === startedLogin?.id ? login : startedLogin);
 
   useEffect(() => {
     if (open && current?.state === "signed-in") onOpenChange(false);
@@ -633,12 +582,10 @@ function SignInDialog({
 function SignedOutContent({
   rpc,
   login,
-  onLogin,
   onChanged,
 }: {
   rpc: AccountRpc;
   login: LoginView | null;
-  onLogin: (state: AccountState) => void;
   onChanged: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -672,7 +619,6 @@ function SignedOutContent({
         onOpenChange={setDialogOpen}
         rpc={rpc}
         login={login}
-        onLogin={onLogin}
       />
     </div>
   );
@@ -680,7 +626,7 @@ function SignedOutContent({
 
 function AccountSettingsSection() {
   const rpc = useRpc<typeof accountPrivateRpcContract>();
-  const { state, loadError, apply, refetch } = useAccountState();
+  const { state, loadError, refetch } = useAccountState();
   const [notice, setNotice] = useState<ReactNode>(null);
   const onSignedOut = useCallback(
     (result: SignOutResult) => {
@@ -718,7 +664,6 @@ function AccountSettingsSection() {
       <SignedOutContent
         rpc={rpc}
         login={state.login}
-        onLogin={apply}
         onChanged={() => {
           setNotice(null);
           refetch();

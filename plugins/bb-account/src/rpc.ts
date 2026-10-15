@@ -7,7 +7,6 @@ import {
   CONNECT_CREDENTIAL_METHOD,
   FETCH_METHOD,
   STATUS_METHOD,
-  WAIT_FOR_STATUS_CHANGE_METHOD,
   accountPrivateRpcContract,
   accountRpcContract,
 } from "./contract.js";
@@ -60,9 +59,10 @@ export function registerAccountRpc(args: {
   bb.rpc.register(
     accountRpcContract,
     {
-      [STATUS_METHOD]: () => account.status(),
-      [WAIT_FOR_STATUS_CHANGE_METHOD]: (input) =>
-        account.waitForStatusChange(input.afterRevision),
+      [STATUS_METHOD]: (_input, context) => {
+        context.experimental_tag("status");
+        return account.status();
+      },
       [FETCH_METHOD]: (input, context) =>
         account.fetch(input, context.experimental_caller),
     },
@@ -81,7 +81,9 @@ export function registerAccountRpc(args: {
     },
     [CONNECT_CREDENTIAL_METHOD]: (_input, context) => {
       if (!isConnectPlugin(context.experimental_caller)) {
-        throw new Error("only the connect plugin can read the server credential");
+        throw new Error(
+          "only the connect plugin can read the server credential",
+        );
       }
       return { credential: account.connectCredential() };
     },
@@ -95,10 +97,13 @@ export function registerAccountRpc(args: {
     },
     "login.start": (input) =>
       rethrowCoded(() => logins.start(resolveBaseUrl(input.baseUrl, baseUrls))),
-    "login.poll": (input) => ({
-      login: logins.view(input.loginId),
-      status: account.status(),
-    }),
+    "login.poll": (input, context) => {
+      context.experimental_tag("login", "status");
+      return {
+        login: logins.view(input.loginId),
+        status: account.status(),
+      };
+    },
     "login.cancel": (input) => ({ login: logins.cancel(input.loginId) }),
     redeemCode: (input) =>
       rethrowCoded(() =>

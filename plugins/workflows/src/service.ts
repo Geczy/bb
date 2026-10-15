@@ -54,7 +54,7 @@ import {
   type WorkflowRunRow,
 } from "./data.js";
 import { parseWorkflowSource } from "./parser.js";
-import { WORKFLOW_RUNS_REALTIME_CHANNEL } from "./realtime-channel.js";
+
 import { executeWorkflowScript } from "./runtime.js";
 import {
   DEFAULT_WORKFLOW_SETTINGS,
@@ -431,9 +431,7 @@ export function createWorkflowService(
   }
 
   function publishRunsChanged(originThreadId: string): void {
-    bb.realtime.publish(WORKFLOW_RUNS_REALTIME_CHANNEL, {
-      threadId: originThreadId,
-    });
+    bb.rpc.experimental_invalidate([`runs:${originThreadId}`]);
   }
 
   function publishRunProgress(runId: string): void {
@@ -1607,7 +1605,17 @@ export function createWorkflowService(
   async function sweepExpiredRuns(now: number): Promise<void> {
     const expired = listExpiredTerminalRuns(db, now, RETENTION_SWEEP_RUNS);
     if (expired.runIds.length === 0) return;
+    const tags = [
+      ...new Set(
+        expired.runIds.flatMap((id) => {
+          const run = getRun(db, id);
+          return run ? [`runs:${run.originThreadId}`] : [];
+        }),
+      ),
+    ];
     deleteTerminalRuns(db, expired.runIds);
+    const [first, ...rest] = tags;
+    if (first !== undefined) bb.rpc.experimental_invalidate([first, ...rest]);
   }
 
   async function maintenanceTick(): Promise<void> {

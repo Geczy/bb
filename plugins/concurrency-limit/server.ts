@@ -19,7 +19,7 @@ import {
 
 const CONFIGURATION_KEY = "configuration";
 const CAPACITIES_KEY = "host-capacities";
-const CONFIGURATION_CHANGED_CHANNEL = "configuration-changed";
+
 const RETRY_MIN_MS = 1_000;
 const RETRY_MAX_MS = 30_000;
 export const MAX_REASON_LENGTH = 200;
@@ -236,7 +236,7 @@ export default async function concurrencyLimitPlugin(
     const normalized = normalizeConfiguration(next);
     await bb.storage.kv.set(CONFIGURATION_KEY, normalized);
     configuration = normalized;
-    bb.realtime.publish(CONFIGURATION_CHANGED_CHANNEL, {});
+    bb.rpc.experimental_invalidateAll();
     await bb.experimental_hooks.recheck("message.dispatch");
   }
 
@@ -419,7 +419,7 @@ export default async function concurrencyLimitPlugin(
       );
       if (changed) {
         await persistCapacities();
-        bb.realtime.publish(CONFIGURATION_CHANGED_CHANNEL, {});
+        bb.rpc.experimental_invalidateAll();
         await bb.experimental_hooks.recheck("message.dispatch");
       }
       return retry ? "retry" : "settled";
@@ -473,7 +473,7 @@ export default async function concurrencyLimitPlugin(
                 change === "host-connected" || change === "host-disconnected",
             )
           )
-            bb.realtime.publish(CONFIGURATION_CHANGED_CHANNEL, {});
+            bb.rpc.experimental_invalidateAll();
           if (event.changes.includes("host-connected"))
             requestRefresh(event.id);
         },

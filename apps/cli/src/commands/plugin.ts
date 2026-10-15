@@ -52,6 +52,43 @@ interface NewPluginTarget {
   directoryName: string;
 }
 
+async function watchPluginRpc(
+  start: (signal: AbortSignal, onError: (error: Error) => void) => () => void,
+): Promise<void> {
+  const controller = new AbortController();
+  let stop: (() => void) | null = null;
+  let failure: Error | null = null;
+  const abort = () => controller.abort();
+  process.once("SIGINT", abort);
+  process.once("SIGTERM", abort);
+  try {
+    stop = start(controller.signal, (error) => {
+      if (
+        error instanceof BbHttpError &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 408 &&
+        error.status !== 429
+      ) {
+        failure = error;
+        controller.abort();
+      } else console.error(error.message);
+    });
+    if (!controller.signal.aborted)
+      await new Promise<void>((resolveDone) =>
+        controller.signal.addEventListener("abort", () => resolveDone(), {
+          once: true,
+        }),
+      );
+    if (failure) throw failure;
+  } finally {
+    controller.abort();
+    stop?.();
+    process.removeListener("SIGINT", abort);
+    process.removeListener("SIGTERM", abort);
+  }
+}
+
 export function resolveNewPluginTarget(name: string): NewPluginTarget | null {
   const packageName = name.startsWith("@")
     ? name
@@ -801,14 +838,30 @@ export function registerPluginCommands(
     .description("Inspect discoverable plugin RPC methods");
   rpc
     .command("list [plugin-id]")
+    .option("--watch", "Print discovery again when published methods change")
     .option("--method <name>", "Filter by exact method name")
     .option("--json", "Output JSON")
     .action(
       action(
         async (
           pluginId: string | undefined,
-          opts: JsonOutputOptions & { method?: string },
+          opts: JsonOutputOptions & { method?: string; watch?: boolean },
         ) => {
+          if (opts.watch) {
+            await watchPluginRpc((signal, onError) =>
+              createCliBbSdk(getUrl()).plugins.experimental_watchDiscovery({
+                pluginId,
+                method: opts.method,
+                signal,
+                onChange: (methods) =>
+                  console.log(
+                    JSON.stringify(methods, null, opts.json ? undefined : 2),
+                  ),
+                onError,
+              }),
+            );
+            return;
+          }
           const methods = await createCliBbSdk(
             getUrl(),
           ).plugins.experimental_discoverRpc({ pluginId, method: opts.method });
@@ -827,6 +880,7 @@ export function registerPluginCommands(
   rpc
     .command("call <plugin-id> <method>")
     .description("Call a plugin RPC method with server-side schema validation")
+    .option("--watch", "Keep the read live until interrupted")
     .option(
       "--input-file <path>",
       "Read JSON input from a file; defaults to null",
@@ -837,7 +891,7 @@ export function registerPluginCommands(
         async (
           pluginId: string,
           method: string,
-          opts: JsonOutputOptions & { inputFile?: string },
+          opts: JsonOutputOptions & { inputFile?: string; watch?: boolean },
         ) => {
           const input =
             opts.inputFile === undefined
@@ -845,6 +899,23 @@ export function registerPluginCommands(
               : jsonValueSchema.parse(
                   JSON.parse(await readFile(opts.inputFile, "utf8")),
                 );
+          if (opts.watch) {
+            await watchPluginRpc((signal, onError) =>
+              createCliBbSdk(getUrl()).plugins.experimental_watchRpc({
+                pluginId,
+                method,
+                input,
+                outputSchema: jsonValueSchema,
+                signal,
+                onChange: (value) =>
+                  console.log(
+                    JSON.stringify(value, null, opts.json ? undefined : 2),
+                  ),
+                onError,
+              }),
+            );
+            return;
+          }
           const result = await createCliBbSdk(getUrl()).plugins.callRpc({
             pluginId,
             method,
