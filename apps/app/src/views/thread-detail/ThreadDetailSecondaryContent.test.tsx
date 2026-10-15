@@ -301,7 +301,7 @@ function createProps(
       threadRuntimeDisplayStatus: "idle",
       timelineError: false,
       timelineRows: [],
-      unreadDividerAutoScroll: false,
+      unreadDividerAutoScrollKey: null,
       unreadDividerPlacement: null,
       workspaceRootPath: undefined,
     } as unknown as ThreadDetailSecondaryContentProps["timeline"],

@@ -70,7 +70,7 @@ export interface ThreadTimelineSurfaceProps {
   timelineNavigationTargetRowId?: string | null;
   threadId: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
-  unreadDividerAutoScroll?: boolean;
+  unreadDividerAutoScrollKey?: number | null;
   unreadDividerPlacement?: ThreadTimelineUnreadDividerPlacement | null;
   workspaceRootPath: string | undefined;
 }
@@ -171,7 +171,7 @@ export function ThreadTimelineSurface({
   timelineNavigationTargetRowId,
   threadId,
   threadRuntimeDisplayStatus,
-  unreadDividerAutoScroll,
+  unreadDividerAutoScrollKey,
   unreadDividerPlacement,
   workspaceRootPath,
 }: ThreadTimelineSurfaceProps) {
@@ -253,7 +253,7 @@ export function ThreadTimelineSurface({
             timelineNavigationTargetRowId={timelineNavigationTargetRowId}
             threadId={threadId}
             threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
-            unreadDividerAutoScroll={unreadDividerAutoScroll}
+            unreadDividerAutoScrollKey={unreadDividerAutoScrollKey}
             unreadDividerPlacement={unreadDividerPlacement}
             workspaceRootPath={workspaceRootPath}
           />
@@ -373,4 +373,3 @@ function DelayedThreadLoadingIndicator() {
 
   return <ThreadTimelineLoadingSkeleton />;
 }
-

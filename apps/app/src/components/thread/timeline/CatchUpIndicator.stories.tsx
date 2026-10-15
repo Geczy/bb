@@ -167,7 +167,7 @@ export function Overview() {
           threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
           timelineError={false}
           timelineRows={cachedRows}
-          unreadDividerAutoScroll={false}
+          unreadDividerAutoScrollKey={null}
           unreadDividerPlacement={null}
           workspaceRootPath={undefined}
         />

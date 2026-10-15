@@ -15,7 +15,7 @@ interface ThreadUnreadDividerSnapshot {
 }
 
 interface ThreadUnreadDividerState {
-  autoScroll: boolean;
+  autoScrollKey: number | null;
   placement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
@@ -35,7 +35,7 @@ interface UseThreadUnreadDividerStateArgs {
 }
 
 const NO_UNREAD_DIVIDER_STATE: ThreadUnreadDividerState = {
-  autoScroll: false,
+  autoScrollKey: null,
   placement: null,
 };
 
@@ -58,6 +58,10 @@ function isThreadUnread({
     return false;
   }
   return lastReadAt === null || lastReadAt < latestAttentionAt;
+}
+
+function isWindowUnattended(): boolean {
+  return document.visibilityState !== "visible" || !document.hasFocus();
 }
 
 function buildUnreadDividerPlacement(
@@ -128,7 +132,9 @@ export function useThreadUnreadDividerState({
       const placement = buildUnreadDividerPlacement(threadState);
       return {
         attentionAt: threadLatestAttentionAt,
-        autoScroll: isFirstTrackedThreadState && placement !== null,
+        autoScroll:
+          (isFirstTrackedThreadState || isWindowUnattended()) &&
+          placement !== null,
         placement,
         threadId,
       };
@@ -152,7 +158,10 @@ export function useThreadUnreadDividerState({
   }
 
   return {
-    autoScroll: snapshot.autoScroll && snapshot.placement !== null,
+    autoScrollKey:
+      snapshot.autoScroll && snapshot.placement !== null
+        ? snapshot.attentionAt
+        : null,
     placement: snapshot.placement,
   };
 }

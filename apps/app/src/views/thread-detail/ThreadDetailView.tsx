@@ -2886,7 +2886,7 @@ function ThreadDetailViewInternal(
               stoppingAnchorAt: thread.updatedAt,
               threadId: thread.id,
               threadRuntimeDisplayStatus: thread.runtime.displayStatus,
-              unreadDividerAutoScroll: unreadDividerState.autoScroll,
+              unreadDividerAutoScrollKey: unreadDividerState.autoScrollKey,
               unreadDividerPlacement: unreadDividerState.placement,
               workspaceRootPath: environment?.path ?? undefined,
             }}

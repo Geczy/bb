@@ -188,7 +188,7 @@ export interface ThreadTimelineRowsProps {
   timelineNavigationTargetRowId?: string | null;
   threadId?: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
-  unreadDividerAutoScroll?: boolean;
+  unreadDividerAutoScrollKey?: number | null;
   unreadDividerPlacement?: ThreadTimelineUnreadDividerPlacement | null;
   workspaceRootPath: string | undefined;
 }
@@ -239,12 +239,12 @@ interface TimelineRowsListProps {
   showAssistantMessageActions: boolean;
   spacing: TimelineRowsListSpacing;
   className?: string;
-  unreadDividerAutoScroll: boolean;
+  unreadDividerAutoScrollKey: number | null;
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
 interface TimelineUnreadDividerProps {
-  autoScroll: boolean;
+  autoScrollKey: number | null;
   scrollTargetRowId: string | null;
 }
 
@@ -1066,15 +1066,19 @@ const ConversationRowContent = memo(function ConversationRowContent({
 });
 
 function TimelineUnreadDivider({
-  autoScroll,
+  autoScrollKey,
   scrollTargetRowId,
 }: TimelineUnreadDividerProps) {
   const bottomAnchor = useBottomAnchoredScroll();
   const dividerRef = useRef<HTMLDivElement>(null);
-  const hasScrolledRef = useRef(false);
+  const scrolledKeyRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!autoScroll || !bottomAnchor || hasScrolledRef.current) {
+    if (
+      autoScrollKey === null ||
+      !bottomAnchor ||
+      scrolledKeyRef.current === autoScrollKey
+    ) {
       return;
     }
 
@@ -1084,7 +1088,11 @@ function TimelineUnreadDivider({
         return;
       }
 
-      hasScrolledRef.current = true;
+      const isFirstScroll = scrolledKeyRef.current === null;
+      scrolledKeyRef.current = autoScrollKey;
+      if (!isFirstScroll && !bottomAnchor.isAtBottom) {
+        return;
+      }
       const scrollTarget =
         scrollTargetRowId === null
           ? null
@@ -1099,7 +1107,7 @@ function TimelineUnreadDivider({
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [autoScroll, bottomAnchor, scrollTargetRowId]);
+  }, [autoScrollKey, bottomAnchor, scrollTargetRowId]);
 
   return (
     <div
@@ -1203,7 +1211,7 @@ function TimelineExpandableBodyContent({
           showAssistantMessageActions={showAssistantMessageActions}
           compactActivityIntents={true}
           spacing="bundle"
-          unreadDividerAutoScroll={false}
+          unreadDividerAutoScrollKey={null}
           unreadDividerPlacement={null}
         />
       );
@@ -1313,7 +1321,7 @@ function TurnRowBody({
       compactActivityIntents={compactActivityIntents}
       spacing="nested"
       className={NESTED_TIMELINE_GROUP_LINE_CLASS_NAME}
-      unreadDividerAutoScroll={false}
+      unreadDividerAutoScrollKey={null}
       unreadDividerPlacement={null}
     />
   );
@@ -1431,7 +1439,7 @@ function LazyTurnRowBody({
             showAssistantMessageActions={showAssistantMessageActions}
             compactActivityIntents={compactActivityIntents}
             spacing="nested"
-            unreadDividerAutoScroll={false}
+            unreadDividerAutoScrollKey={null}
             unreadDividerPlacement={null}
           />
         </>
@@ -1521,7 +1529,7 @@ function DeferredDelegationChildRows({
           showAssistantMessageActions={false}
           compactActivityIntents={false}
           spacing="nested"
-          unreadDividerAutoScroll={false}
+          unreadDividerAutoScrollKey={null}
           unreadDividerPlacement={null}
         />
       ) : null}
@@ -1563,7 +1571,7 @@ function DelegationRowBody({ row }: { row: TimelineViewDelegationWorkRow }) {
             showAssistantMessageActions={false}
             compactActivityIntents={false}
             spacing="nested"
-            unreadDividerAutoScroll={false}
+            unreadDividerAutoScrollKey={null}
             unreadDividerPlacement={null}
           />
         ) : null}
@@ -2089,7 +2097,7 @@ function TimelineRowsList({
   showAssistantMessageActions,
   spacing,
   className,
-  unreadDividerAutoScroll,
+  unreadDividerAutoScrollKey,
   unreadDividerPlacement,
 }: TimelineRowsListProps) {
   const { threadId } = useTimelineRendererStaticContext();
@@ -2215,7 +2223,7 @@ function TimelineRowsList({
                     style={windowedState.itemStyle}
                   >
                     <TimelineUnreadDivider
-                      autoScroll={unreadDividerAutoScroll}
+                      autoScrollKey={unreadDividerAutoScrollKey}
                       scrollTargetRowId={item.scrollTargetRowId}
                     />
                   </div>
@@ -2526,8 +2534,10 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
                             showAssistantMessageActions={true}
                             compactActivityIntents={false}
                             spacing="top-level"
-                            unreadDividerAutoScroll={
-                              props.unreadDividerAutoScroll ?? true
+                            unreadDividerAutoScrollKey={
+                              props.unreadDividerAutoScrollKey === undefined
+                                ? 0
+                                : props.unreadDividerAutoScrollKey
                             }
                             unreadDividerPlacement={
                               props.unreadDividerPlacement ?? null
