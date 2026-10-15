@@ -1173,7 +1173,11 @@ export function useThreadConversationOutline(
     queryKey: threadConversationOutlineQueryKey(id, role),
     queryFn: async ({ signal }) => {
       const threadId = requireThreadId(id, "useThreadConversationOutline");
-      return sdk.threads.conversationOutline({ threadId, role, signal });
+      return sdk.threads.conversationOutline({
+        threadId,
+        ...(role === "all" ? {} : { role }),
+        signal,
+      });
     },
     enabled,
     refetchOnMount: options?.refetchOnMount ?? true,

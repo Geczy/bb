@@ -970,7 +970,7 @@ export function threadTimelineQueryKey(
   return [THREAD_TIMELINE_QUERY_KEY, threadId];
 }
 
-export type ThreadConversationOutlineRole = "user" | "assistant";
+export type ThreadConversationOutlineRole = "user" | "assistant" | "all";
 
 export function threadConversationOutlineQueryKey(
   threadId: string,

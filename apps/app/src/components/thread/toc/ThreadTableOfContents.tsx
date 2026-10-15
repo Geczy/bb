@@ -105,20 +105,12 @@ function outlineItemToTocItem(item: ThreadConversationOutlineItem): TocItem {
   };
 }
 
-function partitionTocItems(items: Iterable<TocItem>): {
-  agentItems: TocItem[];
-  userItems: TocItem[];
-} {
-  const userItems: TocItem[] = [];
-  const agentItems: TocItem[] = [];
-  for (const item of items) {
-    if (item.role === "user") {
-      userItems.push(item);
-    } else {
-      agentItems.push(item);
-    }
-  }
-  return { agentItems, userItems };
+function isAgentCommTocItem(item: TocItem): boolean {
+  return item.role === "user" && parseAgentMessageEnvelope(item.label) !== null;
+}
+
+function isAgentMessageTocItem(item: TocItem): boolean {
+  return item.role === "assistant" || isAgentCommTocItem(item);
 }
 
 function mergeLiveTocItems(
@@ -266,33 +258,35 @@ function mergeOutlineTocItems(
   );
 }
 
-function useConversationTocItems({
-  agentOutlineItems,
-  timelineRows,
-  userOutlineItems,
-}: {
-  agentOutlineItems: readonly ThreadConversationOutlineItem[] | undefined;
-  timelineRows: readonly TimelineRow[];
-  userOutlineItems: readonly ThreadConversationOutlineItem[] | undefined;
-}) {
-  const timelineTocItems = useMemo(
+function useTimelineTocItems(timelineRows: readonly TimelineRow[]) {
+  return useMemo(() => {
+    const items = timelineRows
+      .filter((row) => row.kind === "conversation")
+      .map((row) => getTimelineTocItem(row));
+    return {
+      agentItems: items.filter(isAgentMessageTocItem),
+      promptItems: items.filter((item) => item.role === "user"),
+    };
+  }, [timelineRows]);
+}
+
+function includeAllTocItems(): boolean {
+  return true;
+}
+
+function useMergedOutlineTocItems(
+  outlineItems: readonly ThreadConversationOutlineItem[] | undefined,
+  timelineItems: readonly TocItem[],
+  include: (item: TocItem) => boolean = includeAllTocItems,
+): TocItem[] {
+  return useMemo(
     () =>
-      partitionTocItems(
-        timelineRows
-          .filter((row) => row.kind === "conversation")
-          .map((row) => getTimelineTocItem(row)),
+      mergeOutlineTocItems(
+        outlineItems?.filter((item) => include(outlineItemToTocItem(item))),
+        timelineItems,
       ),
-    [timelineRows],
+    [include, outlineItems, timelineItems],
   );
-  const userItems = useMemo(
-    () => mergeOutlineTocItems(userOutlineItems, timelineTocItems.userItems),
-    [timelineTocItems.userItems, userOutlineItems],
-  );
-  const agentItems = useMemo(
-    () => mergeOutlineTocItems(agentOutlineItems, timelineTocItems.agentItems),
-    [agentOutlineItems, timelineTocItems.agentItems],
-  );
-  return { agentItems, userItems };
 }
 
 function currentOutlineItems(
@@ -459,21 +453,16 @@ export function findActiveItemIds({
   const scrollTop = scrollRect.top;
   const scrollBottom = scrollRect.bottom;
   const isNearBottom = isScrollElementNearBottom(scrollElement);
-  const rolesById = new Map<string, TocTab>();
-  for (const item of userItems) rolesById.set(item.id, "user");
-  for (const item of agentItems) rolesById.set(item.id, "agent");
+  const userIds = new Set(userItems.map((item) => item.id));
+  const agentIds = new Set(agentItems.map((item) => item.id));
   const userRows: HTMLElement[] = [];
   const agentRows: HTMLElement[] = [];
 
   for (const row of findTimelineRowElements(scrollElement)) {
     const rowId = row.dataset.timelineRowId;
     if (!rowId) continue;
-    const role = rolesById.get(rowId);
-    if (role === "user") {
-      userRows.push(row);
-    } else if (role === "agent") {
-      agentRows.push(row);
-    }
+    if (userIds.has(rowId)) userRows.push(row);
+    if (agentIds.has(rowId)) agentRows.push(row);
   }
 
   if (isNearBottom) {
@@ -522,23 +511,29 @@ export function ThreadTableOfContents({
   const userOutlineQuery = useThreadConversationOutline(threadId, "user", {
     enabled: outlineEnabled,
   });
-  const agentOutlineQuery = useThreadConversationOutline(
-    threadId,
-    "assistant",
-    { enabled: outlineEnabled && open && tab === "agent" },
+  const timelineTocItems = useTimelineTocItems(timelineRows);
+  const userItems = useMergedOutlineTocItems(
+    currentOutlineItems(userOutlineQuery.data, contextBoundarySeq),
+    timelineTocItems.promptItems,
   );
-  const senderThreadMetadataById = useSenderThreadMetadataById();
-  const { agentItems, userItems } = useConversationTocItems({
-    agentOutlineItems: currentOutlineItems(
-      agentOutlineQuery.data,
-      contextBoundarySeq,
-    ),
-    timelineRows,
-    userOutlineItems: currentOutlineItems(
-      userOutlineQuery.data,
-      contextBoundarySeq,
-    ),
+  const yourItems = useMemo(
+    () => userItems.filter((item) => !isAgentCommTocItem(item)),
+    [userItems],
+  );
+  const prefersAgentTab = tab === "agent" || yourItems.length === 0;
+  const agentOutlineQuery = useThreadConversationOutline(threadId, "all", {
+    enabled: outlineEnabled && open && prefersAgentTab,
   });
+  const agentItems = useMergedOutlineTocItems(
+    currentOutlineItems(agentOutlineQuery.data, contextBoundarySeq),
+    timelineTocItems.agentItems,
+    isAgentMessageTocItem,
+  );
+  const hasAgentMessages =
+    agentItems.length > 0 || yourItems.length < userItems.length;
+  const activeTab: TocTab =
+    hasAgentMessages && prefersAgentTab ? "agent" : "user";
+  const senderThreadMetadataById = useSenderThreadMetadataById();
   const [activeUserId, setActiveUserId] = useState<string | null>(null);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [pendingJumpId, setPendingJumpId] = useState<string | null>(null);
@@ -554,9 +549,7 @@ export function ThreadTableOfContents({
   });
   const itemEls = useRef(new Map<string, HTMLElement>());
   const activeIdsRef = useRef<ActiveItemIds>({ agent: null, user: null });
-  const hasAgentMessages = agentItems.length > 0;
-  const activeTab = tab === "agent" && hasAgentMessages ? "agent" : "user";
-  const items = activeTab === "user" ? userItems : agentItems;
+  const items = activeTab === "user" ? yourItems : agentItems;
   const activeId = activeTab === "user" ? activeUserId : activeAgentId;
   const railItems = useMemo(
     () => selectTocRailItems({ activeId: activeUserId, items: userItems }),
@@ -748,7 +741,7 @@ export function ThreadTableOfContents({
           {open ? (
             <div
               id={`thread-toc-panel-${threadId}`}
-              className="pointer-events-auto absolute right-full top-0 w-[18.25rem] max-w-[calc(100vw-3rem)] pr-1"
+              className="pointer-events-auto absolute right-6 top-0 w-[18.25rem] max-w-[calc(100vw-3rem)] pr-1"
             >
               <div className="rounded-lg border border-border bg-popover p-1 shadow-lg">
                 <div className="flex items-center gap-1 pb-1">
