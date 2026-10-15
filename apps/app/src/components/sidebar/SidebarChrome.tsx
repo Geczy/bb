@@ -31,7 +31,7 @@ export function useSidebarHeaderControlAxisClass(): string | undefined {
 }
 
 export const MACOS_DRAWER_HEADER_RESERVE_CLASS =
-  "pl-[calc(88px_-_2_*_var(--bb-sidebar-rail-padding))]";
+  "pl-[calc(var(--bb-macos-traffic-light-reserve,84px)_+_32px_-_var(--bb-sidebar-control-size)_-_2_*_var(--bb-sidebar-rail-padding))]";
 
 export function SidebarTopReserveRow({
   testId,
