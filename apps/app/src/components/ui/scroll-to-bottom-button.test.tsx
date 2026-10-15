@@ -37,6 +37,14 @@ describe("surfaces that stay over the timeline do not blur their backdrop", () =
     expect(content).not.toContain("animate-shine-icon");
   });
 
+  it("labels the button when newer content arrived below", () => {
+    const markup = renderToStaticMarkup(
+      <ScrollToBottomButton visible hasNewContent onClick={() => {}} />,
+    );
+    expect(markup).toContain('aria-label="Scroll to new messages"');
+    expect(markup).toContain("New messages");
+  });
+
   it("keeps the shared page-header surface free of blur", () => {
     expect(APP_PAGE_HEADER_SURFACE_CLASS).not.toContain("backdrop-blur");
   });

@@ -102,6 +102,18 @@ export function useBottomAnchoredScroll(): BottomAnchorContextValue | null {
   return useContext(BottomAnchorContext);
 }
 
+interface NewContentBelowContextValue {
+  hasNewContentBelow: boolean;
+  markNewContentBelow: () => void;
+}
+
+const NewContentBelowContext =
+  createContext<NewContentBelowContextValue | null>(null);
+
+export function useNewContentBelow(): NewContentBelowContextValue | null {
+  return useContext(NewContentBelowContext);
+}
+
 function getMaxScrollOffset(element: HTMLElement) {
   return Math.max(0, element.scrollHeight - element.clientHeight);
 }
@@ -265,6 +277,7 @@ export function BottomAnchoredScrollBody({
   }>({ scrollAreaClientHeight: null, scrollContentHeight: null });
   const scrollAnchorRowsRef = useRef<NodeListOf<HTMLElement> | null>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewContentBelow, setHasNewContentBelow] = useState(false);
   const initialScrollRestoreRowId = useMemo(() => {
     if (scrollAnchorThreadId === undefined) return null;
     const anchor = store.get(
@@ -911,6 +924,22 @@ export function BottomAnchoredScrollBody({
     ],
   );
 
+  useEffect(() => {
+    if (isAtBottom) setHasNewContentBelow(false);
+  }, [isAtBottom]);
+
+  const markNewContentBelow = useCallback(() => {
+    if (!shouldStickToBottomRef.current) setHasNewContentBelow(true);
+  }, []);
+
+  const newContentBelowContextValue = useMemo<NewContentBelowContextValue>(
+    () => ({
+      hasNewContentBelow: hasNewContentBelow && !isAtBottom,
+      markNewContentBelow,
+    }),
+    [hasNewContentBelow, isAtBottom, markNewContentBelow],
+  );
+
   const flushScrollAnchorCapture = useCallback(
     (scrollArea: HTMLElement) => {
       const captureThrottle = scrollAnchorCaptureThrottleRef.current;
@@ -1012,57 +1041,59 @@ export function BottomAnchoredScrollBody({
 
   return (
     <BottomAnchorContext.Provider value={bottomAnchorContextValue}>
-      <TimelineScrollRestoreRowIdContext.Provider
-        value={initialScrollRestoreRowId}
-      >
-        <div className="grid min-h-0 flex-1 grid-rows-[minmax(auto,1fr)] overflow-hidden">
-          <div
-            ref={scrollAreaRef}
-            data-page-scroll-viewport=""
-            className={cn(
-              "thread-scrollbar @container/page col-start-1 row-start-1 min-h-0 overflow-x-hidden overflow-y-auto",
-              scrollAreaClassName,
-            )}
-          >
+      <NewContentBelowContext.Provider value={newContentBelowContextValue}>
+        <TimelineScrollRestoreRowIdContext.Provider
+          value={initialScrollRestoreRowId}
+        >
+          <div className="grid min-h-0 flex-1 grid-rows-[minmax(auto,1fr)] overflow-hidden">
             <div
-              ref={scrollContentRef}
-              className="flex min-h-full min-w-0 flex-col"
+              ref={scrollAreaRef}
+              data-page-scroll-viewport=""
+              className={cn(
+                "thread-scrollbar @container/page col-start-1 row-start-1 min-h-0 overflow-x-hidden overflow-y-auto",
+                scrollAreaClassName,
+              )}
             >
-              {}
               <div
-                className={cn(
-                  "mx-auto flex w-full min-w-0 flex-1 flex-col px-4 pb-4 pt-2",
-                  maxWidthClassName,
-                  contentClassName,
-                  isAtBottom &&
-                    supportsScrollAnchoring() &&
-                    "scroll-bottom-anchor-content",
-                )}
-                style={PAGE_SHELL_CONTENT_STYLE}
+                ref={scrollContentRef}
+                className="flex min-h-full min-w-0 flex-col"
               >
-                {children}
-              </div>
-              <div className="scroll-bottom-anchor" aria-hidden />
-              {footer ? (
+                {}
                 <div
-                  data-scroll-footer=""
-                  className="sticky bottom-0 z-20 shrink-0 [overflow-anchor:none]"
+                  className={cn(
+                    "mx-auto flex w-full min-w-0 flex-1 flex-col px-4 pb-4 pt-2",
+                    maxWidthClassName,
+                    contentClassName,
+                    isAtBottom &&
+                      supportsScrollAnchoring() &&
+                      "scroll-bottom-anchor-content",
+                  )}
+                  style={PAGE_SHELL_CONTENT_STYLE}
                 >
-                  {footer}
+                  {children}
                 </div>
-              ) : null}
+                <div className="scroll-bottom-anchor" aria-hidden />
+                {footer ? (
+                  <div
+                    data-scroll-footer=""
+                    className="sticky bottom-0 z-20 shrink-0 [overflow-anchor:none]"
+                  >
+                    {footer}
+                  </div>
+                ) : null}
+              </div>
             </div>
+            {scrollOverlay ? (
+              <div
+                data-scroll-overlay=""
+                className="pointer-events-none z-30 col-start-1 row-start-1 flex min-h-0 min-w-0 items-center justify-end px-3 py-3"
+              >
+                <div className="pointer-events-auto">{scrollOverlay}</div>
+              </div>
+            ) : null}
           </div>
-          {scrollOverlay ? (
-            <div
-              data-scroll-overlay=""
-              className="pointer-events-none z-30 col-start-1 row-start-1 flex min-h-0 min-w-0 items-center justify-end px-3 py-3"
-            >
-              <div className="pointer-events-auto">{scrollOverlay}</div>
-            </div>
-          ) : null}
-        </div>
-      </TimelineScrollRestoreRowIdContext.Provider>
+        </TimelineScrollRestoreRowIdContext.Provider>
+      </NewContentBelowContext.Provider>
     </BottomAnchorContext.Provider>
   );
 }

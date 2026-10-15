@@ -4,12 +4,14 @@ import { Icon } from "@bb/shared-ui/icon";
 interface ScrollToBottomButtonProps {
   visible: boolean;
   active?: boolean;
+  hasNewContent?: boolean;
   onClick: () => void;
 }
 
 export function ScrollToBottomButton({
   visible,
   active = false,
+  hasNewContent = false,
   onClick,
 }: ScrollToBottomButtonProps) {
   return (
@@ -17,12 +19,15 @@ export function ScrollToBottomButton({
       <button
         onClick={onClick}
         className={cn(
-          "z-20 -mt-20 flex size-8 cursor-pointer items-center justify-center rounded-full border border-border bg-background transition-all duration-200 hover:bg-accent",
+          "z-20 -mt-20 flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-border bg-background transition-all duration-200 hover:bg-accent",
+          hasNewContent ? "px-3 text-xs text-foreground" : "w-8",
           visible
             ? "translate-y-0 opacity-100"
             : "pointer-events-none invisible translate-y-2 opacity-0",
         )}
-        aria-label="Scroll to latest event"
+        aria-label={
+          hasNewContent ? "Scroll to new messages" : "Scroll to latest event"
+        }
         type="button"
       >
         {}
@@ -30,6 +35,7 @@ export function ScrollToBottomButton({
           name="ArrowDown"
           className={cn("size-4", active && visible && "animate-shine-icon")}
         />
+        {hasNewContent ? <span>New messages</span> : null}
       </button>
     </div>
   );

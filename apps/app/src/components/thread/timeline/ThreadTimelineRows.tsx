@@ -110,6 +110,7 @@ import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/pr
 import {
   TimelineScrollRestoreRowIdContext,
   useBottomAnchoredScroll,
+  useNewContentBelow,
 } from "@/components/ui/bottom-anchored-scroll-body.js";
 import {
   collectSearchedMessageAncestorRowIds,
@@ -2078,6 +2079,39 @@ function estimateTimelineWindowedRowHeight(
   return 20 + lineCount * 23;
 }
 
+function useMarkNewTimelineRowsBelow({
+  enabled,
+  latestRowId,
+  threadId,
+}: {
+  enabled: boolean;
+  latestRowId: string | null;
+  threadId: string | undefined;
+}) {
+  const newContentBelow = useNewContentBelow();
+  const markNewContentBelow = newContentBelow?.markNewContentBelow;
+  const previousRef = useRef<{
+    latestRowId: string | null;
+    threadId: string | undefined;
+  } | null>(null);
+
+  useEffect(() => {
+    const previous = previousRef.current;
+    previousRef.current = { latestRowId, threadId };
+    if (
+      !enabled ||
+      previous === null ||
+      previous.threadId !== threadId ||
+      previous.latestRowId === null ||
+      latestRowId === null ||
+      previous.latestRowId === latestRowId
+    ) {
+      return;
+    }
+    markNewContentBelow?.();
+  }, [enabled, latestRowId, markNewContentBelow, threadId]);
+}
+
 function TimelineRowsList({
   compactActivityIntents,
   hasOlderTimelineRows,
@@ -2161,6 +2195,11 @@ function TimelineRowsList({
     bottomAnchor?.getScrollElement ??
     null;
   const isTopLevelList = spacing === "top-level";
+  useMarkNewTimelineRowsBelow({
+    enabled: isTopLevelList && detailScrollRoot === null,
+    latestRowId: rows.at(-1)?.id ?? null,
+    threadId,
+  });
   const { measureRef: messageColumnWidthSourceRef, width: messageColumnWidth } =
     useMeasuredWidth({ enabled: isTopLevelList });
   const messageColumnWidthValue = useMemo(
