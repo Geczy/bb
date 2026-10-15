@@ -215,14 +215,18 @@ function setOutline(
           items === undefined
             ? undefined
             : {
-                ...outlineResponse(items.filter((item) => item.role === role)),
+                ...outlineResponse(
+                  role === "all"
+                    ? items
+                    : items.filter((item) => item.role === role),
+                ),
                 maxSeq,
               },
       }) as ReturnType<typeof useThreadConversationOutline>,
   );
 }
 
-function lastOutlineOptions(role: "user" | "assistant") {
+function lastOutlineOptions(role: "user" | "all") {
   return vi
     .mocked(useThreadConversationOutline)
     .mock.calls.filter(([, callRole]) => callRole === role)
@@ -429,13 +433,13 @@ describe("ThreadTableOfContents", () => {
     render(<TocHost timelineRows={[userConversationRow(1)]} />);
 
     expect(lastOutlineOptions("user")).toEqual({ enabled: true });
-    expect(lastOutlineOptions("assistant")).toEqual({ enabled: false });
+    expect(lastOutlineOptions("all")).toEqual({ enabled: false });
 
     openTocPanel();
-    expect(lastOutlineOptions("assistant")).toEqual({ enabled: false });
+    expect(lastOutlineOptions("all")).toEqual({ enabled: false });
 
     fireEvent.click(screen.getByText("Agent messages"));
-    expect(lastOutlineOptions("assistant")).toEqual({ enabled: true });
+    expect(lastOutlineOptions("all")).toEqual({ enabled: true });
     expect(screen.getByText("Agent answer")).not.toBeNull();
   });
 
@@ -477,10 +481,10 @@ describe("ThreadTableOfContents", () => {
       (_threadId, role) =>
         ({
           data:
-            role === "assistant" && !agentPreviewsReady
+            role === "all" && !agentPreviewsReady
               ? undefined
               : outlineResponse(
-                  role === "assistant"
+                  role === "all"
                     ? [1, 2, 3].map((index) => ({
                         id: `earlier_agent_${index}`,
                         role: "assistant" as const,
@@ -848,6 +852,10 @@ describe("ThreadTableOfContents", () => {
     render(<TocHost timelineRows={[]} />);
     openTocPanel();
 
+    expect(
+      screen.queryByText("Release bug report: the calendar is stale."),
+    ).toBeNull();
+    fireEvent.click(screen.getByText("Agent messages"));
     expect(await screen.findByText("Agent")).not.toBeNull();
     expect(
       screen.getByText("Release bug report: the calendar is stale."),
@@ -910,6 +918,7 @@ describe("ThreadTableOfContents", () => {
       </QueryClientProvider>,
     );
     openTocPanel();
+    fireEvent.click(screen.getByText("Agent messages"));
 
     expect(await screen.findByText("Ask Calendar specialist")).not.toBeNull();
     expect(screen.queryByText("@thread:thr_nested")).toBeNull();
@@ -1163,11 +1172,14 @@ describe("ThreadTableOfContents", () => {
   });
 
   it("finds active items with logarithmic row measurements", () => {
-    const allItems = Array.from({ length: 256 }, (_, index): TocItem => ({
-      id: `item-${index}`,
-      label: `Message ${index}`,
-      role: index % 2 === 0 ? "user" : "assistant",
-    }));
+    const allItems = Array.from(
+      { length: 256 },
+      (_, index): TocItem => ({
+        id: `item-${index}`,
+        label: `Message ${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+      }),
+    );
     const manyUserItems = allItems.filter((item) => item.role === "user");
     const manyAgentItems = allItems.filter((item) => item.role === "assistant");
     const visibleIndex = 200;
