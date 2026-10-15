@@ -12,6 +12,7 @@ Twelve clickable Ladle stories: six proposed experiences, each beside a control 
 - Worktree: `/home/bersabel/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_e4bcx727qf-1/bb`
 - Launch command from worktree: `cd apps/app && pnpm storybook --port 61001 --stories src/prototypes/retention/Retention.stories.tsx`
 - Preview: <http://localhost:61001/?story=retention--h1a-automation&theme=light>
+- Remote preview: <https://brsbl-bbox--61001.getbb.app/?story=retention--h1a-automation&theme=light>
 - Port 61000 was already occupied. Leave this environment and terminal alive for review.
 
 ## Stories and interactions
