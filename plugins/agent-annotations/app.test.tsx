@@ -93,7 +93,7 @@ describe("AnnotateAction", () => {
       },
       {
         rpc: {
-          save: () => ({ id: "ann_saved" }),
+          save: () => ({ id: pageAnnotation.id }),
           update: () => ({ id: pageAnnotation.id }),
         },
       },
@@ -120,11 +120,12 @@ describe("AnnotateAction", () => {
       expect(slot.inspection.composer.draft.mentions).toMatchObject([
         {
           provider: "annotation",
-          id: "ann_saved",
-          label: '1. button#pay "Pay now"',
+          id: pageAnnotation.id,
+          label: "1. Make this green",
         },
       ]);
     });
+    expect(slot.inspection.composer.focusCount).toBe(0);
     expect(slot.inspection.rpcCalls).toEqual([
       {
         method: "save",
@@ -145,6 +146,7 @@ describe("AnnotateAction", () => {
       fake.emit({
         type: "annotation-update",
         id: pageAnnotation.id,
+        number: 1,
         comment: "Make this blue",
       });
     });
@@ -154,11 +156,17 @@ describe("AnnotateAction", () => {
         input: { id: pageAnnotation.id, comment: "Make this blue" },
       });
     });
-    expect(slot.inspection.composer.draft.mentions).toHaveLength(1);
+    await waitFor(() => {
+      expect(slot.inspection.composer.draft.text).toBe("1. Make this blue ");
+    });
+    expect(slot.inspection.composer.draft.mentions).toMatchObject([
+      { id: pageAnnotation.id, label: "1. Make this blue", from: 0, to: 17 },
+    ]);
 
     act(() => {
       fake.emit({ type: "state", active: false, count: 1 });
     });
+    expect(slot.inspection.composer.focusCount).toBe(1);
     expect(
       slot
         .getByRole("button", { name: "Annotate elements" })

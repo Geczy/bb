@@ -67,7 +67,10 @@ export const pageMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
   annotationUpdateSchema
-    .extend({ type: z.literal("annotation-update") })
+    .extend({
+      type: z.literal("annotation-update"),
+      number: z.number().int().positive(),
+    })
     .strict(),
   pageStateSchema.extend({ type: z.literal("state") }).strict(),
   z
@@ -88,8 +91,18 @@ export const annotationRecordSchema = pageAnnotationSchema
   .strict();
 export type AnnotationRecord = z.infer<typeof annotationRecordSchema>;
 
-export function annotationMentionLabel(annotation: PageAnnotation): string {
-  return `${annotation.number}. ${annotation.element.name}`;
+const MENTION_COMMENT_LENGTH = 60;
+
+export function annotationMentionLabel(
+  number: number,
+  comment: string,
+): string {
+  const text = comment.replace(/\s+/g, " ").trim();
+  const shown =
+    text.length > MENTION_COMMENT_LENGTH
+      ? `${text.slice(0, MENTION_COMMENT_LENGTH - 1).trimEnd()}…`
+      : text;
+  return `${number}. ${shown}`;
 }
 
 function formatComponent(component: ReactComponent): string {

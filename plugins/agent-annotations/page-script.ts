@@ -137,6 +137,7 @@ function installAgentAnnotations(
   let active = false;
   let hovered: Element | null = null;
   let editor: HTMLElement | null = null;
+  let saveEditor: (() => void) | null = null;
   let nextNumber = 1;
   let frame = 0;
   const annotations: PinnedAnnotation[] = [];
@@ -330,6 +331,12 @@ function installAgentAnnotations(
   function closeEditor(): void {
     editor?.remove();
     editor = null;
+    saveEditor = null;
+  }
+
+  function settleEditor(): void {
+    saveEditor?.();
+    closeEditor();
   }
 
   function commit(element: Element, comment: string): void {
@@ -402,15 +409,21 @@ function installAgentAnnotations(
     annotation.pin.title = trimmed;
     closeEditor();
     showHover(null);
-    post({ type: "annotation-update", id: annotation.id, comment: trimmed });
+    post({
+      type: "annotation-update",
+      id: annotation.id,
+      number: annotation.number,
+      comment: trimmed,
+    });
   }
 
   function openEditor(
     element: Element,
     annotation: PinnedAnnotation | null = null,
   ): void {
-    closeEditor();
+    settleEditor();
     showHover(element);
+    hoverLabel.style.display = "none";
     const rect = element.getBoundingClientRect();
     const panel = part("div", "editor");
     panel.setAttribute("role", "dialog");
@@ -464,6 +477,13 @@ function installAgentAnnotations(
     panel.append(header, textarea, actions);
     root.append(panel);
     editor = panel;
+    saveEditor = () => {
+      if (annotation === null) {
+        commit(element, textarea.value);
+      } else if (textarea.value.trim() !== annotation.comment) {
+        update(annotation, textarea.value);
+      }
+    };
     const panelRect = panel.getBoundingClientRect();
     const below = rect.bottom + 8;
     const preferredTop =
@@ -519,12 +539,10 @@ function installAgentAnnotations(
     }
     event.preventDefault();
     event.stopImmediatePropagation();
-    if (editor !== null) {
-      closeEditor();
-      return;
-    }
     const target = targetAt(event.clientX, event.clientY);
-    if (target !== null) {
+    if (target === null) {
+      settleEditor();
+    } else {
       openEditor(target);
     }
   }
@@ -570,7 +588,7 @@ function installAgentAnnotations(
       window.removeEventListener("mouseup", swallow, true);
       window.removeEventListener("click", onClick, true);
       window.removeEventListener("keydown", onKeyDown, true);
-      closeEditor();
+      settleEditor();
       showHover(null);
       reposition();
       syncLoop();
