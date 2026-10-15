@@ -245,6 +245,7 @@ interface TimelineRowsListProps {
 
 interface TimelineUnreadDividerProps {
   autoScroll: boolean;
+  scrollTargetRowId: string | null;
 }
 
 interface TimelineRowViewProps {
@@ -343,6 +344,7 @@ type TimelineRowsListItem =
   | {
       kind: "unread-divider";
       id: "thread-unread-divider";
+      scrollTargetRowId: string | null;
     };
 
 interface ConversationRowProps {
@@ -1063,7 +1065,10 @@ const ConversationRowContent = memo(function ConversationRowContent({
   );
 });
 
-function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
+function TimelineUnreadDivider({
+  autoScroll,
+  scrollTargetRowId,
+}: TimelineUnreadDividerProps) {
   const bottomAnchor = useBottomAnchoredScroll();
   const dividerRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
@@ -1080,13 +1085,21 @@ function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
       }
 
       hasScrolledRef.current = true;
+      const scrollTarget =
+        scrollTargetRowId === null
+          ? null
+          : bottomAnchor
+              .getScrollElement()
+              ?.querySelector<HTMLElement>(
+                `[data-timeline-row-id="${CSS.escape(scrollTargetRowId)}"]`,
+              );
       bottomAnchor.scrollElementIntoViewClampedToMaxScroll({
-        element: divider,
+        element: scrollTarget ?? divider,
       });
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [autoScroll, bottomAnchor]);
+  }, [autoScroll, bottomAnchor, scrollTargetRowId]);
 
   return (
     <div
@@ -1956,6 +1969,20 @@ function isUserAuthoredConversationRow(row: ThreadTimelineViewRow): boolean {
   );
 }
 
+function isAgentConversationRow(row: ThreadTimelineViewRow): boolean {
+  return row.kind === "conversation" && !isUserAuthoredConversationRow(row);
+}
+
+function findUnreadScrollTargetRowId(
+  rows: readonly ThreadTimelineViewRow[],
+  dividerIndex: number,
+): string | null {
+  const firstUnreadMessage = rows
+    .slice(dividerIndex + 1)
+    .find(isAgentConversationRow);
+  return firstUnreadMessage?.id ?? null;
+}
+
 function isUnreadDividerCandidateAfterCutoff({
   cutoffAt,
   row,
@@ -1979,7 +2006,13 @@ export function buildTimelineRowsListItems({
 
   for (const [index, row] of rows.entries()) {
     if (index === dividerIndex) {
-      items.push({ kind: "unread-divider", id: "thread-unread-divider" });
+      items.push({
+        kind: "unread-divider",
+        id: "thread-unread-divider",
+        scrollTargetRowId: isAgentConversationRow(row)
+          ? null
+          : findUnreadScrollTargetRowId(rows, dividerIndex),
+      });
     }
     items.push({ kind: "row", row });
   }
@@ -2100,6 +2133,9 @@ function TimelineRowsList({
     for (const item of items) {
       if (item.kind === "unread-divider") {
         keys.add(`divider:${item.id}`);
+        if (item.scrollTargetRowId !== null) {
+          keys.add(item.scrollTargetRowId);
+        }
       }
     }
     for (const rowId of stableSearchExpandedRowIds) {
@@ -2180,6 +2216,7 @@ function TimelineRowsList({
                   >
                     <TimelineUnreadDivider
                       autoScroll={unreadDividerAutoScroll}
+                      scrollTargetRowId={item.scrollTargetRowId}
                     />
                   </div>
                 );

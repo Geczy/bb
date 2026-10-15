@@ -143,4 +143,32 @@ describe("unread divider placement", () => {
 
     expect(sequence[0]).toBe(DIVIDER);
   });
+
+  it("targets the first unread agent message below unread work", () => {
+    const divider = buildTimelineRowsListItems({
+      rows: buildTimelineViewRows([
+        userMessage(100),
+        assistantMessage(200),
+        command(400),
+        command(500),
+        assistantMessage(600),
+      ]),
+      unreadDividerPlacement: { kind: "after-cutoff", cutoffAt: 300 },
+    }).find((item) => item.kind === "unread-divider");
+
+    expect(divider).toMatchObject({ scrollTargetRowId: "assistant-600" });
+  });
+
+  it("targets the divider itself when an agent message follows it", () => {
+    const divider = buildTimelineRowsListItems({
+      rows: buildTimelineViewRows([
+        userMessage(100),
+        command(200),
+        assistantMessage(500),
+      ]),
+      unreadDividerPlacement: { kind: "after-cutoff", cutoffAt: 350 },
+    }).find((item) => item.kind === "unread-divider");
+
+    expect(divider).toMatchObject({ scrollTargetRowId: null });
+  });
 });
