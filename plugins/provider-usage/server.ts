@@ -311,6 +311,13 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
         event: "host:changed",
         callback: () => bb.rpc.experimental_invalidate(["inventory"]),
       });
+      const stopSystem = bb.sdk.subscribe({
+        event: "system:changed",
+        callback: (event) => {
+          if (event.changes.includes("config-changed"))
+            bb.rpc.experimental_invalidate(["inventory"]);
+        },
+      });
       const stop = bb.sdk.plugins.experimental_watchDiscovery({
         method: usageListMethod,
         signal,
@@ -323,6 +330,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
           );
       } finally {
         stopHosts();
+        stopSystem();
         stop();
         for (const dispose of sourceStops.values()) dispose();
         sourceStops.clear();
@@ -515,24 +523,28 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     watchCount++;
     if (watchCount === 1)
       inventoryTimer = setInterval(() => {
-        void reconcileInventory().catch((error) => bb.log.warn(String(error)));
+        void reconcileInventory().catch((error) => {
+          if (lifetime.signal.aborted) return;
+          bb.log.warn(String(error));
+          bb.rpc.experimental_invalidate(["inventory"]);
+        });
       }, 30 * 60_000);
     let timer: ReturnType<typeof setTimeout> | null = null;
     const refresh = async () => {
       try {
         await readUsage({ ...request, force: false });
-        if (!signal.aborted)
+      } catch (error) {
+        if (!signal.aborted) bb.log.warn(String(error));
+      } finally {
+        if (!signal.aborted) {
           bb.rpc.experimental_invalidate([
             "usage:all",
             ...(request.machineIds?.map((id) => `usage:${id}`) ?? []),
           ]);
-      } catch (error) {
-        if (!signal.aborted) bb.log.warn(String(error));
-      } finally {
-        if (!signal.aborted)
           timer = setTimeout(() => {
             void refresh();
           }, refreshIntervalMs);
+        }
       }
     };
     if (request.providerIds.length > 0)

@@ -1,8 +1,9 @@
 import { usageRpcTags } from "./testing/rpc-tags.js";
+import { usageListMethod } from "./usage-source-contract.js";
 // @vitest-environment jsdom
-import { cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   installTestPluginRuntime,
   renderSlot,
@@ -302,5 +303,112 @@ it("reloads inventory-only settings through server invalidations", async () => {
     stop();
     slot.unmount();
     await host.harness.dispose();
+  }
+});
+
+it("keeps measured usage and offers reload when a scheduled host read fails", async () => {
+  let failed = false;
+  const host = createFakePluginHost({
+    pluginId: "provider-usage",
+    sdk: {
+      system: { config: async () => ({ primaryHostId: null }) },
+      hosts: {
+        list: async () => {
+          if (failed) throw new Error("Hosts unavailable");
+          return [];
+        },
+      },
+      providers: { list: async () => [] },
+      plugins: {
+        experimental_discoverRpc: async () => [
+          {
+            pluginId: "source",
+            displayName: "Source",
+            method: usageListMethod,
+          },
+        ],
+        callRpc: async ({ method }) =>
+          method === usageListMethod
+            ? {
+                resources: [
+                  {
+                    id: "account",
+                    providerId: "codex",
+                    label: "person@example.com",
+                    scope: { kind: "shared" },
+                  },
+                ],
+              }
+            : {
+                observedAt: Date.now(),
+                usage: {
+                  status: "ok",
+                  accountEmail: "person@example.com",
+                  planLabel: null,
+                  windows: [],
+                },
+              },
+      },
+    },
+  });
+  plugin(host.bb);
+  const slot = renderSlot<{}, typeof providerUsageRpcContract>(
+    { component: UsageSettings },
+    {},
+    {
+      rpc: {
+        getUsage: async (input) =>
+          providerUsageRpcContract.getUsage.output.parse(
+            await host.harness.callRpc("getUsage", input),
+          ),
+      },
+      experimental_rpcTags: usageRpcTags,
+    },
+  );
+  const stop = host.harness.experimental_onRpcInvalidation((tags) => {
+    void slot.experimental_invalidateRpc(tags ?? undefined);
+  });
+  let release: (() => void) | undefined;
+  try {
+    await slot.findByText("person@example.com");
+    await waitFor(() =>
+      expect(
+        slot
+          .getByRole("button", { name: "Reload usage data" })
+          .hasAttribute("disabled"),
+      ).toBe(false),
+    );
+    vi.useFakeTimers();
+    release = host.harness.holdRpcWatch("getUsage", {
+      input: {
+        force: false,
+        machineIds: ["source:source"],
+        providerIds: ["codex"],
+        maxAgeMs: 60_000,
+      },
+    });
+    failed = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(70_000);
+    });
+    expect(
+      slot.getByText("Couldn’t refresh. Showing last update."),
+    ).toBeTruthy();
+    expect(slot.getByText("person@example.com")).toBeTruthy();
+    failed = false;
+    await act(async () => {
+      fireEvent.click(slot.getByRole("button", { name: "Reload usage data" }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(
+      slot.queryByText("Couldn’t refresh. Showing last update."),
+    ).toBeNull();
+    expect(slot.getByText("person@example.com")).toBeTruthy();
+  } finally {
+    release?.();
+    stop();
+    slot.unmount();
+    await host.harness.dispose();
+    vi.useRealTimers();
   }
 });

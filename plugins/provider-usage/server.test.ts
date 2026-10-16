@@ -561,3 +561,135 @@ it("invalidates inventory on host changes even without sources", async () => {
     await host.harness.dispose();
   }
 });
+
+it.each(["hosts", "discovery", "inventory-discovery"])(
+  "delivers a scheduled %s failure to readers and recovers",
+  async (boundary) => {
+    vi.useFakeTimers();
+    let failed = false;
+    const host = createFakePluginHost({
+      pluginId: "provider-usage",
+      sdk: {
+        system: { config: async () => ({ primaryHostId: null }) },
+        hosts: {
+          list: async () => {
+            if (failed && boundary === "hosts")
+              throw new Error("Hosts unavailable");
+            return [];
+          },
+        },
+        providers: { list: async () => [] },
+        plugins: {
+          experimental_discoverRpc: async () => {
+            if (failed && boundary !== "hosts")
+              throw new Error("Discovery unavailable");
+            return [
+              {
+                pluginId: "source",
+                displayName: "Source",
+                method: usageListMethod,
+              },
+            ];
+          },
+          callRpc: async ({ method }) =>
+            method === usageListMethod
+              ? {
+                  resources: [
+                    {
+                      id: "account",
+                      providerId: "codex",
+                      label: "Account",
+                      scope: { kind: "shared" },
+                    },
+                  ],
+                }
+              : {
+                  observedAt: Date.now(),
+                  usage: {
+                    status: "ok",
+                    accountEmail: null,
+                    planLabel: null,
+                    windows: [],
+                  },
+                },
+        },
+      },
+    });
+    plugin(host.bb);
+    const inventoryOnly = boundary === "inventory-discovery";
+    const input = {
+      force: false,
+      machineIds: ["source:source"],
+      providerIds: inventoryOnly ? [] : ["codex"],
+      maxAgeMs: boundary === "hosts" ? 60_000 : 5 * 60_000,
+    };
+    let release: (() => void) | undefined;
+    try {
+      const loaded = await host.harness.callRpc("getUsage", input);
+      host.harness.rpcInvalidations.length = 0;
+      release = host.harness.holdRpcWatch("getUsage", { input });
+      failed = true;
+      await vi.advanceTimersByTimeAsync(
+        inventoryOnly ? 30 * 60_000 : input.maxAgeMs,
+      );
+      expect(host.harness.rpcInvalidations).toContainEqual(
+        inventoryOnly ? ["inventory"] : ["usage:all", "usage:source:source"],
+      );
+      await expect(host.harness.callRpc("getUsage", input)).rejects.toThrow(
+        boundary === "hosts" ? "Hosts unavailable" : "Discovery unavailable",
+      );
+      failed = false;
+      expect(await host.harness.callRpc("getUsage", input)).toEqual(loaded);
+    } finally {
+      release?.();
+      await host.harness.dispose();
+      vi.useRealTimers();
+    }
+  },
+);
+
+it("invalidates inventory immediately when the primary host changes", async () => {
+  let primaryHostId = "a";
+  const host = createFakePluginHost({
+    pluginId: "provider-usage",
+    sdk: {
+      system: { config: async () => ({ primaryHostId }) },
+      hosts: {
+        list: async () =>
+          ["a", "b"].map((id) =>
+            makeHostResponse({ id, name: id, status: "connected" }),
+          ),
+      },
+      providers: { list: async () => [] },
+      plugins: { experimental_discoverRpc: async () => [] },
+    },
+  });
+  plugin(host.bb);
+  const service = host.harness.runService("usage-inventories");
+  const input = {
+    force: false,
+    machineIds: null,
+    providerIds: [],
+    maxAgeMs: 60_000,
+  };
+  try {
+    expect(await host.harness.callRpc("getUsage", input)).toMatchObject({
+      machines: [{ id: "a" }, { id: "b" }],
+    });
+    host.harness.rpcInvalidations.length = 0;
+    primaryHostId = "b";
+    host.harness.sdk.emitRealtime("system:changed", {
+      type: "changed",
+      entity: "system",
+      changes: ["config-changed"],
+    });
+    expect(host.harness.rpcInvalidations).toContainEqual(["inventory"]);
+    expect(await host.harness.callRpc("getUsage", input)).toMatchObject({
+      machines: [{ id: "b" }, { id: "a" }],
+    });
+  } finally {
+    service.controller.abort();
+    await service.done;
+    await host.harness.dispose();
+  }
+});
