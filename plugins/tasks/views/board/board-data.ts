@@ -90,8 +90,18 @@ export function useBoardData(projectId: string) {
   }, [rows.data, labelsById, threads.data, attachments.data]);
   return {
     data,
-    error: rows.error ?? labels.error,
+    error:
+      rows.error ??
+      labels.error ??
+      threads.error?.message ??
+      attachments.error?.message ??
+      null,
     isLoading: rows.isLoading,
-    refresh: rows.refresh,
+    refresh: () => {
+      rows.refresh();
+      if (labels.error !== null) labels.refresh();
+      if (threads.error !== null) void threads.refetch();
+      if (attachments.error !== null) void attachments.refetch();
+    },
   };
 }

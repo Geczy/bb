@@ -16,14 +16,18 @@ export async function createTasksServer(
   await plugin(bb);
   const metadata = new Map<string, ReadMetadata>();
   const failures = new Map<string, Error>();
-  const holds = new Map<string, Promise<void>>();
+  const holds = new Map<
+    string,
+    { gate: Promise<void>; matches(input: unknown): boolean }
+  >();
   let queue = Promise.resolve();
   const call = async (
     method: string,
     input: unknown,
     context?: { experimental_warmKeyedMethods: readonly string[] },
   ) => {
-    await holds.get(method);
+    const hold = holds.get(method);
+    if (hold?.matches(input)) await hold.gate;
     const read = queue.then(async () => {
       const failure = failures.get(method);
       if (failure) throw failure;
@@ -68,14 +72,12 @@ export async function createTasksServer(
     recover(method: string) {
       failures.delete(method);
     },
-    hold(method: string) {
+    hold(method: string, matches: (input: unknown) => boolean = () => true) {
       let release = () => {};
-      holds.set(
-        method,
-        new Promise<void>((resolve) => {
-          release = resolve;
-        }),
-      );
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      holds.set(method, { gate, matches });
       return () => {
         holds.delete(method);
         release();

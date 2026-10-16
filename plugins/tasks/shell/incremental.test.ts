@@ -123,7 +123,7 @@ describe("task membership and keyed invalidation", () => {
       expect(affected).toBe(invalidated);
       const after = await membership(input);
       expect(after.keys).toEqual([task.id]);
-      if (!invalidated) expect(after).toEqual(before);
+      if (!invalidated) expect(after.keys).toEqual(before.keys);
       expect(harness.rpcInvalidations.flat()).toContain(`task:${task.id}`);
     },
   );

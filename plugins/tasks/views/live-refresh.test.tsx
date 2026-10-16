@@ -106,6 +106,38 @@ describe("board and list row loading", () => {
     expect(slot.queryByRole("alert")).toBeNull();
   });
 
+  it("retries every failed board read from the inline error", async () => {
+    const server = await setup();
+    const { label } = tasksRpcContract.createLabel.output.parse(
+      await server.harness.callRpc("createLabel", {
+        projectId: server.project.id,
+        name: "Needs review",
+        color: "red",
+      }),
+    );
+    const task = await server.createTask({ title: "Labelled", status: "todo" });
+    await server.harness.callRpc("updateTask", {
+      taskId: task.id,
+      labelIds: [label.id],
+    });
+    server.fail("listLabels", "labels unavailable");
+    const slot = server.live(
+      renderSlot(
+        app.navPanels[0]!,
+        { subPath: `${server.project.id}?view=board` },
+        server.options,
+      ),
+    );
+    await slot.findByText("Labelled");
+    const alert = await slot.findByRole("alert");
+    expect(alert.textContent).toContain("labels unavailable");
+
+    server.recover("listLabels");
+    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+    await slot.findByText("Needs review");
+    expect(slot.queryByRole("alert")).toBeNull();
+  });
+
   it("shows open tasks before closed ones while the remaining rows load", async () => {
     const server = await setup();
     for (let index = 0; index < 25; index++)
@@ -126,6 +158,90 @@ describe("board and list row loading", () => {
     } finally {
       release();
     }
+  });
+});
+
+describe("open-first loading across row batches", () => {
+  it("withholds closed rows until every open row has loaded", async () => {
+    const server = await setup();
+    const tasks = [];
+    for (let index = 0; index < 536; index++)
+      tasks.push(
+        await server.createTask({ title: `Task ${index}`, status: "done" }),
+      );
+    const byId = [...tasks].sort((left, right) =>
+      left.id.localeCompare(right.id),
+    );
+    const lateOpen = byId.at(-1)!;
+    for (const task of [...byId.slice(0, 25), lateOpen])
+      await server.harness.callRpc("updateTask", {
+        taskId: task.id,
+        status: "todo",
+      });
+    const release = server.hold(
+      "getTasksKeyed",
+      (input) =>
+        typeof input === "object" &&
+        input !== null &&
+        "keys" in input &&
+        Array.isArray(input.keys) &&
+        input.keys.includes(lateOpen.id),
+    );
+    try {
+      const slot = server.live(
+        renderSlot(
+          app.navPanels[0]!,
+          { subPath: `${server.project.id}?view=list` },
+          server.options,
+        ),
+      );
+      await waitFor(() =>
+        expect(
+          slot.rpcCalls.filter((call) => call.method === "getTasksKeyed"),
+        ).toHaveLength(2),
+      );
+      await settle();
+      const header = (status: string) =>
+        slot.container.querySelector(`[data-status-group-header="${status}"]`);
+      await waitFor(() => expect(header("todo")).not.toBeNull());
+      expect(header("todo")?.textContent).toContain("25");
+      expect(header("done")).toBeNull();
+
+      release();
+      await waitFor(() => expect(header("done")).not.toBeNull());
+      expect(header("todo")?.textContent).toContain("26");
+    } finally {
+      release();
+    }
+  }, 60_000);
+
+  it("keeps closed rows visible when an open task arrives after loading", async () => {
+    const server = await setup();
+    await server.createTask({ title: "Already done", status: "done" });
+    await server.createTask({ title: "Still open", status: "todo" });
+    const slot = server.live(
+      renderSlot(
+        app.navPanels[0]!,
+        { subPath: `${server.project.id}?view=list` },
+        server.options,
+      ),
+    );
+    await slot.findByText("Already done");
+    const membershipReads = () =>
+      slot.rpcCalls.filter((call) => call.method === "taskMembership").length;
+    const before = membershipReads();
+    const release = server.hold("getTasksKeyed");
+    try {
+      await act(async () => {
+        await server.createTask({ title: "Brand new", status: "todo" });
+      });
+      await waitFor(() => expect(membershipReads()).toBeGreaterThan(before));
+      await settle();
+      expect(slot.getByText("Already done")).toBeTruthy();
+    } finally {
+      release();
+    }
+    await slot.findByText("Brand new");
   });
 });
 

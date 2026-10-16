@@ -745,7 +745,7 @@ export function registerHandlers(
         context?.experimental_tag(`${scope}:status`);
       if (input.labelIds !== undefined)
         context?.experimental_tag(`${scope}:labels`);
-      const keys = store.tasks.listTaskKeys(input);
+      const { keys, openCount } = store.tasks.listTaskKeys(input);
       context?.experimental_provideKeyed("getTasksKeyed", () =>
         Object.fromEntries(
           apiTasks(
@@ -765,7 +765,7 @@ export function registerHandlers(
           ),
         ),
       );
-      return { keys };
+      return { keys, openCount };
     },
     getLabelsKeyed({ keys }, context) {
       return Object.fromEntries(

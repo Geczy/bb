@@ -501,7 +501,10 @@ export const tasksRpcContract = defineRpcContract({
   },
   taskMembership: {
     input: taskListInputSchema.omit({ limit: true, cursor: true, sort: true }),
-    output: z.object({ keys: z.array(z.string()) }),
+    output: z.object({
+      keys: z.array(z.string()),
+      openCount: z.number().int().nonnegative(),
+    }),
   },
   getLabelsKeyed: {
     input: z.object({ keys: z.array(idSchema).max(500) }),

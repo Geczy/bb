@@ -1,7 +1,7 @@
 import { sortTasks } from "../shared/sort.js";
 import { readQuerySnapshot, writeQuerySnapshot } from "./query-snapshot.js";
 import type { z } from "zod";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   experimental_useRpcQuery,
   experimental_useRpcKeyedQuery,
@@ -59,6 +59,22 @@ export function useTaskRows(
     method: "getTasksKeyed",
     keys: membership.data?.keys ?? [],
   });
+  const identity = JSON.stringify(input);
+  const [loadedIdentity, setLoadedIdentity] = useState<string>();
+  const openKeys = useMemo(
+    () => membership.data?.keys.slice(0, membership.data.openCount) ?? [],
+    [membership.data],
+  );
+  const openPending =
+    loadedIdentity !== identity &&
+    rows.error === null &&
+    openKeys.some((key) => rows.data?.[key] === undefined);
+  if (
+    membership.data !== undefined &&
+    !openPending &&
+    loadedIdentity !== identity
+  )
+    setLoadedIdentity(identity);
   const data = useMemo(() => {
     if (
       membership.data === undefined ||
@@ -66,13 +82,13 @@ export function useTaskRows(
     )
       return undefined;
     return sortTasks(
-      membership.data.keys.flatMap((key) => {
+      (openPending ? openKeys : membership.data.keys).flatMap((key) => {
         const task = rows.data?.[key];
         return task ? [task] : [];
       }),
       "manual",
     );
-  }, [membership.data, rows.data, rows.isLoading]);
+  }, [membership.data, rows.data, rows.isLoading, openPending, openKeys]);
   return {
     data,
     error: membership.error ?? rows.error?.message ?? null,

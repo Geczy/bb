@@ -973,15 +973,19 @@ export function createTasksStore(db: PluginDatabase) {
 
   function listTaskKeys(
     filters: Omit<ListTasksFilters, "limit" | "cursor" | "sort">,
-  ): string[] {
+  ): { keys: string[]; openCount: number } {
     const { parameters, where } = taskSelection(filters);
-    return db
-      .prepare<Record<string, SqlParameter>, { id: string }>(`
-      SELECT t.id FROM tasks t JOIN projects p ON p.id = t.project_id ${where}
-      ORDER BY t.status IN ('done', 'canceled'), t.id
+    const rows = db
+      .prepare<Record<string, SqlParameter>, { id: string; closed: number }>(`
+      SELECT t.id, t.status IN ('done', 'canceled') AS closed
+      FROM tasks t JOIN projects p ON p.id = t.project_id ${where}
+      ORDER BY closed, t.id
     `)
-      .all(parameters)
-      .map((row) => row.id);
+      .all(parameters);
+    return {
+      keys: rows.map((row) => row.id),
+      openCount: rows.filter((row) => row.closed === 0).length,
+    };
   }
 
   function listTasksPage(filters: ListTasksFilters = {}): ListTasksPage {

@@ -56,7 +56,9 @@ export function liveTaskRpcFixtures(
   handlers: Record<string, ((input: never) => unknown) | undefined>,
 ) {
   const rows = new Map<string, Task>();
-  let membershipPending: Promise<{ keys: string[] }> | undefined;
+  let membershipPending:
+    | Promise<{ keys: string[]; openCount: number }>
+    | undefined;
   const invoke = async (method: string, input: unknown) =>
     handlers[method]?.(input as never);
   return {
@@ -73,7 +75,13 @@ export function liveTaskRpcFixtures(
           | undefined;
         const tasks = result?.tasks ?? [];
         for (const task of tasks) rows.set(task.id, task);
-        return { keys: tasks.map((task) => task.id) };
+        const closed = (task: Task) =>
+          task.status === "done" || task.status === "canceled";
+        const open = tasks.filter((task) => !closed(task));
+        return {
+          keys: [...open, ...tasks.filter(closed)].map((task) => task.id),
+          openCount: open.length,
+        };
       })();
       return membershipPending;
     },

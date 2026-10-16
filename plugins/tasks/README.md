@@ -14,7 +14,9 @@ batches database reads, and shares cached rows across views. Thread and attachme
 metadata also use batched SQL reads. On a cold browser read, membership provides
 up to 25 initial summaries, open tasks first, to that same keyed cache alongside
 its IDs, so cards do not wait for a second request. The remaining keys load in normal
-batches. The host skips this lazy producer once the method
+batches. Membership lists open tasks first and reports how many leading keys
+are open; until a view first has every open row, it shows no closed rows. The
+order and count are load hints, so status edits do not refresh them. The host skips this lazy producer once the method
 has cached entries. Warm membership refreshes remain IDs-only. `listTasks`
 continues to return paginated full rows for CLI and SDK consumers.
 

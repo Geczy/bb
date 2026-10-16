@@ -942,7 +942,7 @@ describe("tasks app shell", () => {
       {
         rpc: {
           ...liveTaskRpcFixtures(seededRpc()),
-          taskMembership: () => ({ keys: [task.id] }),
+          taskMembership: () => ({ keys: [task.id], openCount: 1 }),
           getTasksKeyed: () => ({ [task.id]: task }),
           getTaskAttachmentsKeyed: () => attachments,
         },
