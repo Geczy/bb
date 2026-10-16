@@ -3618,6 +3618,10 @@ export default async function plugin(
 
   bb.background.service("watch-vaults", {
     async start(signal) {
+      const unsubscribeHost = bb.sdk.subscribe({
+        event: "host:changed",
+        callback: () => bb.rpc.experimental_invalidate(["vaults"]),
+      });
       const watchers = new Map<string, VaultWatcher>();
       const retryNative = new Set<string>();
       let debounce: NodeJS.Timeout | null = null;
@@ -3707,14 +3711,6 @@ export default async function plugin(
             }
           }
 
-          const hostsSnapshot = JSON.stringify(
-            (await bb.sdk.hosts.list())
-              .map(({ id, name, status }) => ({ id, name, status }))
-              .sort((a, b) => a.id.localeCompare(b.id)),
-          );
-          if (previous.has("hosts") && previous.get("hosts") !== hostsSnapshot)
-            bb.rpc.experimental_invalidate(["vaults"]);
-          previous.set("hosts", hostsSnapshot);
           const snapshots: string[] = [];
           for (const vault of vaults) {
             if (
@@ -3752,6 +3748,7 @@ export default async function plugin(
           await waitForDelay(10_000, signal);
         }
       } finally {
+        unsubscribeHost();
         if (debounce) clearTimeout(debounce);
         for (const watcher of watchers.values()) watcher.close();
       }

@@ -2057,39 +2057,46 @@ it("coalesces a saved file's native event without losing a later external edit",
   }
 });
 
-it("refreshes another notebook's host picker when an unviewed remote vault disconnects", async () => {
-  const host = await loadNotebook({});
-  const { harness } = host;
-  host.bb.storage
-    .database()
-    .prepare(
-      "INSERT INTO vaults (id, name, host_id, root_path, created_at) VALUES (?, ?, ?, ?, ?)",
-    )
-    .run("remote", "Remote", "host_remote", "/remote", 0);
-  await harness.callRpc("listNotes", { vaultId: "personal" });
-  const tags = harness.rpcTags.get("listNotes") ?? [];
-  let offline = false;
-  harness.sdk.stub("hosts.list", async () => [
-    makeHostResponse({
+it.each([
+  ["connects", ["host-connected"]],
+  ["disconnects", ["host-disconnected"]],
+  ["is renamed", []],
+] as const)(
+  "refreshes the host picker when an unviewed remote vault's host %s",
+  async (_change, changes) => {
+    const host = await loadNotebook({});
+    const { harness } = host;
+    host.bb.storage
+      .database()
+      .prepare(
+        "INSERT INTO vaults (id, name, host_id, root_path, created_at) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run("remote", "Remote", "host_remote", "/remote", 0);
+    await harness.callRpc("listNotes", { vaultId: "personal" });
+    const tags = harness.rpcTags.get("listNotes") ?? [];
+    const hostReads = harness.sdk.callsTo("hosts.list").length;
+    vi.useFakeTimers();
+    const service = harness.runService("watch-vaults");
+    const event = {
+      type: "changed",
+      entity: "host",
       id: "host_remote",
-      status: offline ? "disconnected" : "connected",
-    }),
-  ]);
-  vi.useFakeTimers();
-  const service = harness.runService("watch-vaults");
-  try {
-    await vi.advanceTimersByTimeAsync(0);
-    offline = true;
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(
-      harness.rpcInvalidations.some((invalidated) =>
-        invalidated?.some((tag) => tags.includes(tag)),
-      ),
-    ).toBe(true);
-  } finally {
-    service.controller.abort();
-    await service.done;
-    vi.useRealTimers();
-    await harness.dispose();
-  }
-});
+      changes: [...changes],
+    } as const;
+    try {
+      harness.sdk.emitRealtime("host:changed", event);
+      expect(
+        harness.rpcInvalidations.some((invalidated) =>
+          invalidated?.some((tag) => tags.includes(tag)),
+        ),
+      ).toBe(true);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(harness.sdk.callsTo("hosts.list")).toHaveLength(hostReads);
+    } finally {
+      service.controller.abort();
+      await service.done;
+      vi.useRealTimers();
+      await harness.dispose();
+    }
+  },
+);
