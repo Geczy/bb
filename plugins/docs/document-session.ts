@@ -115,6 +115,7 @@ function createSession(io: DocumentIO) {
         proposal?.version !== state.proposal?.version
       )
         throw new DocumentConflict();
+      set({ error: null, conflict: false });
     } else
       set({
         ...file,
@@ -313,7 +314,12 @@ export function useSavedDocument(io: DocumentIO) {
     if (io.liveRead === undefined) return;
     const error = query.error ?? preview.error;
     if (error) session.receiveError(error);
-    else if (query.data !== undefined && preview.data !== undefined)
+    else if (
+      !query.isFetching &&
+      !preview.isFetching &&
+      query.data !== undefined &&
+      preview.data !== undefined
+    )
       void session.receive({
         content: query.data.content,
         sha256: query.data.sha256,
@@ -322,6 +328,8 @@ export function useSavedDocument(io: DocumentIO) {
         previewPath: io.liveRead.path,
       });
   }, [
+    query.isFetching,
+    preview.isFetching,
     query.data,
     query.error,
     preview.data,
@@ -365,6 +373,9 @@ export function useDocumentSession(vaultId: string, path: string) {
     const error = query.error ?? proposal.error ?? preview.error;
     if (error) session.receiveError(error);
     else if (
+      !query.isFetching &&
+      !proposal.isFetching &&
+      !preview.isFetching &&
       query.data !== undefined &&
       proposal.data !== undefined &&
       preview.data !== undefined
@@ -377,8 +388,11 @@ export function useDocumentSession(vaultId: string, path: string) {
         previewPath: path,
       });
   }, [
+    query.isFetching,
+    preview.isFetching,
     query.data,
     query.error,
+    proposal.isFetching,
     proposal.data,
     proposal.error,
     preview.data,

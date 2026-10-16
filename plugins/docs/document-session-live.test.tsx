@@ -71,3 +71,46 @@ it.each([
     );
   },
 );
+
+it("waits for the proposal refresh before accepting new file content", async () => {
+  let content = "Old file";
+  let release: (() => void) | undefined;
+  let pending = false;
+  const slot = renderSlot(
+    { component: SessionStatus },
+    {},
+    {
+      rpc: {
+        readNote: () => ({ content, sha256: content }),
+        readProposal: async () => {
+          if (pending)
+            await new Promise<void>((resolve) => {
+              release = resolve;
+            });
+          return null;
+        },
+        preparePreview: () => ({
+          baseUrl: "/preview",
+          expiresAtMs: Date.now() + 60_000,
+        }),
+      },
+      experimental_rpcTags: (method) => ({
+        tags: [
+          "vault:personal",
+          "path:personal:read-errors.md",
+          `${method === "preparePreview" ? "preview" : method === "readNote" ? "note" : "proposal"}:personal:read-errors.md`,
+        ],
+      }),
+    },
+  );
+  await slot.findByText("Old file");
+  content = "New file";
+  pending = true;
+  await act(async () => {
+    void slot.experimental_invalidateRpc(["vault:personal"]);
+  });
+  await waitFor(() => expect(release).toBeTypeOf("function"));
+  expect(slot.getByText("Old file")).toBeTruthy();
+  await act(async () => release?.());
+  await slot.findByText("New file");
+});

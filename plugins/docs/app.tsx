@@ -2128,6 +2128,14 @@ function NotesWorkspace({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {error && (
+        <div role="alert" className="p-3 text-sm text-destructive">
+          {error}
+          <Button size="sm" variant="outline" onClick={refresh}>
+            Retry
+          </Button>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         {navigationOnly ? (
           <Tree

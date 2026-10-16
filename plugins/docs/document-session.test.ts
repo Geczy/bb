@@ -357,3 +357,23 @@ describe("Docs document sessions", () => {
     });
   });
 });
+
+it("clears a failed save after a successful read without losing the draft", async () => {
+  const { session, call } = await loadedSession();
+  session.edit("Unsaved draft");
+  call.mockRejectedValueOnce(new Error("Save unavailable"));
+  await expect(session.flush()).rejects.toThrow("Save unavailable");
+  expect(session.getSnapshot().error).toBe("Save unavailable");
+  await session.receive({
+    content: "Original",
+    sha256: "original-sha",
+    proposal: null,
+    previewBaseUrl: "/preview",
+    previewPath: "letter.md",
+  });
+  expect(session.getSnapshot()).toMatchObject({
+    error: null,
+    draft: "Unsaved draft",
+    dirty: true,
+  });
+});

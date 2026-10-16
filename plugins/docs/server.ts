@@ -3707,6 +3707,14 @@ export default async function plugin(
             }
           }
 
+          const hostsSnapshot = JSON.stringify(
+            (await bb.sdk.hosts.list())
+              .map(({ id, name, status }) => ({ id, name, status }))
+              .sort((a, b) => a.id.localeCompare(b.id)),
+          );
+          if (previous.has("hosts") && previous.get("hosts") !== hostsSnapshot)
+            bb.rpc.experimental_invalidate(["vaults"]);
+          previous.set("hosts", hostsSnapshot);
           const snapshots: string[] = [];
           for (const vault of vaults) {
             if (

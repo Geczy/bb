@@ -1775,3 +1775,38 @@ describe("Docs nav panel", () => {
     slot.getByText("Roadmap");
   });
 });
+
+it("keeps the notebook mounted on refresh failure and retries", async () => {
+  let failing = false;
+  const slot = renderSlot(
+    navigationRegistration,
+    { subPath: "personal" },
+    {
+      rpc: {
+        listNotes: () => {
+          if (failing) throw new Error("Unknown vault");
+          return listNotesResult([
+            {
+              path: "kept.md",
+              title: "Kept note",
+              preview: "",
+              modifiedAtMs: 1,
+            },
+          ]);
+        },
+      },
+      experimental_rpcTags: () => ({
+        tags: ["vaults", "vault:personal", "notes:personal"],
+      }),
+    },
+  );
+  const note = await slot.findByText("Kept note");
+  failing = true;
+  await act(async () => slot.experimental_invalidateRpc(["vaults"]));
+  await slot.findByText(/Unknown vault/);
+  expect(note.isConnected).toBe(true);
+  failing = false;
+  fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(slot.queryByText(/Unknown vault/)).toBeNull());
+  expect(note.isConnected).toBe(true);
+});
