@@ -1,3 +1,4 @@
+import { usageRpcTags } from "./testing/rpc-tags.js";
 import { usageRpcSuccessSchema } from "./usage-schema.js";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
@@ -240,6 +241,7 @@ describe("provider usage footer disclosure", () => {
       {
         pluginId: "bb--provider-usage",
         rpc: { getUsage },
+        experimental_rpcTags: usageRpcTags,
         context: { threadId: "thread-active" },
         sidebarThreads: {
           threads: [threadOnMachine("host-m5", "M5")],
@@ -422,9 +424,7 @@ describe("provider usage footer disclosure", () => {
       expect(
         slot.queryByText(/Unexpected token|bb connect|invalid JSON/i),
       ).toBeNull();
-      fireEvent.click(
-        slot.getByRole("button", { name: "Reload provider usage" }),
-      );
+      await slot.experimental_invalidateRpc();
       await waitFor(() =>
         expect(
           slot.queryByText("Couldn’t refresh. Showing last update."),
@@ -501,7 +501,11 @@ it.each([
   const slot = renderSlot(
     item,
     { dismiss: vi.fn() },
-    { pluginId: "bb--provider-usage", rpc: { getUsage } },
+    {
+      pluginId: "bb--provider-usage",
+      rpc: { getUsage },
+      experimental_rpcTags: usageRpcTags,
+    },
   );
   await waitFor(() =>
     expect(slot.getByText(expected, { exact: false })).toBeTruthy(),
@@ -577,7 +581,11 @@ it("keeps a measured refresh when an older snapshot response arrives late", asyn
   const slot = renderSlot(
     item,
     { dismiss: vi.fn() },
-    { pluginId: "bb--provider-usage", rpc: { getUsage } },
+    {
+      pluginId: "bb--provider-usage",
+      rpc: { getUsage },
+      experimental_rpcTags: usageRpcTags,
+    },
   );
   await slot.findByText("37%");
   await slot.experimental_invalidateRpc();

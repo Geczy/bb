@@ -840,6 +840,22 @@ function ProviderUsageStatus(props: ExperimentalSidebarFooterDisclosureProps) {
   });
   const [forcing, setForcing] = useState(false);
   const [forceError, setForceError] = useState<string | null>(null);
+  useEffect(() => {
+    if (
+      inventory.data !== undefined &&
+      !inventory.isFetching &&
+      inventory.error === null
+    )
+      setForceError(null);
+  }, [inventory.data, inventory.isFetching, inventory.error]);
+  useEffect(() => {
+    if (
+      measurements.data !== undefined &&
+      !measurements.isFetching &&
+      measurements.error === null
+    )
+      setForceError(null);
+  }, [measurements.data, measurements.isFetching, measurements.error]);
   const snapshot: UsageStoreSnapshot = {
     data: measurements.data ?? inventory.data ?? null,
     error:

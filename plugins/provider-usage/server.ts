@@ -307,6 +307,10 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
   };
   bb.background.service("usage-inventories", {
     async start(signal) {
+      const stopHosts = bb.sdk.subscribe({
+        event: "host:changed",
+        callback: () => bb.rpc.experimental_invalidate(["inventory"]),
+      });
       const stop = bb.sdk.plugins.experimental_watchDiscovery({
         method: usageListMethod,
         signal,
@@ -318,6 +322,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
             signal.addEventListener("abort", () => resolve(), { once: true }),
           );
       } finally {
+        stopHosts();
         stop();
         for (const dispose of sourceStops.values()) dispose();
         sourceStops.clear();
@@ -393,8 +398,8 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
           const cached = measurements.get(key);
           if (
             !request.force &&
-            Date.now() -
-              Math.max(cached?.loadedAt ?? 0, failures.get(key) ?? 0) <
+            cached !== undefined &&
+            Date.now() - Math.max(cached.loadedAt, failures.get(key) ?? 0) <
               request.maxAgeMs
           )
             return;
@@ -490,6 +495,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
       const result = await readUsage(request);
       if (request.force)
         bb.rpc.experimental_invalidate([
+          "inventory",
           "usage:all",
           ...(request.machineIds?.map((id) => `usage:${id}`) ?? []),
         ]);
@@ -505,7 +511,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     );
     if (!parsed.success) return;
     const request = parsed.data;
-    const refreshIntervalMs = Math.max(1_000, request.maxAgeMs * 2);
+    const refreshIntervalMs = Math.max(1_000, request.maxAgeMs);
     watchCount++;
     if (watchCount === 1)
       inventoryTimer = setInterval(() => {

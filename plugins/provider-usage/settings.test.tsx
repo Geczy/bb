@@ -1,3 +1,4 @@
+import { usageRpcTags } from "./testing/rpc-tags.js";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -6,7 +7,14 @@ import {
   installTestPluginRuntime,
   renderSlot,
 } from "@get-bb/plugin-sdk/testing/app";
-import type { UsageRequest, providerUsageRpcContract } from "./server.js";
+import {
+  createFakePluginHost,
+  makeHostResponse,
+} from "@get-bb/plugin-sdk/testing";
+import plugin, {
+  providerUsageRpcContract,
+  type UsageRequest,
+} from "./server.js";
 import { UsageSettings, UsageSettingsContent } from "./settings.js";
 import type { UsageMachine, UsageProvider } from "./usage-schema.js";
 
@@ -82,7 +90,10 @@ describe("UsageSettings live reads", () => {
       const slot = renderSlot<{}, typeof providerUsageRpcContract>(
         { component: UsageSettings },
         {},
-        { rpc: { getUsage: () => ({ machines }) } },
+        {
+          rpc: { getUsage: () => ({ machines }) },
+          experimental_rpcTags: usageRpcTags,
+        },
       );
       const selected = pool ? "source:pool" : "host";
       await waitFor(() =>
@@ -126,7 +137,10 @@ describe("UsageSettings live reads", () => {
     const slot = renderSlot<{}, typeof providerUsageRpcContract>(
       { component: UsageSettings },
       {},
-      { rpc: { getUsage: () => ({ machines }) } },
+      {
+        rpc: { getUsage: () => ({ machines }) },
+        experimental_rpcTags: usageRpcTags,
+      },
     );
     await slot.findByText("Account Pooler");
     expect(
@@ -142,6 +156,7 @@ describe("UsageSettings live reads", () => {
       { component: UsageSettings },
       {},
       {
+        experimental_rpcTags: usageRpcTags,
         rpc: {
           getUsage: () => {
             if (failed) throw new Error("private transport detail");
@@ -163,6 +178,12 @@ describe("UsageSettings live reads", () => {
     await slot.findByText(/Showing last update/);
     expect(slot.getByText("first@example.com")).toBeTruthy();
     expect(slot.queryByText("private transport detail")).toBeNull();
+    failed = false;
+    await slot.experimental_invalidateRpc(["usage"]);
+    await waitFor(() =>
+      expect(slot.queryByText(/Showing last update/)).toBeNull(),
+    );
+    expect(slot.getByText("first@example.com")).toBeTruthy();
   });
 });
 
@@ -230,4 +251,56 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain("No usage limits reported for this plan.");
     expect(html).not.toContain("0% used");
   });
+});
+
+it("reloads inventory-only settings through server invalidations", async () => {
+  let name = "Original";
+  const host = createFakePluginHost({
+    pluginId: "provider-usage",
+    sdk: {
+      system: { config: async () => ({ primaryHostId: null }) },
+      hosts: {
+        list: async () => [
+          makeHostResponse({ id: "first", name, status: "connected" }),
+          makeHostResponse({
+            id: "second",
+            name: "Second",
+            status: "connected",
+          }),
+        ],
+      },
+      providers: { list: async () => [] },
+      plugins: { experimental_discoverRpc: async () => [] },
+    },
+  });
+  plugin(host.bb);
+  const slot = renderSlot<{}, typeof providerUsageRpcContract>(
+    { component: UsageSettings },
+    {},
+    {
+      rpc: {
+        getUsage: async (input) =>
+          providerUsageRpcContract.getUsage.output.parse(
+            await host.harness.callRpc("getUsage", input),
+          ),
+      },
+      experimental_rpcTags: usageRpcTags,
+    },
+  );
+  const stop = host.harness.experimental_onRpcInvalidation((tags) => {
+    void slot.experimental_invalidateRpc(tags ?? undefined);
+  });
+  try {
+    await slot.findByText("Original");
+    name = "Renamed";
+    fireEvent.click(
+      await slot.findByRole("button", { name: "Reload usage data" }),
+    );
+    await slot.findByText("Renamed");
+    expect(slot.queryByText("Original")).toBeNull();
+  } finally {
+    stop();
+    slot.unmount();
+    await host.harness.dispose();
+  }
 });

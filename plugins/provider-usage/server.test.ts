@@ -359,22 +359,97 @@ it("collapses known account observations per machine, preserves unknown identiti
   }
 });
 
-it("keeps watched collection at the baseline cache cadence and caches failures", async () => {
-  vi.useFakeTimers();
-  const rpc = vi.fn(async ({ method, input }) => {
-    if (method === usageListMethod)
+it.each([60_000, 120_000])(
+  "refreshes watched measurements every %i ms",
+  async (maxAgeMs) => {
+    vi.useFakeTimers();
+    const rpc = vi.fn(async ({ method, input }) => {
+      if (method === usageListMethod)
+        return {
+          resources: ["healthy", "failed"].map((id) => ({
+            id,
+            providerId: "codex",
+            label: id,
+            scope: { kind: "shared" },
+          })),
+        };
+      if (input.resourceId === "failed") throw new Error("Unavailable");
       return {
-        resources: ["healthy", "failed"].map((id) => ({
-          id,
-          providerId: "codex",
-          label: id,
-          scope: { kind: "shared" },
-        })),
+        observedAt: Date.now(),
+        usage: {
+          status: "ok",
+          accountEmail: null,
+          planLabel: null,
+          windows: [],
+        },
       };
-    if (input.resourceId === "failed") throw new Error("Unavailable");
-    return { observedAt: Date.now(), usage: { status: "ok", windows: [] } };
-  });
-  const { bb, harness } = createFakePluginHost({
+    });
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "provider-usage",
+      sdk: {
+        system: { config: async () => ({ primaryHostId: null }) },
+        hosts: { list: async () => [] },
+        providers: { list: async () => [] },
+        plugins: {
+          experimental_discoverRpc: async () => [
+            {
+              pluginId: "source",
+              displayName: "Source",
+              method: usageListMethod,
+            },
+          ],
+          callRpc: rpc,
+        },
+      },
+    });
+    let release: (() => void) | undefined;
+    const input = {
+      force: false,
+      machineIds: ["source:source"],
+      providerIds: ["codex"],
+      maxAgeMs,
+    };
+    try {
+      plugin(bb);
+      await harness.callRpc("getUsage", input);
+      await harness.callRpc("getUsage", { ...input, providerIds: [] });
+      expect(harness.rpcTags.get("getUsage")).toEqual(["inventory"]);
+      harness.rpcInvalidations.length = 0;
+      rpc.mockClear();
+      release = harness.holdRpcWatch("getUsage", { input });
+      await vi.advanceTimersByTimeAsync(maxAgeMs - 1);
+      expect(harness.rpcInvalidations).toEqual([]);
+      expect(
+        rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
+      ).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(harness.rpcInvalidations).toEqual([
+        ["usage:all", "usage:source:source"],
+      ]);
+      expect(
+        rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
+      ).toHaveLength(2);
+      await harness.callRpc("getUsage", input);
+      expect(
+        rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
+      ).toHaveLength(3);
+      expect(harness.rpcInvalidations).toHaveLength(1);
+      release();
+      await vi.advanceTimersByTimeAsync(maxAgeMs * 2);
+      expect(
+        rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
+      ).toHaveLength(3);
+    } finally {
+      release?.();
+      await harness.dispose();
+      vi.useRealTimers();
+    }
+  },
+);
+
+it("retries an uncached failed measurement on the next read", async () => {
+  let attempts = 0;
+  const host = createFakePluginHost({
     pluginId: "provider-usage",
     sdk: {
       system: { config: async () => ({ primaryHostId: null }) },
@@ -388,50 +463,101 @@ it("keeps watched collection at the baseline cache cadence and caches failures",
             method: usageListMethod,
           },
         ],
-        callRpc: rpc,
+        callRpc: async ({ method }) => {
+          if (method === usageListMethod)
+            return {
+              resources: [
+                {
+                  id: "account",
+                  providerId: "codex",
+                  label: "Account",
+                  scope: { kind: "shared" },
+                },
+              ],
+            };
+          if (++attempts === 1) throw new Error("Unavailable");
+          return {
+            observedAt: Date.now(),
+            usage: {
+              status: "ok",
+              accountEmail: null,
+              planLabel: null,
+              windows: [],
+            },
+          };
+        },
       },
     },
   });
-  let release: (() => void) | undefined;
-  const input = {
+  plugin(host.bb);
+  const request = {
     force: false,
-    machineIds: ["source:source"],
+    machineIds: null,
     providerIds: ["codex"],
     maxAgeMs: 60_000,
   };
   try {
-    plugin(bb);
-    await harness.callRpc("getUsage", input);
-    await harness.callRpc("getUsage", { ...input, providerIds: [] });
-    expect(harness.rpcTags.get("getUsage")).toEqual(["inventory"]);
-    harness.rpcInvalidations.length = 0;
-    rpc.mockClear();
-    release = harness.holdRpcWatch("getUsage", { input });
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(harness.rpcInvalidations).toEqual([]);
-    expect(
-      rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
-    ).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(harness.rpcInvalidations).toEqual([
-      ["usage:all", "usage:source:source"],
-    ]);
-    expect(
-      rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
-    ).toHaveLength(2);
-    await harness.callRpc("getUsage", input);
-    expect(
-      rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
-    ).toHaveLength(2);
-    expect(harness.rpcInvalidations).toHaveLength(1);
-    release();
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(
-      rpc.mock.calls.filter(([args]) => args.method === usageFetchMethod),
-    ).toHaveLength(2);
+    expect(await host.harness.callRpc("getUsage", request)).toMatchObject({
+      machines: [
+        {
+          providers: [{ usage: null }],
+          error: "Some usage could not be refreshed.",
+        },
+      ],
+    });
+    expect(await host.harness.callRpc("getUsage", request)).toMatchObject({
+      machines: [{ providers: [{ usage: { status: "ok" } }], error: null }],
+    });
+    expect(attempts).toBe(2);
   } finally {
-    release?.();
-    await harness.dispose();
-    vi.useRealTimers();
+    await host.harness.dispose();
+  }
+});
+
+it("invalidates inventory on host changes even without sources", async () => {
+  let connected = true;
+  const host = createFakePluginHost({
+    pluginId: "provider-usage",
+    sdk: {
+      system: { config: async () => ({ primaryHostId: null }) },
+      hosts: {
+        list: async () => [
+          makeHostResponse({
+            id: "host",
+            name: "Machine",
+            status: connected ? "connected" : "disconnected",
+          }),
+        ],
+      },
+      providers: { list: async () => [] },
+      plugins: { experimental_discoverRpc: async () => [] },
+    },
+  });
+  plugin(host.bb);
+  const service = host.harness.runService("usage-inventories");
+  try {
+    const input = {
+      force: false,
+      machineIds: null,
+      providerIds: [],
+      maxAgeMs: 60_000,
+    };
+    await host.harness.callRpc("getUsage", input);
+    host.harness.rpcInvalidations.length = 0;
+    connected = false;
+    host.harness.sdk.emitRealtime("host:changed", {
+      type: "changed",
+      entity: "host",
+      id: "host",
+      changes: ["host-disconnected"],
+    });
+    expect(host.harness.rpcInvalidations).toContainEqual(["inventory"]);
+    expect(await host.harness.callRpc("getUsage", input)).toMatchObject({
+      machines: [{ status: "disconnected" }],
+    });
+  } finally {
+    service.controller.abort();
+    await service.done;
+    await host.harness.dispose();
   }
 });

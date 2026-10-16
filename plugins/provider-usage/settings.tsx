@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import {
   useRpc,
   experimental_useRpcQuery,
@@ -528,6 +528,18 @@ export function UsageSettings() {
     input,
     enabled: input.providerIds.length > 0 && selected?.status === "connected",
   });
+  useEffect(() => {
+    if (
+      inventory.data !== undefined &&
+      !inventory.isFetching &&
+      inventory.error === null
+    )
+      setForceError(false);
+  }, [inventory.data, inventory.isFetching, inventory.error]);
+  useEffect(() => {
+    if (query.data !== undefined && !query.isFetching && query.error === null)
+      setForceError(false);
+  }, [query.data, query.isFetching, query.error]);
   const machines = query.data?.machines ?? inventory.data?.machines ?? [];
   const loading = forcing || inventory.isLoading || query.isFetching;
   const error = forceError || inventory.error !== null || query.error !== null;
