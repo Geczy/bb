@@ -2,7 +2,14 @@
 import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
-import { accountSchema } from "./src/contracts.js";
+import fs, { mkdtemp } from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
+import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import { z } from "zod";
+import { accountSchema, statusSchema } from "./src/contracts.js";
+import { accountPoolRpcContract } from "./src/rpc.js";
+import { createAccountPoolPlugin } from "./src/server.js";
 import type {
   AccountPoolConfig,
   AccountSummary,
@@ -949,3 +956,208 @@ it.each([true, false])(
     );
   },
 );
+
+describe("settings action ordering through the server", () => {
+  const disposals: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const dispose of disposals.splice(0).reverse()) await dispose();
+  });
+
+  async function fixture() {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "bb-pool-settings-"));
+    const host = createFakePluginHost({
+      pluginId: "account-pool",
+      dataDir,
+      sdk: { hosts: { list: async () => [] } },
+    });
+    disposals.push(async () => {
+      await host.harness.lifecycle.dispose();
+      await fs.rm(dataDir, { recursive: true, force: true });
+    });
+    await createAccountPoolPlugin({ env: {} })(host.bb);
+    for (const label of ["First", "Second"]) {
+      await host.harness.behavior.callRpc("account.add", {
+        provider: "claude",
+        source: { kind: "api-key", apiKey: "sk-test" },
+        label,
+        priority: label === "First" ? 1 : 2,
+      });
+    }
+    const replies = new Map<string, () => Promise<void>>();
+    const slot = renderSlot(
+      app.settingsSections[0]!,
+      {},
+      {
+        rpc: Object.fromEntries(
+          Object.keys(accountPoolRpcContract).map((method) => [
+            method,
+            async (input: unknown) => {
+              const result = await host.harness.behavior.callRpc(method, input);
+              await replies.get(method)?.();
+              return z.json().parse(result);
+            },
+          ]),
+        ),
+        experimental_rpcTags: (method) => ({
+          tags: host.harness.inspection.rpcTags.get(method) ?? [],
+        }),
+      },
+    );
+    const unsubscribe = host.harness.inspection.experimental_onRpcInvalidation(
+      (tags) => {
+        void slot.experimental_invalidateRpc(tags ?? undefined);
+      },
+    );
+    disposals.push(async () => {
+      slot.unmount();
+      unsubscribe();
+    });
+    await slot.findByRole("button", { name: "First actions" });
+    await slot.findByRole("button", { name: "Advanced" });
+    return { slot, host, replies };
+  }
+
+  it("keeps usage refresh pending through the status read", async () => {
+    const { slot, replies } = await fixture();
+    const read = deferred<void>();
+    replies.set("status.get", () => read.promise);
+    fireEvent.pointerDown(slot.getByRole("button", { name: "First actions" }));
+    fireEvent.click(
+      await slot.findByRole("menuitem", { name: "Refresh usage" }),
+    );
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls.filter(({ method }) => method === "status.get").length,
+      ).toBeGreaterThan(1),
+    );
+    try {
+      expect(slot.queryByText("refreshing usage…")).not.toBeNull();
+      fireEvent.pointerDown(
+        slot.getByRole("button", { name: "First actions" }),
+      );
+      expect(
+        (
+          await slot.findByRole("menuitem", { name: "Refresh usage" })
+        ).getAttribute("aria-disabled"),
+      ).toBe("true");
+    } finally {
+      await act(async () => read.resolve());
+    }
+    await waitFor(() =>
+      expect(slot.queryByText("refreshing usage…")).toBeNull(),
+    );
+  });
+
+  it("does not admit another routing action before its status read settles", async () => {
+    const { slot, replies } = await fixture();
+    const read = deferred<void>();
+    replies.set("status.get", () => read.promise);
+    const toggle = slot.getByRole("switch", { name: "Route Claude threads" });
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(toggle.getAttribute("aria-checked")).toBe("false"),
+    );
+    await waitFor(() =>
+      expect(
+        slot.rpcCalls.filter(({ method }) => method === "status.get").length,
+      ).toBeGreaterThan(1),
+    );
+    try {
+      fireEvent.click(toggle);
+      await act(async () => {});
+      expect(
+        slot.rpcCalls.filter(({ method }) => method === "routing.set"),
+      ).toHaveLength(1);
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+    } finally {
+      await act(async () => read.resolve());
+    }
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(toggle.getAttribute("aria-checked")).toBe("true"),
+    );
+  });
+
+  it.each(["success", "failure"] as const)(
+    "settles a reorder against authoritative status after a %s read",
+    async (outcome) => {
+      measureAccountRows();
+      const { slot, host, replies } = await fixture();
+      const read = deferred<void>();
+      replies.set("status.get", () => read.promise);
+      const handle = slot.getByRole("button", { name: "Reorder First" });
+      await keyboardMove(handle);
+      fireEvent.keyDown(document, { code: "Space" });
+      await waitFor(() =>
+        expect(
+          slot.rpcCalls.some(({ method }) => method === "account.reorder"),
+        ).toBe(true),
+      );
+      await waitFor(() =>
+        expect(
+          slot.rpcCalls.filter(({ method }) => method === "status.get").length,
+        ).toBeGreaterThan(1),
+      );
+      try {
+        expect(handle.hasAttribute("disabled")).toBe(true);
+      } finally {
+        if (outcome === "failure")
+          await act(async () => read.reject(new Error("Status unavailable")));
+        else await act(async () => read.resolve());
+      }
+      replies.delete("status.get");
+      if (outcome === "failure") await slot.findByText("Status unavailable");
+      await waitFor(() => expect(handle.hasAttribute("disabled")).toBe(false));
+      const current = statusSchema.parse(
+        await host.harness.behavior.callRpc("status.get", null),
+      );
+      await act(async () => {
+        await host.harness.behavior.callRpc("account.reorder", {
+          provider: "claude",
+          accountIds: [...current.accounts].reverse().map(({ id }) => id),
+        });
+      });
+      await waitFor(() =>
+        expect(
+          slot
+            .getAllByRole("button", { name: /Reorder/ })
+            .map((button) => button.getAttribute("aria-label")),
+        ).toEqual(["Reorder First", "Reorder Second"]),
+      );
+    },
+  );
+
+  it("releases a failed reorder's optimistic order before a later status update", async () => {
+    measureAccountRows();
+    const { slot, host, replies } = await fixture();
+    replies.set("status.get", async () => {
+      throw new Error("Status unavailable");
+    });
+    const handle = slot.getByRole("button", { name: "Reorder First" });
+    await keyboardMove(handle);
+    fireEvent.keyDown(document, { code: "Space" });
+    await slot.findByText("Status unavailable");
+    await waitFor(() => expect(handle.hasAttribute("disabled")).toBe(false));
+    expect(
+      slot
+        .getAllByRole("button", { name: /Reorder/ })
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Reorder First", "Reorder Second"]);
+    replies.delete("status.get");
+    await act(async () => {
+      await slot.experimental_invalidateRpc(["accounts"]);
+    });
+    await waitFor(() =>
+      expect(
+        slot
+          .getAllByRole("button", { name: /Reorder/ })
+          .map((button) => button.getAttribute("aria-label")),
+      ).toEqual(["Reorder Second", "Reorder First"]),
+    );
+    expect(
+      statusSchema
+        .parse(await host.harness.behavior.callRpc("status.get", null))
+        .accounts.map(({ label }) => label),
+    ).toEqual(["Second", "First"]);
+  });
+});

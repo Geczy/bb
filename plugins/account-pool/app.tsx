@@ -918,16 +918,6 @@ function AccountPoolSettings() {
       writeCachedStatus(statusQuery.data);
       const nextStatus = statusQuery.data;
       setStatus(nextStatus);
-      setOptimisticOrder((current) => {
-        if (!current) return null;
-        const ids = nextStatus.accounts
-          .filter((account) => account.provider === current.provider)
-          .map((account) => account.id);
-        return ids.length !== current.ids.length ||
-          ids.every((id, index) => id === current.ids[index])
-          ? null
-          : current;
-      });
       setStatusIsCached(false);
     }
   }, [statusQuery.data]);
@@ -1029,8 +1019,8 @@ function AccountPoolSettings() {
     setError(null);
     try {
       await action();
+      await refresh();
     } catch (actionError) {
-      if (key.startsWith("order-")) setOptimisticOrder(null);
       setError(errorText(actionError));
     } finally {
       clearPending(key);
@@ -1153,7 +1143,6 @@ function AccountPoolSettings() {
         await rpc.call(account.enabled ? "account.disable" : "account.enable", {
           id: account.id,
         });
-        await refresh();
       }
       if (action === "refresh")
         await rpc.call("account.refreshUsage", { accountId: account.id });
@@ -1172,9 +1161,13 @@ function AccountPoolSettings() {
     if (from < 0 || to < 0 || from === to) return;
     const accountIds = arrayMove(ids, from, to);
     setOptimisticOrder({ provider, ids: accountIds });
-    await run(`order-${provider}`, async () => {
-      await rpc.call("account.reorder", { provider, accountIds });
-    });
+    try {
+      await run(`order-${provider}`, async () => {
+        await rpc.call("account.reorder", { provider, accountIds });
+      });
+    } finally {
+      setOptimisticOrder(null);
+    }
   }
 
   function closeDialog(): void {
