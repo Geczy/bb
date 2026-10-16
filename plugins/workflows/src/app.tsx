@@ -60,8 +60,8 @@ type RunLoadState =
 
 type ActiveRunsLoadState =
   | { status: "loading" }
-  | { status: "ready"; runs: WorkflowRunView[] }
-  | { status: "error" };
+  | { status: "ready"; runs: WorkflowRunView[]; refreshError: string | null }
+  | { status: "error"; message: string };
 
 interface SharedWorkflowView {
   callsById: ReadonlyMap<string, WorkflowCallView>;
@@ -179,16 +179,27 @@ function formatDuration(startedAt: number | null, finishedAt: number | null) {
     .join(" ");
 }
 
-function WorkflowDuration({ startedAt }: { startedAt: number }) {
-  const [elapsed, setElapsed] = useState(() => Date.now() - startedAt);
+function WorkflowDuration({
+  startedAt,
+  finishedAt = null,
+  showShort = false,
+}: {
+  startedAt: number;
+  finishedAt?: number | null;
+  showShort?: boolean;
+}) {
+  const [elapsed, setElapsed] = useState(
+    () => (finishedAt ?? Date.now()) - startedAt,
+  );
   useEffect(() => {
-    setElapsed(Date.now() - startedAt);
+    setElapsed((finishedAt ?? Date.now()) - startedAt);
+    if (finishedAt !== null) return;
     const interval = window.setInterval(() => {
-      setElapsed(Date.now() - startedAt);
+      setElapsed((finishedAt ?? Date.now()) - startedAt);
     }, 1_000);
     return () => window.clearInterval(interval);
-  }, [startedAt]);
-  if (elapsed <= 1_000) return null;
+  }, [startedAt, finishedAt]);
+  if (!showShort && elapsed <= 1_000) return null;
   return <>{formatDuration(0, elapsed)}</>;
 }
 
@@ -355,28 +366,36 @@ function useWorkflowRun(
     "workflowRunView"
   >({ method: "workflowRunView", input: { threadId, runId } });
   const state: RunLoadState =
+    query.error && query.data?.run === null
+      ? { status: "error", message: query.error.message }
+      : query.data !== undefined
+        ? {
+            status: "ready",
+            run: query.data.run,
+            refreshError: query.error?.message ?? null,
+          }
+        : query.error !== null
+          ? { status: "error", message: query.error.message }
+          : { status: "loading" };
+  return { state, refresh: query.refetch };
+}
+
+function useActiveWorkflowRuns(threadId: string) {
+  const query = experimental_useRpcQuery<
+    typeof workflowUiRpcContract,
+    "workflowActiveRuns"
+  >({ method: "workflowActiveRuns", input: { threadId } });
+  const state: ActiveRunsLoadState =
     query.data !== undefined
       ? {
           status: "ready",
-          run: query.data.run,
+          runs: query.data.runs,
           refreshError: query.error?.message ?? null,
         }
       : query.error !== null
         ? { status: "error", message: query.error.message }
         : { status: "loading" };
   return { state, refresh: query.refetch };
-}
-
-function useActiveWorkflowRuns(threadId: string): ActiveRunsLoadState {
-  const query = experimental_useRpcQuery<
-    typeof workflowUiRpcContract,
-    "workflowActiveRuns"
-  >({ method: "workflowActiveRuns", input: { threadId } });
-  return query.data !== undefined
-    ? { status: "ready", runs: query.data.runs }
-    : query.error !== null
-      ? { status: "error" }
-      : { status: "loading" };
 }
 
 export function EmptyOrError({ children }: { children: ReactNode }) {
@@ -401,13 +420,22 @@ export function WorkflowRunPanelState({ children }: { children: ReactNode }) {
   return <div className="p-4">{children}</div>;
 }
 
-function RefreshWarning({ message }: { message: string }) {
+function RefreshWarning({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
   return (
     <div
       role="status"
       className="rounded-md border border-warning/20 bg-warning/5 px-2.5 py-1.5 text-xs text-warning-text"
     >
-      Could not refresh: {message}. Retrying…
+      Could not refresh: {message}
+      <Button size="sm" variant="ghost" onClick={onRetry}>
+        Retry
+      </Button>
     </div>
   );
 }
@@ -584,7 +612,7 @@ function WorkflowStackFront({
 }
 
 function WorkflowStatusBannerLoaded({ threadId }: { threadId: string }) {
-  const state = useActiveWorkflowRuns(threadId);
+  const { state, refresh } = useActiveWorkflowRuns(threadId);
   const [stackExpanded, setStackExpanded] = useState(false);
   const listId = useId();
   const focus = useDisclosureFocusHandoff(stackExpanded, () =>
@@ -594,12 +622,18 @@ function WorkflowStatusBannerLoaded({ threadId }: { threadId: string }) {
   if (stackExpanded && state.status === "ready" && state.runs.length < 2) {
     setStackExpanded(false);
   }
-  if (state.status !== "ready" || state.runs.length === 0) return null;
+  if (state.status === "error")
+    return <RefreshWarning message={state.message} onRetry={refresh} />;
+  if (state.status !== "ready") return null;
+  if (state.runs.length === 0 && state.refreshError === null) return null;
 
   const runs = state.runs;
   const collapsed = runs.length > 1 && !stackExpanded;
   return (
     <section aria-label="Active workflows" className="flex flex-col gap-2">
+      {state.refreshError && (
+        <RefreshWarning message={state.refreshError} onRetry={refresh} />
+      )}
       {collapsed ? (
         <WorkflowStackFront
           runs={runs}
@@ -659,13 +693,20 @@ function WorkflowPreviewLoaded({
   source: string;
 }) {
   const navigate = useBbNavigate();
-  const { state } = useWorkflowRun(threadId, runId);
+  const { state, refresh } = useWorkflowRun(threadId, runId);
   const [expanded, setExpanded] = useState(true);
   const bodyId = useId();
   const toggleId = useId();
   if (state.status === "loading") return <LoadingPreview />;
   if (state.status === "error") {
-    return <EmptyOrError>{state.message}</EmptyOrError>;
+    return (
+      <EmptyOrError>
+        {state.message}
+        <Button size="sm" variant="ghost" onClick={refresh}>
+          Retry
+        </Button>
+      </EmptyOrError>
+    );
   }
   if (state.run === null) {
     return <EmptyOrError>Workflow run not found.</EmptyOrError>;
@@ -674,7 +715,6 @@ function WorkflowPreviewLoaded({
   const shared = buildSharedWorkflowView(run);
   const activityState = runActivityState(run);
   const pillState = runPillState(run.status);
-  const duration = formatDuration(run.startedAt, run.finishedAt);
   const settledAgents = settledAgentCount(shared.progress.agents);
   return (
     <section
@@ -719,14 +759,18 @@ function WorkflowPreviewLoaded({
               {settledAgents}/{shared.progress.agents.length} agents
             </span>
           ) : null}
-          {duration === null ? null : (
+          {run.startedAt === null ? null : (
             <span
               className={activityMetaClass(
                 activityState,
                 "shrink-0 text-2xs tabular-nums",
               )}
             >
-              {duration}
+              <WorkflowDuration
+                startedAt={run.startedAt}
+                finishedAt={run.finishedAt}
+                showShort
+              />
             </span>
           )}
         </span>
@@ -783,7 +827,7 @@ function WorkflowPreviewLoaded({
       </section>
       {state.refreshError === null ? null : (
         <div className="border-t border-border-seam bg-popover px-3 py-2">
-          <RefreshWarning message={state.refreshError} />
+          <RefreshWarning message={state.refreshError} onRetry={refresh} />
         </div>
       )}
       <div className="flex min-h-9 items-center border-t border-border-seam bg-popover px-2">
@@ -835,7 +879,7 @@ function WorkflowRunPanelLoaded({
 }) {
   const navigate = useBbNavigate();
   const rpc = useRpc<typeof workflowUiRpcContract>();
-  const { state } = useWorkflowRun(threadId, runId);
+  const { state, refresh } = useWorkflowRun(threadId, runId);
   const [stopping, setStopping] = useState(false);
   const [stopError, setStopError] = useState<string | null>(null);
   const run = state.status === "ready" ? state.run : null;
@@ -853,7 +897,12 @@ function WorkflowRunPanelLoaded({
   if (state.status === "error") {
     return (
       <WorkflowRunPanelState>
-        <EmptyOrError>{state.message}</EmptyOrError>
+        <EmptyOrError>
+          {state.message}
+          <Button size="sm" variant="ghost" onClick={refresh}>
+            Retry
+          </Button>
+        </EmptyOrError>
       </WorkflowRunPanelState>
     );
   }
@@ -867,7 +916,6 @@ function WorkflowRunPanelLoaded({
     );
   }
   const pillState = runPillState(run.status);
-  const duration = formatDuration(run.startedAt, run.finishedAt);
   const settledAgents = settledAgentCount(shared.progress.agents);
   const completedCalls = shared.progress.agents.filter(
     (agent) => agent.state === "done",
@@ -908,9 +956,18 @@ function WorkflowRunPanelLoaded({
             {shared.progress.agents.length > 0
               ? `${settledAgents}/${shared.progress.agents.length} agents · `
               : ""}
-            {duration === null
-              ? "Not started"
-              : `${duration} ${isRunActive(run) ? "elapsed" : "total"}`}
+            {run.startedAt === null ? (
+              "Not started"
+            ) : (
+              <>
+                <WorkflowDuration
+                  startedAt={run.startedAt}
+                  finishedAt={run.finishedAt}
+                  showShort
+                />{" "}
+                {isRunActive(run) ? "elapsed" : "total"}
+              </>
+            )}
           </span>
           <span className="ml-auto font-mono">{run.id.slice(-8)}</span>
         </div>
@@ -930,7 +987,7 @@ function WorkflowRunPanelLoaded({
         )}
         {state.refreshError === null ? null : (
           <div className="mt-3">
-            <RefreshWarning message={state.refreshError} />
+            <RefreshWarning message={state.refreshError} onRetry={refresh} />
           </div>
         )}
         <div className="my-4 h-px bg-border-seam" />

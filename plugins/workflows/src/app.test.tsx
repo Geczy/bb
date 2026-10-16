@@ -633,19 +633,18 @@ describe("workflow-preview directive", () => {
     });
     expect(slot.getByRole("alert").textContent).toMatch(/initial outage/i);
 
-    await slot.experimental_invalidateRpc();
+    fireEvent.click(slot.getByRole("button", { name: "Retry" }));
     await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(slot.getByText("Review the release")).toBeTruthy();
     expect(slot.queryByText("Complete")).toBeNull();
 
     await slot.experimental_invalidateRpc();
     await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(slot.getByRole("status").textContent).toMatch(
-      /poll outage.*retrying/i,
-    );
+    expect(slot.getByRole("status").textContent).toMatch(/poll outage/i);
     expect(slot.getByText("Review the release")).toBeTruthy();
 
-    await slot.experimental_invalidateRpc();
+    expect(slot.queryByText(/Retrying/)).toBeNull();
+    fireEvent.click(slot.getByRole("button", { name: "Retry" }));
     await act(async () => vi.advanceTimersByTimeAsync(0));
     expect(slot.getByText("Complete")).toBeTruthy();
     expect(slot.queryByRole("status")).toBeNull();
@@ -963,3 +962,124 @@ describe("workflow thread panel", () => {
     expect(slot.rpcCalls).toEqual([]);
   });
 });
+
+const previewProps = {
+  attributes: { run: run.id },
+  source: `::workflow-preview{run="${run.id}"}`,
+  message,
+  openWorkspaceFile: null,
+};
+
+it.each(["preview", "panel"] as const)(
+  "shows refresh errors and Retry after an empty %s read",
+  async (surface) => {
+    let failing = false;
+    const rpc = {
+      workflowRunView: () => {
+        if (failing) throw new Error("History unavailable");
+        return { run: null };
+      },
+    };
+    const slot =
+      surface === "preview"
+        ? renderSlot(app.messageDirectives[0]!, previewProps, {
+            rpc,
+            experimental_rpcTags: () => ({
+              tags: [`runs:${message.threadId}`, `run:${run.id}`],
+            }),
+          })
+        : renderSlot(
+            app.threadPanelActions[0]!,
+            { threadId: message.threadId, params: { runId: run.id } },
+            {
+              rpc,
+              experimental_rpcTags: () => ({
+                tags: [`runs:${message.threadId}`, `run:${run.id}`],
+              }),
+            },
+          );
+    await slot.findByText(
+      surface === "preview"
+        ? "Workflow run not found."
+        : "No workflow runs were found for this thread.",
+    );
+    failing = true;
+    await act(async () => slot.experimental_invalidateRpc());
+    await slot.findByText(/History unavailable/);
+    expect(slot.queryByText(/Retrying/)).toBeNull();
+    failing = false;
+    fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(slot.queryByText(/History unavailable/)).toBeNull(),
+    );
+  },
+);
+
+it.each(["initial", "refresh"] as const)(
+  "shows active banner %s errors with Retry and retains loaded runs",
+  async (phase) => {
+    let failing = phase === "initial";
+    const slot = renderSlot(
+      app.composerCustomizations[0]!.banners![0]!,
+      {},
+      {
+        composer: { scope: { kind: "thread", threadId: message.threadId } },
+        rpc: {
+          workflowActiveRuns: () => {
+            if (failing) throw new Error("Active runs unavailable");
+            return { runs: [run] };
+          },
+        },
+        experimental_rpcTags: () => ({ tags: [`runs:${message.threadId}`] }),
+      },
+    );
+    let card: HTMLElement | undefined;
+    if (phase === "refresh") {
+      card = await slot.findByText(run.name);
+      failing = true;
+      await act(async () =>
+        slot.experimental_invalidateRpc([`runs:${message.threadId}`]),
+      );
+    }
+    await slot.findByText(/Active runs unavailable/);
+    if (card) expect(card.isConnected).toBe(true);
+    failing = false;
+    fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(slot.queryByText(/Active runs unavailable/)).toBeNull(),
+    );
+    expect(slot.getByText(run.name)).toBeTruthy();
+  },
+);
+
+it.each(["preview", "panel"] as const)(
+  "updates elapsed time in a running %s without rereading",
+  async (surface) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const read = vi.fn(() => ({ run: { ...run, startedAt: 10_000 } }));
+    const options = {
+      rpc: { workflowRunView: read },
+      experimental_rpcTags: () => ({
+        tags: [`runs:${message.threadId}`, `run:${run.id}`],
+      }),
+    };
+    const slot =
+      surface === "preview"
+        ? renderSlot(app.messageDirectives[0]!, previewProps, options)
+        : renderSlot(
+            app.threadPanelActions[0]!,
+            { threadId: message.threadId, params: { runId: run.id } },
+            options,
+          );
+    await act(async () => vi.advanceTimersByTimeAsync(0));
+    expect(slot.getByText(run.name)).toBeTruthy();
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(
+      slot.getByText(
+        surface === "preview" ? "30s" : "1/2 agents · 30s elapsed",
+      ),
+    ).toBeTruthy();
+    expect(read).toHaveBeenCalledTimes(1);
+  },
+);
