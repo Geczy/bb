@@ -34,6 +34,7 @@ export function createPluginReadWatcher<T>(options: {
           error instanceof BbHttpError &&
           error.status >= 400 &&
           error.status < 500 &&
+          error.status !== 404 &&
           error.status !== 408 &&
           error.status !== 429;
         if (permanent) {

@@ -4,7 +4,7 @@ import { createPluginReadWatcher } from "../src/plugin-read-watcher.js";
 
 afterEach(() => vi.useRealTimers());
 
-it.each([400, 401, 403, 404, 409, 422, 499])(
+it.each([400, 401, 403, 409, 422, 499])(
   "ends a watch on permanent HTTP %i and ignores subsequent refreshes",
   async (status) => {
     vi.useFakeTimers();
@@ -69,3 +69,37 @@ it.each([408, 429, 500, 503, null])(
     }
   },
 );
+
+it("recovers on invalidation after an unavailable plugin returns HTTP 404", async () => {
+  vi.useFakeTimers();
+  const read = vi
+    .fn()
+    .mockRejectedValueOnce(
+      new BbHttpError({
+        status: 404,
+        message: "Plugin is not running",
+        body: null,
+        code: null,
+      }),
+    )
+    .mockResolvedValue(7);
+  const onChange = vi.fn();
+  const onStop = vi.fn();
+  const watch = createPluginReadWatcher({
+    signal: new AbortController().signal,
+    read,
+    onChange,
+    onStop,
+  });
+  try {
+    watch.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onChange).not.toHaveBeenCalled();
+    watch.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(7);
+    expect(onStop).not.toHaveBeenCalled();
+  } finally {
+    watch.stop();
+  }
+});
