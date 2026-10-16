@@ -1505,3 +1505,50 @@ describe("automations server plugin harness", () => {
     );
   });
 });
+
+it("invalidates script detail when a run starts", async () => {
+  const { harness } = await bootAutomationsPlugin();
+  const result = await harness.runCli([
+    "create",
+    "--project",
+    PROJECT_ID,
+    "--name",
+    "Refresh script",
+    "--at",
+    new Date(Date.now() + 60_000).toISOString(),
+    "--script",
+    "echo before",
+    "--interpreter",
+    "bash",
+    "--json",
+  ]);
+  expect(result.exitCode).toBe(0);
+  const created = automationDetailResponseSchema.parse(
+    JSON.parse(result.stdout ?? ""),
+  );
+  await harness.callRpc("automations_get", {
+    projectId: PROJECT_ID,
+    automationId: created.id,
+  });
+  const tags = harness.rpcTags.get("automations_get") ?? [];
+  harness.rpcInvalidations.length = 0;
+  await harness.callRpc("automations_run", {
+    projectId: PROJECT_ID,
+    automationId: created.id,
+  });
+  expect(
+    harness.rpcInvalidations.some((invalidated) =>
+      invalidated?.some((tag) => tags.includes(tag)),
+    ),
+  ).toBe(true);
+  await vi.waitFor(async () => {
+    const history = automationRunListResponseSchema.parse(
+      await harness.callRpc("automations_runs", {
+        projectId: PROJECT_ID,
+        automationId: created.id,
+      }),
+    );
+    expect(history.runs[0]?.finishedAt).not.toBeNull();
+  });
+  await harness.dispose();
+});

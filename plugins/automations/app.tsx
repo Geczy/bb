@@ -103,6 +103,10 @@ function useAutomation(route: DetailRoute): {
     typeof automationRpcContract,
     "automations_get"
   >({ method: "automations_get", input: { projectId, automationId } });
+  const refresh = query.refetch;
+  useEffect(() => {
+    void refresh();
+  }, [refresh, projectId, automationId]);
   return {
     automation: query.data ?? null,
     error: query.error?.message ?? null,
@@ -439,7 +443,7 @@ function DetailView({
       .finally(() => setDeleting(false));
   }, [mutations, route, onBack]);
 
-  if (error !== null) {
+  if (error !== null && automation === null) {
     return (
       <ResourceListState
         state="error"
@@ -530,7 +534,19 @@ function DetailView({
       onRunNow={() => runAction("run")}
       onDelete={() => setDeleteOpen(true)}
       onOpenThread={openThread}
-      footer={deleteDialog}
+      footer={
+        <>
+          {error && (
+            <div role="alert" className="p-3 text-sm text-destructive">
+              {error}
+              <Button size="sm" variant="outline" onClick={refetch}>
+                Retry
+              </Button>
+            </div>
+          )}
+          {deleteDialog}
+        </>
+      }
     />
   );
 }

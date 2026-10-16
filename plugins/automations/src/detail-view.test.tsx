@@ -817,3 +817,127 @@ it("keeps loaded runs and retries the next page after it fails", async () => {
   );
   expect(slot.queryByRole("button", { name: "Load more" })).toBeNull();
 });
+
+it("preserves loaded overview rows on refresh failure and clears the error on Retry", async () => {
+  const app = await loadPluginApp(() => import("../app.js"));
+  let failing = false;
+  const slot = renderSlot(
+    app.navPanels[0]!,
+    { subPath: "" },
+    {
+      rpc: {
+        automations_overview: () => {
+          if (failing) throw new Error("Overview unavailable");
+          return {
+            automations: [
+              {
+                automation: AUTOMATION,
+                project: { id: AUTOMATION.projectId, name: "Personal" },
+              },
+            ],
+          };
+        },
+      },
+      experimental_rpcTags: () => ({ tags: ["automations"] }),
+    },
+  );
+  const row = await slot.findByText(AUTOMATION.name);
+  failing = true;
+  await act(async () => slot.experimental_invalidateRpc(["automations"]));
+  await slot.findByText(/Overview unavailable/);
+  expect(row.isConnected).toBe(true);
+  failing = false;
+  fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+  await waitFor(() =>
+    expect(slot.queryByText(/Overview unavailable/)).toBeNull(),
+  );
+});
+
+it("rereads script content when returning to detail", async () => {
+  const app = await loadPluginApp(() => import("../app.js"));
+  let script = "echo original";
+  const Panel = app.navPanels[0]!.component;
+  const props = { subPath: `${AUTOMATION.projectId}/${AUTOMATION.id}` };
+  const slot = renderSlot(app.navPanels[0]!, props, {
+    rpc: {
+      automations_get: () => ({
+        ...AUTOMATION,
+        execution: {
+          mode: "script",
+          script,
+          interpreter: "bash",
+          timeoutMs: 60_000,
+          workingDirectory: { type: "project" },
+          resolvedWorkingDirectory: "/project",
+        },
+      }),
+      automations_overview: () => ({ automations: [] }),
+      automations_runs: () => ({ runs: [], nextCursor: null }),
+    },
+    experimental_rpcTags: (method) => ({
+      tags:
+        method === "automations_overview"
+          ? ["automations"]
+          : method === "automations_runs"
+            ? [`runs:${AUTOMATION.projectId}`]
+            : [
+                `automations:${AUTOMATION.projectId}`,
+                `runs:${AUTOMATION.projectId}`,
+              ],
+    }),
+  });
+  await slot.findByText("echo original");
+  slot.rerender(<Panel subPath="" />);
+  await slot.findByText("No automations installed.");
+  script = "echo edited externally";
+  slot.rerender(<Panel {...props} />);
+  await slot.findByText("echo edited externally");
+});
+
+it("keeps an automation edit draft mounted when detail refresh fails", async () => {
+  const app = await loadPluginApp(() => import("../app.js"));
+  let failing = false;
+  const slot = renderSlot(
+    app.navPanels[0]!,
+    { subPath: `${AUTOMATION.projectId}/${AUTOMATION.id}/edit` },
+    {
+      rpc: {
+        automations_get: () => {
+          if (failing) throw new Error("Detail unavailable");
+          return AUTOMATION;
+        },
+        automations_overview: () => ({ automations: [] }),
+        automations_runs: () => ({ runs: [], nextCursor: null }),
+      },
+      experimental_rpcTags: (method) => ({
+        tags:
+          method === "automations_get"
+            ? [
+                `automations:${AUTOMATION.projectId}`,
+                `runs:${AUTOMATION.projectId}`,
+              ]
+            : method === "automations_runs"
+              ? [`runs:${AUTOMATION.projectId}`]
+              : ["automations"],
+      }),
+    },
+  );
+  const prompt = await slot.findByRole("textbox", {
+    name: "Automation prompt",
+  });
+  fireEvent.change(prompt, { target: { value: "My unsaved prompt" } });
+  failing = true;
+  await act(async () =>
+    slot.experimental_invalidateRpc([`automations:${AUTOMATION.projectId}`]),
+  );
+  await slot.findByText(/Detail unavailable/);
+  expect(prompt.isConnected).toBe(true);
+  expect(prompt).toHaveProperty("value", "My unsaved prompt");
+  failing = false;
+  fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+  await waitFor(() =>
+    expect(slot.queryByText(/Detail unavailable/)).toBeNull(),
+  );
+  expect(prompt.isConnected).toBe(true);
+  expect(prompt).toHaveProperty("value", "My unsaved prompt");
+});

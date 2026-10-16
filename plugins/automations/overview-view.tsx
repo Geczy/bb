@@ -569,7 +569,6 @@ export function AutomationOverviewView({
     ].join("\u0000"),
   });
   const hasInstalledPagination =
-    error === null &&
     entries !== null &&
     installedPagination.total > installedPagination.pageSize;
   const handleSortChange = useCallback(
@@ -587,11 +586,11 @@ export function AutomationOverviewView({
   );
 
   let body: ReactNode;
-  if (error !== null) {
+  if (error !== null && entries === null) {
     body = (
       <ResourceListState
         state="error"
-        message="Couldn't load automations."
+        message={`Couldn't load automations: ${error}`}
         onRetry={onRetry}
       />
     );
@@ -669,6 +668,14 @@ export function AutomationOverviewView({
         />
       }
     >
+      {error && entries !== null && (
+        <div role="alert" className="text-sm text-destructive">
+          {error}
+          <Button size="sm" variant="outline" onClick={onRetry}>
+            Retry
+          </Button>
+        </div>
+      )}
       {activeMode === "browse" ? (
         <ResourceCollectionViewport contentClassName="space-y-3">
           <ResourceBrowseGrid>

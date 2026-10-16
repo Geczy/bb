@@ -80,7 +80,10 @@ export function createRpcHandlers(service: AutomationService) {
       input: z.output<typeof projectAutomationInputSchema>,
       context?: import("@get-bb/plugin-sdk").ExperimentalPluginRpcHandlerContext,
     ) {
-      context?.experimental_tag(`automations:${input.projectId}`);
+      context?.experimental_tag(
+        `automations:${input.projectId}`,
+        `runs:${input.projectId}`,
+      );
       return service.get(input);
     },
     automations_create(input: z.output<typeof createAutomationInputSchema>) {
