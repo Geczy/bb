@@ -177,29 +177,7 @@ describe("WebSocketManager subscriptions", () => {
     ]);
   });
 
-  it("resends active subscriptions when the websocket reconnects", async () => {
-    const { manager, socket } = createConnectedManager();
-
-    manager.subscribe(THREAD_TARGET);
-    manager.subscribe(PROJECT_TARGET);
-    socket.sentMessages.length = 0;
-
-    socket.close();
-    socket.open();
-
-    await Promise.resolve();
-    expect(readClientMessages(socket)).toEqual([
-      {
-        type: "subscribe",
-        target: THREAD_TARGET,
-      },
-      {
-        type: "subscribe",
-        target: PROJECT_TARGET,
-      },
-    ]);
-  });
-  it("batches subscription changes and drops interests released before the flush", async () => {
+  it("batches live subscriptions on flush and reconnect, dropping released interests", async () => {
     installOpenWebSocketConstructor();
     const { manager, socket } = createConnectedManager();
     try {
@@ -225,8 +203,19 @@ describe("WebSocketManager subscriptions", () => {
       socket.close();
       socket.open();
       await Promise.resolve();
-      expect(socket.sentMessages).toHaveLength(1);
-      expect(readClientMessages(socket)).toHaveLength(2);
+      expect(
+        socket.sentMessages.map((message) =>
+          clientMessageSchema.parse(JSON.parse(message)),
+        ),
+      ).toEqual([
+        {
+          type: "subscriptions",
+          changes: [
+            { type: "subscribe", target: THREAD_TARGET },
+            { type: "subscribe", target: PROJECT_TARGET },
+          ],
+        },
+      ]);
     } finally {
       manager.disconnect();
     }
