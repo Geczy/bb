@@ -930,8 +930,31 @@ function AccountPoolSettings() {
       });
       setStatusIsCached(false);
     }
-    if (statusQuery.error !== null) setError(statusQuery.error.message);
-  }, [statusQuery.data, statusQuery.error]);
+  }, [statusQuery.data]);
+  useEffect(() => {
+    if (
+      statusQuery.data !== undefined &&
+      !statusQuery.isFetching &&
+      statusQuery.error === null
+    )
+      setError(null);
+  }, [statusQuery.data, statusQuery.isFetching, statusQuery.error]);
+  useEffect(() => {
+    if (
+      configQuery.data !== undefined &&
+      !configQuery.isFetching &&
+      configQuery.error === null
+    ) {
+      setError(null);
+      setConfigErrors({
+        anthropicUpstreamBaseUrl: null,
+        codexUpstreamBaseUrl: null,
+        switchThreshold: null,
+      });
+    }
+  }, [configQuery.data, configQuery.isFetching, configQuery.error]);
+  const displayError =
+    configQuery.error?.message ?? statusQuery.error?.message ?? error;
   useEffect(() => {
     if (configQuery.data !== undefined) applyConfig(configQuery.data);
   }, [configQuery.data, applyConfig]);
@@ -1208,12 +1231,22 @@ function AccountPoolSettings() {
           {status?.inFlight ?? 0} in flight · used by {hubHosts}
           {statusIsCached ? " · refreshing…" : null}
         </p>
-        {error === null ? null : (
+        {displayError === null ? null : (
           <div
             role="alert"
             className="rounded-md border border-destructive/40 bg-surface-destructive px-3 py-2 text-sm text-destructive-text"
           >
-            {error}
+            {displayError}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void refresh();
+                void refreshConfig();
+              }}
+            >
+              Retry
+            </Button>
           </div>
         )}
         {status !== null && !statusIsCached && accounts.length === 0 ? (
@@ -1273,10 +1306,21 @@ function AccountPoolSettings() {
                       void run(
                         `routing-${provider.id}`,
                         async () => {
-                          await rpc.call("routing.set", {
+                          const result = await rpc.call("routing.set", {
                             provider: provider.id,
                             enabled,
                           });
+                          setStatus((current) =>
+                            current === null
+                              ? current
+                              : {
+                                  ...current,
+                                  routing: {
+                                    ...current.routing,
+                                    [result.provider]: result.enabled,
+                                  },
+                                },
+                          );
                         },
                         enabled,
                       )

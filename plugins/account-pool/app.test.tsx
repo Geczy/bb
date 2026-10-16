@@ -129,6 +129,9 @@ function render(
         "config.get": () => config(),
         ...extraRpc,
       },
+      experimental_rpcTags: (method) => ({
+        tags: method === "config.get" ? ["config"] : ["accounts", "config"],
+      }),
       openUrl: () => true,
       experimental_copyToClipboard: copyToClipboard,
     },
@@ -793,5 +796,105 @@ describe("Account Pool settings", () => {
           .map((button) => button.getAttribute("aria-label")),
       ).toEqual(["Reorder First", "Reorder Second"]);
     },
+  );
+});
+
+it.each([false, true])(
+  "shows config failure with Retry and preserves drafts on refresh (loaded=%s)",
+  async (loaded) => {
+    let failed = !loaded;
+    const slot = render([account()], {
+      "config.get": () => {
+        if (failed) throw new Error("Configuration unavailable");
+        return config();
+      },
+    });
+    let input: HTMLElement | null = null;
+    if (loaded) {
+      fireEvent.click(await slot.findByRole("button", { name: "Advanced" }));
+      input = await slot.findByLabelText("Anthropic upstream base URL");
+      fireEvent.change(input, {
+        target: { value: "https://draft.example.com" },
+      });
+      failed = true;
+      await slot.experimental_invalidateRpc(["config"]);
+    }
+    await slot.findByText("Configuration unavailable");
+    if (input)
+      expect((input as HTMLInputElement).value).toBe(
+        "https://draft.example.com",
+      );
+    failed = false;
+    fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(slot.queryByText("Configuration unavailable")).toBeNull(),
+    );
+    if (input) {
+      expect(slot.getByLabelText("Anthropic upstream base URL")).toBe(input);
+      expect((input as HTMLInputElement).value).toBe(
+        "https://draft.example.com",
+      );
+    }
+  },
+);
+
+it("keeps the committed routing value while the status refresh is in flight", async () => {
+  const nextStatus = deferred<PoolStatus>();
+  let changed = false;
+  const slot = render([account()], {
+    "status.get": () => (changed ? nextStatus.promise : status()),
+    "routing.set": () => {
+      changed = true;
+      return { provider: "claude", enabled: false };
+    },
+  });
+  const toggle = await slot.findByRole("switch", {
+    name: "Route Claude threads",
+  });
+  await slot.findByText("person@example.com");
+  fireEvent.click(toggle);
+  await slot.experimental_invalidateRpc(["config"]);
+  expect(toggle.getAttribute("aria-checked")).toBe("false");
+  await act(async () =>
+    nextStatus.resolve({
+      ...status(),
+      routing: { claude: false, codex: true },
+    }),
+  );
+  await waitFor(() =>
+    expect(toggle.getAttribute("aria-checked")).toBe("false"),
+  );
+});
+
+it("clears a config save error after an unchanged successful refresh without dropping the draft", async () => {
+  const slot = render([account()], {
+    "config.set": () => {
+      throw new Error("Save refused");
+    },
+  });
+  fireEvent.click(await slot.findByRole("button", { name: "Advanced" }));
+  const input = await slot.findByLabelText("Anthropic upstream base URL");
+  fireEvent.change(input, { target: { value: "https://draft.example.com" } });
+  fireEvent.blur(input);
+  await slot.findByText("Save refused");
+  await slot.experimental_invalidateRpc(["config"]);
+  await waitFor(() => expect(slot.queryByText("Save refused")).toBeNull());
+  expect(slot.getByLabelText("Anthropic upstream base URL")).toBe(input);
+  expect((input as HTMLInputElement).value).toBe("https://draft.example.com");
+});
+
+it("clears a routing error after an unchanged successful read", async () => {
+  const slot = render([account()], {
+    "routing.set": () => {
+      throw new Error("Routing unavailable");
+    },
+  });
+  fireEvent.click(
+    await slot.findByRole("switch", { name: "Route Claude threads" }),
+  );
+  await slot.findByText("Routing unavailable");
+  await slot.experimental_invalidateRpc(["accounts"]);
+  await waitFor(() =>
+    expect(slot.queryByText("Routing unavailable")).toBeNull(),
   );
 });
