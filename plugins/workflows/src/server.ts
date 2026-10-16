@@ -131,6 +131,7 @@ export default async function plugin(bb: BbPluginApi) {
       const stopped = await service.stop(run.id);
       const latest = workflowForThread(threadId, run.id);
       if (latest === null) throw new Error(`Unknown workflow run ${runId}`);
+      bb.rpc.experimental_invalidate([`runs:${threadId}`]);
       return { stopped, run: buildWorkflowRunView(latest) };
     },
   });

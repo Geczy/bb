@@ -3,7 +3,14 @@ import {
   makePluginAgentConfigurationContext,
 } from "@get-bb/plugin-sdk/testing";
 import { afterEach, describe, expect, it } from "vitest";
-import { getCall, getRunRequired, migrations } from "./data.js";
+import {
+  createRun,
+  getCall,
+  getRunRequired,
+  migrations,
+  settleRun,
+} from "./data.js";
+import { DEFAULT_WORKFLOW_SETTINGS } from "./settings.js";
 import plugin from "./server.js";
 import { createWorkflowService } from "./service.js";
 
@@ -44,6 +51,55 @@ describe("workflows plugin", () => {
   afterEach(async () => {
     await Promise.all(hosts.map((host) => host.dispose()));
     hosts.length = 0;
+  });
+
+  it("invalidates specific and latest run views when Stop finds a terminal run", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "workflows" });
+    hosts.push(harness);
+    await plugin(bb);
+    const db = bb.storage.database();
+    const run = createRun(db, {
+      projectId: "project-test",
+      originThreadId: "thread-test",
+      environmentId: "environment-test",
+      originProvider: "codex",
+      originModel: "gpt-test",
+      originReasoningLevel: "medium",
+      originPermissionMode: "full",
+      name: "Already finished",
+      source: workflowSource("return null;"),
+      sourceHash: "hash",
+      argsJson: "null",
+      settingsJson: JSON.stringify(DEFAULT_WORKFLOW_SETTINGS),
+      resumedFromRunId: null,
+    });
+    const reads: string[][] = [];
+    for (const runId of [run.id, null]) {
+      await harness.callRpc("workflowRunView", {
+        threadId: run.originThreadId,
+        runId,
+      });
+      reads.push([...(harness.rpcTags.get("workflowRunView") ?? [])]);
+    }
+    settleRun(db, {
+      id: run.id,
+      status: "succeeded",
+      result: null,
+      error: null,
+    });
+    harness.rpcInvalidations.length = 0;
+    await expect(
+      harness.callRpc("workflowStopRun", {
+        threadId: run.originThreadId,
+        runId: run.id,
+      }),
+    ).resolves.toMatchObject({
+      stopped: false,
+      run: { id: run.id, status: "succeeded" },
+    });
+    const invalidated = harness.rpcInvalidations.flatMap((tags) => tags ?? []);
+    for (const tags of reads)
+      expect(tags.some((tag) => invalidated.includes(tag))).toBe(true);
   });
 
   it("loads with defaults and needs-configuration when persisted settings are invalid", async () => {
