@@ -1105,12 +1105,34 @@ describe("settings action ordering through the server", () => {
           await act(async () => read.reject(new Error("Status unavailable")));
         else await act(async () => read.resolve());
       }
-      replies.delete("status.get");
       if (outcome === "failure") await slot.findByText("Status unavailable");
       await waitFor(() => expect(handle.hasAttribute("disabled")).toBe(false));
+      if (outcome === "failure") {
+        expect(
+          slot
+            .getAllByRole("button", { name: /Reorder/ })
+            .map((button) => button.getAttribute("aria-label")),
+        ).toEqual(["Reorder First", "Reorder Second"]);
+        replies.delete("status.get");
+        await act(async () => {
+          await slot.experimental_invalidateRpc(["accounts"]);
+        });
+        await waitFor(() =>
+          expect(
+            slot
+              .getAllByRole("button", { name: /Reorder/ })
+              .map((button) => button.getAttribute("aria-label")),
+          ).toEqual(["Reorder Second", "Reorder First"]),
+        );
+      }
+      replies.delete("status.get");
       const current = statusSchema.parse(
         await host.harness.behavior.callRpc("status.get", null),
       );
+      expect(current.accounts.map(({ label }) => label)).toEqual([
+        "Second",
+        "First",
+      ]);
       await act(async () => {
         await host.harness.behavior.callRpc("account.reorder", {
           provider: "claude",
@@ -1127,39 +1149,6 @@ describe("settings action ordering through the server", () => {
     },
   );
 
-  it("releases a failed reorder's optimistic order before a later status update", async () => {
-    measureAccountRows();
-    const { slot, host, replies } = await fixture();
-    replies.set("status.get", async () => {
-      throw new Error("Status unavailable");
-    });
-    const handle = slot.getByRole("button", { name: "Reorder First" });
-    await keyboardMove(handle);
-    fireEvent.keyDown(document, { code: "Space" });
-    await slot.findByText("Status unavailable");
-    await waitFor(() => expect(handle.hasAttribute("disabled")).toBe(false));
-    expect(
-      slot
-        .getAllByRole("button", { name: /Reorder/ })
-        .map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["Reorder First", "Reorder Second"]);
-    replies.delete("status.get");
-    await act(async () => {
-      await slot.experimental_invalidateRpc(["accounts"]);
-    });
-    await waitFor(() =>
-      expect(
-        slot
-          .getAllByRole("button", { name: /Reorder/ })
-          .map((button) => button.getAttribute("aria-label")),
-      ).toEqual(["Reorder Second", "Reorder First"]),
-    );
-    expect(
-      statusSchema
-        .parse(await host.harness.behavior.callRpc("status.get", null))
-        .accounts.map(({ label }) => label),
-    ).toEqual(["Second", "First"]);
-  });
   it("reconciles routing after a failed read when the next status equals the cached pre-action value", async () => {
     const { slot, host, replies } = await fixture();
     replies.set("status.get", async () => {
