@@ -105,7 +105,8 @@ function useAutomation(route: DetailRoute): {
   >({ method: "automations_get", input: { projectId, automationId } });
   const refresh = query.refetch;
   useEffect(() => {
-    void refresh();
+    if (query.data !== undefined) void refresh();
+    // oxlint-disable-next-line react/exhaustive-deps
   }, [refresh, projectId, automationId]);
   return {
     automation: query.data ?? null,

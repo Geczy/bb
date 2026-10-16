@@ -941,3 +941,33 @@ it("keeps an automation edit draft mounted when detail refresh fails", async () 
   expect(prompt.isConnected).toBe(true);
   expect(prompt).toHaveProperty("value", "My unsaved prompt");
 });
+
+it("reads automation detail only once on first entry without cached data", async () => {
+  const app = await loadPluginApp(() => import("../app.js"));
+  const read = vi.fn(() => AUTOMATION);
+  const slot = renderSlot(
+    app.navPanels[0]!,
+    { subPath: `${AUTOMATION.projectId}/${AUTOMATION.id}` },
+    {
+      rpc: {
+        automations_get: read,
+        automations_overview: () => ({ automations: [] }),
+        automations_runs: () => ({ runs: [], nextCursor: null }),
+      },
+      experimental_rpcTags: (method) => ({
+        tags:
+          method === "automations_overview"
+            ? ["automations"]
+            : method === "automations_runs"
+              ? [`runs:${AUTOMATION.projectId}`]
+              : [
+                  `automations:${AUTOMATION.projectId}`,
+                  `runs:${AUTOMATION.projectId}`,
+                ],
+      }),
+    },
+  );
+  await slot.findByText(AUTOMATION.name);
+  await act(async () => {});
+  expect(read).toHaveBeenCalledTimes(1);
+});
