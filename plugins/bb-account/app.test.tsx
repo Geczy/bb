@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { type AccountStatus, type LoginView } from "@/src/schemas";
+import { accountPrivateRpcContract } from "./src/contract.js";
 
 const app = await loadPluginApp(() => import("./app"));
 
@@ -196,6 +197,42 @@ describe("bb account settings section", () => {
     );
   });
 
+  it("removes a code replaced by another client and offers a fresh sign-in", async () => {
+    let login: LoginView | null = null;
+    let starts = 0;
+    const slot = renderSlot(
+      app.settingsSections[0]!,
+      {},
+      {
+        experimental_rpcTags: () => ({ tags: ["login", "status"] }),
+        rpc: {
+          "login.poll": (input: unknown) => {
+            const { loginId } =
+              accountPrivateRpcContract["login.poll"].input.parse(input);
+            return {
+              login: loginId === null || loginId === login?.id ? login : null,
+              status: signedOut,
+            };
+          },
+          "login.start": () => {
+            login = pendingLogin({
+              id: `login-${++starts}`,
+              userCode: starts === 1 ? "K7QP-2M4X" : "NEWC-0DE2",
+            });
+            return login;
+          },
+        },
+      },
+    );
+    fireEvent.click(await slot.findByRole("button", { name: "Sign in" }));
+    await slot.findByText("K7QP-2M4X");
+    login = pendingLogin({ id: "other-client", userCode: "OTHR-CODE" });
+    await slot.experimental_invalidateRpc(["login"]);
+    await waitFor(() => expect(slot.queryByText("K7QP-2M4X")).toBeNull());
+    fireEvent.click(await slot.findByRole("button", { name: "Try again" }));
+    await slot.findByText("NEWC-0DE2");
+  });
+
   it("keeps the sign-in code through a read failure and retries on reconnect", async () => {
     let polls = 0;
     const slot = renderSlot(
@@ -264,14 +301,24 @@ describe("bb account settings section", () => {
   });
 
   it("cancels the pending sign-in when the dialog closes", async () => {
+    let login: LoginView | null = null;
     const slot = renderSlot(
       app.settingsSections[0]!,
       {},
       {
         rpc: {
-          "login.poll": () => ({ login: null, status: signedOut }),
-          "login.start": () => pendingLogin(),
-          "login.cancel": () => ({ login: null }),
+          "login.poll": () => ({ login, status: signedOut }),
+          "login.start": () => {
+            login = pendingLogin();
+            return login;
+          },
+          "login.cancel": () => {
+            login = pendingLogin({
+              state: "cancelled",
+              message: "Sign-in was cancelled.",
+            });
+            return { login };
+          },
         },
       },
     );

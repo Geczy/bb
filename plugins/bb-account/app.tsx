@@ -526,8 +526,11 @@ function SignInDialog({
     enabled: pendingId !== null,
   });
   const current =
-    pendingLogin.data?.login ??
-    (login?.id === startedLogin?.id ? login : startedLogin);
+    pendingLogin.data !== undefined
+      ? pendingLogin.data.login
+      : login?.id === startedLogin?.id
+        ? login
+        : startedLogin;
 
   useEffect(() => {
     if (open && current?.state === "signed-in") onOpenChange(false);
@@ -560,7 +563,12 @@ function SignInDialog({
             <SignInDialogBody
               login={current}
               starting={starting}
-              startError={startError}
+              startError={
+                startError ??
+                (pendingLogin.data?.login === null
+                  ? "This sign-in is no longer active. Try again for a new code."
+                  : null)
+              }
               onRetry={start}
             />
             <DialogFooter>
