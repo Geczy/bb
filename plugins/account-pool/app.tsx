@@ -899,7 +899,9 @@ function AccountPoolSettings() {
   const mounted = useRef(true);
   const threshold =
     config?.switchThreshold ?? DEFAULT_ACCOUNT_POOL_CONFIG.switchThreshold;
+  const appliedConfig = useRef<AccountPoolConfig | null>(null);
   const applyConfig = useCallback((next: AccountPoolConfig) => {
+    appliedConfig.current = next;
     setConfig(next);
     setDrafts(configDrafts(next));
   }, []);
@@ -914,40 +916,46 @@ function AccountPoolSettings() {
   const refresh = statusQuery.refetch;
   const refreshConfig = configQuery.refetch;
   useEffect(() => {
-    if (statusQuery.data !== undefined) {
-      writeCachedStatus(statusQuery.data);
-      const nextStatus = statusQuery.data;
-      setStatus(nextStatus);
-      setStatusIsCached(false);
-    }
-  }, [statusQuery.data]);
-  useEffect(() => {
     if (
-      statusQuery.data !== undefined &&
-      !statusQuery.isFetching &&
-      statusQuery.error === null
+      statusQuery.data === undefined ||
+      statusQuery.isFetching ||
+      statusQuery.error !== null
     )
-      setError(null);
+      return;
+    writeCachedStatus(statusQuery.data);
+    setStatus(statusQuery.data);
+    setStatusIsCached(false);
+    setError(null);
   }, [statusQuery.data, statusQuery.isFetching, statusQuery.error]);
   useEffect(() => {
+    const next = configQuery.data;
     if (
-      configQuery.data !== undefined &&
-      !configQuery.isFetching &&
-      configQuery.error === null
-    ) {
-      setError(null);
-      setConfigErrors({
-        anthropicUpstreamBaseUrl: null,
-        codexUpstreamBaseUrl: null,
-        switchThreshold: null,
-      });
-    }
-  }, [configQuery.data, configQuery.isFetching, configQuery.error]);
+      next === undefined ||
+      configQuery.isFetching ||
+      configQuery.error !== null
+    )
+      return;
+    const previous = appliedConfig.current;
+    if (
+      previous === null ||
+      previous.parentMode !== next.parentMode ||
+      CONFIG_FIELDS.some((field) => previous[field] !== next[field])
+    )
+      applyConfig(next);
+    setError(null);
+    setConfigErrors({
+      anthropicUpstreamBaseUrl: null,
+      codexUpstreamBaseUrl: null,
+      switchThreshold: null,
+    });
+  }, [
+    configQuery.data,
+    configQuery.isFetching,
+    configQuery.error,
+    applyConfig,
+  ]);
   const displayError =
     configQuery.error?.message ?? statusQuery.error?.message ?? error;
-  useEffect(() => {
-    if (configQuery.data !== undefined) applyConfig(configQuery.data);
-  }, [configQuery.data, applyConfig]);
   useEffect(() => {
     mounted.current = true;
     return () => {

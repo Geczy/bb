@@ -1160,4 +1160,81 @@ describe("settings action ordering through the server", () => {
         .accounts.map(({ label }) => label),
     ).toEqual(["Second", "First"]);
   });
+  it("reconciles routing after a failed read when the next status equals the cached pre-action value", async () => {
+    const { slot, host, replies } = await fixture();
+    replies.set("status.get", async () => {
+      throw new Error("Status unavailable");
+    });
+    const toggle = slot.getByRole("switch", { name: "Route Claude threads" });
+    fireEvent.click(toggle);
+    await slot.findByText("Status unavailable");
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    replies.delete("status.get");
+    await act(async () => {
+      await host.harness.behavior.callRpc("routing.set", {
+        provider: "claude",
+        enabled: true,
+      });
+    });
+    await waitFor(() =>
+      expect(slot.queryByText("Status unavailable")).toBeNull(),
+    );
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("preserves the next draft when a delayed config read repeats the completed save", async () => {
+    const { slot, replies } = await fixture();
+    fireEvent.click(slot.getByRole("button", { name: "Advanced" }));
+    const input = await slot.findByLabelText("Anthropic upstream base URL");
+    if (!(input instanceof HTMLInputElement))
+      throw new Error("Expected a config input.");
+    await waitFor(() => expect(input.disabled).toBe(false));
+    const read = deferred<void>();
+    replies.set("config.get", () => read.promise);
+    fireEvent.change(input, { target: { value: "https://saved.example.com" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(slot.rpcCalls.some(({ method }) => method === "config.set")).toBe(
+        true,
+      ),
+    );
+    await waitFor(() => expect(input.disabled).toBe(false));
+    fireEvent.change(input, {
+      target: { value: "https://next-draft.example.com" },
+    });
+    await act(async () => read.resolve());
+    expect(input.value).toBe("https://next-draft.example.com");
+  });
+
+  it("applies a config revert even when it equals the cached value from before the save", async () => {
+    const { slot, host, replies } = await fixture();
+    fireEvent.click(slot.getByRole("button", { name: "Advanced" }));
+    const input = await slot.findByLabelText("Anthropic upstream base URL");
+    if (!(input instanceof HTMLInputElement))
+      throw new Error("Expected a config input.");
+    await waitFor(() => expect(input.disabled).toBe(false));
+    const original = input.value;
+    const read = deferred<void>();
+    replies.set("config.get", () => read.promise);
+    fireEvent.change(input, { target: { value: "https://saved.example.com" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(slot.rpcCalls.some(({ method }) => method === "config.set")).toBe(
+        true,
+      ),
+    );
+    await waitFor(() => expect(input.disabled).toBe(false));
+    await act(async () => read.reject(new Error("Config unavailable")));
+    await slot.findByText("Config unavailable");
+    replies.delete("config.get");
+    await act(async () => {
+      await host.harness.behavior.callRpc("config.set", {
+        anthropicUpstreamBaseUrl: original,
+      });
+    });
+    await waitFor(() =>
+      expect(slot.queryByText("Config unavailable")).toBeNull(),
+    );
+    expect(input.value).toBe(original);
+  });
 });
