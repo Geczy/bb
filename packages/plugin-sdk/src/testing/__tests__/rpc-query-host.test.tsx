@@ -894,6 +894,42 @@ describe("invalidation while a read is in flight", () => {
     expect(bReads).toBe(1);
   });
 
+  it.each(["plain", "keyed"] as const)(
+    "re-reads a %s read whose first load failed on the next invalidation",
+    async (kind) => {
+      let calls = 0;
+      const { hooks, queryClient } = setup(async () => {
+        if (++calls === 1) throw new Error("offline");
+        return kind === "plain"
+          ? { result: 1, tags: ["item:a"] }
+          : { result: { a: 1 }, tags: [], keyTags: { a: ["item:a"] } };
+      });
+      const mounted = renderHook(() => {
+        const query =
+          kind === "plain"
+            ? hooks.experimental_useRpcQuery<typeof contract, "read">({
+                method: "read",
+                input: { id: "a" },
+              })
+            : hooks.experimental_useRpcKeyedQuery<number>({
+                method: "keyed",
+                keys: ["a"],
+              });
+        const data: unknown = query.data;
+        return {
+          value: kind === "plain" ? data : (data as Record<string, number>).a,
+          error: query.error?.message ?? null,
+        };
+      });
+      await waitFor(() => expect(mounted.result.current.error).toBe("offline"));
+      act(() => invalidateRpcQueries(queryClient, "producer", ["item:a"]));
+      await waitFor(() =>
+        expect(mounted.result.current).toEqual({ value: 1, error: null }),
+      );
+      expect(calls).toBe(2);
+    },
+  );
+
   it("re-reads a new key invalidated before its first response", async () => {
     const gate = deferred<void>();
     let bReads = 0;

@@ -433,8 +433,14 @@ function createKeyedOwner(
         ),
       ])) {
         const keyTags = values.get(key)?.tags ?? cached?.keyTags[key];
-        if (tags !== null && !keyTags?.some((tag) => tags.includes(tag))) {
-          for (const tag of tags) inflightKeyTags.get(key)?.add(tag);
+        const missed = inflightKeyTags.get(key);
+        if (
+          tags !== null &&
+          (keyTags === undefined
+            ? missed !== undefined
+            : !keyTags.some((tag) => tags.includes(tag)))
+        ) {
+          for (const tag of tags) missed?.add(tag);
           continue;
         }
         matched = true;
