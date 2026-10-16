@@ -34,7 +34,8 @@ On first load the plugin copies any non-default `sidebar.*` values from
 `environmentGrouping` decides whether sibling threads sharing one worktree
 collapse into a single row: `"auto"` (default) groups them in every
 organization except chronological, `false` never groups, and `true` always
-groups. `sortDirection` is `default` (each field's natural order: newest first
+groups. Children sharing their parent’s worktree stay directly beneath the
+parent without another worktree header. `sortDirection` is `default` (each field's natural order: newest first
 for dates, A–Z for titles), `ascending`, or `descending`.
 
 `hiddenGroups` (default `[]`) moves groups into More, the same as a group
@@ -66,7 +67,7 @@ keys still work. The default is `'["bb--core/archive"]'` and `'[]'` leaves
 only the menu. For example,
 `bb thread-list prefs set rowActions '["bb--core/pin","bb--core/archive"]'`.
 In the app, a thread
-row's actions menu has Customize row actions, which turns that row's quick
+row's actions menu has Customize actions, which turns that row's quick
 actions into three editable slots in place; each slot picks an action, a filled
 slot can Hide, and filled slots drag to reorder. Done, Escape, or a click
 elsewhere finishes.
