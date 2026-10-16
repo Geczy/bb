@@ -619,6 +619,7 @@ async function runDispatchAttempt(
       payload: resolvedPayload,
       thread,
       trigger: args.trigger,
+      startedOnBehalfOf: args.startedOnBehalfOf,
       ...(args.retryOf !== undefined ? { retryOf: args.retryOf } : {}),
       beforeAppendInTransaction: ({ tx }) => {
         if (getThread(tx, thread.id)?.status !== thread.status) {

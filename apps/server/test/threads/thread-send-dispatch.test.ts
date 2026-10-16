@@ -1446,6 +1446,12 @@ describe("idle cold-start activation", () => {
         expect(
           listQueuedThreadCommands(harness, "thread.start", thread.id),
         ).toHaveLength(0);
+        const request = listEvents(harness.db, { threadId: thread.id }).find(
+          (event) => event.type === "client/turn/requested",
+        );
+        expect(JSON.parse(request?.data ?? "{}")).toMatchObject({
+          initiator: "system",
+        });
         expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(0);
       });
     },

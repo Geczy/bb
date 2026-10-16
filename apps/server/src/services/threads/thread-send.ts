@@ -8,6 +8,7 @@ import type {
   ClientTurnRequestId,
   PromptInput,
   ResolvedThreadExecutionOptions,
+  StartedOnBehalfOf,
   Thread,
   ThreadTurnInitiator,
   TurnRequestTarget,
@@ -104,6 +105,7 @@ interface SendThreadMessageArgs {
   payload: SendThreadMessagePayload;
   thread: Thread;
   trigger: SendThreadMessageTrigger;
+  startedOnBehalfOf?: StartedOnBehalfOf | null;
 }
 
 interface ResolveMessageSenderArgs {
@@ -559,7 +561,7 @@ async function sendThreadMessageWithoutContextClear(
   const { initiator } = resolveDispatchAuthor({
     retrying: args.retryOf !== undefined,
     senderThreadId,
-    startedOnBehalfOf: null,
+    startedOnBehalfOf: args.startedOnBehalfOf ?? null,
   });
   const shouldCaptureUserMessageSent =
     args.trigger === "user" && initiator === "user" && input.length > 0;
