@@ -147,19 +147,23 @@ function useRuns(
     setCursor(null);
     setPreviousRuns([]);
   }, [projectId, automationId]);
+  useEffect(() => {
+    if (tail.error) toast.error(errorText(tail.error));
+  }, [tail.error]);
   return {
     runs: [...previousRuns, ...(query.data?.runs ?? [])],
-    nextCursor: query.data?.nextCursor ?? null,
-    loading: query.isLoading,
+    nextCursor: query.data === undefined ? cursor : query.data.nextCursor,
+    loading: cursor === null && query.isLoading,
     loadingMore: cursor !== null && query.isFetching,
-    error: query.error?.message ?? null,
+    error: first.error?.message ?? null,
     loadMore: () => {
-      if (query.data?.nextCursor) {
+      if (query.data === undefined) void query.refetch();
+      else if (query.data.nextCursor) {
         setPreviousRuns((current) => [...current, ...query.data!.runs]);
         setCursor(query.data.nextCursor);
       }
     },
-    retry: query.refetch,
+    retry: first.refetch,
   };
 }
 

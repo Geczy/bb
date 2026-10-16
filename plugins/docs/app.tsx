@@ -224,7 +224,7 @@ function storedMarkdown(
 }
 
 interface HtmlEmbedOptions {
-  baseUrl: string;
+  baseUrl(): string;
   notePath: string;
 }
 
@@ -234,7 +234,7 @@ const HtmlEmbed = Node.create<HtmlEmbedOptions>({
   atom: true,
   isolating: true,
   addOptions() {
-    return { baseUrl: "", notePath: "" };
+    return { baseUrl: () => "", notePath: "" };
   },
   addAttributes() {
     return {
@@ -278,7 +278,7 @@ const HtmlEmbed = Node.create<HtmlEmbedOptions>({
       iframe.setAttribute("sandbox", "allow-scripts");
       iframe.style.height = `${Math.min(1200, Math.max(120, Number(node.attrs.height) || 360))}px`;
       iframe.src = previewUrl(
-        this.options.baseUrl,
+        this.options.baseUrl(),
         this.options.notePath,
         String(node.attrs.src),
       );
@@ -448,6 +448,7 @@ function TiptapEditor(props: {
   const editorRef = useRef<Editor | null>(null);
   const baselineRef = useRef<ProseMirrorNode | null>(null);
   const sourceRef = useRef(initialValue);
+  const baseUrlRef = useRef(previewBaseUrl);
   const blocksRef = useRef<MarkdownBlocks | null>(null);
   const latest = useRef(props);
   latest.current = props;
@@ -458,7 +459,7 @@ function TiptapEditor(props: {
       const body = parseMarkdownDocument(latest.current.baseMarkdown).body;
       const root = new window.DOMParser().parseFromString(
         editor.storage.markdown.parser.parse(
-          displayMarkdown(body, previewBaseUrl, notePath),
+          displayMarkdown(body, baseUrlRef.current, notePath),
         ),
         "text/html",
       ).body;
@@ -470,10 +471,28 @@ function TiptapEditor(props: {
       editor.state.tr.setMeta(proposalDiffKey, { refresh: true }),
     );
   };
+  const display = (source: string) =>
+    displayMarkdown(source, baseUrlRef.current, notePath);
+  const reload = (editor: Editor, markdown: string, addToHistory: boolean) => {
+    const { from, to } = editor.state.selection;
+    const focused = editor.isFocused;
+    blocksRef.current = loadMarkdownBlocks(
+      editor,
+      parseMarkdownDocument(markdown).body,
+      display,
+      addToHistory,
+    );
+    if (focused)
+      editor.commands.setTextSelection({
+        from: Math.min(from, editor.state.doc.content.size),
+        to: Math.min(to, editor.state.doc.content.size),
+      });
+  };
 
   useEffect(() => {
     ensureEditorStyles();
     if (!rootRef.current) return;
+    baseUrlRef.current = latest.current.previewBaseUrl;
     sourceRef.current = latest.current.value ?? initialValue;
     const markdownDocument = parseMarkdownDocument(sourceRef.current);
     let editor: Editor;
@@ -484,7 +503,7 @@ function TiptapEditor(props: {
         .chain()
         .focus()
         .setImage({
-          src: previewUrl(previewBaseUrl, notePath, result.markdownPath),
+          src: previewUrl(baseUrlRef.current, notePath, result.markdownPath),
           alt: file.name,
         })
         .run();
@@ -506,7 +525,7 @@ function TiptapEditor(props: {
         MarkdownTaskInput,
         HtmlBlock,
         HtmlSource,
-        HtmlEmbed.configure({ baseUrl: previewBaseUrl, notePath }),
+        HtmlEmbed.configure({ baseUrl: () => baseUrlRef.current, notePath }),
         Placeholder.configure({ placeholder: "Start writing…" }),
         Markdown.configure({
           html: true,
@@ -554,7 +573,7 @@ function TiptapEditor(props: {
     blocksRef.current = loadMarkdownBlocks(
       editor,
       markdownDocument.body,
-      (source) => displayMarkdown(source, previewBaseUrl, notePath),
+      display,
       false,
     );
     setBase(editor);
@@ -565,7 +584,7 @@ function TiptapEditor(props: {
           editor.storage.markdown.serializer.serialize(
             editor.schema.topNodeType.create(null, nodes),
           ),
-          previewBaseUrl,
+          baseUrlRef.current,
           notePath,
         ),
       );
@@ -577,28 +596,25 @@ function TiptapEditor(props: {
       editorRef.current = null;
     };
     // oxlint-disable-next-line react/exhaustive-deps
-  }, [initialValue, notePath, previewBaseUrl, inline]);
+  }, [initialValue, notePath, inline]);
 
   useEffect(() => {
     const editor = editorRef.current;
+    if (!editor || baseUrlRef.current === previewBaseUrl) return;
+    const markdown = serializeRef.current();
+    baseUrlRef.current = previewBaseUrl;
+    reload(editor, markdown, false);
+    setBase(editor);
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [previewBaseUrl]);
+  useEffect(() => {
+    const editor = editorRef.current;
     if (!editor || value === undefined) return;
-    if (value !== sourceRef.current && value !== serializeRef.current()) {
-      const { from, to } = editor.state.selection;
-      const focused = editor.isFocused;
-      blocksRef.current = loadMarkdownBlocks(
-        editor,
-        parseMarkdownDocument(value).body,
-        (source) => displayMarkdown(source, previewBaseUrl, notePath),
-        true,
-      );
-      if (focused)
-        editor.commands.setTextSelection({
-          from: Math.min(from, editor.state.doc.content.size),
-          to: Math.min(to, editor.state.doc.content.size),
-        });
-    }
+    if (value !== sourceRef.current && value !== serializeRef.current())
+      reload(editor, value, true);
     sourceRef.current = value;
-  }, [value, notePath, previewBaseUrl]);
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [value, notePath]);
   useEffect(() => {
     if (editorRef.current) setBase(editorRef.current);
     // oxlint-disable-next-line react/exhaustive-deps

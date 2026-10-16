@@ -1,16 +1,29 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useState, type ComponentProps } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { toast } from "sonner";
 import type {
   ExperimentalPermissionModePickerProps,
   ExperimentalProviderModelPickerProps,
 } from "@get-bb/plugin-sdk/app";
-import { installTestPluginRuntime } from "@get-bb/plugin-sdk/testing/app";
+import {
+  installTestPluginRuntime,
+  loadPluginApp,
+  renderSlot,
+} from "@get-bb/plugin-sdk/testing/app";
 import type {
   AgentExecutionUpdate,
   AutomationDetailResponse,
+  AutomationRunResponse,
 } from "./rpc-types.js";
 import {
   AutomationDetailView as AutomationDetailViewBase,
@@ -693,4 +706,114 @@ describe("Automation detail recipe", () => {
       ).not.toBeNull();
     },
   );
+});
+
+it("keeps existing runs mounted while loading the next page", async () => {
+  const app = await loadPluginApp(() => import("../app.js"));
+  const run: AutomationRunResponse = {
+    id: "run_first",
+    automationId: AUTOMATION.id,
+    runMode: "agent",
+    threadId: "thr_first",
+    status: "succeeded",
+    trigger: "manual",
+    skipReason: null,
+    error: null,
+    output: null,
+    exitCode: null,
+    scheduledFor: 1_700_000_000_000,
+    startedAt: 1_700_000_000_000,
+    finishedAt: 1_700_000_001_000,
+  };
+  let finishPage!: (page: {
+    runs: AutomationRunResponse[];
+    nextCursor: null;
+  }) => void;
+  const nextPage = new Promise<{
+    runs: AutomationRunResponse[];
+    nextCursor: null;
+  }>((resolve) => {
+    finishPage = resolve;
+  });
+  let pages = 0;
+  const slot = renderSlot(
+    app.navPanels[0]!,
+    { subPath: `${AUTOMATION.projectId}/${AUTOMATION.id}` },
+    {
+      rpc: {
+        automations_get: () => AUTOMATION,
+        automations_overview: () => ({ automations: [] }),
+        automations_runs: () =>
+          ++pages === 1 ? { runs: [run], nextCursor: "older" } : nextPage,
+      },
+    },
+  );
+  const more = await slot.findByRole("button", { name: "Load more" });
+  const existing = slot.getByRole("img", { name: "Succeeded" });
+  fireEvent.click(more);
+  await waitFor(() => expect(pages).toBe(2));
+  expect(existing.isConnected).toBe(true);
+  expect(
+    slot.getByRole("button", { name: "Loading…" }).hasAttribute("disabled"),
+  ).toBe(true);
+  await act(async () =>
+    finishPage({
+      runs: [{ ...run, id: "run_second", threadId: "thr_second" }],
+      nextCursor: null,
+    }),
+  );
+  await waitFor(() =>
+    expect(slot.getAllByRole("img", { name: "Succeeded" })).toHaveLength(2),
+  );
+  expect(existing.isConnected).toBe(true);
+});
+
+it("keeps loaded runs and retries the next page after it fails", async () => {
+  const app = await loadPluginApp(() => import("../app.js"));
+  const run: AutomationRunResponse = {
+    id: "run_first",
+    automationId: AUTOMATION.id,
+    runMode: "agent",
+    threadId: "thr_first",
+    status: "succeeded",
+    trigger: "manual",
+    skipReason: null,
+    error: null,
+    output: null,
+    exitCode: null,
+    scheduledFor: 1_700_000_000_000,
+    startedAt: 1_700_000_000_000,
+    finishedAt: 1_700_000_001_000,
+  };
+  const failure = vi.spyOn(toast, "error").mockImplementation(() => "");
+  onTestFinished(() => failure.mockRestore());
+  let pages = 0;
+  const slot = renderSlot(
+    app.navPanels[0]!,
+    { subPath: `${AUTOMATION.projectId}/${AUTOMATION.id}` },
+    {
+      rpc: {
+        automations_get: () => AUTOMATION,
+        automations_overview: () => ({ automations: [] }),
+        automations_runs: () => {
+          pages += 1;
+          if (pages === 1) return { runs: [run], nextCursor: "older" };
+          if (pages === 2) throw new Error("runs offline");
+          return {
+            runs: [{ ...run, id: "run_second", threadId: "thr_second" }],
+            nextCursor: null,
+          };
+        },
+      },
+    },
+  );
+  fireEvent.click(await slot.findByRole("button", { name: "Load more" }));
+  await waitFor(() => expect(failure).toHaveBeenCalled());
+  expect(slot.getAllByRole("img", { name: "Succeeded" })).toHaveLength(1);
+  expect(slot.queryByText("Runs unavailable.")).toBeNull();
+  fireEvent.click(await slot.findByRole("button", { name: "Load more" }));
+  await waitFor(() =>
+    expect(slot.getAllByRole("img", { name: "Succeeded" })).toHaveLength(2),
+  );
+  expect(slot.queryByRole("button", { name: "Load more" })).toBeNull();
 });

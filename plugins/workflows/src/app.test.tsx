@@ -770,7 +770,7 @@ describe("workflow-preview directive", () => {
     slot.unmount();
   });
 
-  it("does not poll unavailable workflows and retries after reconnect", async () => {
+  it("retries unavailable workflows with backoff and after reconnect", async () => {
     vi.useFakeTimers();
     let attempt = 0;
     const slot = renderSlot(
@@ -798,15 +798,18 @@ describe("workflow-preview directive", () => {
       if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
     });
     expect(attempt).toBe(1);
-    await act(async () => vi.advanceTimersByTimeAsync(2_000));
-    expect(attempt).toBe(1);
     await act(async () => vi.advanceTimersByTimeAsync(4_000));
     expect(attempt).toBe(1);
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+    expect(attempt).toBe(2);
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    expect(attempt).toBe(4);
     await act(async () => vi.advanceTimersByTimeAsync(10 * 60_000));
-    expect(attempt).toBe(1);
+    expect(attempt).toBeLessThanOrEqual(15);
+    const beforeReconnect = attempt;
     await slot.setRealtimeConnectionState("reconnecting");
     await slot.setRealtimeConnectionState("connected");
-    expect(attempt).toBe(2);
+    expect(attempt).toBe(beforeReconnect + 1);
     slot.unmount();
   });
 

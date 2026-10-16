@@ -101,6 +101,82 @@ describe("Docs document sessions", () => {
     });
   });
 
+  it.each([false, true])(
+    "rechecks snapshots queued behind a save (remote edit: %s)",
+    async (remoteEdit) => {
+      const { session, call } = await loadedSession();
+      const pending = deferred<{
+        outcome: "written";
+        sha256: string;
+        sizeBytes: number;
+      }>();
+      call.mockReturnValueOnce(pending.promise);
+      const latest = remoteEdit
+        ? file("Later remote edit", "remote-sha")
+        : file("My saved edit", "saved-sha");
+      call.mockResolvedValueOnce(latest);
+      call.mockResolvedValueOnce(null);
+      session.edit("My saved edit");
+      const saving = session.flush();
+      await Promise.resolve();
+      const incoming = session.receive({
+        ...file(),
+        proposal: null,
+        previewBaseUrl: "/preview",
+        previewPath: "letter.md",
+      });
+      pending.resolve({
+        outcome: "written",
+        sha256: "saved-sha",
+        sizeBytes: 13,
+      });
+      await saving;
+      await incoming;
+      expect(session.getSnapshot()).toMatchObject({
+        content: latest.content,
+        draft: latest.content,
+        sha256: latest.sha256,
+        dirty: false,
+        conflict: false,
+      });
+    },
+  );
+
+  it.each(["file", "proposal"] as const)(
+    "rereads a %s snapshot that arrives after the save that replaced it",
+    async (kind) => {
+      const { session, call } = await loadedSession(
+        kind === "proposal" ? proposal("pending", 1) : null,
+      );
+      const saved =
+        kind === "proposal"
+          ? { ...proposal("pending", 2), content: "My saved edit" }
+          : { outcome: "written" as const, sha256: "saved-sha", sizeBytes: 13 };
+      call.mockResolvedValueOnce(saved);
+      session.edit("My saved edit");
+      await session.flush();
+      call.mockResolvedValueOnce(
+        kind === "proposal" ? file() : file("My saved edit", "saved-sha"),
+      );
+      call.mockResolvedValueOnce(kind === "proposal" ? saved : null);
+      await session.receive({
+        ...file(),
+        proposal: kind === "proposal" ? proposal("pending", 1) : null,
+        previewBaseUrl: "/preview",
+        previewPath: "letter.md",
+      });
+      expect(call).toHaveBeenCalledWith("readNote", {
+        vaultId: "personal",
+        path: "letter.md",
+      });
+      expect(session.getSnapshot()).toMatchObject({
+        draft: "My saved edit",
+        dirty: false,
+        conflict: false,
+      });
+    },
+  );
+
   it("drains edits made during a save using the returned file hash", async () => {
     const { session, call } = await loadedSession();
     const first = deferred<{

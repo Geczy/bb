@@ -723,11 +723,16 @@ describe("Docs nav panel", () => {
     expect(slot.queryByText("Remote Mac")).toBeNull();
   });
 
-  it("renders and autosaves editable Markdown tables", async () => {
-    const saveNote = vi.fn((_input: unknown) => ({
-      outcome: "written",
-      sha256: "next-sha",
-    }));
+  it("autosaves editable Markdown tables without replacing the focused editor", async () => {
+    let leases = 0;
+    let savedContent: string | null = null;
+    const saveNote = vi.fn((input: unknown) => {
+      savedContent = (input as { content: string }).content;
+      return {
+        outcome: "written",
+        sha256: "next-sha",
+      };
+    });
     const slot = renderSlot(
       app.navPanels[0]!,
       { subPath: "personal/status.md" },
@@ -744,10 +749,14 @@ describe("Docs nav panel", () => {
             ]),
           readNote: () => ({
             content:
-              "# Status\n\n| Project | State |\n| --- | --- |\n| Docs | Ready |",
-            sha256: "sha",
+              savedContent ??
+              "# Status\n\n![Chart](chart.png)\n\n| Project | State |\n| --- | --- |\n| Docs | Ready |",
+            sha256: savedContent === null ? "sha" : "next-sha",
           }),
-          preparePreview: () => preview,
+          preparePreview: () => ({
+            ...preview,
+            baseUrl: `${preview.baseUrl}-${++leases}`,
+          }),
           renameToTitle: () => ({ path: "status.md" }),
           saveNote,
         },
@@ -762,6 +771,8 @@ describe("Docs nav panel", () => {
     expect(table?.closest(".tableWrapper")).toBeTruthy();
     expect(table?.closest('[contenteditable="true"]')).toBeTruthy();
 
+    const editor = slot.getByRole("textbox", { name: "Document content" });
+    editor.focus();
     const firstBodyCell = table?.querySelector("td p");
     expect(firstBodyCell).toBeTruthy();
     firstBodyCell!.textContent = "Plans";
@@ -771,6 +782,28 @@ describe("Docs nav panel", () => {
     });
     expect(saveNote.mock.calls.at(-1)?.[0]).toMatchObject({
       content: expect.stringContaining("| Plans | Ready |"),
+    });
+    const leasesBefore = leases;
+    await act(async () => slot.experimental_invalidateRpc());
+    await waitFor(() =>
+      expect(slot.getByRole("img", { name: "Chart" }).getAttribute("src")).toBe(
+        `${preview.baseUrl}-${leasesBefore + 1}/chart.png`,
+      ),
+    );
+    expect(slot.getByText("Plans")).toBeTruthy();
+    expect(slot.getByRole("textbox", { name: "Document content" })).toBe(
+      editor,
+    );
+    expect(document.activeElement).toBe(editor);
+    const saves = saveNote.mock.calls.length;
+    const cell = slot.container.querySelector("td p")!;
+    cell.textContent = "Launch";
+    fireEvent.input(cell);
+    await waitFor(() => expect(saveNote.mock.calls.length).toBe(saves + 1), {
+      timeout: 2_000,
+    });
+    expect(saveNote.mock.calls.at(-1)?.[0]).toMatchObject({
+      content: expect.stringContaining("![Chart](chart.png)"),
     });
   });
 

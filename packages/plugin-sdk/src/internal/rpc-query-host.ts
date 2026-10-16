@@ -100,7 +100,21 @@ type Envelope = z.infer<typeof envelopeSchema>;
 const interestResponse = z.object({ whileWatched: z.boolean().default(false) });
 const taggedResponse = z.object({ tags: z.array(z.string()) });
 const generations = new WeakMap<Query, number>();
+const inflightTags = new WeakMap<Query, Set<string>>();
+const overlaps = (tags: readonly string[], missed: ReadonlySet<string>) =>
+  tags.some((tag) => missed.has(tag));
 const seedGenerations = new WeakMap<QueryClient, Map<string, number>>();
+const errorBaselines = new WeakMap<Query<Envelope, Error, Envelope>, number>();
+function retryFailedRead(
+  query: Query<Envelope, Error, Envelope>,
+): number | false {
+  if (query.state.status === "success")
+    errorBaselines.set(query, query.state.errorUpdateCount);
+  if (query.state.status !== "error") return false;
+  const failures =
+    query.state.errorUpdateCount - (errorBaselines.get(query) ?? 0);
+  return Math.min(60_000, 5_000 * 2 ** Math.max(0, failures - 1));
+}
 const readOwners = new WeakMap<QueryClient, Map<string, number>>();
 const dormantReads = new WeakMap<QueryClient, Set<string>>();
 
@@ -114,6 +128,8 @@ export async function runPluginRpcRead<T>(
     .get(queryClient.defaultQueryOptions({ queryKey }).queryHash);
   for (;;) {
     const started = query === undefined ? 0 : (generations.get(query) ?? 0);
+    const missed = new Set<string>();
+    if (query !== undefined) inflightTags.set(query, missed);
     let result: T;
     try {
       result = await read();
@@ -121,7 +137,12 @@ export async function runPluginRpcRead<T>(
       if (query !== undefined && started !== (generations.get(query) ?? 0))
         continue;
       throw error;
+    } finally {
+      if (query !== undefined && inflightTags.get(query) === missed)
+        inflightTags.delete(query);
     }
+    const response = taggedResponse.safeParse(result);
+    if (response.success && overlaps(response.data.tags, missed)) continue;
     if (query === undefined || started === (generations.get(query) ?? 0))
       return result;
   }
@@ -143,16 +164,22 @@ export function invalidateRpcQueries(
     .findAll({ queryKey: ["plugin-rpc", pluginId] });
   const matching = new Set(
     queries.filter((query) => {
+      const invalidateKeyed = keyedInvalidators.get(query);
+      if (invalidateKeyed) return invalidateKeyed(tags);
       if (tags === null) return true;
       const response = taggedResponse.safeParse(query.state.data);
-      return (
-        !response.success ||
+      if (
+        response.success &&
         response.data.tags.some((tag) => tags.includes(tag))
-      );
+      )
+        return true;
+      const missed = inflightTags.get(query);
+      if (!missed) return !response.success;
+      for (const tag of tags) missed.add(tag);
+      return false;
     }),
   );
   for (const query of matching) {
-    keyedInvalidators.get(query)?.(tags);
     generations.set(query, (generations.get(query) ?? 0) + 1);
   }
   void queryClient.invalidateQueries(
@@ -192,7 +219,7 @@ function shareKeyedData(
 }
 const keyedInvalidators = new WeakMap<
   Query,
-  (tags: readonly string[] | null) => void
+  (tags: readonly string[] | null) => boolean
 >();
 const keyedOwners = new WeakMap<
   QueryClient,
@@ -213,6 +240,7 @@ function createKeyedOwner(
   const listeners = new Set<() => void>();
   let stopObserver: (() => void) | null = null;
   const pending = new Map<string, Promise<void>>();
+  const inflightKeyTags = new Map<string, Set<string>>();
   const queued = new Map<
     string,
     { resolve(): void; reject(error: Error): void }
@@ -242,6 +270,8 @@ function createKeyedOwner(
               async (_, index) => {
                 const keys = requested.slice(index * 500, (index + 1) * 500);
                 const versions = keys.map((key) => revisions.get(key) ?? 0);
+                for (const key of keys) inflightKeyTags.set(key, new Set());
+                let overtaken = false;
                 try {
                   const generation =
                     seedGenerations.get(host.queryClient)?.get(pluginId) ?? 0;
@@ -269,25 +299,28 @@ function createKeyedOwner(
                     );
                   const rows = response.result;
                   for (const [index, key] of keys.entries()) {
-                    if (versions[index] === (revisions.get(key) ?? 0)) {
-                      const result = rows[key];
-                      if (result === undefined)
-                        throw new Error(`RPC ${method} omitted key ${key}`);
-                      values.set(key, {
-                        result: replaceEqualDeep(
-                          values.get(key)?.result,
-                          result,
-                        ),
-                        tags: [
-                          ...response.tags,
-                          ...(response.keyTags[key] ?? []),
-                        ],
-                        keyTags: {},
-                        whileWatched: response.whileWatched,
-                      });
-                      dirty.delete(key);
-                      errors.delete(key);
+                    if (versions[index] !== (revisions.get(key) ?? 0)) continue;
+                    const result = rows[key];
+                    if (result === undefined)
+                      throw new Error(`RPC ${method} omitted key ${key}`);
+                    const keyTags = [
+                      ...response.tags,
+                      ...(response.keyTags[key] ?? []),
+                    ];
+                    if (overlaps(keyTags, inflightKeyTags.get(key)!)) {
+                      overtaken = true;
+                      dirty.add(key);
+                      revisions.set(key, (revisions.get(key) ?? 0) + 1);
+                      continue;
                     }
+                    values.set(key, {
+                      result: replaceEqualDeep(values.get(key)?.result, result),
+                      tags: keyTags,
+                      keyTags: {},
+                      whileWatched: response.whileWatched,
+                    });
+                    dirty.delete(key);
+                    errors.delete(key);
                   }
                   for (const key of keys) batch.get(key)?.resolve();
                 } catch (error) {
@@ -299,7 +332,15 @@ function createKeyedOwner(
                     batch.get(key)?.reject(failure);
                   }
                 } finally {
-                  for (const key of keys) pending.delete(key);
+                  for (const key of keys) {
+                    pending.delete(key);
+                    inflightKeyTags.delete(key);
+                  }
+                  if (overtaken) {
+                    if (query)
+                      generations.set(query, (generations.get(query) ?? 0) + 1);
+                    void observer.refetch({ cancelRefetch: false });
+                  }
                   for (const listener of listeners) listener();
                 }
               },
@@ -320,6 +361,7 @@ function createKeyedOwner(
     queryKey,
     enabled: true,
     staleTime: Infinity,
+    refetchInterval: retryFailedRead,
     queryFn: () =>
       runPluginRpcRead(host.queryClient, queryKey, async () => {
         let requested: string[];
@@ -388,6 +430,7 @@ function createKeyedOwner(
   };
   if (query)
     keyedInvalidators.set(query, (tags) => {
+      let matched = false;
       const cached = observer.getCurrentQuery().state.data;
       for (const key of new Set([
         ...values.keys(),
@@ -402,15 +445,15 @@ function createKeyedOwner(
         ),
       ])) {
         const keyTags = values.get(key)?.tags ?? cached?.keyTags[key];
-        if (
-          tags !== null &&
-          keyTags !== undefined &&
-          !keyTags.some((tag) => tags.includes(tag))
-        )
+        if (tags !== null && !keyTags?.some((tag) => tags.includes(tag))) {
+          for (const tag of tags) inflightKeyTags.get(key)?.add(tag);
           continue;
+        }
+        matched = true;
         dirty.add(key);
         revisions.set(key, (revisions.get(key) ?? 0) + 1);
       }
+      return matched;
     });
   return {
     queryKey,
@@ -687,6 +730,7 @@ function createReadQuery(
   const options = {
     queryKey,
     staleTime: Infinity,
+    refetchInterval: retryFailedRead,
     queryFn: async () => {
       let generation = 0;
       const response = await runPluginRpcRead(

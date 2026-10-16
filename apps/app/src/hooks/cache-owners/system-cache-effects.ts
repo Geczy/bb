@@ -49,6 +49,7 @@ import { clearCachedModelCatalogs } from "@/lib/model-catalog-cache";
 import { bumpAllDiffPatchEvictionGenerations } from "./environment-diff-patch-cache-owner";
 import { invalidateAppUpdateStatus } from "./app-update-cache-owner";
 import { invalidatePluginList } from "./plugin-cache-owner";
+import { refreshPluginRpcQueries } from "./plugin-rpc-cache-owner";
 import { invalidateSystemVersion } from "./system-version-cache-owner";
 import {
   invalidateQueryKeys,
@@ -67,6 +68,7 @@ export function invalidateRealtimeQueriesAfterServerReconnect({
   disconnectedAt,
   queryClient,
 }: ServerReconnectInvalidationArgs): void {
+  refreshPluginRpcQueries(queryClient);
   for (const queryKey of getServerReconnectInvalidationQueryKeys()) {
     void queryClient.invalidateQueries(
       {
@@ -101,6 +103,7 @@ export function invalidateRealtimeQueriesFetchedBeforeInitialConnect({
   connectedAt,
   queryClient,
 }: InitialConnectInvalidationArgs): void {
+  refreshPluginRpcQueries(queryClient);
   for (const queryKey of getServerReconnectInvalidationQueryKeys()) {
     queryClient.invalidateQueries({
       queryKey,
@@ -114,8 +117,8 @@ export function invalidateRealtimeQueriesFetchedBeforeInitialConnect({
 export function refetchActiveRealtimeQueriesOnResume({
   queryClient,
 }: QueryClientArg): void {
+  refreshPluginRpcQueries(queryClient);
   for (const queryKey of [
-    ["plugin-rpc"],
     allThreadTimelineQueryKeyPrefix(),
     allThreadQueryKeyPrefix(),
     sidebarNavigationQueryKey(),
@@ -222,7 +225,6 @@ export function resetModelCatalogsAfterStreamerModeChange({
 
 function getServerReconnectInvalidationQueryKeys(): QueryKey[] {
   return [
-    ["plugin-rpc"],
     hostsQueryKey(),
     allHostQueryKeyPrefix(),
     projectsQueryKey(),

@@ -450,7 +450,7 @@ describe("thread notifications action", () => {
     expect(listCalls()).toEqual([
       { threadIds: ["thr_a", "thr_b"] },
       { threadIds: ["thr_c"] },
-      { threadIds: ["thr_a", "thr_b", "thr_c"] },
+      { threadIds: ["thr_b"] },
     ]);
   });
 

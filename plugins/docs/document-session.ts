@@ -70,6 +70,9 @@ function createSession(io: DocumentIO) {
   let refreshing: Promise<void> | null = null;
   let saving: Promise<void> | null = null;
   let refreshAgain = false;
+  const replaced = new Set<string>();
+  const identity = (file: Pick<Document, "sha256" | "proposal">) =>
+    `${file.sha256}:${file.proposal?.version ?? 0}`;
   const savedDraft = () =>
     state.proposal?.status === "pending"
       ? state.proposal.content
@@ -78,6 +81,15 @@ function createSession(io: DocumentIO) {
     state = { ...state, ...patch };
     state.dirty = state.draft !== savedDraft();
     for (const listener of listeners) listener();
+  };
+  const replace = (patch: Partial<DocumentState>) => {
+    replaced.add(identity(state));
+    set(patch);
+    replaced.delete(identity(state));
+    for (const old of replaced) {
+      if (replaced.size <= 100) break;
+      replaced.delete(old);
+    }
   };
   const run = (work: () => Promise<void>) => {
     const result = operations.then(work);
@@ -107,7 +119,7 @@ function createSession(io: DocumentIO) {
       set({
         ...file,
         loaded: true,
-        initialContent: file.content,
+        initialContent: state.loaded ? state.initialContent : file.content,
         draft: proposal?.status === "pending" ? proposal.content : file.content,
         error: null,
         conflict: false,
@@ -142,11 +154,11 @@ function createSession(io: DocumentIO) {
             content,
             state.proposal.version,
           );
-          set({ proposal });
+          replace({ proposal });
         } else {
           const result = await io.write(content, force ? null : state.sha256);
           if (result.outcome === "conflict") throw new DocumentConflict();
-          set({ content, sha256: result.sha256, conflict: false });
+          replace({ content, sha256: result.sha256, conflict: false });
           await io.afterSave?.();
         }
         force = false;
@@ -178,7 +190,7 @@ function createSession(io: DocumentIO) {
       await save();
       if (state.proposal && io.proposals) {
         const file = await io.proposals.resolve(action, state.proposal.version);
-        set({
+        replace({
           ...file,
           draft:
             file.proposal?.status === "pending"
@@ -194,7 +206,11 @@ function createSession(io: DocumentIO) {
     receiveError: (error: Error) => set({ error: error.message }),
     receive: (file: Document) =>
       run(async () => {
-        accept(file);
+        accept(
+          replaced.has(identity(file))
+            ? await io.read(state.previewBaseUrl)
+            : file,
+        );
       }).catch(() => undefined),
     initialize: (content: string) => set({ content, draft: content }),
     reload: async () => {

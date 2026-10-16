@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient } from "@tanstack/react-query";
+import { focusManager, QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -796,4 +796,193 @@ it("keeps disabled normal reads dormant and refreshes their cached value when en
   mounted.rerender({ enabled: true });
   await waitFor(() => expect(mounted.result.current.data).toBe(2));
   expect(host.call).toHaveBeenCalledTimes(2);
+});
+
+describe("invalidation while a read is in flight", () => {
+  type Row = {
+    kind: "plain" | "keyed";
+    phase: "first load" | "refetch" | "settled";
+    tags: "own" | "unrelated" | "all";
+    reads: number;
+  };
+  const rows: Row[] = [];
+  for (const kind of ["plain", "keyed"] as const) {
+    rows.push(
+      { kind, phase: "first load", tags: "own", reads: 2 },
+      { kind, phase: "first load", tags: "unrelated", reads: 1 },
+      { kind, phase: "first load", tags: "all", reads: 2 },
+      { kind, phase: "refetch", tags: "own", reads: 3 },
+      { kind, phase: "refetch", tags: "unrelated", reads: 2 },
+      { kind, phase: "refetch", tags: "all", reads: 3 },
+      { kind, phase: "settled", tags: "own", reads: 2 },
+      { kind, phase: "settled", tags: "unrelated", reads: 1 },
+      { kind, phase: "settled", tags: "all", reads: 2 },
+    );
+  }
+  it.each(rows)(
+    "$kind read, $phase, $tags tags: $reads reads",
+    async ({ kind, phase, tags, reads }) => {
+      const gated = phase === "settled" ? 0 : phase === "refetch" ? 2 : 1;
+      const gate = deferred<void>();
+      let calls = 0;
+      const { hooks, queryClient } = setup(async () => {
+        const read = ++calls;
+        if (read === gated) await gate.promise;
+        const readTags = ["item:a", `read:${read}`];
+        return kind === "plain"
+          ? { result: read, tags: readTags }
+          : { result: { a: read }, tags: [], keyTags: { a: readTags } };
+      });
+      const mounted = renderHook(() =>
+        kind === "plain"
+          ? hooks.experimental_useRpcQuery<typeof contract, "read">({
+              method: "read",
+              input: { id: "a" },
+            }).data
+          : hooks.experimental_useRpcKeyedQuery<number>({
+              method: "keyed",
+              keys: ["a"],
+            }).data?.a,
+      );
+      if (phase !== "first load")
+        await waitFor(() => expect(mounted.result.current).toBe(1));
+      if (phase === "refetch")
+        act(() => invalidateRpcQueries(queryClient, "producer", ["item:a"]));
+      await waitFor(() => expect(calls).toBe(Math.max(gated, 1)));
+      act(() =>
+        invalidateRpcQueries(
+          queryClient,
+          "producer",
+          tags === "all"
+            ? null
+            : tags === "own"
+              ? [`read:${Math.max(gated, 1)}`]
+              : ["other"],
+        ),
+      );
+      await act(async () => gate.resolve());
+      await waitFor(() => expect(mounted.result.current).toBe(reads));
+      await act(async () => {});
+      expect(calls).toBe(reads);
+    },
+  );
+
+  it("keeps a new key's response when an unrelated row changes while it loads", async () => {
+    const gate = deferred<void>();
+    let bReads = 0;
+    const { hooks, queryClient } = setup(async (_plugin, _method, input) => {
+      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
+      if (keys.includes("b") && ++bReads === 1) await gate.promise;
+      return {
+        result: Object.fromEntries(keys.map((key) => [key, 1])),
+        keyTags: Object.fromEntries(keys.map((key) => [key, [`item:${key}`]])),
+      };
+    });
+    const mounted = renderHook(
+      ({ keys }) =>
+        hooks.experimental_useRpcKeyedQuery<number>({ method: "keyed", keys }),
+      { initialProps: { keys: ["a"] } },
+    );
+    await waitFor(() => expect(mounted.result.current.data).toEqual({ a: 1 }));
+    mounted.rerender({ keys: ["a", "b"] });
+    await waitFor(() => expect(bReads).toBe(1));
+    act(() => invalidateRpcQueries(queryClient, "producer", ["item:c"]));
+    await act(async () => gate.resolve());
+    await waitFor(() =>
+      expect(mounted.result.current.data).toEqual({ a: 1, b: 1 }),
+    );
+    expect(bReads).toBe(1);
+  });
+
+  it("re-reads a new key invalidated before its first response", async () => {
+    const gate = deferred<void>();
+    let bReads = 0;
+    const { hooks, queryClient } = setup(async (_plugin, _method, input) => {
+      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
+      const read = keys.includes("b") ? ++bReads : 0;
+      if (read === 1) await gate.promise;
+      return {
+        result: Object.fromEntries(keys.map((key) => [key, read || 1])),
+        keyTags: Object.fromEntries(keys.map((key) => [key, [`item:${key}`]])),
+      };
+    });
+    const mounted = renderHook(
+      ({ keys }) =>
+        hooks.experimental_useRpcKeyedQuery<number>({ method: "keyed", keys }),
+      { initialProps: { keys: ["a"] } },
+    );
+    await waitFor(() => expect(mounted.result.current.data).toEqual({ a: 1 }));
+    mounted.rerender({ keys: ["a", "b"] });
+    await waitFor(() => expect(bReads).toBe(1));
+    act(() => invalidateRpcQueries(queryClient, "producer", ["item:b"]));
+    await act(async () => gate.resolve());
+    await waitFor(() =>
+      expect(mounted.result.current.data).toEqual({ a: 1, b: 2 }),
+    );
+  });
+});
+
+describe("failed reads", () => {
+  afterEach(() => {
+    focusManager.setFocused(undefined);
+    vi.useRealTimers();
+  });
+
+  it.each(["plain", "keyed"] as const)(
+    "%s read retries with backoff only while visible, keeping data and clearing the error",
+    async (kind) => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const outcomes: Array<number | Error> = [
+        1,
+        new Error("offline"),
+        new Error("offline"),
+        2,
+      ];
+      let calls = 0;
+      const { hooks, queryClient } = setup(async () => {
+        const outcome = outcomes[calls++] ?? 2;
+        if (outcome instanceof Error) throw outcome;
+        return kind === "plain"
+          ? { result: outcome, tags: ["item:a"] }
+          : { result: { a: outcome }, tags: [], keyTags: { a: ["item:a"] } };
+      });
+      const mounted = renderHook(() => {
+        const query =
+          kind === "plain"
+            ? hooks.experimental_useRpcQuery<typeof contract, "read">({
+                method: "read",
+                input: { id: "a" },
+              })
+            : hooks.experimental_useRpcKeyedQuery<number>({
+                method: "keyed",
+                keys: ["a"],
+              });
+        const data: unknown = query.data;
+        return {
+          value: kind === "plain" ? data : (data as Record<string, number>).a,
+          error: query.error?.message ?? null,
+        };
+      });
+      await waitFor(() => expect(mounted.result.current.value).toBe(1));
+      act(() => invalidateRpcQueries(queryClient, "producer", ["item:a"]));
+      await waitFor(() =>
+        expect(mounted.result.current).toEqual({ value: 1, error: "offline" }),
+      );
+      expect(calls).toBe(2);
+      await act(() => vi.advanceTimersByTimeAsync(5_000));
+      await waitFor(() => expect(calls).toBe(3));
+      act(() => focusManager.setFocused(false));
+      await act(() => vi.advanceTimersByTimeAsync(30_000));
+      expect(calls).toBe(3);
+      expect(mounted.result.current).toEqual({ value: 1, error: "offline" });
+      act(() => focusManager.setFocused(true));
+      await act(() => vi.advanceTimersByTimeAsync(10_000));
+      await waitFor(() =>
+        expect(mounted.result.current).toEqual({ value: 2, error: null }),
+      );
+      expect(calls).toBe(4);
+      await act(() => vi.advanceTimersByTimeAsync(120_000));
+      expect(calls).toBe(4);
+    },
+  );
 });
