@@ -21,6 +21,7 @@ import {
   createNotificationPreferences,
   describeNotificationSource,
   NOTIFICATION_LEVEL_LABELS,
+  UNSET_THREAD_NOTIFICATIONS,
   notificationLevelSchema,
   ownNotificationLevelSchema,
   type ThreadNotifications,
@@ -265,7 +266,10 @@ export function createPushNotificationsPlugin(
       "threadNotifications.keyed": async ({ keys }, context) => {
         for (const key of keys)
           context.experimental_tagKey(key, `thread:${key}`);
-        return preferences.list(keys);
+        const rows = await preferences.list(keys);
+        return Object.fromEntries(
+          keys.map((key) => [key, rows[key] ?? UNSET_THREAD_NOTIFICATIONS]),
+        );
       },
       "threadNotifications.list": async ({ threadIds }) => ({
         threads: await preferences.list(threadIds),

@@ -7,6 +7,8 @@ import type {
 } from "@get-bb/plugin-sdk/app";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import serverPlugin from "./server.js";
 import { pushNotificationsRpcContract } from "./contract.js";
 import type { ThreadNotificationInputs } from "./preferences.js";
 import type { ThreadNotificationsData } from "./notificationsAction.js";
@@ -539,4 +541,189 @@ it("keeps a successfully saved notification level when its reread fails", async 
   });
   await waitFor(() => expect(probe.listCalls().length).toBeGreaterThan(1));
   expect(probe.summary()?.detail).toBe("Muted");
+});
+
+async function renderServerNotifications(
+  failInitially = false,
+  ids = ["thr_a_default", "thr_z_explicit"],
+) {
+  const metadata = new Map<string, Record<string, unknown>>([
+    ["thr_z_explicit", { notifications: { own: "muted" } }],
+  ]);
+  let failReads = failInitially;
+  const server = createFakePluginHost({
+    pluginId: "push-notifications",
+    sdk: {
+      threads: {
+        experimental_listAncestors: async ({ threadIds }) => ({
+          threads: threadIds.map((threadId) => ({ threadId, ancestorIds: [] })),
+        }),
+        experimental_listDescendants: async ({ threadIds }) => ({
+          threads: threadIds.map((threadId) => ({
+            threadId,
+            descendantIds: [],
+          })),
+        }),
+        experimental_listPluginMetadata: async ({ threadIds }) => {
+          if (failReads) throw new Error("Notification read failed");
+          return {
+            threads: threadIds.flatMap((threadId) =>
+              metadata.has(threadId)
+                ? [{ threadId, metadata: metadata.get(threadId)! }]
+                : [],
+            ),
+          };
+        },
+        updatePluginMetadata: async ({ threadId, set, remove }) => {
+          const next = { ...metadata.get(threadId), ...set };
+          for (const key of remove ?? []) delete next[key];
+          metadata.set(threadId, next);
+          return next;
+        },
+      },
+    },
+  });
+  await serverPlugin(server.bb);
+  let itemFor: ItemFor | null = null;
+  const contract = pushNotificationsRpcContract["threadNotifications.keyed"];
+  const view = renderSlot(
+    { component: Probe },
+    {
+      threadIds: ids,
+      onItem: (next: ItemFor) => {
+        itemFor = next;
+      },
+    },
+    {
+      settings: { defaultLevel: "all", childLevel: "input-only" },
+      experimental_rpcTags: () => ({
+        tags: [],
+        keyTags:
+          server.harness.inspection.experimental_rpcKeyTags.get(
+            "threadNotifications.keyed",
+          ) ?? {},
+      }),
+      rpc: {
+        "threadNotifications.keyed": async (input) =>
+          contract.output.parse(
+            await server.harness.callRpc(
+              "threadNotifications.keyed",
+              contract.input.parse(input),
+            ),
+          ),
+      },
+    },
+  );
+  const unsubscribe = server.harness.inspection.experimental_onRpcInvalidation(
+    (tags) => {
+      void view.experimental_invalidateRpc(tags ?? undefined);
+    },
+  );
+  return {
+    view,
+    item: (id = "thr_a_default") => itemFor?.(makeTarget({ id })) ?? null,
+    fail(value: boolean) {
+      failReads = value;
+    },
+    async reset() {
+      await server.harness.callRpc("threadNotifications.set", {
+        threadId: "thr_z_explicit",
+        level: "inherit",
+      });
+    },
+    async dispose() {
+      unsubscribe();
+      view.lifecycle.unmount();
+      await server.harness.dispose();
+    },
+  };
+}
+
+it("loads mixed default and explicit rows through the real keyed handler", async () => {
+  const probe = await renderServerNotifications();
+  try {
+    await waitFor(() =>
+      expect(probe.item("thr_z_explicit")?.detail).toBe("Muted"),
+    );
+    expect(
+      probe.item()?.choices?.items.find((choice) => choice.selected)?.id,
+    ).toBe("inherit");
+  } finally {
+    await probe.dispose();
+  }
+});
+
+it.each([false, true])(
+  "offers Retry for real keyed read errors with cached rows: %s",
+  async (cached) => {
+    const probe = await renderServerNotifications(!cached, ["thr_z_explicit"]);
+    try {
+      if (cached) {
+        await waitFor(() =>
+          expect(probe.item("thr_z_explicit")?.detail).toBe("Muted"),
+        );
+        probe.fail(true);
+        await act(async () => {
+          await probe.view.experimental_invalidateRpc([
+            "thread:thr_z_explicit",
+          ]);
+        });
+      }
+      await waitFor(() =>
+        expect(probe.item("thr_z_explicit")?.choices?.hint).toContain(
+          "Notification read failed",
+        ),
+      );
+      if (cached) expect(probe.item("thr_z_explicit")?.detail).toBe("Muted");
+      else {
+        expect(probe.item("thr_z_explicit")?.detail).toBe(
+          "Notifications unavailable",
+        );
+        expect(
+          probe
+            .item("thr_z_explicit")
+            ?.choices?.items.map((choice) => choice.label),
+        ).toEqual(["Retry"]);
+      }
+      const retry = probe
+        .item("thr_z_explicit")
+        ?.choices?.items.find((choice) => choice.label === "Retry");
+      expect(retry).toBeDefined();
+      probe.fail(false);
+      await act(async () => {
+        await probe
+          .item("thr_z_explicit")!
+          .run({ value: retry!.id, requestRename: () => {} });
+      });
+      await waitFor(() =>
+        expect(probe.item("thr_z_explicit")?.choices?.hint ?? "").not.toContain(
+          "Notification read failed",
+        ),
+      );
+      expect(probe.item("thr_z_explicit")?.detail).toBe("Muted");
+    } finally {
+      await probe.dispose();
+    }
+  },
+);
+
+it("clears an override removed on another client through the real keyed handler", async () => {
+  const probe = await renderServerNotifications(false, ["thr_z_explicit"]);
+  try {
+    await waitFor(() =>
+      expect(probe.item("thr_z_explicit")?.detail).toBe("Muted"),
+    );
+    await act(async () => {
+      await probe.reset();
+    });
+    await waitFor(() =>
+      expect(
+        probe
+          .item("thr_z_explicit")
+          ?.choices?.items.find((choice) => choice.selected)?.id,
+      ).toBe("inherit"),
+    );
+  } finally {
+    await probe.dispose();
+  }
 });

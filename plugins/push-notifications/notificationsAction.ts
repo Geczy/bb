@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   experimental_THREAD_ACTION_GROUPS,
   experimental_useRpcKeyedQuery,
@@ -24,6 +24,9 @@ import {
 export interface ThreadNotificationsData {
   levels: ReadonlyMap<string, ThreadNotificationInputs>;
   defaults: NotificationDefaults | null;
+  error: string | null;
+  unloadedThreadIds: ReadonlySet<string> | null;
+  retry(): Promise<void>;
   setLevel(threadId: string, level: OwnNotificationLevel): Promise<void>;
 }
 
@@ -45,6 +48,17 @@ function useThreadNotificationsData({
     method: "threadNotifications.keyed",
     keys: threadIds,
   });
+  const latestRefetch = useRef(query.refetch);
+  latestRefetch.current = query.refetch;
+  const retry = useCallback(() => latestRefetch.current(), []);
+  const error = query.error?.message ?? null;
+  const unloadedThreadIds = useMemo(
+    () =>
+      error === null
+        ? null
+        : new Set(threadIds.filter((id) => query.data?.[id] === undefined)),
+    [error, query.data, threadIds],
+  );
   const nextLevels = useMemo(
     () =>
       new Map(
@@ -83,8 +97,8 @@ function useThreadNotificationsData({
   );
 
   return useMemo(
-    () => ({ levels, defaults, setLevel }),
-    [defaults, levels, setLevel],
+    () => ({ levels, defaults, setLevel, error, unloadedThreadIds, retry }),
+    [defaults, levels, setLevel, error, unloadedThreadIds, retry],
   );
 }
 
@@ -119,22 +133,35 @@ export const notificationsThreadAction: PluginThreadActionRegistration<ThreadNot
               { parentThreadId: thread.parentThreadId },
               data.defaults,
             );
-      const hint = resolved === null ? undefined : capHint(resolved);
+      const unavailable = data.unloadedThreadIds?.has(thread.id) ?? false;
+      const hint =
+        data.error ?? (resolved === null ? undefined : capHint(resolved));
       return {
         label: "Notifications",
-        ...(resolved === null
-          ? {}
-          : { detail: NOTIFICATION_LEVEL_LABELS[resolved.effective] }),
+        ...(unavailable
+          ? { detail: "Notifications unavailable" }
+          : resolved === null
+            ? {}
+            : { detail: NOTIFICATION_LEVEL_LABELS[resolved.effective] }),
         icon: resolved === null ? "BellDot" : LEVEL_ICONS[resolved.effective],
         choices: {
           ...(hint === undefined ? {} : { hint }),
-          items: ownNotificationLevelSchema.options.map((id) => ({
-            id,
-            label: NOTIFICATION_LEVEL_LABELS[id],
-            selected: id === stored.own,
-          })),
+          items: [
+            ...(unavailable
+              ? []
+              : ownNotificationLevelSchema.options.map((id) => ({
+                  id,
+                  label: NOTIFICATION_LEVEL_LABELS[id],
+                  selected: id === stored.own,
+                }))),
+            ...(data.error === null ? [] : [{ id: "retry", label: "Retry" }]),
+          ],
         },
         run: async ({ value }) => {
+          if (value === "retry") {
+            await data.retry();
+            return;
+          }
           const level = ownNotificationLevelSchema.safeParse(value);
           if (!level.success) return;
           await data.setLevel(thread.id, level.data);
