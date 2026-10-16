@@ -75,68 +75,61 @@ function directiveProps(key: string) {
 }
 
 describe("board and list row loading", () => {
-  it("shows a failed row batch above the partial board and recovers on Retry", async () => {
-    const server = await setup();
-    for (let index = 0; index < 26; index++)
-      await server.createTask({ title: `Task ${index}`, status: "todo" });
-    server.fail("getTasksKeyed", "row transport failed");
-    const slot = server.live(
-      renderSlot(
-        app.navPanels[0]!,
-        {
-          subPath: `${server.project.id}?view=board`,
-        },
-        server.options,
-      ),
-    );
+  it.each([
+    { method: "getTasksKeyed", message: "row transport failed", visible: 25 },
+    { method: "listLabels", message: "labels unavailable", visible: 26 },
+  ])(
+    "recovers a failed $method read from the partial board on Retry",
+    async ({ method, message, visible }) => {
+      const server = await setup();
+      const { label } = tasksRpcContract.createLabel.output.parse(
+        await server.harness.callRpc("createLabel", {
+          projectId: server.project.id,
+          name: "Needs review",
+          color: "red",
+        }),
+      );
+      for (let index = 0; index < 26; index++) {
+        const task = await server.createTask({
+          title: `Task ${index}`,
+          status: "todo",
+        });
+        if (index === 0)
+          await server.harness.callRpc("updateTask", {
+            taskId: task.id,
+            labelIds: [label.id],
+          });
+      }
+      server.fail(method, message);
+      const slot = server.live(
+        renderSlot(
+          app.navPanels[0]!,
+          { subPath: `${server.project.id}?view=board` },
+          server.options,
+        ),
+      );
+      await slot.findByText("Task 0");
+      const alert = await slot.findByRole("alert");
+      expect(alert.textContent).toContain(
+        `Failed to load the board: ${message}`,
+      );
+      await waitFor(() =>
+        expect(slot.container.querySelectorAll("[data-task-key]")).toHaveLength(
+          visible,
+        ),
+      );
 
-    const alert = await slot.findByRole("alert");
-    expect(alert.textContent).toContain(
-      "Failed to load the board: row transport failed",
-    );
-    expect(slot.container.querySelectorAll("[data-task-key]")).toHaveLength(25);
-
-    server.recover("getTasksKeyed");
-    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
-    await waitFor(() =>
-      expect(slot.container.querySelectorAll("[data-task-key]")).toHaveLength(
-        26,
-      ),
-    );
-    expect(slot.queryByRole("alert")).toBeNull();
-  });
-
-  it("retries every failed board read from the inline error", async () => {
-    const server = await setup();
-    const { label } = tasksRpcContract.createLabel.output.parse(
-      await server.harness.callRpc("createLabel", {
-        projectId: server.project.id,
-        name: "Needs review",
-        color: "red",
-      }),
-    );
-    const task = await server.createTask({ title: "Labelled", status: "todo" });
-    await server.harness.callRpc("updateTask", {
-      taskId: task.id,
-      labelIds: [label.id],
-    });
-    server.fail("listLabels", "labels unavailable");
-    const slot = server.live(
-      renderSlot(
-        app.navPanels[0]!,
-        { subPath: `${server.project.id}?view=board` },
-        server.options,
-      ),
-    );
-    await slot.findByText("Labelled");
-    const alert = await slot.findByRole("alert");
-    expect(alert.textContent).toContain("labels unavailable");
-
-    server.recover("listLabels");
-    fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
-    await slot.findByText("Needs review");
-    expect(slot.queryByRole("alert")).toBeNull();
-  });
+      server.recover(method);
+      fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+      await waitFor(() => {
+        expect(slot.container.querySelectorAll("[data-task-key]")).toHaveLength(
+          26,
+        );
+        expect(slot.getByText("Needs review")).toBeTruthy();
+        expect(slot.queryByRole("alert")).toBeNull();
+      });
+    },
+  );
 
   it("shows open tasks before closed ones while the remaining rows load", async () => {
     const server = await setup();
