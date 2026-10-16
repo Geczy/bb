@@ -957,7 +957,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
       isLoading: query.isLoading,
       isFetching: query.isFetching,
       refetch: refresh,
-      experimental_setData: setData,
+      setData,
     } as ReturnType<PluginSdkApp["experimental_useRpcQuery"]>;
   };
 
@@ -1026,7 +1026,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     return {
       ...combined,
       refetch: refresh,
-      experimental_setKey: setKey,
+      setKey,
     } as ExperimentalRpcKeyedQueryState<T>;
   }
 

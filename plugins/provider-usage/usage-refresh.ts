@@ -65,7 +65,7 @@ export function useUsageRefresh(
       };
       if (JSON.stringify(next) !== JSON.stringify(cached)) {
         const refetch = measurements.isFetching || measurements.error !== null;
-        measurements.experimental_setData(next);
+        measurements.setData(next);
         if (
           refetch &&
           request.providerIds.length > 0 &&
@@ -94,7 +94,7 @@ export function useUsageRefresh(
     inventory.data,
     inventory.isFetching,
     inventory.error,
-    measurements.experimental_setData,
+    measurements.setData,
   ]);
   useEffect(() => {
     if (
@@ -121,8 +121,8 @@ export function useUsageRefresh(
           maxAgeMs: 0,
         });
         if (currentScope.active) {
-          measurements.experimental_setData(result);
-          inventory.experimental_setData(result);
+          measurements.setData(result);
+          inventory.setData(result);
           setStatus({
             identity,
             pending: currentScope.pending > 1,

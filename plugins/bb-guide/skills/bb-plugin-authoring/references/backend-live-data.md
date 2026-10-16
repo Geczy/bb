@@ -39,13 +39,13 @@ in the same render. Return every requested key, using `null` for a missing item.
 the producer, `context.experimental_tagKey(key, ...tags)` tags a particular
 key; `experimental_tag` adds dependencies shared by every returned key.
 After a successful mutation or forced reload, call a plain read result's
-`experimental_setData(savedValue)` or a keyed result's
-`experimental_setKey(key, savedValue)` to write through the shared query client
+`setData(savedValue)` or a keyed result's
+`setKey(key, savedValue)` to write through the shared query client
 and notify all observers. These writers retain known tags, clear the written
 read's error, and drop results and errors from reads already in flight. Later
 reads replace the saved value normally. Writes made before tags are known
 conservatively match invalidations until a read supplies tags. Keyed results expose
-only `experimental_setKey`; plain results expose only `experimental_setData`.
+only `setKey`; plain results expose only `setData`.
 `experimental_useRpcRefresh()` refreshes this client's active reads belonging
 to the calling plugin, and reports whether they are fetching.
 

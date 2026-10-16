@@ -465,9 +465,9 @@ describe("tagged RPC query ownership", () => {
       }
       act(() => {
         const current = first.result.current;
-        if ("experimental_setKey" in current)
-          current.experimental_setKey("a", 2);
-        else current.experimental_setData(2);
+        if ("setKey" in current)
+          current.setKey("a", 2);
+        else current.setData(2);
       });
       expect(first.result.current.data).toEqual(rows(2));
       expect(second.result.current.data).toEqual(rows(2));

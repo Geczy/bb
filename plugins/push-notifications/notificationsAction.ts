@@ -69,7 +69,7 @@ function useThreadNotificationsData({
       ),
     [query.data],
   );
-  const setKey = query.experimental_setKey;
+  const setKey = query.setKey;
   const setLevel = useCallback(
     async (threadId: string, level: OwnNotificationLevel) => {
       const saved = await rpc.call("threadNotifications.set", {

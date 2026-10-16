@@ -28,15 +28,15 @@ provide Node lifetimes through the loopback WebSocket. CLI call/list `--watch`
 use those same SDK paths. The frontend testing host uses the same query owner; `experimental_rpcTags`
 and `experimental_invalidateRpc(tags?, pluginId?)` supply producer metadata
 and changes. Query `timeoutMs` preserves bounded reads such as theme catalogs.
-`ExperimentalRpcQueryState.experimental_setData(value)` and
-`ExperimentalRpcKeyedQueryState.experimental_setKey(key, value)` write saved JSON
+`ExperimentalRpcQueryState.setData(value)` and
+`ExperimentalRpcKeyedQueryState.setKey(key, value)` write saved JSON
 values through the core query client and notify every observer of that read.
 They retain known tags, clear the written read's error, and drop results and errors
 from reads already in flight. Later reads can replace the saved value. Writes
 made before tags are known remain conservatively invalidatable until a read
 supplies dependencies. The keyed writer advances only the written key's revision.
-Push-notifications uses `experimental_setKey` after level mutations;
-provider-usage's forced reload is the caller for `experimental_setData`.
+Push-notifications uses `setKey` after level mutations;
+provider-usage's forced reload is the caller for `setData`.
 Production and testing use the same query owners. Before stabilization, audit
 pending reads, errors, tag retention, unobserved keys, cache collection,
 input changes, and multiple consumers.

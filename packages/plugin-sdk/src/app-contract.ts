@@ -3608,15 +3608,15 @@ export interface ExperimentalRpcQueryState<T> {
   isFetching: boolean;
   refetch(): Promise<void>;
   /** Write a saved value through the shared query cache, retaining tags and dropping older reads. */
-  experimental_setData(value: T): void;
+  setData(value: T): void;
 }
 
 export interface ExperimentalRpcKeyedQueryState<T> extends Omit<
   ExperimentalRpcQueryState<Record<string, T>>,
-  "experimental_setData"
+  "setData"
 > {
   /** Write a saved value into the shared keyed cache, retaining known tags and dropping reads already in flight for that key. */
-  experimental_setKey(key: string, value: T): void;
+  setKey(key: string, value: T): void;
 }
 
 export interface ExperimentalRpcQueryOptions<
