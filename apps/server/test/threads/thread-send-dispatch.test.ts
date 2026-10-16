@@ -1448,7 +1448,9 @@ describe("idle cold-start activation", () => {
         ).toHaveLength(0);
         const request = listEvents(harness.db, {
           threadId: thread.id,
-        }).findLast((event) => event.type === "client/turn/requested");
+        })
+          .filter((event) => event.type === "client/turn/requested")
+          .at(-1);
         expect(JSON.parse(request?.data ?? "{}")).toMatchObject({
           initiator: "system",
         });
