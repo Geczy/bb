@@ -2,6 +2,7 @@ import {
   definePluginApp,
   useBbNavigate,
   experimental_useRpcQuery,
+  experimental_useRpcRefresh,
   useRpc,
 } from "@get-bb/plugin-sdk/app";
 import { Badge as BbBadge } from "@/components/ui/badge";
@@ -3412,18 +3413,26 @@ function PreviewPage({ subPath }: { subPath: string }) {
     typeof rpcContract,
     "themeCatalog"
   >({ method: "themeCatalog", input: {}, timeoutMs: CLIENT_RPC_TIMEOUT_MS });
+  const { refresh: invalidateCatalog } = experimental_useRpcRefresh();
   const lastQueryCatalog = useRef<Catalog | undefined>(undefined);
   useEffect(() => {
     if (
       catalogQuery.data !== undefined &&
       catalogQuery.data !== lastQueryCatalog.current &&
+      !catalogQuery.isFetching &&
+      catalogQuery.error === null &&
       !selectionPending.current
     ) {
       lastQueryCatalog.current = catalogQuery.data;
       commitCatalog(catalogQuery.data, setCatalog);
     }
     setError(catalogQuery.error?.message ?? null);
-  }, [catalogQuery.data, catalogQuery.error, pendingSelection]);
+  }, [
+    catalogQuery.data,
+    catalogQuery.error,
+    catalogQuery.isFetching,
+    pendingSelection,
+  ]);
 
   useEffect(() => {
     if (!pendingSelection) {
@@ -3480,6 +3489,7 @@ function PreviewPage({ subPath }: { subPath: string }) {
     )
       .then((next) => {
         if (catalogRequests.current.isLatest(request)) {
+          invalidateCatalog();
           commitCatalog(next, setCatalog);
           setFailedSelection(null);
         }
@@ -3589,14 +3599,19 @@ function PreviewPage({ subPath }: { subPath: string }) {
             </TabsList>
           </Tabs>
           {error ? (
-            <span
-              style={{
-                fontSize: 12,
-                color: v("destructive-text", v("destructive")),
-              }}
+            <div
+              role="alert"
+              className="flex items-center gap-2 text-xs text-destructive"
             >
-              {error}
-            </span>
+              <span>{error}</span>
+              <BbButton
+                size="sm"
+                variant="outline"
+                onClick={() => void catalogQuery.refetch()}
+              >
+                Retry
+              </BbButton>
+            </div>
           ) : null}
           <div
             style={{

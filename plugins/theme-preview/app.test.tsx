@@ -984,3 +984,65 @@ describe("Theme Preview", () => {
     );
   });
 });
+
+it("does not apply a catalog response delivered after a successful selection", async () => {
+  const stale = deferred<Catalog>();
+  let current = DEFAULT_CATALOG;
+  let reads = 0;
+  const slot = renderPreview({
+    themeCatalog: () => {
+      reads += 1;
+      return reads === 2 ? stale.promise : current;
+    },
+    setTheme: () => {
+      current = ENDLESS_CATALOG;
+      return current;
+    },
+  });
+  await screen.findByRole("combobox", { name: /Default/i });
+  await slot.experimental_invalidateRpc();
+  await waitFor(() => expect(reads).toBe(2));
+  await chooseEndlessDark();
+  await screen.findByRole("combobox", { name: /Endless Color/i });
+  await act(async () => {
+    stale.resolve({
+      ...DEFAULT_CATALOG,
+      themes: [
+        ...DEFAULT_CATALOG.themes,
+        { id: "new-theme", name: "New theme", light: null, dark: null },
+      ],
+    });
+  });
+  await waitFor(() =>
+    expect(themeControl().textContent).toContain("Endless Color"),
+  );
+  await act(async () => {});
+  expect(themeControl().textContent).toContain("Endless Color");
+});
+
+it.each([false, true])(
+  "offers Retry for catalog errors with a loaded catalog: %s",
+  async (loaded) => {
+    let fail = !loaded;
+    const slot = renderPreview({
+      themeCatalog: () => {
+        if (fail) throw new Error("Catalog unavailable");
+        return DEFAULT_CATALOG;
+      },
+      setTheme: () => DEFAULT_CATALOG,
+    });
+    if (loaded) {
+      await screen.findByRole("combobox", { name: /Default/i });
+      fail = true;
+      await slot.experimental_invalidateRpc();
+    }
+    await screen.findByText("Catalog unavailable");
+    const control = themeControl();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Catalog unavailable")).toBeNull(),
+    );
+    expect(themeControl()).toBe(control);
+  },
+);
