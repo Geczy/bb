@@ -274,6 +274,7 @@ Read the installed SDK declarations for the exact current signatures.
 
 ## Live RPC data
 
+- `ExperimentalRpcKeyedQueryState`
 - `ExperimentalRpcQueryOptions`
 - `ExperimentalRpcQueryState`
 - `experimental_useRpcQuery`

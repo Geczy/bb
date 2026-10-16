@@ -421,6 +421,7 @@ Read the installed declarations for exact current signatures.
 
 ## Live RPC data
 
+- `ExperimentalRpcKeyedQueryState`
 - `ExperimentalRpcQueryOptions`
 - `ExperimentalRpcQueryState`
 - `experimental_useRpcQuery`
