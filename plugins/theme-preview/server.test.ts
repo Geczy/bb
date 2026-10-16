@@ -351,7 +351,7 @@ describe("createCatalogLoader", () => {
     resumeFirstPluginList();
     const late = await stale;
 
-    expect(late.activeThemeId).toBe("theme-a");
+    expect(late.activeThemeId).toBe("theme-b");
     expect(activeThemeId).toBe("theme-b");
     expect(setCalls).toEqual(["theme-b"]);
     await rm(directory, { recursive: true, force: true });

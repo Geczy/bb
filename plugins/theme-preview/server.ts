@@ -509,7 +509,9 @@ export function createCatalogLoader(bb: BbPluginApi) {
     }
   };
 
-  const loadCatalog = async (selectionAtStart: number) => {
+  const loadCatalog = async (
+    selectionAtStart: number,
+  ): Promise<z.infer<typeof catalogSchema>> => {
     const raw = (await observeCatalogOperation("theme catalog", (signal) =>
       bb.sdk.theme.catalog({ signal }),
     )) as {
@@ -590,6 +592,10 @@ export function createCatalogLoader(bb: BbPluginApi) {
         }
       }
     }
+    if (selectionGeneration !== selectionAtStart) {
+      await selectionQueue;
+      return catalog();
+    }
     const next = { ...built, revision };
     if (selectionGeneration === selectionAtStart) latestCatalog = next;
     return next;
@@ -638,7 +644,15 @@ export default async function plugin(bb: BbPluginApi) {
       const onChange = () => {
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => {
-          bb.rpc.experimental_invalidateAll();
+          void catalog()
+            .catch((error) =>
+              bb.log.warn(
+                `theme-preview: watch refresh failed: ${String(error)}`,
+              ),
+            )
+            .finally(() => {
+              if (!signal.aborted) bb.rpc.experimental_invalidateAll();
+            });
         }, 120);
       };
       const refreshRoots = async () => {
