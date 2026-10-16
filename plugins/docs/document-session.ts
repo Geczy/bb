@@ -302,6 +302,11 @@ export function useSavedDocument(io: DocumentIO) {
     input: io.liveRead ?? { vaultId: "", path: "" },
     enabled: io.liveRead !== undefined,
   });
+  const refresh = query.refetch;
+  useEffect(() => {
+    if (io.liveRead !== undefined && query.data !== undefined) void refresh();
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [session, refresh]);
   const preview = experimental_useRpcQuery<
     typeof docsRpcContract,
     "preparePreview"
@@ -369,6 +374,13 @@ export function useDocumentSession(vaultId: string, path: string) {
     typeof docsRpcContract,
     "preparePreview"
   >({ method: "preparePreview", input: { vaultId, path } });
+  const refreshNote = query.refetch;
+  const refreshProposal = proposal.refetch;
+  useEffect(() => {
+    if (query.data !== undefined) void refreshNote();
+    if (proposal.data !== undefined) void refreshProposal();
+    // oxlint-disable-next-line react/exhaustive-deps
+  }, [session, refreshNote, refreshProposal]);
   useEffect(() => {
     const error = query.error ?? proposal.error ?? preview.error;
     if (error) session.receiveError(error);

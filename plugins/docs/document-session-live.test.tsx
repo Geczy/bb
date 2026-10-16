@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act, cleanup, waitFor } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
+import { useMemo } from "react";
+import { z } from "zod";
 import { renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { useDocumentSession, useSavedDocument } from "./document-session.js";
 
@@ -114,3 +116,70 @@ it("waits for the proposal refresh before accepting new file content", async () 
   await act(async () => release?.());
   await slot.findByText("New file");
 });
+
+function SavedReentryStatus({ path }: { path: string }) {
+  const io = useMemo(
+    () => ({ ...savedIO, liveRead: { vaultId: "personal", path } }),
+    [path],
+  );
+  const { state } = useSavedDocument(io);
+  return <div>{state.loaded ? state.content : "Loading"}</div>;
+}
+
+function SessionReentryStatus({ path }: { path: string }) {
+  const { state } = useDocumentSession("personal", path);
+  return <div>{state.loaded ? state.content : "Loading"}</div>;
+}
+
+it.each([true, false])(
+  "rereads an externally edited document on reentry for saved=%s",
+  async (saved) => {
+    const Status = saved ? SavedReentryStatus : SessionReentryStatus;
+    const a = `reentry-${saved}-a.md`;
+    const b = `reentry-${saved}-b.md`;
+    let contentA = "Original A";
+    const slot = renderSlot(
+      { component: Status },
+      { path: a },
+      {
+        rpc: {
+          readNote: (input) => {
+            const path = z.object({ path: z.string() }).parse(input).path;
+            const content = path === a ? contentA : "Document B";
+            return {
+              path,
+              content,
+              sha256: content,
+              contentEncoding: "utf8",
+              sizeBytes: content.length,
+            };
+          },
+          readProposal: () => null,
+          preparePreview: () => ({
+            baseUrl: "/preview",
+            expiresAtMs: Date.now() + 60_000,
+          }),
+        },
+        experimental_rpcTags: (method, input) => {
+          const path = z.object({ path: z.string() }).parse(input).path;
+          return {
+            tags: [
+              "vault:personal",
+              `path:personal:${path}`,
+              `${method === "preparePreview" ? "preview" : method === "readNote" ? "note" : "proposal"}:personal:${path}`,
+            ],
+          };
+        },
+      },
+    );
+    await slot.findByText("Original A");
+    expect(
+      slot.rpcCalls.filter((call) => call.method === "readNote"),
+    ).toHaveLength(1);
+    slot.rerender(<Status path={b} />);
+    await slot.findByText("Document B");
+    contentA = "Externally edited A";
+    slot.rerender(<Status path={a} />);
+    await slot.findByText("Externally edited A");
+  },
+);
