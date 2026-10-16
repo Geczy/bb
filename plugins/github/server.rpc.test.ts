@@ -187,6 +187,7 @@ const prefixed = [
   ["issue view 7 -R acme/widgets --json", ${JSON.stringify(issueDetail)}],
   ["pr view 42 -R acme/widgets --json", ${JSON.stringify(pullDetail)}],
   ["issue edit ", "[]"],
+  ["issue create ", "https://github.com/acme/widgets/issues/8"],
 ];
 const prefixMatch = prefixed.find(([prefix]) => joined.startsWith(prefix));
 out((exact[joined] ?? prefixMatch?.[1] ?? "[]") + "\\n");`,
@@ -471,4 +472,22 @@ describe("github plugin RPC behavior", () => {
       },
     });
   });
+});
+
+it("refreshes PR observers after createIssue replaces both repo caches", async () => {
+  const { harness } = await loadPlugin();
+  try {
+    await expect(
+      harness.callRpc("createIssue", {
+        repo: "acme/widgets",
+        title: "New issue",
+      }),
+    ).resolves.toMatchObject({ number: 8 });
+    await expect(
+      harness.callRpc("listItems", { kind: "pr" }),
+    ).resolves.toMatchObject({ items: [{ number: 42 }] });
+    expect(harness.inspection.rpcInvalidations.flat()).toContain("items:pr");
+  } finally {
+    await harness.dispose();
+  }
 });

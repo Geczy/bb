@@ -1547,7 +1547,7 @@ export default async function plugin(bb: BbPluginApi) {
       const number = match !== null ? Number(match[1]) : null;
       try {
         replaceRepoRows(input.repo, await fetchRepoItems(gh, input.repo));
-        bb.rpc.experimental_invalidate(["items:issue", "status"]);
+        bb.rpc.experimental_invalidate(["items:issue", "items:pr", "status"]);
       } catch {}
       return { number, url: stdout.trim() };
     },

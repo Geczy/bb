@@ -1595,8 +1595,20 @@ function PullDetailView({
     setError(query.error?.message ?? null);
   }, [query.data, query.error]);
 
-  if (error !== null) return <EmptyState message={error} />;
+  const errorBanner =
+    error === null ? null : (
+      <div
+        role="alert"
+        className="flex items-center gap-3 text-sm text-destructive"
+      >
+        <span>{error}</span>
+        <Button size="sm" variant="outline" onClick={() => void load()}>
+          Retry
+        </Button>
+      </div>
+    );
   if (pull === null) {
+    if (errorBanner !== null) return errorBanner;
     return <DetailSkeleton />;
   }
 
@@ -1652,6 +1664,7 @@ function PullDetailView({
 
   return (
     <div className="@container/github-detail flex flex-col gap-4">
+      {errorBanner}
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
         {onBack !== undefined ? (
           <Button

@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import { act } from "react";
+import { fireEvent, waitFor } from "@testing-library/react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 
 const app = await loadPluginApp(() => import("./app"));
@@ -55,11 +56,20 @@ describe("GitHub app navigation", () => {
     slot.lifecycle.unmount();
   });
 
-  it("keeps removed pull-request files out of live workspace navigation", async () => {
+  it("keeps removed files out of workspace navigation and preserves the comment editor on refresh failure", async () => {
+    let readError: Error | null = null;
     const slot = renderSlot(
       app.threadPanelActions[0]!,
       { threadId: "thr-1", params: null },
       {
+        experimental_rpcTags: (method) => ({
+          tags:
+            method === "getPull"
+              ? ["pr:get-bb/bb#42"]
+              : method === "listLinks"
+                ? ["links"]
+                : ["links", "thread:thr-1", "environment:env-1"],
+        }),
         rpc: {
           pullForThread: () => ({
             pull: {
@@ -68,49 +78,52 @@ describe("GitHub app navigation", () => {
               environmentId: "env-1",
             },
           }),
-          getPull: () => ({
-            pull: {
-              repo: "get-bb/bb",
-              number: 42,
-              title: "Navigation fix",
-              state: "OPEN",
-              author: "octocat",
-              body: "",
-              url: "https://github.com/get-bb/bb/pull/42",
-              createdAt: "2026-08-20T00:00:00.000Z",
-              updatedAt: "2026-08-20T00:00:00.000Z",
-              baseRefName: "main",
-              headRefName: "fix-navigation",
-              additions: 1,
-              deletions: 1,
-              changedFiles: 2,
-              labels: [],
-              assignees: [],
-              reviewDecision: "",
-              mergeStateStatus: "CLEAN",
-              reviewRequests: [],
-              checks: [],
-              comments: [],
-              reviews: [],
-              reviewThreads: [],
-              files: [
-                {
-                  path: "removed.ts",
-                  status: "removed",
-                  additions: 0,
-                  deletions: 1,
-                  patch: "@@ -1 +0,0 @@\n-removed",
-                },
-                {
-                  path: "modified.ts",
-                  status: "modified",
-                  additions: 1,
-                  deletions: 0,
-                  patch: "@@ -0,0 +1 @@\n+added",
-                },
-              ],
-            },
-          }),
+          getPull: () => {
+            if (readError) throw readError;
+            return {
+              pull: {
+                repo: "get-bb/bb",
+                number: 42,
+                title: "Navigation fix",
+                state: "OPEN",
+                author: "octocat",
+                body: "",
+                url: "https://github.com/get-bb/bb/pull/42",
+                createdAt: "2026-08-20T00:00:00.000Z",
+                updatedAt: "2026-08-20T00:00:00.000Z",
+                baseRefName: "main",
+                headRefName: "fix-navigation",
+                additions: 1,
+                deletions: 1,
+                changedFiles: 2,
+                labels: [],
+                assignees: [],
+                reviewDecision: "",
+                mergeStateStatus: "CLEAN",
+                reviewRequests: [],
+                checks: [],
+                comments: [],
+                reviews: [],
+                reviewThreads: [],
+                files: [
+                  {
+                    path: "removed.ts",
+                    status: "removed",
+                    additions: 0,
+                    deletions: 1,
+                    patch: "@@ -1 +0,0 @@\n-removed",
+                  },
+                  {
+                    path: "modified.ts",
+                    status: "modified",
+                    additions: 1,
+                    deletions: 0,
+                    patch: "@@ -0,0 +1 @@\n+added",
+                  },
+                ],
+              },
+            };
+          },
           listLinks: () => ({ links: {} }),
         },
       },
@@ -137,6 +150,26 @@ describe("GitHub app navigation", () => {
     expect(diffToggle.getAttribute("aria-label")).toBe(
       "Collapse removed.ts diff",
     );
+    const editor = slot.getByPlaceholderText("Leave a comment…");
+    fireEvent.change(editor, { target: { value: "Unsaved review comment" } });
+    editor.focus();
+    readError = new Error("Pull refresh failed");
+    await act(async () => {
+      await slot.experimental_invalidateRpc(["pr:get-bb/bb#42"]);
+    });
+    await slot.findByText("Pull refresh failed");
+    expect(slot.getByPlaceholderText("Leave a comment…")).toBe(editor);
+    expect(editor.getAttribute("value") ?? editor.textContent).toBe(
+      "Unsaved review comment",
+    );
+    expect(document.activeElement).toBe(editor);
+    readError = null;
+    fireEvent.click(slot.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(slot.queryByText("Pull refresh failed")).toBeNull(),
+    );
+    expect(slot.getByPlaceholderText("Leave a comment…")).toBe(editor);
+    expect(editor.textContent).toBe("Unsaved review comment");
     slot.lifecycle.unmount();
   });
 });
