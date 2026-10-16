@@ -1315,9 +1315,14 @@ describe("idle cold-start activation", () => {
     });
   });
 
-  it.each(["completed", "failed", "manual-stop"] as const)(
-    "resumes a directory switch automatically only after normal completion: %s",
-    async (finish) => {
+  it.each([
+    ["completed", false],
+    ["completed", true],
+    ["failed", false],
+    ["manual-stop", false],
+  ] as const)(
+    "resumes a directory switch automatically only after normal completion: %s, queued follow-up: %s",
+    async (finish, hasFollowup) => {
       await withTestHarness(async (harness) => {
         const { environment, sessionId, thread } = seedProviderThreadFixture({
           harness,
@@ -1337,6 +1342,15 @@ describe("idle cold-start activation", () => {
           threadId: thread.id,
           turnId: "turn_before_switch",
         });
+        const followup = hasFollowup
+          ? seedQueuedMessage(harness.deps, {
+              threadId: thread.id,
+              content: textInput(
+                "Start the next task after finishing this one.",
+              ),
+              waitingOn: { kind: "thread-busy" },
+            })
+          : null;
         for (let attempt = 0; attempt < 2; attempt++) {
           const response = await harness.app.request(
             "/internal/session/tool-call",
@@ -1454,7 +1468,9 @@ describe("idle cold-start activation", () => {
         expect(JSON.parse(request?.data ?? "{}")).toMatchObject({
           initiator: "system",
         });
-        expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(0);
+        expect(
+          listQueuedThreadMessages(harness.db, thread.id).map((row) => row.id),
+        ).toEqual(followup ? [followup.id] : []);
       });
     },
   );

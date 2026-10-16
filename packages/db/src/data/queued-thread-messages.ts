@@ -63,6 +63,7 @@ import { queryInSqliteVariableBatches } from "./sqlite-variable-batches.js";
 
 export interface CreateQueuedThreadMessageInput {
   threadId: string;
+  position?: "first" | "last";
   content: PromptInput[];
   senderThreadId?: string | null;
   /**
@@ -578,18 +579,20 @@ export function getQueuedThreadStartMessage(
   );
 }
 
-function getLastQueuedThreadMessage(
+function getQueuedThreadMessageEdge(
   db: DbQueryConnection,
   threadId: string,
+  position: "first" | "last",
 ): QueuedThreadMessageRow | null {
+  const order = position === "first" ? asc : desc;
   return (
     db
       .select()
       .from(queuedThreadMessages)
       .where(eq(queuedThreadMessages.threadId, threadId))
       .orderBy(
-        desc(queuedThreadMessages.sortKey),
-        desc(queuedThreadMessages.id),
+        order(queuedThreadMessages.sortKey),
+        order(queuedThreadMessages.id),
       )
       .limit(1)
       .get() ?? null
@@ -796,10 +799,12 @@ export function createQueuedThreadMessageInTransaction(
     projectAttachmentPaths(input.content),
   );
   const id = createQueuedThreadMessageId();
-  const lastQueuedMessage = getLastQueuedThreadMessage(tx, input.threadId);
-  const sortKey = lastQueuedMessage
-    ? createOrderKeyAfter({ previousKey: lastQueuedMessage.sortKey })
-    : createOrderKeyBetween({ previousKey: null, nextKey: null });
+  const position = input.position ?? "last";
+  const edge = getQueuedThreadMessageEdge(tx, input.threadId, position);
+  const sortKey =
+    position === "last" && edge
+      ? createOrderKeyAfter({ previousKey: edge.sortKey })
+      : createOrderKeyBetween({ previousKey: null, nextKey: edge?.sortKey ?? null });
   const waitingOn =
     input.waitingOn === null ? null : JSON.stringify(input.waitingOn);
   const state = requireQueuedMessageTransition({

@@ -197,6 +197,7 @@ function attachReadyEnvironment(
       ) {
         createQueuedThreadMessageInTransaction(tx, {
           threadId: latestThread.id,
+          position: "first",
           content: [
             {
               type: "text",
