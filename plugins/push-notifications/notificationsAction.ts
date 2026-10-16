@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
   experimental_THREAD_ACTION_GROUPS,
   experimental_useRpcKeyedQuery,
@@ -59,7 +59,7 @@ function useThreadNotificationsData({
         : new Set(threadIds.filter((id) => query.data?.[id] === undefined)),
     [error, query.data, threadIds],
   );
-  const nextLevels = useMemo(
+  const levels = useMemo(
     () =>
       new Map(
         Object.entries(query.data ?? {}).filter(
@@ -69,25 +69,16 @@ function useThreadNotificationsData({
       ),
     [query.data],
   );
-  const [levels, setLevels] = useState(nextLevels);
-  const [lastLevels, setLastLevels] = useState(nextLevels);
-  if (lastLevels !== nextLevels) {
-    setLastLevels(nextLevels);
-    if (
-      nextLevels.size !== levels.size ||
-      [...nextLevels].some(([id, inputs]) => levels.get(id) !== inputs)
-    )
-      setLevels(nextLevels);
-  }
+  const setKey = query.experimental_setKey;
   const setLevel = useCallback(
     async (threadId: string, level: OwnNotificationLevel) => {
       const saved = await rpc.call("threadNotifications.set", {
         threadId,
         level,
       });
-      setLevels((current) => new Map(current).set(threadId, saved));
+      setKey(threadId, saved);
     },
-    [rpc],
+    [rpc, setKey],
   );
 
   const defaultsKey = JSON.stringify(parseDefaults(values));

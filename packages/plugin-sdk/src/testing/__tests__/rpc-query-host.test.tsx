@@ -399,6 +399,100 @@ describe("tagged RPC query ownership", () => {
     expect(batches.at(-1)).toEqual(["c"]);
   });
 
+  it.each(
+    ["plain", "keyed"].flatMap((kind) =>
+      [false, true].flatMap((cached) =>
+        [false, true].map((failOlder) => ({ kind, cached, failOlder })),
+      ),
+    ),
+  )(
+    "shares $kind writes and rejects older reads (cached: $cached, failure: $failOlder)",
+    async ({ kind, cached, failOlder }) => {
+      let value = 1;
+      const gate = deferred<void>();
+      let held: Promise<void> | null = cached ? null : gate.promise;
+      const calls: string[][] = [];
+      const { hooks, queryClient } = setup(async (_plugin, method, input) => {
+        const keys =
+          method === "keyed"
+            ? z.object({ keys: z.array(z.string()) }).parse(input).keys
+            : ["a"];
+        calls.push(keys);
+        const result =
+          method === "keyed"
+            ? Object.fromEntries(
+                keys.map((key) => [key, key === "a" ? value : 8]),
+              )
+            : value;
+        if (held) {
+          await held;
+          if (failOlder) throw new Error("Older read failed");
+        }
+        return {
+          result,
+          tags: method === "keyed" ? [] : ["item:a"],
+          keyTags: Object.fromEntries(
+            keys.map((key) => [key, [`item:${key}`]]),
+          ),
+        };
+      });
+      const useRead = () => {
+        const plain = hooks.experimental_useRpcQuery<typeof contract, "read">({
+          method: "read",
+          input: { id: "a" },
+          enabled: kind === "plain",
+        });
+        const keyed = hooks.experimental_useRpcKeyedQuery<number>({
+          method: "keyed",
+          keys: kind === "keyed" ? (cached ? ["a", "b"] : ["a"]) : [],
+        });
+        return kind === "plain" ? plain : keyed;
+      };
+      const first = renderHook(useRead);
+      const second = renderHook(useRead);
+      const rows = (number: number) =>
+        kind === "plain"
+          ? number
+          : cached
+            ? { a: number, b: 8 }
+            : { a: number };
+      await waitFor(() => expect(calls).toHaveLength(1));
+      if (cached) {
+        await waitFor(() => expect(first.result.current.data).toEqual(rows(1)));
+        held = gate.promise;
+        act(() => invalidateRpcQueries(queryClient, "producer", ["item:a"]));
+        await waitFor(() => expect(calls).toHaveLength(2));
+      }
+      act(() => {
+        const current = first.result.current;
+        if ("experimental_setKey" in current)
+          current.experimental_setKey("a", 2);
+        else current.experimental_setData(2);
+      });
+      expect(first.result.current.data).toEqual(rows(2));
+      expect(second.result.current.data).toEqual(rows(2));
+      const queryKey = [
+        "plugin-rpc",
+        "producer",
+        kind === "keyed" ? "keyed" : "read",
+        kind === "keyed" ? { keyed: true } : { input: { id: "a" } },
+      ];
+      expect(queryClient.getQueryData(queryKey)).toMatchObject({
+        result: rows(2),
+      });
+      await act(async () => gate.resolve());
+      await waitFor(() => expect(first.result.current.isFetching).toBe(false));
+      expect(first.result.current.data).toEqual(rows(2));
+      expect(first.result.current.error).toBeNull();
+      held = null;
+      value = 3;
+      act(() => invalidateRpcQueries(queryClient, "producer", ["item:a"]));
+      await waitFor(() => expect(second.result.current.data).toEqual(rows(3)));
+      expect(first.result.current.data).toEqual(rows(3));
+      expect(calls.at(-1)).toEqual(["a"]);
+    },
+  );
+
   it("keeps cached rows across a single view's subscription handoff", async () => {
     const batches: string[][] = [];
     const { hooks } = setup(async (_plugin, _method, input) => {

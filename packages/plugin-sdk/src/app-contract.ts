@@ -3607,6 +3607,16 @@ export interface ExperimentalRpcQueryState<T> {
   isLoading: boolean;
   isFetching: boolean;
   refetch(): Promise<void>;
+  /** Write a saved value through the shared query cache, retaining tags and dropping older reads. */
+  experimental_setData(value: T): void;
+}
+
+export interface ExperimentalRpcKeyedQueryState<T> extends Omit<
+  ExperimentalRpcQueryState<Record<string, T>>,
+  "experimental_setData"
+> {
+  /** Write a saved value into the shared keyed cache, retaining known tags and dropping reads already in flight for that key. */
+  experimental_setKey(key: string, value: T): void;
 }
 
 export interface ExperimentalRpcQueryOptions<
@@ -3636,7 +3646,7 @@ export interface PluginSdkApp {
     method: string;
     keys: readonly string[];
     enabled?: boolean;
-  }): ExperimentalRpcQueryState<Record<string, T>>;
+  }): ExperimentalRpcKeyedQueryState<T>;
   experimental_Icon: ComponentType<ExperimentalIconProps>;
   /**
    * Render provider slot override, then its logo, then its glyph, then fallback.

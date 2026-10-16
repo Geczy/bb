@@ -19,7 +19,10 @@ import {
   type JsonValue,
 } from "@bb/domain";
 import { z } from "zod";
-import type { PluginSdkApp } from "../app-contract.js";
+import type {
+  ExperimentalRpcKeyedQueryState,
+  PluginSdkApp,
+} from "../app-contract.js";
 
 export interface RpcQueryHost {
   pluginId: string;
@@ -101,6 +104,7 @@ const interestResponse = z.object({ whileWatched: z.boolean().default(false) });
 const taggedResponse = z.object({ tags: z.array(z.string()) });
 const generations = new WeakMap<Query, number>();
 const inflightTags = new WeakMap<Query, Set<string>>();
+const unknownReadTags = new WeakSet<object>();
 const overlaps = (tags: readonly string[], missed: ReadonlySet<string>) =>
   tags.some((tag) => missed.has(tag));
 const seedGenerations = new WeakMap<QueryClient, Map<string, number>>();
@@ -155,7 +159,7 @@ export function invalidateRpcQueries(
     queries.filter((query) => {
       const invalidateKeyed = keyedInvalidators.get(query);
       if (invalidateKeyed) return invalidateKeyed(tags);
-      if (tags === null) return true;
+      if (tags === null || unknownReadTags.has(query)) return true;
       const response = taggedResponse.safeParse(query.state.data);
       if (
         response.success &&
@@ -221,7 +225,14 @@ function createKeyedOwner(
   method: string,
 ) {
   const queryKey = ["plugin-rpc", pluginId, method, { keyed: true }];
-  const values = new Map<string, Envelope>();
+  const values = new Map<
+    string,
+    {
+      result: JsonValue;
+      tags: string[] | undefined;
+      whileWatched: boolean;
+    }
+  >();
   const owners = new Map<string, number>();
   const revisions = new Map<string, number>();
   const dirty = new Set<string>();
@@ -234,6 +245,20 @@ function createKeyedOwner(
     string,
     { resolve(): void; reject(error: Error): void }
   >();
+  const snapshotValues = (): Envelope => ({
+    result: Object.fromEntries(
+      [...values].map(([key, value]) => [key, value.result]),
+    ),
+    tags: [
+      ...new Set([...values.values()].flatMap((value) => value.tags ?? [])),
+    ],
+    keyTags: Object.fromEntries(
+      [...values].flatMap(([key, value]) =>
+        value.tags === undefined ? [] : [[key, value.tags]],
+      ),
+    ),
+    whileWatched: [...values.values()].some((value) => value.whileWatched),
+  });
   let flushQueued = false;
   const load = (keys: readonly string[]) => {
     for (const key of keys) {
@@ -305,7 +330,6 @@ function createKeyedOwner(
                     values.set(key, {
                       result: replaceEqualDeep(values.get(key)?.result, result),
                       tags: keyTags,
-                      keyTags: {},
                       whileWatched: response.whileWatched,
                     });
                     dirty.delete(key);
@@ -363,25 +387,32 @@ function createKeyedOwner(
             (key) => owners.has(key) && (dirty.has(key) || !values.has(key)),
           )
         );
-        return {
-          result: Object.fromEntries(
-            [...values].map(([key, value]) => [key, value.result]),
-          ),
-          tags: [
-            ...new Set([...values.values()].flatMap((value) => value.tags)),
-          ],
-          keyTags: Object.fromEntries(
-            [...values].map(([key, value]) => [key, value.tags]),
-          ),
-          whileWatched: [...values.values()].some(
-            (value) => value.whileWatched,
-          ),
-        };
+        return snapshotValues();
       }),
   });
   const query = host.queryClient
     .getQueryCache()
     .find({ queryKey, exact: true });
+  const restoreCachedValues = () => {
+    const cached = observer.getCurrentQuery().state.data;
+    if (
+      cached?.result !== null &&
+      typeof cached?.result === "object" &&
+      !Array.isArray(cached.result)
+    )
+      for (const [key, result] of Object.entries(cached.result))
+        if (!values.has(key))
+          values.set(key, {
+            result,
+            tags: cached.keyTags[key],
+            whileWatched: cached.whileWatched,
+          });
+  };
+  const publishValues = () => {
+    host.queryClient.setQueryData<Envelope>(queryKey, snapshotValues());
+    observer.updateResult();
+    for (const listener of listeners) listener();
+  };
   const compact = () => {
     const state = observer.getCurrentQuery().state;
     if (
@@ -437,7 +468,7 @@ function createKeyedOwner(
         if (
           tags !== null &&
           (keyTags === undefined
-            ? missed !== undefined
+            ? !values.has(key) && missed !== undefined
             : !keyTags.some((tag) => tags.includes(tag)))
         ) {
           for (const tag of tags) missed?.add(tag);
@@ -453,6 +484,19 @@ function createKeyedOwner(
     queryKey,
     pluginId,
     method,
+    setKey(key: string, value: JsonValue) {
+      restoreCachedValues();
+      const previous = values.get(key);
+      values.set(key, {
+        result: replaceEqualDeep(previous?.result, value),
+        tags: previous?.tags,
+        whileWatched: previous?.whileWatched ?? false,
+      });
+      revisions.set(key, (revisions.get(key) ?? 0) + 1);
+      dirty.delete(key);
+      errors.delete(key);
+      publishValues();
+    },
     hasEntries() {
       const result = observer.getCurrentQuery().state.data?.result;
       return (
@@ -480,36 +524,16 @@ function createKeyedOwner(
           (cachedRows === null || !Object.hasOwn(cachedRows, key)),
       );
       if (keys.length === 0) return;
-      if (cachedRows !== null && cached !== undefined)
-        for (const [key, result] of Object.entries(cachedRows))
-          if (!values.has(key))
-            values.set(key, {
-              result,
-              tags: cached.keyTags[key] ?? cached.tags,
-              keyTags: {},
-              whileWatched: cached.whileWatched,
-            });
+      restoreCachedValues();
       for (const key of keys) {
         values.set(key, {
           result: provided.result[key]!,
           tags: provided.keyTags[key] ?? [],
-          keyTags: {},
           whileWatched: provided.whileWatched,
         });
         errors.delete(key);
       }
-      host.queryClient.setQueryData<Envelope>(queryKey, {
-        result: Object.fromEntries(
-          [...values].map(([key, value]) => [key, value.result]),
-        ),
-        tags: [...new Set([...values.values()].flatMap((value) => value.tags))],
-        keyTags: Object.fromEntries(
-          [...values].map(([key, value]) => [key, value.tags]),
-        ),
-        whileWatched: provided.whileWatched,
-      });
-      observer.updateResult();
-      for (const listener of listeners) listener();
+      publishValues();
     },
     compact: () => queueMicrotask(compact),
     refresh(keys: readonly string[]) {
@@ -521,20 +545,7 @@ function createKeyedOwner(
       return observer.refetch({ cancelRefetch: false });
     },
     watch(keys: readonly string[], enabled: boolean) {
-      const cached = observer.getCurrentQuery().state.data;
-      if (
-        values.size === 0 &&
-        cached?.result !== null &&
-        typeof cached?.result === "object" &&
-        !Array.isArray(cached.result)
-      )
-        for (const [key, result] of Object.entries(cached.result))
-          values.set(key, {
-            result,
-            tags: cached.keyTags[key] ?? cached.tags,
-            keyTags: {},
-            whileWatched: cached.whileWatched,
-          });
+      restoreCachedValues();
       let snapshot: KeyedSnapshot = {
         data: {},
         error: null,
@@ -721,23 +732,48 @@ function createReadQuery(
   timeoutMs: number | undefined,
 ) {
   const queryKey = ["plugin-rpc", pluginId, method, { input }];
+  let writeRevision = 0;
   const options = {
     queryKey,
     staleTime: Infinity,
     queryFn: async () => {
       let generation = 0;
+      let readRevision = writeRevision;
       const response = await runPluginRpcRead(
         host.queryClient,
         queryKey,
         async () => {
           generation =
             seedGenerations.get(host.queryClient)?.get(pluginId) ?? 0;
-          return envelopeSchema.parse(
-            await readRpcWithDeadline(host, pluginId, method, input, timeoutMs),
-          );
+          readRevision = writeRevision;
+          try {
+            const response = envelopeSchema.parse(
+              await readRpcWithDeadline(
+                host,
+                pluginId,
+                method,
+                input,
+                timeoutMs,
+              ),
+            );
+            return readRevision === writeRevision
+              ? response
+              : (host.queryClient.getQueryData<Envelope>(queryKey) ?? response);
+          } catch (error) {
+            const saved = host.queryClient.getQueryData<Envelope>(queryKey);
+            if (readRevision !== writeRevision && saved !== undefined)
+              return saved;
+            throw error;
+          }
         },
       );
-      return acceptProvidedKeyed(host, pluginId, response, generation);
+      if (readRevision === writeRevision)
+        unknownReadTags.delete(observer.getCurrentQuery());
+      const saved =
+        readRevision === writeRevision
+          ? undefined
+          : host.queryClient.getQueryData<Envelope>(queryKey);
+      return acceptProvidedKeyed(host, pluginId, saved ?? response, generation);
     },
   };
   const observer = new QueryObserver<Envelope>(host.queryClient, {
@@ -747,6 +783,18 @@ function createReadQuery(
   let enabledCount = 0;
   return {
     observer,
+    setData(value: JsonValue) {
+      writeRevision += 1;
+      const query = observer.getCurrentQuery();
+      if (query.state.data === undefined) unknownReadTags.add(query);
+      host.queryClient.setQueryData<Envelope>(queryKey, (previous) => ({
+        result: value,
+        tags: previous?.tags ?? [],
+        keyTags: previous?.keyTags ?? {},
+        whileWatched: previous?.whileWatched ?? false,
+      }));
+      observer.updateResult();
+    },
     setTimeout(duration: number | undefined) {
       timeoutMs = duration;
     },
@@ -897,12 +945,19 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     const refresh = useCallback(async () => {
       await currentRead.current.observer.refetch();
     }, []);
+    const setData = useCallback(
+      (value: JsonValue) => {
+        read.setData(jsonValueSchema.parse(value));
+      },
+      [read],
+    );
     return {
       data: query.data?.result,
       error: query.error,
       isLoading: query.isLoading,
       isFetching: query.isFetching,
       refetch: refresh,
+      experimental_setData: setData,
     } as ReturnType<PluginSdkApp["experimental_useRpcQuery"]>;
   };
 
@@ -911,9 +966,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     method: string;
     keys: readonly string[];
     enabled?: boolean;
-  }): import("../app-contract.js").ExperimentalRpcQueryState<
-    Record<string, T>
-  > {
+  }): ExperimentalRpcKeyedQueryState<T> {
     const host = useHost();
     const { pluginId: ownId } = host;
     const pluginId = options.pluginId ?? ownId;
@@ -961,12 +1014,20 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     const refresh = useCallback(async () => {
       await owner?.refresh(keys);
     }, [owner, keys]);
+    const setKey = useCallback(
+      (key: string, value: T) => {
+        getKeyedOwner(host, pluginId, options.method).setKey(
+          key,
+          jsonValueSchema.parse(value),
+        );
+      },
+      [host, pluginId, options.method],
+    );
     return {
       ...combined,
       refetch: refresh,
-    } as import("../app-contract.js").ExperimentalRpcQueryState<
-      Record<string, T>
-    >;
+      experimental_setKey: setKey,
+    } as ExperimentalRpcKeyedQueryState<T>;
   }
 
   function experimental_useRpcRefresh() {

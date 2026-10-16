@@ -16,6 +16,7 @@ import type { ThreadNotificationsData } from "./notificationsAction.js";
 const app = await loadPluginApp(() => import("./app.js"));
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -303,7 +304,7 @@ describe("thread notifications action", () => {
     expect(new Set(requested)).toEqual(new Set(many));
   });
 
-  it("keeps action data stable when additional rows use the existing defaults", async () => {
+  it("keeps loaded rows stable when additional rows use the existing defaults", async () => {
     const { view, show, summary, listCalls, holdReads, change, data } =
       renderNotifications({ thr_top: { own: "muted", ancestorCap: null } }, [
         "thr_top",
@@ -317,7 +318,7 @@ describe("thread notifications action", () => {
     await act(async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    expect(data()).toBe(loaded);
+    expect(data()?.levels.get("thr_top")).toBe(loaded?.levels.get("thr_top"));
     expect(summary({ id: "thr_default" })?.selected).toBe("inherit");
     change({ thr_default: { own: "input-only", ancestorCap: null } });
     await view.experimental_invalidateRpc(["thread:thr_default"]);
@@ -551,6 +552,7 @@ async function renderServerNotifications(
     ["thr_z_explicit", { notifications: { own: "muted" } }],
   ]);
   let failReads = failInitially;
+  let holdRead: (() => Promise<void>) | null = null;
   const server = createFakePluginHost({
     pluginId: "push-notifications",
     sdk: {
@@ -604,11 +606,23 @@ async function renderServerNotifications(
           ) ?? {},
       }),
       rpc: {
-        "threadNotifications.keyed": async (input) =>
-          contract.output.parse(
+        "threadNotifications.keyed": async (input) => {
+          const hold = holdRead;
+          holdRead = null;
+          const result = contract.output.parse(
             await server.harness.callRpc(
               "threadNotifications.keyed",
               contract.input.parse(input),
+            ),
+          );
+          await hold?.();
+          return result;
+        },
+        "threadNotifications.set": async (input) =>
+          server.harness.callRpc(
+            "threadNotifications.set",
+            pushNotificationsRpcContract["threadNotifications.set"].input.parse(
+              input,
             ),
           ),
       },
@@ -624,6 +638,38 @@ async function renderServerNotifications(
     item: (id = "thr_a_default") => itemFor?.(makeTarget({ id })) ?? null,
     fail(value: boolean) {
       failReads = value;
+    },
+    show(threadIds: string[]) {
+      view.rerender(
+        <Probe
+          threadIds={threadIds}
+          onItem={(next) => {
+            itemFor = next;
+          }}
+        />,
+      );
+    },
+    holdNextRead() {
+      let release: (error?: Error) => void = () => {};
+      let started = () => {};
+      const pending = new Promise<Error | undefined>((resolve) => {
+        release = resolve;
+      });
+      const captured = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      holdRead = async () => {
+        started();
+        const error = await pending;
+        if (error) throw error;
+      };
+      return { captured, release };
+    },
+    async set(threadId: string, level: string) {
+      await server.harness.callRpc("threadNotifications.set", {
+        threadId,
+        level,
+      });
     },
     async reset() {
       await server.harness.callRpc("threadNotifications.set", {
@@ -652,6 +698,49 @@ it("loads mixed default and explicit rows through the real keyed handler", async
     await probe.dispose();
   }
 });
+
+it.each(["all", "inherit"])(
+  "keeps a successful %s save available when the initial read fails later",
+  async (level) => {
+    const probe = await renderServerNotifications(false, []);
+    const held = probe.holdNextRead();
+    try {
+      probe.show(["thr_z_explicit"]);
+      await held.captured;
+      await act(async () => {
+        await probe
+          .item("thr_z_explicit")!
+          .run({ value: level, requestRename: () => {} });
+      });
+      await act(async () => held.release(new Error("Read response lost")));
+      expect(probe.item("thr_z_explicit")?.detail).toBe("All activity");
+      expect(probe.item("thr_z_explicit")?.choices?.hint ?? "").not.toContain(
+        "Read response lost",
+      );
+      probe.fail(true);
+      await act(async () => {
+        await probe.view.experimental_invalidateRpc(["thread:thr_z_explicit"]);
+      });
+      await waitFor(() =>
+        expect(probe.item("thr_z_explicit")?.choices?.hint).toContain(
+          "Notification read failed",
+        ),
+      );
+      expect(probe.item("thr_z_explicit")?.detail).toBe("All activity");
+      expect(
+        probe
+          .item("thr_z_explicit")
+          ?.choices?.items.find((choice) => choice.selected)?.id,
+      ).toBe(level);
+      expect(probe.item("thr_z_explicit")?.choices?.items.at(-1)?.label).toBe(
+        "Retry",
+      );
+    } finally {
+      await act(async () => held.release());
+      await probe.dispose();
+    }
+  },
+);
 
 it.each([false, true])(
   "offers Retry for real keyed read errors with cached rows: %s",
@@ -724,6 +813,64 @@ it("clears an override removed on another client through the real keyed handler"
       ).toBe("inherit"),
     );
   } finally {
+    await probe.dispose();
+  }
+});
+
+it("keeps a saved level while another row loads during its pending refresh", async () => {
+  const probe = await renderServerNotifications(false, ["thr_z_explicit"]);
+  let release = () => {};
+  try {
+    await waitFor(() =>
+      expect(probe.item("thr_z_explicit")?.detail).toBe("Muted"),
+    );
+    await probe.set("thr_other", "input-only");
+    const held = probe.holdNextRead();
+    release = held.release;
+    await act(async () => {
+      await probe
+        .item("thr_z_explicit")!
+        .run({ value: "all", requestRename: () => {} });
+    });
+    await held.captured;
+    expect(probe.item("thr_z_explicit")?.detail).toBe("All activity");
+    probe.show(["thr_z_explicit", "thr_other"]);
+    await waitFor(() =>
+      expect(probe.item("thr_other")?.detail).toBe("Needs input only"),
+    );
+    expect(probe.item("thr_z_explicit")?.detail).toBe("All activity");
+    await act(async () => {
+      await probe.set("thr_z_explicit", "muted");
+      held.release();
+    });
+    await waitFor(() =>
+      expect(probe.item("thr_z_explicit")?.detail).toBe("Muted"),
+    );
+  } finally {
+    await act(async () => release());
+    await probe.dispose();
+  }
+});
+
+it("refreshes retained action data after its inactive keyed cache is collected", async () => {
+  const probe = await renderServerNotifications(false, ["thr_z_explicit"]);
+  try {
+    await waitFor(() =>
+      expect(probe.item("thr_z_explicit")?.detail).toBe("Muted"),
+    );
+    vi.useFakeTimers();
+    probe.show([]);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 10);
+    });
+    await probe.set("thr_z_explicit", "all");
+    vi.useRealTimers();
+    probe.show(["thr_z_explicit"]);
+    await waitFor(() =>
+      expect(probe.item("thr_z_explicit")?.detail).toBe("All activity"),
+    );
+  } finally {
+    vi.useRealTimers();
     await probe.dispose();
   }
 });
