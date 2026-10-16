@@ -9,7 +9,6 @@ import {
 import {
   definePluginApp,
   experimental_useRpcQuery,
-  useRpc,
   experimental_ProviderIcon as ProviderIcon,
   experimental_useSidebarThreads,
   experimental_usePluginId,
@@ -52,6 +51,7 @@ import {
 } from "./usage-feedback.js";
 
 import type { providerUsageRpcContract, UsageRequest } from "./server.js";
+import { useUsageRefresh } from "./usage-refresh.js";
 import { UsageSettings } from "./settings.js";
 
 export interface UsageStoreSnapshot {
@@ -807,7 +807,6 @@ export function ProviderUsageStatusContent({
 
 function ProviderUsageStatus(props: ExperimentalSidebarFooterDisclosureProps) {
   const pluginId = experimental_usePluginId();
-  const rpc = useRpc<typeof providerUsageRpcContract>();
   const inventory = experimental_useRpcQuery<
     typeof providerUsageRpcContract,
     "getUsage"
@@ -838,24 +837,11 @@ function ProviderUsageStatus(props: ExperimentalSidebarFooterDisclosureProps) {
         request.machineIds?.includes(machine.id),
       )?.status === "connected",
   });
-  const [forcing, setForcing] = useState(false);
-  const [forceError, setForceError] = useState<string | null>(null);
-  useEffect(() => {
-    if (
-      inventory.data !== undefined &&
-      !inventory.isFetching &&
-      inventory.error === null
-    )
-      setForceError(null);
-  }, [inventory.data, inventory.isFetching, inventory.error]);
-  useEffect(() => {
-    if (
-      measurements.data !== undefined &&
-      !measurements.isFetching &&
-      measurements.error === null
-    )
-      setForceError(null);
-  }, [measurements.data, measurements.isFetching, measurements.error]);
+  const { forcing, forceError, reload } = useUsageRefresh(
+    inventory,
+    measurements,
+    request,
+  );
   const snapshot: UsageStoreSnapshot = {
     data: measurements.data ?? inventory.data ?? null,
     error:
@@ -872,14 +858,6 @@ function ProviderUsageStatus(props: ExperimentalSidebarFooterDisclosureProps) {
       ),
     [],
   );
-  const onReload = useCallback(() => {
-    setForcing(true);
-    setForceError(null);
-    void rpc
-      .call("getUsage", { ...request, force: true, maxAgeMs: 0 })
-      .catch(() => setForceError("Couldn’t refresh usage."))
-      .finally(() => setForcing(false));
-  }, [rpc, request]);
   const { threadId } = useBbContext();
   const sidebarThreads = experimental_useSidebarThreads();
   const threadMachineId = useMemo(
@@ -894,7 +872,7 @@ function ProviderUsageStatus(props: ExperimentalSidebarFooterDisclosureProps) {
       pluginId={pluginId}
       snapshot={snapshot}
       onSelectionChange={onSelectionChange}
-      onReload={onReload}
+      onReload={reload}
       threadMachineId={threadMachineId}
       machineSelectionStorageKey={`bb.${pluginId}.selected-machine.v1`}
     />

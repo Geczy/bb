@@ -1,6 +1,5 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import {
-  useRpc,
   experimental_useRpcQuery,
   experimental_ProviderIcon as ProviderIcon,
 } from "@get-bb/plugin-sdk/app";
@@ -13,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useUsageRefresh } from "./usage-refresh.js";
 import type { providerUsageRpcContract, UsageRequest } from "./server.js";
 import {
   emptyUsageMessage,
@@ -489,10 +489,7 @@ export function UsageSettingsContent({
 }
 
 export function UsageSettings() {
-  const rpc = useRpc<typeof providerUsageRpcContract>();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [forcing, setForcing] = useState(false);
-  const [forceError, setForceError] = useState(false);
   const inventory = experimental_useRpcQuery<
     typeof providerUsageRpcContract,
     "getUsage"
@@ -528,29 +525,15 @@ export function UsageSettings() {
     input,
     enabled: input.providerIds.length > 0 && selected?.status === "connected",
   });
-  useEffect(() => {
-    if (
-      inventory.data !== undefined &&
-      !inventory.isFetching &&
-      inventory.error === null
-    )
-      setForceError(false);
-  }, [inventory.data, inventory.isFetching, inventory.error]);
-  useEffect(() => {
-    if (query.data !== undefined && !query.isFetching && query.error === null)
-      setForceError(false);
-  }, [query.data, query.isFetching, query.error]);
+  const { forcing, forceError, reload } = useUsageRefresh(
+    inventory,
+    query,
+    input,
+  );
   const machines = query.data?.machines ?? inventory.data?.machines ?? [];
-  const loading = forcing || inventory.isLoading || query.isFetching;
-  const error = forceError || inventory.error !== null || query.error !== null;
-  const reload = () => {
-    setForcing(true);
-    setForceError(false);
-    void rpc
-      .call("getUsage", { ...input, force: true, maxAgeMs: 0 })
-      .catch(() => setForceError(true))
-      .finally(() => setForcing(false));
-  };
+  const loading = forcing || inventory.isFetching || query.isFetching;
+  const error =
+    forceError !== null || inventory.error !== null || query.error !== null;
 
   return (
     <UsageSettingsContent
