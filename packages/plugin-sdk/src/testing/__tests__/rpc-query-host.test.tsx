@@ -299,28 +299,6 @@ describe("tagged RPC query ownership", () => {
     expect(release).toHaveBeenCalledTimes(2);
   });
 
-  it("drops an overtaken first result and coalesces changes into one trailing read", async () => {
-    const first = deferred<{ result: number; tags: string[] }>();
-    let calls = 0;
-    const { host, hooks, queryClient } = setup(async () =>
-      ++calls === 1 ? first.promise : { result: 2, tags: ["item:a"] },
-    );
-    const mounted = renderHook(() =>
-      hooks.experimental_useRpcQuery<typeof contract, "read">({
-        method: "read",
-        input: { id: "a" },
-      }),
-    );
-    await waitFor(() => expect(host.call).toHaveBeenCalledTimes(1));
-    act(() => {
-      for (let i = 0; i < 20; i++)
-        invalidateRpcQueries(queryClient, "producer", ["item:a"]);
-    });
-    await act(async () => first.resolve({ result: 1, tags: ["item:a"] }));
-    await waitFor(() => expect(mounted.result.current.data).toBe(2));
-    expect(host.call).toHaveBeenCalledTimes(2);
-  });
-
   it("retains the last result on failure and keeps caches separate between clients", async () => {
     let failing = false;
     const first = setup(async () => {
@@ -656,40 +634,6 @@ describe("tagged RPC query ownership", () => {
     },
   );
 
-  it("drops a keyed response invalidated while its batch is running", async () => {
-    const pending = deferred<{
-      result: Record<string, number>;
-      tags: string[];
-      keyTags: Record<string, string[]>;
-    }>();
-    let calls = 0;
-    const { hooks, queryClient } = setup(async () =>
-      ++calls === 1
-        ? pending.promise
-        : { result: { a: 2 }, tags: [], keyTags: { a: ["item:a"] } },
-    );
-    const mounted = renderHook(() =>
-      hooks.experimental_useRpcKeyedQuery<number>({
-        method: "keyed",
-        keys: ["a"],
-      }),
-    );
-    await waitFor(() => expect(calls).toBe(1));
-    act(() => {
-      for (let i = 0; i < 10; i++)
-        invalidateRpcQueries(queryClient, "producer", ["item:a"]);
-    });
-    await act(async () =>
-      pending.resolve({
-        result: { a: 1 },
-        tags: [],
-        keyTags: { a: ["item:a"] },
-      }),
-    );
-    await waitFor(() => expect(mounted.result.current.data).toEqual({ a: 2 }));
-    expect(calls).toBe(2);
-  });
-
   it("splits a large board into bounded batches", async () => {
     const batches: number[] = [];
     const first = deferred<void>();
@@ -943,50 +887,25 @@ describe("invalidation while a read is in flight", () => {
       if (phase === "refetch")
         act(() => invalidateRpcQueries(queryClient, "producer", ["item:a"]));
       await waitFor(() => expect(calls).toBe(Math.max(gated, 1)));
-      act(() =>
-        invalidateRpcQueries(
-          queryClient,
-          "producer",
-          tags === "all"
-            ? null
-            : tags === "own"
-              ? [`read:${Math.max(gated, 1)}`]
-              : ["other"],
-        ),
-      );
+      const changes = phase === "first load" && tags === "own" ? 20 : 1;
+      act(() => {
+        for (let i = 0; i < changes; i++)
+          invalidateRpcQueries(
+            queryClient,
+            "producer",
+            tags === "all"
+              ? null
+              : tags === "own"
+                ? [`read:${Math.max(gated, 1)}`]
+                : ["other"],
+          );
+      });
       await act(async () => gate.resolve());
       await waitFor(() => expect(mounted.result.current).toBe(reads));
       await act(async () => {});
       expect(calls).toBe(reads);
     },
   );
-
-  it("keeps a new key's response when an unrelated row changes while it loads", async () => {
-    const gate = deferred<void>();
-    let bReads = 0;
-    const { hooks, queryClient } = setup(async (_plugin, _method, input) => {
-      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
-      if (keys.includes("b") && ++bReads === 1) await gate.promise;
-      return {
-        result: Object.fromEntries(keys.map((key) => [key, 1])),
-        keyTags: Object.fromEntries(keys.map((key) => [key, [`item:${key}`]])),
-      };
-    });
-    const mounted = renderHook(
-      ({ keys }) =>
-        hooks.experimental_useRpcKeyedQuery<number>({ method: "keyed", keys }),
-      { initialProps: { keys: ["a"] } },
-    );
-    await waitFor(() => expect(mounted.result.current.data).toEqual({ a: 1 }));
-    mounted.rerender({ keys: ["a", "b"] });
-    await waitFor(() => expect(bReads).toBe(1));
-    act(() => invalidateRpcQueries(queryClient, "producer", ["item:c"]));
-    await act(async () => gate.resolve());
-    await waitFor(() =>
-      expect(mounted.result.current.data).toEqual({ a: 1, b: 1 }),
-    );
-    expect(bReads).toBe(1);
-  });
 
   it.each(["plain", "keyed"] as const)(
     "re-reads a %s read whose first load failed on the next invalidation",
@@ -1024,30 +943,46 @@ describe("invalidation while a read is in flight", () => {
     },
   );
 
-  it("re-reads a new key invalidated before its first response", async () => {
-    const gate = deferred<void>();
-    let bReads = 0;
-    const { hooks, queryClient } = setup(async (_plugin, _method, input) => {
-      const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
-      const read = keys.includes("b") ? ++bReads : 0;
-      if (read === 1) await gate.promise;
-      return {
-        result: Object.fromEntries(keys.map((key) => [key, read || 1])),
-        keyTags: Object.fromEntries(keys.map((key) => [key, [`item:${key}`]])),
-      };
-    });
-    const mounted = renderHook(
-      ({ keys }) =>
-        hooks.experimental_useRpcKeyedQuery<number>({ method: "keyed", keys }),
-      { initialProps: { keys: ["a"] } },
-    );
-    await waitFor(() => expect(mounted.result.current.data).toEqual({ a: 1 }));
-    mounted.rerender({ keys: ["a", "b"] });
-    await waitFor(() => expect(bReads).toBe(1));
-    act(() => invalidateRpcQueries(queryClient, "producer", ["item:b"]));
-    await act(async () => gate.resolve());
-    await waitFor(() =>
-      expect(mounted.result.current.data).toEqual({ a: 1, b: 2 }),
-    );
-  });
+  it.each([
+    { tags: "unrelated", changedKey: "c", reads: 1 },
+    { tags: "own", changedKey: "b", reads: 2 },
+  ])(
+    "loads a new key with $tags invalidation in $reads reads",
+    async ({ changedKey, reads }) => {
+      const gate = deferred<void>();
+      let bReads = 0;
+      const { hooks, queryClient } = setup(async (_plugin, _method, input) => {
+        const { keys } = z.object({ keys: z.array(z.string()) }).parse(input);
+        const read = keys.includes("b") ? ++bReads : 0;
+        if (read === 1) await gate.promise;
+        return {
+          result: Object.fromEntries(keys.map((key) => [key, read || 1])),
+          keyTags: Object.fromEntries(
+            keys.map((key) => [key, [`item:${key}`]]),
+          ),
+        };
+      });
+      const mounted = renderHook(
+        ({ keys }) =>
+          hooks.experimental_useRpcKeyedQuery<number>({
+            method: "keyed",
+            keys,
+          }),
+        { initialProps: { keys: ["a"] } },
+      );
+      await waitFor(() =>
+        expect(mounted.result.current.data).toEqual({ a: 1 }),
+      );
+      mounted.rerender({ keys: ["a", "b"] });
+      await waitFor(() => expect(bReads).toBe(1));
+      act(() =>
+        invalidateRpcQueries(queryClient, "producer", [`item:${changedKey}`]),
+      );
+      await act(async () => gate.resolve());
+      await waitFor(() =>
+        expect(mounted.result.current.data).toEqual({ a: 1, b: reads }),
+      );
+      expect(bReads).toBe(reads);
+    },
+  );
 });
