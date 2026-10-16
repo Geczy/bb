@@ -60,9 +60,12 @@ export class AccountLink {
         sync();
       },
       (error) => {
-        if (error instanceof AccountUnavailableError)
+        if (error instanceof AccountUnavailableError) {
+          lastStatus = null;
+          if (retry) clearTimeout(retry);
+          retry = null;
           this.options.onAccount(null);
-        else
+        } else
           this.options.log.warn(
             `could not read the bb account status: ${error.message}`,
           );
