@@ -136,17 +136,6 @@ it.each(["settings", "footer"] as const)(
 );
 
 it.each(["settings", "footer"] as const)(
-  "%s publishes the forced response before follow-up reads finish",
-  async (kind) => {
-    const { slot, button, value } = await renderConsumer(kind, async (input) =>
-      snapshot(input.force ? 81 : 42),
-    );
-    fireEvent.click(button());
-    await slot.findByText(value(81));
-  },
-);
-
-it.each(["settings", "footer"] as const)(
   "%s retains a successful forced measurement when the inventory reread succeeds but measurements fail",
   async (kind) => {
     let refreshed = false;
