@@ -97,13 +97,15 @@ export type ExperimentalPluginRpcCaller =
 
 /** Second argument of every rpc handler. */
 export interface ExperimentalPluginRpcHandlerContext {
+  readonly caller: ExperimentalPluginRpcCaller;
+  /** @deprecated Use `caller`. Kept for plugins built against older SDKs; removed at the next major. */
   readonly experimental_caller: ExperimentalPluginRpcCaller;
   /** Associate the response with producer-owned invalidation tags. */
-  experimental_tag(...tags: string[]): void;
+  tag(...tags: string[]): void;
   /** Associate tags with one key in a keyed batch response. Shared response tags apply to every key. */
-  experimental_tagKey(key: string, ...tags: string[]): void;
+  tagKey(key: string, ...tags: string[]): void;
   /** Seed another keyed read from this response. The producer runs only when the client has no entries for that method. */
-  experimental_provideKeyed(
+  provideKeyed(
     method: string,
     entries: () => Readonly<
       Record<string, { value: unknown; tags: readonly string[] }>

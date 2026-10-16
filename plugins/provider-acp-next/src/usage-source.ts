@@ -153,7 +153,7 @@ export function registerUsageSource(bb: BbPluginApi) {
     usageSourceRpcContract,
     {
       async [usageListMethod](_input, context) {
-        context.experimental_tag("usage-inventory");
+        context.tag("usage-inventory");
         const hosts = await bb.sdk.hosts.list();
         const resources = (
           await Promise.all(

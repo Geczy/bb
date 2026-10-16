@@ -404,7 +404,7 @@ export interface FakePluginBehaviorDrivers {
    * Invoke a registered rpc method with host semantics: input/output schemas,
    * strict JSON result normalization, and structured failure codes. Rejects
    * with the same message/code/issues the frontend client surfaces. The
-   * handler sees `options.experimental_caller` as its caller, `{ kind:
+   * handler sees `options.caller` as its caller, `{ kind:
    * "client" }` by default; pass `{ kind: "plugin", pluginId }` to act as
    * another plugin calling through `bb.sdk.plugins.callRpc`.
    */
@@ -412,6 +412,8 @@ export interface FakePluginBehaviorDrivers {
     method: string,
     input?: unknown,
     options?: {
+      caller?: ExperimentalPluginRpcCaller;
+      /** @deprecated Use `caller`. Kept for tests written against older SDKs; removed at the next major. */
       experimental_caller?: ExperimentalPluginRpcCaller;
       experimental_warmKeyedMethods?: readonly string[];
     },
@@ -1900,6 +1902,8 @@ function createFakePluginHostInternal(
     },
 
     async callRpc(method, input, options = {}) {
+      const rpcCaller = options.caller ??
+        options.experimental_caller ?? { kind: "client" };
       const record = rpcHandlers.get(method);
       if (!record) {
         return throwRpcError({
@@ -1935,24 +1939,23 @@ function createFakePluginHostInternal(
       let result: unknown;
       try {
         result = await record.handler(validatedInput as never, {
-          experimental_provideKeyed: provisioner.provide,
-          experimental_tagKey(key, ...values) {
+          provideKeyed: provisioner.provide,
+          tagKey(key, ...values) {
             if (
               values.some((tag) => typeof tag !== "string" || tag.length === 0)
             )
               throw new Error("RPC tags must be nonempty strings");
             keyTags[key] = [...new Set([...(keyTags[key] ?? []), ...values])];
           },
-          experimental_tag(...values) {
+          tag(...values) {
             if (
               values.some((tag) => typeof tag !== "string" || tag.length === 0)
             )
               throw new Error("RPC tags must be nonempty strings");
             for (const tag of values) tags.add(tag);
           },
-          experimental_caller: options.experimental_caller ?? {
-            kind: "client",
-          },
+          caller: rpcCaller,
+          experimental_caller: rpcCaller,
         });
       } catch (error) {
         return throwRpcError({

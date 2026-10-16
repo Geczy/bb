@@ -60,11 +60,10 @@ export function registerAccountRpc(args: {
     accountRpcContract,
     {
       [STATUS_METHOD]: (_input, context) => {
-        context.experimental_tag("status");
+        context.tag("status");
         return account.status();
       },
-      [FETCH_METHOD]: (input, context) =>
-        account.fetch(input, context.experimental_caller),
+      [FETCH_METHOD]: (input, context) => account.fetch(input, context.caller),
     },
     {
       experimental_discoverable: true,
@@ -74,13 +73,13 @@ export function registerAccountRpc(args: {
   );
   bb.rpc.register(accountPrivateRpcContract, {
     [ADOPT_CONNECT_CREDENTIAL_METHOD]: (input, context) => {
-      if (!isConnectPlugin(context.experimental_caller)) {
+      if (!isConnectPlugin(context.caller)) {
         throw new Error("only the connect plugin can hand over its pairing");
       }
       return account.adoptConnectCredential(input);
     },
     [CONNECT_CREDENTIAL_METHOD]: (_input, context) => {
-      if (!isConnectPlugin(context.experimental_caller)) {
+      if (!isConnectPlugin(context.caller)) {
         throw new Error(
           "only the connect plugin can read the server credential",
         );
@@ -88,7 +87,7 @@ export function registerAccountRpc(args: {
       return { credential: account.connectCredential() };
     },
     [CONFIRM_REFUSED_CREDENTIAL_METHOD]: (input, context) => {
-      if (!isConnectPlugin(context.experimental_caller)) {
+      if (!isConnectPlugin(context.caller)) {
         throw new Error(
           "only the connect plugin can report a refused server credential",
         );
@@ -98,7 +97,7 @@ export function registerAccountRpc(args: {
     "login.start": (input) =>
       rethrowCoded(() => logins.start(resolveBaseUrl(input.baseUrl, baseUrls))),
     "login.poll": (input, context) => {
-      context.experimental_tag("login", "status");
+      context.tag("login", "status");
       return {
         login: logins.view(input.loginId),
         status: account.status(),

@@ -371,7 +371,7 @@ export default async function plugin(bb: BbPluginApi): Promise<void> {
   bb.rpc.register(bbAiRpcContract, {
     overview,
     setEnabled: ({ enabled: next }, context) => {
-      if (context.experimental_caller.kind !== "client") {
+      if (context.caller.kind !== "client") {
         throw new Error(
           "only you can turn bb cloud on or off, with `bb ai on|off`",
         );

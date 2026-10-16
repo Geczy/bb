@@ -16,8 +16,8 @@ a "Docs:" line has no owning doc, so it keeps the essential contract itself.
 
 ## Plugin live RPC data
 
-`ExperimentalPluginRpcHandlerContext.experimental_tag` and
-`experimental_tagKey` collect response dependencies. `PluginRpc.experimental_invalidate`
+`ExperimentalPluginRpcHandlerContext.tag` and
+`tagKey` collect response dependencies. `PluginRpc.experimental_invalidate`
 requires a non-empty tag list; `experimental_invalidateAll` explicitly invalidates all reads. `experimental_whileWatched` starts
 work for canonical normal/keyed watched reads and aborts at the last release.
 `experimental_useRpcQuery`, `experimental_useRpcKeyedQuery`, and
@@ -52,7 +52,7 @@ Before stabilization, audit tag/key metadata bounds, cancellation and trailing
 reads, watch lifetime and plugin generations, hidden/reconnected consumers,
 caller-specific results, bounded large batches and cross-plugin discovery
 changes. Verify client-version compatibility and the CLI streaming contract.
-`ExperimentalPluginRpcHandlerContext.experimental_provideKeyed(method, producer)`
+`ExperimentalPluginRpcHandlerContext.provideKeyed(method, producer)`
 adds validated keyed entries to a cold browser read's response. Its lazy producer
 runs only when the requesting cache has no entries for that method; untracked
 RPC calls and warm requests do not run it. Each entry supplies `{ value, tags }`.
@@ -198,9 +198,10 @@ retained-but-unused sizes so a UI can show reclaimable space without a dry
 run, and whether stale `.staging`, `.promoting`, and `.corrupt` directories
 left by crashes should be collected too.
 
-## RPC caller identity (`ExperimentalPluginRpcHandlerContext.experimental_caller`)
+## RPC caller identity (`ExperimentalPluginRpcHandlerContext.caller`)
 
-Every `bb.rpc.register` handler receives a context whose `experimental_caller`
+Every `bb.rpc.register` handler receives a context whose `caller`
+(formerly `experimental_caller`, still readable; see Scheduled removals)
 is `{ kind: "plugin", pluginId }` for a loaded plugin's
 `bb.sdk.plugins.callRpc` and `{ kind: "client" }` for everyone else. A
 per-load token makes the identity unforgeable by clients.
@@ -296,6 +297,13 @@ CHANGELOG records the renames themselves.
   `item.open`/`item.close`. Then the adapter and its tests are deleted.
 
 ## Scheduled removals (next major)
+
+`ExperimentalPluginRpcHandlerContext.experimental_caller` and the fake plugin
+host's `callRpc` option `experimental_caller` are old names of `caller`, kept
+because plugins and plugin tests built against SDK 0.6.52 or earlier read and
+pass them. The members of the context's own type are unprefixed: the
+`Experimental` type name already marks them. Remove both aliases at the next
+major version.
 
 Unprefixed exports of `@get-bb/plugin-sdk/provider-bridge` with no consumer in
 this repository. They stay because a third-party bridge compiled against an

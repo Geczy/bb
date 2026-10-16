@@ -105,14 +105,14 @@ const thread = await bb.sdk.threads.spawn({
 
 `bb.sdk.plugins.callRpc({ pluginId, method, input, outputSchema })` calls
 another plugin's `bb.rpc` handler. Each handler receives a context whose
-`experimental_caller` is `{ kind: "plugin", pluginId }` for a call through a
+`caller` is `{ kind: "plugin", pluginId }` for a call through a
 loaded plugin's own `bb.sdk.plugins.callRpc`, verified with a per-load token
 only the server holds, and `{ kind: "client" }` for everything else: the app,
 CLI, agents, and bb. Tests set it with
-`harness.callRpc(method, input, { experimental_caller })`.
+`harness.callRpc(method, input, { caller })`.
 
 ```ts
-handOver(input, { experimental_caller: caller }) {
+handOver(input, { caller: caller }) {
   if (caller.kind !== "plugin" || caller.pluginId !== "connect") {
     throw new Error("only the connect plugin can call handOver");
   }

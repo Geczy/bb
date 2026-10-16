@@ -554,7 +554,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
   };
   bb.rpc.register(providerUsageRpcContract, {
     getUsage: async (request, context) => {
-      context.experimental_tag(
+      context.tag(
         "inventory",
         ...(request.providerIds.length === 0
           ? []

@@ -181,7 +181,7 @@ export default async function threadListPlugin(bb: BbPluginApi) {
 
   bb.rpc.register(threadListRpcContract, {
     async listPreferences(_input, context) {
-      context.experimental_tag(...PREFERENCE_KEYS.map((key) => `pref:${key}`));
+      context.tag(...PREFERENCE_KEYS.map((key) => `pref:${key}`));
       return { preferences: await store.readAll() };
     },
     async setPreference({ key, value }) {

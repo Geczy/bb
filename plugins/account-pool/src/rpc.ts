@@ -122,7 +122,7 @@ export function createRpcHandlers(
     "account.add": (input) => operations.add(input),
     "account.list": async (_input, context) => {
       const accounts = await operations.list();
-      context?.experimental_tag(
+      context?.tag(
         "accounts",
         ...accounts.map((account) => `account:${account.id}`),
       );
@@ -152,7 +152,7 @@ export function createRpcHandlers(
       return { provider, enabled };
     },
     "config.get": (_input, context) => {
-      context?.experimental_tag("config");
+      context?.tag("config");
       return config.get();
     },
     "config.set": (input) => config.set(input),
@@ -164,11 +164,11 @@ export function createRpcHandlers(
       cancelled: codexLogin.cancel(input),
     }),
     "status.get": (_input, context) => {
-      context?.experimental_tag("accounts", "config");
+      context?.tag("accounts", "config");
       return operations.status();
     },
     "status.routedThreads": (_input, context) => {
-      context?.experimental_tag("accounts");
+      context?.tag("accounts");
       return operations.routedThreadsWithoutLocalLogin();
     },
     "token.rotate": ({ machine }) => operations.rotateToken(machine),

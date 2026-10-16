@@ -94,9 +94,10 @@ export function createStore(bb: BbPluginApi): TasksApiStore {
     projectTaskCount(projectId: string): number {
       return (
         database
-          .prepare<[string], CountRow>(
-            "SELECT COUNT(*) AS count FROM tasks WHERE project_id = ?",
-          )
+          .prepare<
+            [string],
+            CountRow
+          >("SELECT COUNT(*) AS count FROM tasks WHERE project_id = ?")
           .get(projectId)?.count ?? 0
       );
     },
@@ -648,7 +649,7 @@ export function registerHandlers(
       return result;
     },
     listFolders(_input, context) {
-      context?.experimental_tag("folders");
+      context?.tag("folders");
       return { folders: store.tasks.listFolders() };
     },
     createProject(input) {
@@ -704,7 +705,7 @@ export function registerHandlers(
       }
     },
     listProjects(input, context) {
-      context?.experimental_tag("projects");
+      context?.tag("projects");
       return { projects: store.tasks.listProjects(input.folderId) };
     },
     createTask(input) {
@@ -735,34 +736,28 @@ export function registerHandlers(
       const scope = input.parentTaskId
         ? `subtasks:${input.parentTaskId}`
         : `membership:${input.projectId ?? "all"}`;
-      context?.experimental_tag(scope);
-      if (input.activeOnly) context?.experimental_tag("active-membership");
-      if (input.search?.trim())
-        context?.experimental_tag(`${scope}:search`, "task-keys");
-      if (input.priorities !== undefined)
-        context?.experimental_tag(`${scope}:priority`);
-      if (input.statuses !== undefined)
-        context?.experimental_tag(`${scope}:status`);
-      if (input.labelIds !== undefined)
-        context?.experimental_tag(`${scope}:labels`);
+      context?.tag(scope);
+      if (input.activeOnly) context?.tag("active-membership");
+      if (input.search?.trim()) context?.tag(`${scope}:search`, "task-keys");
+      if (input.priorities !== undefined) context?.tag(`${scope}:priority`);
+      if (input.statuses !== undefined) context?.tag(`${scope}:status`);
+      if (input.labelIds !== undefined) context?.tag(`${scope}:labels`);
       const { keys, openCount } = store.tasks.listTaskKeys(input);
-      context?.experimental_provideKeyed("getTasksKeyed", () =>
+      context?.provideKeyed("getTasksKeyed", () =>
         Object.fromEntries(
           apiTasks(
             store,
             store.tasks.getTasksByIds(keys.slice(0, INITIAL_KEYED_TASK_ROWS)),
-          ).map(
-            (task) => {
-              const { description: _description, ...summary } = task;
-              return [
-                task.id,
-                {
-                  value: summary,
-                  tags: [`task:${task.id}`, `task-project:${task.projectId}`],
-                },
-              ];
-            },
-          ),
+          ).map((task) => {
+            const { description: _description, ...summary } = task;
+            return [
+              task.id,
+              {
+                value: summary,
+                tags: [`task:${task.id}`, `task-project:${task.projectId}`],
+              },
+            ];
+          }),
         ),
       );
       return { keys, openCount };
@@ -770,7 +765,7 @@ export function registerHandlers(
     getLabelsKeyed({ keys }, context) {
       return Object.fromEntries(
         keys.map((key) => {
-          context?.experimental_tagKey(key, `project:${key}`);
+          context?.tagKey(key, `project:${key}`);
           return [key, store.tasks.listLabels(key)];
         }),
       );
@@ -785,7 +780,7 @@ export function registerHandlers(
       return Object.fromEntries(
         keys.map((key) => {
           const task = tasks.get(key);
-          context?.experimental_tagKey(
+          context?.tagKey(
             key,
             `task:${key}`,
             ...(task ? [`task-project:${task.projectId}`] : []),
@@ -800,7 +795,7 @@ export function registerHandlers(
       const threads = store.tasks.listTaskThreadsForTasks(keys);
       return Object.fromEntries(
         keys.map((key) => {
-          context?.experimental_tagKey(key, `threads:${key}`);
+          context?.tagKey(key, `threads:${key}`);
           return [key, threads.get(key) ?? []];
         }),
       );
@@ -809,28 +804,22 @@ export function registerHandlers(
       const attachments = store.tasks.listAttachmentsForTasks(keys);
       return Object.fromEntries(
         keys.map((key) => {
-          context?.experimental_tagKey(key, `attachments:${key}`);
+          context?.tagKey(key, `attachments:${key}`);
           return [key, (attachments.get(key) ?? []).map(attachmentMetadata)];
         }),
       );
     },
     getTask(input, context) {
-      context?.experimental_tag(`task:${input.taskId}`);
+      context?.tag(`task:${input.taskId}`);
       const task = store.tasks.getTask(input.taskId);
-      if (task) context?.experimental_tag(`task-project:${task.projectId}`);
+      if (task) context?.tag(`task-project:${task.projectId}`);
       return { task: task ? apiTask(store, task) : null };
     },
     getTaskByKey(input, context) {
-      context?.experimental_tag(
-        `task-key:${canonicalTaskKey(input.taskKey)}`,
-        "task-keys",
-      );
+      context?.tag(`task-key:${canonicalTaskKey(input.taskKey)}`, "task-keys");
       const task = store.tasks.getTaskByKey(input.taskKey);
       if (task)
-        context?.experimental_tag(
-          `task:${task.id}`,
-          `task-project:${task.projectId}`,
-        );
+        context?.tag(`task:${task.id}`, `task-project:${task.projectId}`);
       return { task: task ? apiTask(store, task) : null };
     },
     updateTask(input) {
@@ -949,7 +938,7 @@ export function registerHandlers(
       return { deleted };
     },
     listTasks(input, context) {
-      context?.experimental_tag(`task-list:${input.projectId ?? "all"}`);
+      context?.tag(`task-list:${input.projectId ?? "all"}`);
       const page = store.tasks.listTasksPage({
         projectId: input.projectId,
         statuses: input.statuses,
@@ -1052,7 +1041,7 @@ export function registerHandlers(
       return { deleted };
     },
     listLabels(input, context) {
-      context?.experimental_tag(`project:${input.projectId}`);
+      context?.tag(`project:${input.projectId}`);
       return { labels: store.tasks.listLabels(input.projectId) };
     },
     async createComment(input) {
@@ -1069,7 +1058,7 @@ export function registerHandlers(
       return { comment };
     },
     async listComments(input, context) {
-      context?.experimental_tag(
+      context?.tag(
         `comments:${input.taskId}`,
         `attachments:${input.taskId}`,
         `task:${input.taskId}`,
@@ -1105,7 +1094,7 @@ export function registerHandlers(
       };
     },
     listAttachments(input, context) {
-      context?.experimental_tag(
+      context?.tag(
         `attachments:${"taskId" in input ? input.taskId : "commentsOfTaskId" in input ? input.commentsOfTaskId : (store.tasks.getComment(input.commentId)?.taskId ?? input.commentId)}`,
       );
       const attachments =
@@ -1151,14 +1140,11 @@ export function registerHandlers(
       }
     },
     listTaskThreads(input, context) {
-      context?.experimental_tag(`threads:${input.taskId}`);
+      context?.tag(`threads:${input.taskId}`);
       return { taskThreads: store.tasks.listTaskThreads(input.taskId) };
     },
     async listTaskPullRequests(input, context) {
-      context?.experimental_tag(
-        `prs:${input.taskId}`,
-        `threads:${input.taskId}`,
-      );
+      context?.tag(`prs:${input.taskId}`, `threads:${input.taskId}`);
       return listTaskPullRequests(bb, store, input.taskId);
     },
     createPreset(input) {
@@ -1183,7 +1169,7 @@ export function registerHandlers(
       return { deleted };
     },
     listPresets(_input, context) {
-      context?.experimental_tag("presets");
+      context?.tag("presets");
       return { presets: store.tasks.listPresets() };
     },
     async listMachines() {
@@ -1232,7 +1218,7 @@ export function registerHandlers(
       };
     },
     async listBbProjects(_input, context) {
-      context?.experimental_tag("projects");
+      context?.tag("projects");
       const projects = await bb.sdk.projects.list({ includePersonal: true });
       return {
         bbProjects: projects.map((project) => ({
@@ -1242,11 +1228,11 @@ export function registerHandlers(
       };
     },
     sidebarOpenTaskCount(_input, context) {
-      context?.experimental_tag("sidebar");
+      context?.tag("sidebar");
       return { openTaskCount: store.openTaskCount() };
     },
     sidebarSummary(_input, context) {
-      context?.experimental_tag("sidebar");
+      context?.tag("sidebar");
       return { projects: store.sidebarSummary() };
     },
   };

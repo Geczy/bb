@@ -264,8 +264,7 @@ export function createPushNotificationsPlugin(
         return { ok: true as const };
       },
       "threadNotifications.keyed": async ({ keys }, context) => {
-        for (const key of keys)
-          context.experimental_tagKey(key, `thread:${key}`);
+        for (const key of keys) context.tagKey(key, `thread:${key}`);
         const rows = await preferences.list(keys);
         return Object.fromEntries(
           keys.map((key) => [key, rows[key] ?? UNSET_THREAD_NOTIFICATIONS]),

@@ -2187,16 +2187,17 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
           throwRpcBoundaryError,
         );
         const result = await handler.handler(parsedInput, {
+          caller,
           experimental_caller: caller,
-          experimental_provideKeyed: provisioner.provide,
-          experimental_tagKey(key, ...values) {
+          provideKeyed: provisioner.provide,
+          tagKey(key, ...values) {
             if (
               values.some((tag) => typeof tag !== "string" || tag.length === 0)
             )
               throw new Error("RPC tags must be nonempty strings");
             keyTags[key] = [...new Set([...(keyTags[key] ?? []), ...values])];
           },
-          experimental_tag(...values) {
+          tag(...values) {
             for (const tag of values) {
               if (typeof tag !== "string" || tag.length === 0)
                 throw new Error("RPC tags must be nonempty strings");

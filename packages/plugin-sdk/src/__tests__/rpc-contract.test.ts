@@ -39,7 +39,7 @@ const contextHandlers: ExperimentalPluginRpcHandlersWithContext<
 > = {
   ...handlers,
   ping(_input, context) {
-    expectTypeOf(context.experimental_caller).toEqualTypeOf<
+    expectTypeOf(context.caller).toEqualTypeOf<
       | { readonly kind: "plugin"; readonly pluginId: string }
       | { readonly kind: "client" }
     >();
@@ -71,10 +71,11 @@ describe("schema-driven rpc contract", () => {
     expectTypeOf(assertFrontendInference).toBeFunction();
     expect(
       contextHandlers.ping(null, {
+        caller: { kind: "plugin", pluginId: "other" },
         experimental_caller: { kind: "plugin", pluginId: "other" },
-        experimental_tag() {},
-        experimental_tagKey() {},
-        experimental_provideKeyed() {},
+        tag() {},
+        tagKey() {},
+        provideKeyed() {},
       }),
     ).toEqual({ ok: true });
   });

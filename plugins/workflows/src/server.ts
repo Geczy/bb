@@ -113,7 +113,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.rpc.register(workflowUiRpcContract, {
     workflowActiveRuns({ threadId }, context) {
-      context.experimental_tag(`runs:${threadId}`);
+      context.tag(`runs:${threadId}`);
       return {
         runs: service
           .inspectActiveForThread(threadId)
@@ -121,7 +121,7 @@ export default async function plugin(bb: BbPluginApi) {
       };
     },
     workflowRunView({ threadId, runId }, context) {
-      context.experimental_tag(`runs:${threadId}`, `run:${runId ?? "latest"}`);
+      context.tag(`runs:${threadId}`, `run:${runId ?? "latest"}`);
       const run = workflowForThread(threadId, runId);
       return { run: run === null ? null : buildWorkflowRunView(run) };
     },

@@ -1,6 +1,6 @@
 # Plugin live RPC data
 
-Handlers call `context.experimental_tag("task:123", "project:7:tasks")` to
+Handlers call `context.tag("task:123", "project:7:tasks")` to
 associate reads with producer-owned tags. Results retain their declared types;
 tags travel beside the result in the host envelope. After a write, call
 `bb.rpc.experimental_invalidate(["task:123"])` with a non-empty tag list.
@@ -36,8 +36,8 @@ bounds each request attempt. The host drops overtaken responses and performs one
 method shaped `{ keys: string[] } -> Record<string, value>`. It caches each key
 independently and batches missing or invalidated keys in groups of at most 500
 in the same render. Return every requested key, using `null` for a missing item. Inside
-the producer, `context.experimental_tagKey(key, ...tags)` tags a particular
-key; `experimental_tag` adds dependencies shared by every returned key.
+the producer, `context.tagKey(key, ...tags)` tags a particular
+key; `tag` adds dependencies shared by every returned key.
 After a successful mutation or forced reload, call a plain read result's
 `setData(savedValue)` or a keyed result's
 `setKey(key, savedValue)` to write through the shared query client
@@ -59,7 +59,7 @@ normal or per-key envelope tags while the real query owner handles reads.
 A list read can fill a keyed cache in the same response:
 
 ```ts
-context.experimental_provideKeyed("getTasksKeyed", () =>
+context.provideKeyed("getTasksKeyed", () =>
   Object.fromEntries(rows().map(row => [row.id, {
     value: row,
     tags: [`task:${row.id}`],

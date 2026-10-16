@@ -68,7 +68,7 @@ function callAccountRpc(args: RpcArgs): Promise<unknown> {
   }
   const call = accountHost.harness
     .callRpc(args.method, args.input ?? null, {
-      experimental_caller: { kind: "plugin", pluginId: "connect" },
+      caller: { kind: "plugin", pluginId: "connect" },
     })
     .then((result) => {
       successfulAccountReads += 1;
@@ -237,7 +237,7 @@ describe("connect on top of bb account", () => {
         await accountHost.harness.callRpc(
           "bb-account.v1.adoptConnectCredential",
           { credential: legacy, baseUrl: stub.apexUrl, replaces: null },
-          { experimental_caller: { kind: "plugin", pluginId: "connect" } },
+          { caller: { kind: "plugin", pluginId: "connect" } },
         );
         release();
         await vi.waitFor(async () =>

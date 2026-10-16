@@ -429,7 +429,7 @@ function IssuesButton() {
 }
 ```
 
-Each handler also receives a context whose `experimental_caller` identifies
+Each handler also receives a context whose `caller` identifies
 the calling plugin; see "Calling another plugin's RPC" in `backend-sdk.md`.
 
 The wire envelope is `{ ok: true, result }` or `{ ok: false, error }`.

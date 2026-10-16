@@ -30,7 +30,7 @@ const TEST_OPTIONS = {
 };
 
 const AS_CONNECT = {
-  experimental_caller: { kind: "plugin", pluginId: "connect" },
+  caller: { kind: "plugin", pluginId: "connect" },
 } as const;
 
 let stub: StubGetbb;
@@ -440,7 +440,7 @@ describe("bb-account.v1.fetch", () => {
 
     expect(
       await host.harness.callRpc(FETCH_METHOD, request, {
-        experimental_caller: { kind: "plugin", pluginId: "bb--mcp" },
+        caller: { kind: "plugin", pluginId: "bb--mcp" },
       }),
     ).toEqual({ status: 200, body: { grants: [] } });
   });
@@ -719,7 +719,7 @@ describe("sign-out, profile refresh, and adoption", () => {
     for (const caller of [
       undefined,
       {
-        experimental_caller: { kind: "plugin", pluginId: "bb-ai" },
+        caller: { kind: "plugin", pluginId: "bb-ai" },
       } as const,
     ]) {
       await expect(
@@ -769,7 +769,7 @@ describe("sign-out, profile refresh, and adoption", () => {
     for (const caller of [
       undefined,
       {
-        experimental_caller: { kind: "plugin", pluginId: "bb-ai" },
+        caller: { kind: "plugin", pluginId: "bb-ai" },
       } as const,
     ]) {
       await expect(
@@ -932,9 +932,9 @@ describe("who may use bb account", () => {
 
     for (const caller of [
       undefined,
-      { experimental_caller: { kind: "client" } } as const,
+      { caller: { kind: "client" } } as const,
       {
-        experimental_caller: { kind: "plugin", pluginId: "bb-ai" },
+        caller: { kind: "plugin", pluginId: "bb-ai" },
       } as const,
     ]) {
       await expect(
@@ -962,7 +962,7 @@ describe("who may use bb account", () => {
     for (const caller of [
       undefined,
       {
-        experimental_caller: { kind: "plugin", pluginId: "bb-ai" },
+        caller: { kind: "plugin", pluginId: "bb-ai" },
       } as const,
     ]) {
       await expect(

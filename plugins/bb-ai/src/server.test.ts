@@ -229,7 +229,7 @@ describe("bb cloud preference", () => {
       host.harness.behavior.callRpc(
         "setEnabled",
         { enabled: true },
-        { experimental_caller: { kind: "plugin", pluginId: "sneaky" } },
+        { caller: { kind: "plugin", pluginId: "sneaky" } },
       ),
     ).rejects.toThrow("only you can turn bb cloud on or off");
     await expect(

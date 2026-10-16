@@ -567,6 +567,23 @@ describe("rpc", () => {
     });
   });
 
+  it("accepts the old experimental_caller names for the RPC caller", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "notes" });
+    const caller = z.union([
+      z.object({ kind: z.literal("plugin"), pluginId: z.string() }),
+      z.object({ kind: z.literal("client") }),
+    ]);
+    bb.rpc.register(
+      defineRpcContract({ whoami: { input: z.null(), output: caller } }),
+      { whoami: (_input, context) => context.experimental_caller },
+    );
+    await expect(
+      harness.callRpc("whoami", null, {
+        experimental_caller: { kind: "plugin", pluginId: "tasks" },
+      }),
+    ).resolves.toEqual({ kind: "plugin", pluginId: "tasks" });
+  });
+
   it("matches production validation, handler, and serialization failures", async () => {
     const { bb, harness } = createFakePluginHost();
     let calls = 0;

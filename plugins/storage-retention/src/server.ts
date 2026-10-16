@@ -81,7 +81,7 @@ export default function plugin(bb: BbPluginApi) {
   );
   bb.rpc.register(storageRpc, {
     async metadata(_input, context) {
-      context.experimental_tag("hosts");
+      context.tag("hosts");
       const [machines, config] = await Promise.all([
         bb.sdk.hosts.list({ type: "persistent" }),
         bb.sdk.system.config(),
@@ -98,11 +98,11 @@ export default function plugin(bb: BbPluginApi) {
     },
     startCleanup: storage.startCleanup,
     hosts: (_input, context) => {
-      context.experimental_tag("hosts");
+      context.tag("hosts");
       return storage.hosts();
     },
     host: (input, context) => {
-      context.experimental_tag("hosts");
+      context.tag("hosts");
       return storage.host(input);
     },
     scanHost: storage.scanHost,
@@ -116,11 +116,11 @@ export default function plugin(bb: BbPluginApi) {
     startClearArchivedFiles: storage.startClearArchivedFiles,
     removeDevInstances: (input) => storage.removeDevInstances(input),
     state: (_input, context) => {
-      context.experimental_tag("state");
+      context.tag("state");
       return service.state();
     },
     preview: (policy, context) => {
-      context.experimental_tag("retention-preview");
+      context.tag("retention-preview");
       return service.preview(policy);
     },
     configure: (policy) => service.configure(policy),

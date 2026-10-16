@@ -890,7 +890,7 @@ export interface PluginRpc {
    * host validates input before invocation and output before strict JSON
    * serialization. The response is `{ ok: true, result }` or
    * `{ ok: false, error: { code, message, issues? } }`. Each handler gets
-   * the call's context as its second argument; `experimental_caller` names
+   * the call's context as its second argument; `caller` names
    * the plugin that called through `bb.sdk.plugins.callRpc`, or `client`.
    */
   register<Contract extends PluginRpcContract>(

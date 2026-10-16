@@ -1041,16 +1041,15 @@ describe("plugin bb.sdk against a running server", () => {
         }),
         {
           read(_input, context) {
-            context.experimental_tag("item:a");
-            context.experimental_provideKeyed("keyed", () => {
+            context.tag("item:a");
+            context.provideKeyed("keyed", () => {
               provisionCount++;
               return { a: { value: providedValue, tags: ["item:a"] } };
             });
             return value;
           },
           keyed({ keys }, context) {
-            for (const key of keys)
-              context.experimental_tagKey(key, `item:${key}`);
+            for (const key of keys) context.tagKey(key, `item:${key}`);
             return Object.fromEntries(keys.map((key) => [key, value]));
           },
         },
@@ -1168,16 +1167,21 @@ describe("plugin bb.sdk against a running server", () => {
         z.object({ kind: z.literal("client") }),
       ]);
       const whoami = vi.fn(
-        (
-          _input: null,
-          context: { experimental_caller: z.infer<typeof callerSchema> },
-        ) => context.experimental_caller,
+        (_input: null, context: { caller: z.infer<typeof callerSchema> }) =>
+          context.caller,
       );
       requireApi(server.pluginService, "callee").rpc.register(
         defineRpcContract({
           whoami: { input: z.null(), output: callerSchema },
+          legacyWhoami: { input: z.null(), output: callerSchema },
         }),
-        { whoami },
+        {
+          whoami,
+          legacyWhoami: (
+            _input: null,
+            context: { experimental_caller: z.infer<typeof callerSchema> },
+          ) => context.experimental_caller,
+        },
       );
       const callerSdk = requireApi(server.pluginService, "caller").sdk;
       const callWhoami = () =>
@@ -1192,6 +1196,14 @@ describe("plugin bb.sdk against a running server", () => {
         kind: "plugin",
         pluginId: "caller",
       });
+      await expect(
+        callerSdk.plugins.callRpc({
+          pluginId: "callee",
+          method: "legacyWhoami",
+          input: null,
+          outputSchema: callerSchema,
+        }),
+      ).resolves.toEqual({ kind: "plugin", pluginId: "caller" });
 
       const cli = await fetch(
         `${server.baseUrl}/api/v1/plugins/callee/rpc/whoami`,

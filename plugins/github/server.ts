@@ -1098,7 +1098,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.rpc.register(githubRpcContract, {
     async status(_input, context) {
-      context.experimental_tag("status");
+      context.tag("status");
       if (ghState !== "ready") {
         try {
           await checkAuth();
@@ -1122,7 +1122,7 @@ export default async function plugin(bb: BbPluginApi) {
     },
 
     async listItems(input, context) {
-      context.experimental_tag(`items:${input.kind}`);
+      context.tag(`items:${input.kind}`);
       return {
         items: listCachedItems({
           kind: input.kind,
@@ -1210,7 +1210,7 @@ export default async function plugin(bb: BbPluginApi) {
     },
 
     async getIssue({ repo, number }, context) {
-      context.experimental_tag(`issue:${repo}#${number}`);
+      context.tag(`issue:${repo}#${number}`);
       const raw = await gh([
         "issue",
         "view",
@@ -1253,7 +1253,7 @@ export default async function plugin(bb: BbPluginApi) {
     },
 
     async getPull({ repo, number }, context) {
-      context.experimental_tag(`pr:${repo}#${number}`);
+      context.tag(`pr:${repo}#${number}`);
       const prFields =
         "number,title,body,state,isDraft,author,createdAt,updatedAt,labels," +
         "assignees,url,baseRefName,headRefName,additions,deletions," +
@@ -1473,13 +1473,13 @@ export default async function plugin(bb: BbPluginApi) {
     },
 
     async pullForThread({ threadId }, context) {
-      context.experimental_tag("links", `thread:${threadId}`);
+      context.tag("links", `thread:${threadId}`);
       let environmentId: string | null = null;
       try {
         const thread = await bb.sdk.threads.get({ threadId });
         if (thread?.environmentId) {
           environmentId = thread.environmentId;
-          context.experimental_tag(`environment:${environmentId}`);
+          context.tag(`environment:${environmentId}`);
           const result = await bb.sdk.environments.pullRequest({
             environmentId: thread.environmentId,
           });
@@ -1561,7 +1561,7 @@ export default async function plugin(bb: BbPluginApi) {
     },
 
     async listLinks(_input, context) {
-      context.experimental_tag("links");
+      context.tag("links");
       return { links: await listAllLinks() };
     },
   });

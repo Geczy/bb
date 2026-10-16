@@ -1695,7 +1695,7 @@ export default async function plugin(
   const handlers: PluginRpcHandlers<typeof docsRpcContract> = {
     async readProposal(input, context) {
       const id = getVault(input.vaultId).id;
-      context?.experimental_tag(
+      context?.tag(
         `vault:${id}`,
         `proposal:${id}:${input.path}`,
         ...pathTags(id, requireVaultPath(input.path)),
@@ -1812,13 +1812,13 @@ export default async function plugin(
     },
     async listNotes(input, context) {
       const id = getVault(input.vaultId).id;
-      context?.experimental_tag("vaults", `vault:${id}`, `notes:${id}`);
+      context?.tag("vaults", `vault:${id}`, `notes:${id}`);
       return notebookData(input.vaultId);
     },
     async readNote(input, context) {
       const id = getVault(input.vaultId).id;
       const relativePath = requireVaultPath(input.path);
-      context?.experimental_tag(
+      context?.tag(
         `vault:${id}`,
         `note:${id}:${relativePath}`,
         ...pathTags(id, relativePath),
@@ -2005,7 +2005,7 @@ export default async function plugin(
         rootPath: vault.rootPath,
       });
       const tag = `preview:${vault.id}:${relativePath}`;
-      context?.experimental_tag(
+      context?.tag(
         `vault:${vault.id}`,
         tag,
         ...pathTags(vault.id, relativePath),
