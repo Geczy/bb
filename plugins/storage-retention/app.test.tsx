@@ -23,7 +23,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function fixture(subPath = "host_test") {
+function fixture(subPath = "host_test", metadataError: Error | null = null) {
   let state: State = {
     policy: {
       archiveAfterDays: null,
@@ -94,6 +94,20 @@ function fixture(subPath = "host_test") {
     }),
   );
   const start = vi.fn(async () => null);
+  const readState = vi.fn(() => state);
+  const metadata = vi.fn(async () => {
+    if (metadataError) throw metadataError;
+    return {
+      machines: [
+        makeHostResponse({
+          id: "host_test",
+          name: "Test machine",
+          status: "connected",
+        }),
+      ],
+      primaryHostId: "host_test",
+    };
+  });
   const Component = app.navPanels[0]!.component;
   const slot = renderSlot<{ subPath: string }>(
     {
@@ -106,8 +120,12 @@ function fixture(subPath = "host_test") {
     },
     { subPath },
     {
+      experimental_rpcTags: (method) => ({
+        tags: method === "state" ? ["state"] : ["hosts"],
+      }),
       rpc: {
-        state: () => state,
+        state: readState,
+        metadata,
         configure: (input) => configure(policySchema.parse(input)),
         hosts: reports,
         removeDevInstances: (input) =>
@@ -119,13 +137,7 @@ function fixture(subPath = "host_test") {
       sdk: {
         subscribe: () => () => {},
         hosts: {
-          list: async () => [
-            makeHostResponse({
-              id: "host_test",
-              name: "Test machine",
-              status: "connected",
-            }),
-          ],
+          list: async () => (await metadata()).machines,
         },
         system: {
           config: async () => makeSystemConfig({ primaryHostId: "host_test" }),
@@ -133,7 +145,16 @@ function fixture(subPath = "host_test") {
       },
     },
   );
-  return { slot, configure, remove, start, hosts, reports };
+  return {
+    slot,
+    configure,
+    remove,
+    start,
+    hosts,
+    reports,
+    metadata,
+    readState,
+  };
 }
 
 it("stops a running development instance only after the user confirms stop and remove", async () => {
@@ -471,3 +492,77 @@ it.each([
     );
   },
 );
+
+it("shows metadata failures and lets Retry recover the first load", async () => {
+  const { slot, metadata } = fixture(
+    "host_test",
+    new Error("Metadata unavailable"),
+  );
+  await slot.findByText("Metadata unavailable");
+  metadata.mockResolvedValue({
+    machines: [
+      makeHostResponse({
+        id: "host_test",
+        name: "Recovered machine",
+        status: "connected",
+      }),
+    ],
+    primaryHostId: "host_test",
+  });
+  fireEvent.click(slot.getByRole("button", { name: "Try again" }));
+  await slot.findByText("Recovered machine");
+  await waitFor(() =>
+    expect(slot.queryByText("Metadata unavailable")).toBeNull(),
+  );
+});
+
+it("refreshes metadata when reports are unchanged and keeps loaded content on metadata failure", async () => {
+  const { slot, metadata, reports } = fixture("");
+  await slot.findByText("Test machine");
+  const before = reports.mock.calls.length;
+  metadata.mockResolvedValue({
+    machines: [
+      makeHostResponse({
+        id: "host_test",
+        name: "Renamed machine",
+        status: "disconnected",
+      }),
+    ],
+    primaryHostId: "host_test",
+  });
+  await slot.experimental_invalidateRpc(["hosts"]);
+  await slot.findByText("Renamed machine");
+  expect(reports.mock.calls.length).toBeGreaterThan(before);
+  expect(slot.getByText("Offline")).toBeTruthy();
+  const policy = slot.getByRole("switch", {
+    name: "Delete thread storage on archive",
+  });
+  metadata.mockRejectedValue(new Error("Metadata refresh failed"));
+  await slot.experimental_invalidateRpc(["hosts"]);
+  await slot.findByText("Metadata refresh failed");
+  expect(
+    slot.getByRole("switch", { name: "Delete thread storage on archive" }),
+  ).toBe(policy);
+});
+
+it("keeps retention controls mounted on policy refresh failure and clears the error on Retry", async () => {
+  const { slot, readState } = fixture("");
+  const policy = await slot.findByRole("switch", {
+    name: "Delete thread storage on archive",
+  });
+  readState.mockImplementationOnce(() => {
+    throw new Error("Policy refresh failed");
+  });
+  await slot.experimental_invalidateRpc(["state"]);
+  await slot.findByText("Policy refresh failed");
+  expect(
+    slot.getByRole("switch", { name: "Delete thread storage on archive" }),
+  ).toBe(policy);
+  fireEvent.click(slot.getByRole("button", { name: "Try again" }));
+  await waitFor(() =>
+    expect(slot.queryByText("Policy refresh failed")).toBeNull(),
+  );
+  expect(
+    slot.getByRole("switch", { name: "Delete thread storage on archive" }),
+  ).toBe(policy);
+});

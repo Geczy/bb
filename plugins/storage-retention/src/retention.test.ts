@@ -145,6 +145,9 @@ describe("retention plugin", () => {
       expect(saved.exitCode).toBe(0);
       await host.harness.runSchedule("retention");
       expect(host.harness.sdk.callsTo("threads.archive")).toHaveLength(1);
+      expect(host.harness.inspection.rpcInvalidations.at(-1)).toContain(
+        "hosts",
+      );
       expect(await host.harness.callRpc("state", null)).toMatchObject({
         policy: { archiveAfterDays: 30, deleteAfterDays: null },
         lastRun: { archivedCount: 1 },

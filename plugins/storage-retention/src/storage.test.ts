@@ -2218,3 +2218,28 @@ it("automatically removes missing-checkout data only when enabled and online, re
     await worker.experimental_dispose();
   }
 });
+
+it("invalidates reports and metadata for host rename and disconnect events", async () => {
+  const host = createFakePluginHost({ pluginId: "storage-retention" });
+  try {
+    plugin(host.bb);
+    host.harness.behavior.runService("development-storage-recovery");
+    for (const changes of [
+      ["host-connected"],
+      ["host-disconnected"],
+    ] as const) {
+      const before = host.harness.inspection.rpcInvalidations.length;
+      host.harness.sdk.emitRealtime("host:changed", {
+        type: "changed",
+        entity: "host",
+        id: "host_test",
+        changes,
+      });
+      expect(
+        host.harness.inspection.rpcInvalidations.slice(before).flat(),
+      ).toContain("hosts");
+    }
+  } finally {
+    await host.harness.dispose();
+  }
+});

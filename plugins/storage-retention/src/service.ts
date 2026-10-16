@@ -108,7 +108,7 @@ export function createService(bb: BbPluginApi) {
       }
       if (!disposed) {
         await bb.storage.kv.set("lastRun", run);
-        bb.rpc.experimental_invalidate(["state", "retention-preview"]);
+        bb.rpc.experimental_invalidate(["state", "retention-preview", "hosts"]);
       }
     } finally {
       running = false;

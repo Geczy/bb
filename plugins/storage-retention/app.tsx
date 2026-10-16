@@ -15,7 +15,6 @@ import {
   useBbNavigate,
   experimental_useRpcQuery,
   useRpc,
-  useSdk,
   type PluginNavPanelProps,
 } from "@get-bb/plugin-sdk/app";
 import { DatabaseRestoreIcon } from "./icons/database-restore.js";
@@ -45,7 +44,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { storageRpc, State, Policy } from "./src/contract.js";
+import type {
+  storageRpc,
+  State,
+  Policy,
+  HostMetadata,
+} from "./src/contract.js";
 import {
   LARGE_FILE_MIN_BYTES,
   LARGE_FILE_NUDGE_MIN_BYTES,
@@ -54,9 +58,7 @@ import {
 type HostReport = import("./src/storage-types.js").HostStorageResponse;
 type Hosts = import("./src/storage-types.js").HostStorageListResponse["hosts"];
 type LargeFileTotals = NonNullable<HostReport["report"]>["archivedLargeFiles"];
-type Machine = Awaited<
-  ReturnType<ReturnType<typeof useSdk>["hosts"]["list"]>
->[number];
+type Machine = HostMetadata["machines"][number];
 const PANEL = "storage";
 const ARCHIVE_PRESETS = [7, 14, 30, 60, 90, 180, 365];
 const DELETE_PRESETS = [7, 30, 90, 180, 365];
@@ -150,7 +152,6 @@ type StorageData = {
 
 function StoragePanel(props: PluginNavPanelProps) {
   const rpc = useRpc<typeof storageRpc>();
-  const sdk = useSdk();
   const stateQuery = experimental_useRpcQuery<typeof storageRpc, "state">({
     method: "state",
     input: null,
@@ -159,44 +160,39 @@ function StoragePanel(props: PluginNavPanelProps) {
     method: "hosts",
     input: null,
   });
-  const [hostMetadata, setHostMetadata] = useState<
-    Pick<StorageData, "machines" | "primaryHostId">
-  >({ machines: {}, primaryHostId: null });
-  useEffect(() => {
-    let disposed = false;
-    Promise.all([sdk.hosts.list({ type: "persistent" }), sdk.system.config()])
-      .then(([machines, config]) => {
-        if (!disposed)
-          setHostMetadata({
-            machines: Object.fromEntries(
-              machines.map((host) => [host.id, host]),
-            ),
-            primaryHostId: config.primaryHostId,
-          });
-      })
-      .catch(() => {});
-    return () => {
-      disposed = true;
-    };
-  }, [sdk, hostsQuery.data]);
+  const metadataQuery = experimental_useRpcQuery<typeof storageRpc, "metadata">(
+    {
+      method: "metadata",
+      input: null,
+    },
+  );
   const data = useMemo<StorageData | null>(
     () =>
-      stateQuery.data === undefined || hostsQuery.data === undefined
+      stateQuery.data === undefined ||
+      hostsQuery.data === undefined ||
+      metadataQuery.data === undefined
         ? null
         : {
             state: stateQuery.data,
             hosts: hostsQuery.data.hosts,
-            ...hostMetadata,
+            machines: Object.fromEntries(
+              metadataQuery.data.machines.map((host) => [host.id, host]),
+            ),
+            primaryHostId: metadataQuery.data.primaryHostId,
           },
-    [stateQuery.data, hostsQuery.data, hostMetadata],
+    [stateQuery.data, hostsQuery.data, metadataQuery.data],
   );
   const loadError =
-    stateQuery.error?.message ?? hostsQuery.error?.message ?? null;
+    stateQuery.error?.message ??
+    hostsQuery.error?.message ??
+    metadataQuery.error?.message ??
+    null;
   const refetchState = stateQuery.refetch;
   const refetchHosts = hostsQuery.refetch;
+  const refetchMetadata = metadataQuery.refetch;
   const refresh = useCallback(async () => {
-    await Promise.all([refetchState(), refetchHosts()]);
-  }, [refetchState, refetchHosts]);
+    await Promise.all([refetchState(), refetchHosts(), refetchMetadata()]);
+  }, [refetchState, refetchHosts, refetchMetadata]);
   const previousJobs = useRef(new Map<string, string>());
   useEffect(() => {
     for (const host of data?.hosts ?? []) {

@@ -35,7 +35,20 @@ export const previewSchema = z.object({
 });
 export type Preview = z.infer<typeof previewSchema>;
 const machineInput = z.object({ hostId: z.string().min(1) }).strict();
+const hostMetadataSchema = z.object({
+  machines: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      status: z.enum(["connected", "disconnected"]),
+      lastSeenAt: z.number().nullable(),
+    }),
+  ),
+  primaryHostId: z.string().nullable(),
+});
+export type HostMetadata = z.infer<typeof hostMetadataSchema>;
 export const storageRpc = defineRpcContract({
+  metadata: { input: z.null(), output: hostMetadataSchema },
   startCleanup: {
     input: z
       .object({
