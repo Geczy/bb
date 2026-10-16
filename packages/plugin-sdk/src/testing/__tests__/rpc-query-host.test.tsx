@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { focusManager, QueryClient } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -920,69 +920,4 @@ describe("invalidation while a read is in flight", () => {
       expect(mounted.result.current.data).toEqual({ a: 1, b: 2 }),
     );
   });
-});
-
-describe("failed reads", () => {
-  afterEach(() => {
-    focusManager.setFocused(undefined);
-    vi.useRealTimers();
-  });
-
-  it.each(["plain", "keyed"] as const)(
-    "%s read retries with backoff only while visible, keeping data and clearing the error",
-    async (kind) => {
-      vi.useFakeTimers({ shouldAdvanceTime: true });
-      const outcomes: Array<number | Error> = [
-        1,
-        new Error("offline"),
-        new Error("offline"),
-        2,
-      ];
-      let calls = 0;
-      const { hooks, queryClient } = setup(async () => {
-        const outcome = outcomes[calls++] ?? 2;
-        if (outcome instanceof Error) throw outcome;
-        return kind === "plain"
-          ? { result: outcome, tags: ["item:a"] }
-          : { result: { a: outcome }, tags: [], keyTags: { a: ["item:a"] } };
-      });
-      const mounted = renderHook(() => {
-        const query =
-          kind === "plain"
-            ? hooks.experimental_useRpcQuery<typeof contract, "read">({
-                method: "read",
-                input: { id: "a" },
-              })
-            : hooks.experimental_useRpcKeyedQuery<number>({
-                method: "keyed",
-                keys: ["a"],
-              });
-        const data: unknown = query.data;
-        return {
-          value: kind === "plain" ? data : (data as Record<string, number>).a,
-          error: query.error?.message ?? null,
-        };
-      });
-      await waitFor(() => expect(mounted.result.current.value).toBe(1));
-      act(() => invalidateRpcQueries(queryClient, "producer", ["item:a"]));
-      await waitFor(() =>
-        expect(mounted.result.current).toEqual({ value: 1, error: "offline" }),
-      );
-      expect(calls).toBe(2);
-      await act(() => vi.advanceTimersByTimeAsync(5_000));
-      await waitFor(() => expect(calls).toBe(3));
-      act(() => focusManager.setFocused(false));
-      await act(() => vi.advanceTimersByTimeAsync(30_000));
-      expect(calls).toBe(3);
-      expect(mounted.result.current).toEqual({ value: 1, error: "offline" });
-      act(() => focusManager.setFocused(true));
-      await act(() => vi.advanceTimersByTimeAsync(10_000));
-      await waitFor(() =>
-        expect(mounted.result.current).toEqual({ value: 2, error: null }),
-      );
-      expect(calls).toBe(4);
-      await act(() => vi.advanceTimersByTimeAsync(120_000));
-      expect(calls).toBe(4);
-    },
-  );
 });

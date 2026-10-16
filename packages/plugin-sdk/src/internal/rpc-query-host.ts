@@ -104,17 +104,6 @@ const inflightTags = new WeakMap<Query, Set<string>>();
 const overlaps = (tags: readonly string[], missed: ReadonlySet<string>) =>
   tags.some((tag) => missed.has(tag));
 const seedGenerations = new WeakMap<QueryClient, Map<string, number>>();
-const errorBaselines = new WeakMap<Query<Envelope, Error, Envelope>, number>();
-function retryFailedRead(
-  query: Query<Envelope, Error, Envelope>,
-): number | false {
-  if (query.state.status === "success")
-    errorBaselines.set(query, query.state.errorUpdateCount);
-  if (query.state.status !== "error") return false;
-  const failures =
-    query.state.errorUpdateCount - (errorBaselines.get(query) ?? 0);
-  return Math.min(60_000, 5_000 * 2 ** Math.max(0, failures - 1));
-}
 const readOwners = new WeakMap<QueryClient, Map<string, number>>();
 const dormantReads = new WeakMap<QueryClient, Set<string>>();
 
@@ -361,7 +350,6 @@ function createKeyedOwner(
     queryKey,
     enabled: true,
     staleTime: Infinity,
-    refetchInterval: retryFailedRead,
     queryFn: () =>
       runPluginRpcRead(host.queryClient, queryKey, async () => {
         let requested: string[];
@@ -730,7 +718,6 @@ function createReadQuery(
   const options = {
     queryKey,
     staleTime: Infinity,
-    refetchInterval: retryFailedRead,
     queryFn: async () => {
       let generation = 0;
       const response = await runPluginRpcRead(

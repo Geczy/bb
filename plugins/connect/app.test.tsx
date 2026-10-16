@@ -197,14 +197,11 @@ describe("connect settings section", () => {
     vi.useFakeTimers();
     await act(async () => fireEvent.click(signIn));
     expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
-    await act(async () => vi.advanceTimersByTimeAsync(4_000));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
     expect(polls()).toBe(1);
-    await act(async () => vi.advanceTimersByTimeAsync(56_000));
-    expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
-    expect(polls()).toBe(4);
     await slot.experimental_invalidateRpc(undefined, "bb-account");
     await act(async () => vi.advanceTimersByTimeAsync(0));
-    expect(polls()).toBe(5);
+    expect(polls()).toBe(2);
   });
 
   it("explains when the bb account plugin is off", async () => {
