@@ -41,6 +41,7 @@ let blockedAccountReads = 0;
 let successfulAccountReads = 0;
 let credentialReads = 0;
 let failCredentialRead: number | null = null;
+let forwardInvalidations = true;
 let tunnelService: { controller: AbortController; done: Promise<void> } | null =
   null;
 
@@ -109,13 +110,15 @@ async function loadBoth(
     },
   });
   const stopInvalidations = accountHost.harness.experimental_onRpcInvalidation(
-    (tags) =>
+    (tags) => {
+      if (!forwardInvalidations) return;
       connectHost.harness.sdk.emitRealtime("plugin:changed", {
         type: "changed",
         entity: "plugin",
         id: "bb-account",
         tags: tags === null ? null : [...tags],
-      }),
+      });
+    },
   );
   connectHost.bb.onDispose(stopInvalidations);
   await seedConnect?.(connectHost);
@@ -174,6 +177,7 @@ beforeEach(async () => {
   successfulAccountReads = 0;
   credentialReads = 0;
   failCredentialRead = null;
+  forwardInvalidations = true;
 });
 
 afterEach(async () => {
@@ -188,6 +192,66 @@ afterEach(async () => {
 });
 
 describe("connect on top of bb account", () => {
+  it.each([false, true])(
+    "reads status after an idempotent credential adoption without another invalidation (queued duplicate: %s)",
+    async (duplicate) => {
+      const legacy = stub.issueCredential();
+      const apexPort = new URL(stub.apexUrl).port;
+      await loadBoth((seeded) =>
+        seeded.bb.storage.kv.set(CREDENTIAL_COPY_KV_KEY, {
+          serverUrl: `http://sawyer-desktop.localhost:${apexPort}`,
+          handle: "sawyer-desktop",
+          credential: legacy,
+        }),
+      );
+      let release!: () => void;
+      const blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const get = connectHost.bb.storage.kv.get;
+      const read = vi.spyOn(connectHost.bb.storage.kv, "get");
+      let readingCopy = false;
+      read.mockImplementation(async (key) => {
+        if (key === CREDENTIAL_COPY_KV_KEY) {
+          readingCopy = true;
+          await blocked;
+        }
+        return get(key);
+      });
+      try {
+        startTunnel();
+        await vi.waitFor(() => expect(readingCopy).toBe(true));
+        if (duplicate) {
+          const reads = successfulAccountReads;
+          connectHost.harness.sdk.emitRealtime("plugin:changed", {
+            type: "changed",
+            entity: "plugin",
+            id: "bb-account",
+            tags: null,
+          });
+          await vi.waitFor(() =>
+            expect(successfulAccountReads).toBeGreaterThan(reads),
+          );
+        }
+        forwardInvalidations = false;
+        await accountHost.harness.callRpc(
+          "bb-account.v1.adoptConnectCredential",
+          { credential: legacy, baseUrl: stub.apexUrl, replaces: null },
+          { experimental_caller: { kind: "plugin", pluginId: "connect" } },
+        );
+        release();
+        await vi.waitFor(async () =>
+          expect((await connectStatus()).paired).toBe(true),
+        );
+        await waitForConnected(1);
+        expect(stub.tunnelDials[0]?.authorization).toBe(`Bearer ${legacy}`);
+      } finally {
+        release();
+        read.mockRestore();
+      }
+    },
+  );
+
   it("keeps the live tunnel through a server move freeze and resumes account polling", async () => {
     await loadBoth();
     await signInAccount();
