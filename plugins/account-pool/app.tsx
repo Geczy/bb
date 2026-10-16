@@ -1149,10 +1149,12 @@ function AccountPoolSettings() {
       return;
     }
     await run(`${action}-${account.id}`, async () => {
-      if (action === "toggle")
+      if (action === "toggle") {
         await rpc.call(account.enabled ? "account.disable" : "account.enable", {
           id: account.id,
         });
+        await refresh();
+      }
       if (action === "refresh")
         await rpc.call("account.refreshUsage", { accountId: account.id });
     });

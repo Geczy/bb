@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { accountSchema } from "./src/contracts.js";
 import type {
   AccountPoolConfig,
   AccountSummary,
@@ -898,3 +899,53 @@ it("clears a routing error after an unchanged successful read", async () => {
     expect(slot.queryByText("Routing unavailable")).toBeNull(),
   );
 });
+
+it.each([true, false])(
+  "keeps account actions pending until the enable/disable status refresh arrives (enabled=%s)",
+  async (enabled) => {
+    const next = deferred<PoolStatus>();
+    const initial = account({
+      enabled,
+      status: enabled ? "ready" : "disabled",
+    });
+    const updated = account({
+      enabled: !enabled,
+      status: enabled ? "disabled" : "ready",
+    });
+    const result = { account: accountSchema.strip().parse(updated) };
+    let changed = false;
+    const slot = render([initial], {
+      "status.get": () => (changed ? next.promise : status([initial])),
+      [enabled ? "account.disable" : "account.enable"]: () => {
+        changed = true;
+        return result;
+      },
+    });
+    const menu = await slot.findByRole("button", {
+      name: "person@example.com actions",
+    });
+    fireEvent.pointerDown(menu);
+    fireEvent.click(
+      await slot.findByRole("menuitem", {
+        name: enabled ? "Disable" : "Enable",
+      }),
+    );
+    await slot.experimental_invalidateRpc(["accounts"]);
+    try {
+      fireEvent.pointerDown(menu);
+      const stale = await slot.findByRole("menuitem", {
+        name: enabled ? "Disable" : "Enable",
+      });
+      expect(stale.getAttribute("aria-disabled")).toBe("true");
+    } finally {
+      await act(async () => next.resolve(status([updated])));
+    }
+    await waitFor(() =>
+      expect(
+        slot
+          .getByRole("menuitem", { name: enabled ? "Enable" : "Disable" })
+          .getAttribute("aria-disabled"),
+      ).not.toBe("true"),
+    );
+  },
+);
