@@ -2219,7 +2219,7 @@ it("automatically removes missing-checkout data only when enabled and online, re
   }
 });
 
-it("invalidates reports and metadata for host rename and disconnect events", async () => {
+it("invalidates reports and metadata for host connect and disconnect events", async () => {
   const host = createFakePluginHost({ pluginId: "storage-retention" });
   try {
     plugin(host.bb);
