@@ -10,6 +10,7 @@ import type { threadListRpcContract } from "../../server.js";
 import {
   applyRemotePreferenceSignal,
   attachPreferencesStore,
+  attachPreferencesRpc,
   hydratePreferences,
   hydratePreferencesFromMirror,
   preferencesReadyAtom,
@@ -31,6 +32,7 @@ export function usePreferencesSync(): void {
   const pluginId = experimental_usePluginId();
   useEffect(() => {
     attachPreferencesStore(store, pluginId);
+    attachPreferencesRpc(rpc);
     syncOwnerCount += 1;
     if (syncOwnerCount === 1) {
       hydratePreferencesFromMirror();
@@ -38,7 +40,7 @@ export function usePreferencesSync(): void {
     return () => {
       syncOwnerCount -= 1;
     };
-  }, [pluginId, store]);
+  }, [pluginId, store, rpc]);
   useEffect(() => {
     if (query.data === undefined) return;
     void hydratePreferences(rpc, query.data);

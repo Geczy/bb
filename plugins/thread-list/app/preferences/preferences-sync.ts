@@ -178,6 +178,10 @@ export function hydratePreferencesFromMirror(): boolean {
   return true;
 }
 
+export function attachPreferencesRpc(rpc: PreferencesRpc): void {
+  state.rpc = rpc;
+}
+
 export async function hydratePreferences(
   rpc: PreferencesRpc,
   snapshot?: unknown,

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
   fireEvent,
   screen,
@@ -16,6 +17,7 @@ import {
 } from "@get-bb/plugin-sdk/testing/app";
 import { makePluginProject, makeSidebarThread } from "./app/model/fixtures.js";
 import {
+  schedulePreferenceWrite,
   resetPreferencesSyncForTest,
   setPreferencesMirrorStorageForTest,
 } from "./app/preferences/preferences-sync.js";
@@ -394,4 +396,25 @@ describe("thread-list plugin", () => {
     link.click();
     await waitFor(() => expect(listProps.onNavigate).toHaveBeenCalledOnce());
   });
+});
+
+it("writes preferences while the initial read is still pending", async () => {
+  setPreferencesMirrorStorageForTest(null);
+  const write = vi.fn(async (input: unknown) => input);
+  const slot = renderSlot(registration, props(), {
+    rpc: {
+      listPreferences: () => new Promise(() => {}),
+      setPreference: write,
+    },
+  });
+  await act(async () => {
+    schedulePreferenceWrite("organizationMode", "project");
+  });
+  await waitFor(() =>
+    expect(write).toHaveBeenCalledWith({
+      key: "organizationMode",
+      value: "project",
+    }),
+  );
+  slot.lifecycle.unmount();
 });
