@@ -162,9 +162,10 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     { value: UsageMeasurement; loadedAt: number }
   >();
   const failures = new Map<string, number>();
+  const resourceGenerations = new Map<string, number>();
   const pending = new Map<
     string,
-    { force: boolean; promise: Promise<UsageMeasurement> }
+    { force: boolean; generation: number; promise: Promise<UsageMeasurement> }
   >();
   const keyOf = (pluginId: string, resourceId: string) =>
     JSON.stringify([pluginId, resourceId]);
@@ -174,8 +175,9 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     force: boolean,
   ): Promise<UsageMeasurement> => {
     const key = keyOf(pluginId, resourceId);
+    const generation = resourceGenerations.get(key) ?? 0;
     const running = pending.get(key);
-    if (running) {
+    if (running?.generation === generation) {
       if (!force || running.force) return running.promise;
       await running.promise.catch(() => undefined);
       return fetchResource(pluginId, resourceId, force);
@@ -186,18 +188,27 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
         method: usageFetchMethod,
         input: { resourceId, refresh: force },
         outputSchema: usageSourceRpcContract[usageFetchMethod].output,
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(45_000)]),
       })
       .then((raw) => {
         const value = normalizeUsageMeasurement(raw);
         if (value.usage.status === "error")
           throw new Error("Usage could not be refreshed.");
-        measurements.set(key, { value, loadedAt: Date.now() });
-        failures.delete(key);
+        if ((resourceGenerations.get(key) ?? 0) === generation) {
+          measurements.set(key, { value, loadedAt: Date.now() });
+          failures.delete(key);
+        }
         return value;
       })
-      .finally(() => pending.delete(key));
-    pending.set(key, { force, promise });
+      .catch((error) => {
+        if ((resourceGenerations.get(key) ?? 0) === generation)
+          failures.set(key, Date.now());
+        throw error;
+      })
+      .finally(() => {
+        if (pending.get(key)?.promise === promise) pending.delete(key);
+      });
+    pending.set(key, { force, generation, promise });
     return promise;
   };
   let sources: Awaited<
@@ -205,12 +216,29 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
   > = [];
   let inventoryUpdatedAt: number | null = null;
   let discoveryGeneration = 0;
+  let discoveryError: Error | null = null;
   let inventoryPending: Promise<void> | null = null;
   const lifetime = new AbortController();
-  bb.onDispose(() => lifetime.abort());
+  bb.onDispose(() => {
+    lifetime.abort();
+    for (const stop of sourceStops.values()) stop();
+    sourceStops.clear();
+  });
   const sourceStops = new Map<string, () => void>();
   const sourceReady = new Map<string, Promise<void>>();
   const sourceGenerations = new Map<string, number>();
+  const evictResources = (
+    pluginId: string,
+    next: UsageResourceList["resources"],
+  ) => {
+    for (const resource of inventories.get(pluginId)?.resources ?? []) {
+      if (next.some((item) => item.id === resource.id)) continue;
+      const key = keyOf(pluginId, resource.id);
+      resourceGenerations.set(key, (resourceGenerations.get(key) ?? 0) + 1);
+      measurements.delete(key);
+      failures.delete(key);
+    }
+  };
   const acceptInventory = (pluginId: string, inventory: UsageResourceList) => {
     if (!sources.some((source) => source.pluginId === pluginId)) return;
     const next = {
@@ -221,6 +249,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     };
     if (JSON.stringify(inventories.get(pluginId)) === JSON.stringify(next))
       return;
+    evictResources(pluginId, inventory.resources);
     inventories.set(pluginId, next);
     bb.rpc.experimental_invalidate(["inventory"]);
   };
@@ -228,49 +257,64 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
     sourceStops.get(id)?.();
     const generation = (sourceGenerations.get(id) ?? 0) + 1;
     sourceGenerations.set(id, generation);
-    let ready!: () => void;
+    const controller = new AbortController();
+    let settle!: () => void;
+    let timer: ReturnType<typeof setTimeout>;
+    const ready = () => {
+      clearTimeout(timer);
+      settle();
+    };
+    const onError = () => {
+      if (
+        sourceGenerations.get(id) === generation &&
+        sources.some((source) => source.pluginId === id)
+      ) {
+        const old = inventories.get(id);
+        inventories.set(id, {
+          pluginId: id,
+          label: old?.label ?? null,
+          resources: old?.resources ?? [],
+          error: "Usage resources could not be listed.",
+        });
+        bb.rpc.experimental_invalidate(["inventory"]);
+      }
+      ready();
+    };
     sourceReady.set(
       id,
       new Promise<void>((resolve) => {
-        ready = resolve;
+        settle = resolve;
       }),
     );
+    timer = setTimeout(() => {
+      controller.abort();
+      onError();
+    }, 45_000);
     const stop = bb.sdk.plugins.experimental_watchRpc({
       pluginId: id,
       method: usageListMethod,
       input: {},
       outputSchema: usageSourceRpcContract[usageListMethod].output,
-      signal: lifetime.signal,
+      signal: AbortSignal.any([lifetime.signal, controller.signal]),
       onChange: (inventory) => {
         if (sourceGenerations.get(id) === generation)
           acceptInventory(id, inventory);
         ready();
       },
-      onError: () => {
-        if (
-          sourceGenerations.get(id) === generation &&
-          sources.some((source) => source.pluginId === id)
-        ) {
-          const old = inventories.get(id);
-          inventories.set(id, {
-            pluginId: id,
-            label: old?.label ?? null,
-            resources: old?.resources ?? [],
-            error: "Usage resources could not be listed.",
-          });
-          bb.rpc.experimental_invalidate(["inventory"]);
-        }
-        ready();
-      },
+      onError,
     });
     sourceStops.set(id, () => {
+      controller.abort();
       stop();
       ready();
     });
   };
   const updateSources = (next: typeof sources) => {
     discoveryGeneration++;
-    const changed = JSON.stringify(sources) !== JSON.stringify(next);
+    const changed =
+      discoveryError !== null ||
+      JSON.stringify(sources) !== JSON.stringify(next);
+    discoveryError = null;
     sources = next;
     const ids = new Set(next.map((source) => source.pluginId));
     for (const [id, stop] of sourceStops)
@@ -279,10 +323,22 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
         sourceStops.delete(id);
         sourceReady.delete(id);
         sourceGenerations.set(id, (sourceGenerations.get(id) ?? 0) + 1);
+        evictResources(id, []);
         inventories.delete(id);
       }
     for (const id of ids) if (!sourceStops.has(id)) startSource(id);
     if (changed) bb.rpc.experimental_invalidate(["inventory"]);
+  };
+  const waitForSources = async () => {
+    let generation: number;
+    do {
+      generation = discoveryGeneration;
+      await Promise.all(
+        sources.map((source) => sourceReady.get(source.pluginId)),
+      );
+      lifetime.signal.throwIfAborted();
+      if (discoveryError) throw discoveryError;
+    } while (generation !== discoveryGeneration);
   };
   const reconcileInventory = (): Promise<void> => {
     if (inventoryPending) return inventoryPending;
@@ -293,12 +349,12 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
         method: usageListMethod,
         signal: lifetime.signal,
       });
+      lifetime.signal.throwIfAborted();
       if (started === discoveryGeneration) updateSources(discovered);
+      if (discoveryError) throw discoveryError;
       for (const source of sources)
         if (existing.has(source.pluginId)) startSource(source.pluginId);
-      await Promise.all(
-        sources.map((source) => sourceReady.get(source.pluginId)),
-      );
+      await waitForSources();
       inventoryUpdatedAt = Date.now();
     })().finally(() => {
       inventoryPending = null;
@@ -322,6 +378,12 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
         method: usageListMethod,
         signal,
         onChange: updateSources,
+        onError: (error) => {
+          discoveryGeneration++;
+          discoveryError = error;
+          inventoryUpdatedAt = null;
+          bb.rpc.experimental_invalidate(["inventory"]);
+        },
       });
       try {
         if (!signal.aborted)
@@ -340,6 +402,8 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
   const readUsage = async (request: UsageRequest): Promise<UsageSnapshot> => {
     if (
       request.force ||
+      discoveryError !== null ||
+      inventoryPending !== null ||
       inventoryUpdatedAt === null ||
       Date.now() - inventoryUpdatedAt >= 5 * 60_000
     )
@@ -358,6 +422,7 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
         .catch(() => []),
       bb.sdk.system.config().catch(() => null),
     ]);
+    await waitForSources();
     hosts.sort(
       (a, b) =>
         Number(b.id === config?.primaryHostId) -
@@ -411,11 +476,11 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
               request.maxAgeMs
           )
             return;
-          try {
-            await fetchResource(source.pluginId, resource.id, request.force);
-          } catch {
-            failures.set(key, Date.now());
-          }
+          await fetchResource(
+            source.pluginId,
+            resource.id,
+            request.force,
+          ).catch(() => undefined);
         }),
       );
     }
