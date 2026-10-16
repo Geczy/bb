@@ -1035,14 +1035,27 @@ function IssueDetailView({
       .finally(() => setPosting(false));
   }, [rpc, repo, number, comment]);
 
-  if (error !== null) return <EmptyState message={error} />;
+  const errorBanner =
+    error === null ? null : (
+      <div
+        role="alert"
+        className="flex items-center gap-3 text-sm text-destructive"
+      >
+        <span>{error}</span>
+        <Button size="sm" variant="outline" onClick={() => void load()}>
+          Retry
+        </Button>
+      </div>
+    );
   if (detail === null) {
+    if (errorBanner !== null) return errorBanner;
     return <DetailSkeleton />;
   }
 
   const issueLinks = links[`issue:${repo}#${number}`];
   return (
     <div className="@container/github-detail flex flex-col gap-4">
+      {errorBanner}
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onBack}>
           ← Issues
@@ -1936,12 +1949,20 @@ function NewIssueForm({
   );
 }
 
-function useStatus(): { status: Status | null; refetch: () => void } {
+function useStatus(): {
+  status: Status | null;
+  error: string | null;
+  refetch: () => Promise<void>;
+} {
   const query = experimental_useRpcQuery<typeof githubRpcContract, "status">({
     method: "status",
     input: null,
   });
-  return { status: query.data ?? null, refetch: query.refetch };
+  return {
+    status: query.data ?? null,
+    error: query.error?.message ?? null,
+    refetch: query.refetch,
+  };
 }
 
 function PanelHeader() {
@@ -1998,7 +2019,7 @@ const DEFAULT_QUERY = "is:open ";
 
 function GithubPanel({ subPath }: PluginNavPanelProps) {
   const [route, navigate] = useSubPathRoute(subPath);
-  const { status } = useStatus();
+  const { status, error: statusError, refetch: retryStatus } = useStatus();
   const [query, setQueryState] = useState<string>(() => {
     try {
       return window.localStorage.getItem(QUERY_KEY) ?? DEFAULT_QUERY;
@@ -2020,6 +2041,8 @@ function GithubPanel({ subPath }: PluginNavPanelProps) {
           route={route}
           navigate={navigate}
           status={status}
+          statusError={statusError}
+          retryStatus={retryStatus}
           query={query}
           setQuery={setQuery}
         />
@@ -2075,12 +2098,16 @@ function GithubPanelBody({
   route,
   navigate,
   status,
+  statusError,
+  retryStatus,
   query,
   setQuery,
 }: {
   route: Route;
   navigate: (route: Route) => void;
   status: Status | null;
+  statusError: string | null;
+  retryStatus: () => Promise<void>;
   query: string;
   setQuery: (query: string) => void;
 }) {
@@ -2094,6 +2121,45 @@ function GithubPanelBody({
     },
     [navigate],
   );
+  const connectionError =
+    statusError ??
+    (status !== null && !status.ghOk
+      ? (status.ghError ?? "GitHub CLI is unavailable or not authenticated")
+      : null);
+  if (route.view === "issue" || route.view === "pull") {
+    return (
+      <>
+        {connectionError !== null && (
+          <div
+            role="alert"
+            className="flex items-center gap-3 text-sm text-destructive"
+          >
+            <span>{connectionError}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void retryStatus()}
+            >
+              Retry GitHub connection
+            </Button>
+          </div>
+        )}
+        {route.view === "issue" ? (
+          <IssueDetailView
+            repo={route.repo}
+            number={route.number}
+            onBack={() => navigate({ view: "issues" })}
+          />
+        ) : (
+          <PullDetailView
+            repo={route.repo}
+            number={route.number}
+            onBack={() => navigate({ view: "pulls" })}
+          />
+        )}
+      </>
+    );
+  }
   if (status !== null && status.ghState === "unavailable") {
     return (
       <EmptyState
@@ -2114,24 +2180,6 @@ function GithubPanelBody({
     );
   }
 
-  if (route.view === "issue") {
-    return (
-      <IssueDetailView
-        repo={route.repo}
-        number={route.number}
-        onBack={() => navigate({ view: "issues" })}
-      />
-    );
-  }
-  if (route.view === "pull") {
-    return (
-      <PullDetailView
-        repo={route.repo}
-        number={route.number}
-        onBack={() => navigate({ view: "pulls" })}
-      />
-    );
-  }
   if (route.view === "new") {
     return (
       <NewIssueForm

@@ -173,3 +173,157 @@ describe("GitHub app navigation", () => {
     slot.lifecycle.unmount();
   });
 });
+
+function detailFixture(
+  kind: "issue" | "pull",
+  initialReadError: Error | null = null,
+) {
+  let readError: Error | null = initialReadError;
+  let statusError: string | null = null;
+  const issue = {
+    repo: "get-bb/bb",
+    number: 42,
+    title: "Live detail",
+    state: "OPEN",
+    author: "octocat",
+    body: "Description",
+    url: "https://github.com/get-bb/bb/issues/42",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+    labels: [],
+    assignees: [],
+    comments: [],
+  };
+  const pull = {
+    ...issue,
+    url: "https://github.com/get-bb/bb/pull/42",
+    createdAt: issue.updatedAt,
+    baseRefName: "main",
+    headRefName: "feature",
+    additions: 0,
+    deletions: 0,
+    changedFiles: 0,
+    reviewDecision: "",
+    mergeStateStatus: "CLEAN",
+    reviewRequests: [],
+    checks: [],
+    reviews: [],
+    reviewThreads: [],
+    files: [],
+  };
+  const view = renderSlot(
+    app.navPanels[0]!,
+    { subPath: `${kind === "pull" ? "pulls" : "issues"}/get-bb/bb/42` },
+    {
+      experimental_rpcTags: (method) => ({
+        tags:
+          method === "status"
+            ? ["status"]
+            : method === "getIssue"
+              ? ["issue:get-bb/bb#42"]
+              : method === "getPull"
+                ? ["pr:get-bb/bb#42"]
+                : ["links"],
+      }),
+      rpc: {
+        getIssue: () => {
+          if (readError) throw readError;
+          return { issue };
+        },
+        getPull: () => {
+          if (readError) throw readError;
+          return { pull };
+        },
+        listLinks: () => ({ links: {} }),
+        status: () => ({
+          ghOk: statusError === null,
+          ghState: statusError === null ? "ready" : "unavailable",
+          ghError: statusError,
+          repos: [{ repo: "get-bb/bb", projectId: null }],
+          lastSyncedAt: null,
+        }),
+      },
+    },
+  );
+  return {
+    view,
+    readError(value: Error | null) {
+      readError = value;
+    },
+    statusError(value: string | null) {
+      statusError = value;
+    },
+  };
+}
+
+it("retains the issue comment editor and offers Retry after a live read fails", async () => {
+  const fixture = detailFixture("issue");
+  const { view } = fixture;
+  try {
+    const editor = await view.findByPlaceholderText("Leave a comment…");
+    fireEvent.change(editor, { target: { value: "Unsaved issue comment" } });
+    editor.focus();
+    fixture.readError(new Error("Issue refresh failed"));
+    await act(async () => {
+      await view.experimental_invalidateRpc(["issue:get-bb/bb#42"]);
+    });
+    await view.findByText("Issue refresh failed");
+    expect(view.queryByPlaceholderText("Leave a comment…")).toBe(editor);
+    expect(document.activeElement).toBe(editor);
+    fixture.readError(null);
+    fireEvent.click(view.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(view.queryByText("Issue refresh failed")).toBeNull(),
+    );
+    expect(view.getByPlaceholderText("Leave a comment…")).toBe(editor);
+    expect(editor.textContent).toBe("Unsaved issue comment");
+  } finally {
+    view.lifecycle.unmount();
+  }
+});
+
+it.each(["issue", "pull"] as const)(
+  "retains the %s editor across unavailable auth status and recovery",
+  async (kind) => {
+    const fixture = detailFixture(kind);
+    const { view } = fixture;
+    try {
+      const editor = await view.findByPlaceholderText("Leave a comment…");
+      fireEvent.change(editor, {
+        target: { value: "Unsaved comment during auth failure" },
+      });
+      editor.focus();
+      fixture.statusError("Network unavailable");
+      await act(async () => {
+        await view.experimental_invalidateRpc(["status"]);
+      });
+      await view.findByText(/Network unavailable/);
+      expect(view.queryByPlaceholderText("Leave a comment…")).toBe(editor);
+      expect(document.activeElement).toBe(editor);
+      fixture.statusError(null);
+      fireEvent.click(
+        view.getByRole("button", { name: "Retry GitHub connection" }),
+      );
+      await waitFor(() =>
+        expect(view.queryByText(/Network unavailable/)).toBeNull(),
+      );
+      expect(view.getByPlaceholderText("Leave a comment…")).toBe(editor);
+      expect(editor.textContent).toBe("Unsaved comment during auth failure");
+    } finally {
+      view.lifecycle.unmount();
+    }
+  },
+);
+
+it("offers Retry when the first issue detail read fails", async () => {
+  const fixture = detailFixture("issue", new Error("Issue unavailable"));
+  try {
+    await fixture.view.findByText("Issue unavailable");
+    expect(fixture.view.queryByPlaceholderText("Leave a comment…")).toBeNull();
+    fixture.readError(null);
+    fireEvent.click(fixture.view.getByRole("button", { name: "Retry" }));
+    await fixture.view.findByPlaceholderText("Leave a comment…");
+    expect(fixture.view.queryByText("Issue unavailable")).toBeNull();
+  } finally {
+    fixture.view.lifecycle.unmount();
+  }
+});
