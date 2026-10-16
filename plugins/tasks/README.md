@@ -12,8 +12,8 @@ from keyed row positions, statuses, priorities, and due dates. Task contents com
 from `getTasksKeyed`, which returns summaries without unused Markdown descriptions,
 batches database reads, and shares cached rows across views. Thread and attachment
 metadata also use batched SQL reads. On a cold browser read, membership provides
-up to 25 initial summaries to that same keyed cache alongside its IDs,
-so cards do not wait for a second request. The remaining keys load in normal
+up to 25 initial summaries, open tasks first, to that same keyed cache alongside
+its IDs, so cards do not wait for a second request. The remaining keys load in normal
 batches. The host skips this lazy producer once the method
 has cached entries. Warm membership refreshes remain IDs-only. `listTasks`
 continues to return paginated full rows for CLI and SDK consumers.
@@ -24,6 +24,11 @@ Title and description edits refresh membership only for searches; priority,
 and label edits refresh the matching filters. Due dates and all display sorts
 update through keyed rows.
 Every edit still invalidates the task row and full-row `listTasks` reads.
+
+`listComments` returns the comments and their attachments as one snapshot, and
+refreshes with any change to its task. A watched `listTaskPullRequests` read
+refreshes every 60 seconds while the task has an open or draft pull request, and
+the task detail refreshes it when the window regains focus.
 
 Run the 1,000-task workload with
 `pnpm exec turbo run test --filter=bb-plugin-tasks -- shell/live-performance.test.tsx`.

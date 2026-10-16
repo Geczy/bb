@@ -605,7 +605,12 @@ export const tasksRpcContract = defineRpcContract({
   },
   listComments: {
     input: z.object({ taskId: idSchema }).strict(),
-    output: z.object({ comments: z.array(displayCommentSchema) }).strict(),
+    output: z
+      .object({
+        comments: z.array(displayCommentSchema),
+        attachments: z.array(attachmentSchema),
+      })
+      .strict(),
   },
   listAttachments: {
     input: z.union([

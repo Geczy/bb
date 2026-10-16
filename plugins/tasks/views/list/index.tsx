@@ -6,6 +6,7 @@ import { useTasksNavigation } from "../../shell/routes.js";
 import { NewTaskDialog } from "../manage/new-task-dialog.js";
 import { DetailToasts, useDetailToasts } from "../detail/toast.js";
 import { EmptyState } from "../../components/empty-state.js";
+import { RefreshError } from "../../components/refresh-error.js";
 import { Button } from "@/components/ui/button";
 import { DelayedLoading } from "@/components/ui/delayed-loading";
 import { Icon } from "@/components/ui/icon";
@@ -219,6 +220,11 @@ export function ListView({ projectId, activeOnly = false }: ListViewProps) {
           icon="AlertCircle"
           title="Couldn't load tasks"
           description={tasksQuery.error}
+          action={
+            <Button variant="outline" size="sm" onClick={tasksQuery.refresh}>
+              Retry
+            </Button>
+          }
         />
       ) : (
         <LoadingRows />
@@ -317,6 +323,13 @@ export function ListView({ projectId, activeOnly = false }: ListViewProps) {
         labelOptions={labelOptions}
         taskCount={displayTasks?.length}
       />
+      {tasksQuery.error !== null && displayTasks !== undefined ? (
+        <RefreshError
+          message={`Couldn't refresh tasks: ${tasksQuery.error}`}
+          onRetry={tasksQuery.refresh}
+          className="shrink-0 border-b border-border-hairline px-3.5 py-1"
+        />
+      ) : null}
       <div
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto @container"

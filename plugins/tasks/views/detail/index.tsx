@@ -251,6 +251,11 @@ function TaskDetail({ task }: { task: Task }) {
     { taskId: task.id },
     (value) => value,
   );
+  const refreshPullRequests = pullRequests.refresh;
+  useEffect(() => {
+    window.addEventListener("focus", refreshPullRequests);
+    return () => window.removeEventListener("focus", refreshPullRequests);
+  }, [refreshPullRequests]);
 
   const updateTask = async (
     input: TaskPropertyUpdate & { title?: string; description?: string },
@@ -493,8 +498,32 @@ function TaskDetail({ task }: { task: Task }) {
 }
 
 export function DetailView({ taskKey, onCanonicalKey }: DetailViewProps) {
-  const query = useTaskRead("getTaskByKey", { taskKey }, (value) => value.task);
-  const canonicalKey = query.data?.key;
+  const lookup = useTaskRead(
+    "getTaskByKey",
+    { taskKey },
+    (value) => value.task,
+  );
+  const [resolved, setResolved] = useState<{ taskKey: string; task: Task }>();
+  if (
+    lookup.data &&
+    (resolved?.task !== lookup.data || resolved.taskKey !== taskKey)
+  )
+    setResolved({ taskKey, task: lookup.data });
+  const kept = resolved?.taskKey === taskKey ? resolved.task : undefined;
+  const followed = useTaskRead(
+    "getTask",
+    { taskId: kept?.id ?? "" },
+    (value) => value.task,
+    lookup.data === null && kept !== undefined,
+  );
+  const query =
+    lookup.data === null && kept !== undefined
+      ? {
+          ...followed,
+          data: followed.data === undefined ? kept : followed.data,
+        }
+      : lookup;
+  const canonicalKey = lookup.data?.key;
   useEffect(() => {
     if (canonicalKey) onCanonicalKey?.(canonicalKey);
   }, [canonicalKey, onCanonicalKey]);

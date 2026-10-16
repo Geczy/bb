@@ -170,6 +170,13 @@ function taskFailure(error: TasksDomainFailure) {
   return { ok: false as const, error: error.detail };
 }
 
+function canonicalTaskKey(taskKey: string): string {
+  const match = /^([A-Za-z][A-Za-z0-9]{0,9})-(\d+)$/.exec(taskKey.trim());
+  return match
+    ? `${match[1]!.toUpperCase()}-${Number(match[2])}`
+    : taskKey.trim().toUpperCase();
+}
+
 function taskRowTags(
   taskId: string,
   projectId: string,
@@ -815,7 +822,7 @@ export function registerHandlers(
     },
     getTaskByKey(input, context) {
       context?.experimental_tag(
-        `task-key:${input.taskKey.toUpperCase()}`,
+        `task-key:${canonicalTaskKey(input.taskKey)}`,
         "task-keys",
       );
       const task = store.tasks.getTaskByKey(input.taskKey);
@@ -1062,8 +1069,15 @@ export function registerHandlers(
       return { comment };
     },
     async listComments(input, context) {
-      context?.experimental_tag(`comments:${input.taskId}`);
+      context?.experimental_tag(
+        `comments:${input.taskId}`,
+        `attachments:${input.taskId}`,
+        `task:${input.taskId}`,
+      );
       const comments = store.tasks.listComments(input.taskId);
+      const attachments = store.tasks.listAttachmentsForTaskComments(
+        input.taskId,
+      );
       const threadInfo = await resolveAgentThreadInfo(bb, comments);
       const providerBadges = await resolveProviderBadges(bb, threadInfo);
       return {
@@ -1087,6 +1101,7 @@ export function registerHandlers(
                   }),
           };
         }),
+        attachments: attachments.map(attachmentMetadata),
       };
     },
     listAttachments(input, context) {
@@ -1216,7 +1231,8 @@ export function registerHandlers(
           })),
       };
     },
-    async listBbProjects() {
+    async listBbProjects(_input, context) {
+      context?.experimental_tag("projects");
       const projects = await bb.sdk.projects.list({ includePersonal: true });
       return {
         bbProjects: projects.map((project) => ({
@@ -1239,7 +1255,22 @@ export function registerHandlers(
 export function registerTasksApi(bb: BbPluginApi, store: TasksApiStore): void {
   storesByPlugin.set(bb, store);
   const handlers = registerHandlers(bb, store);
-  bb.rpc.register(tasksRpcContract, handlers);
+  const tasksWithActivePullRequests = new Set<string>();
+  bb.rpc.register(tasksRpcContract, {
+    ...handlers,
+    async listTaskPullRequests(input, context) {
+      const result = await handlers.listTaskPullRequests(input, context);
+      if (
+        result.pullRequests.some(
+          (pullRequest) =>
+            pullRequest.state === "open" || pullRequest.state === "draft",
+        )
+      )
+        tasksWithActivePullRequests.add(input.taskId);
+      else tasksWithActivePullRequests.delete(input.taskId);
+      return result;
+    },
+  });
   bb.rpc.experimental_whileWatched("listTaskPullRequests", (read, signal) => {
     if (!("input" in read)) return;
     const parsed = tasksRpcContract.listTaskPullRequests.input.safeParse(
@@ -1249,7 +1280,8 @@ export function registerTasksApi(bb: BbPluginApi, store: TasksApiStore): void {
     let timer: ReturnType<typeof setTimeout> | null = null;
     const refresh = () => {
       if (signal.aborted) return;
-      bb.rpc.experimental_invalidate([`prs:${parsed.data.taskId}`]);
+      if (tasksWithActivePullRequests.has(parsed.data.taskId))
+        bb.rpc.experimental_invalidate([`prs:${parsed.data.taskId}`]);
       timer = setTimeout(refresh, 60_000);
     };
     timer = setTimeout(() => {

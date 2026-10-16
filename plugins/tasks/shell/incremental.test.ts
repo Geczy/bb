@@ -303,6 +303,69 @@ describe("task membership and keyed invalidation", () => {
   });
 });
 
+describe("read invalidation", () => {
+  function invalidatedBy(
+    harness: FakePluginHarness,
+    tags: readonly string[],
+  ): boolean {
+    return harness.rpcInvalidations.some(
+      (changes) =>
+        changes === null || changes.some((tag) => tags.includes(tag)),
+    );
+  }
+
+  it.each([{ title: "Renamed" }, { description: "Edited" }])(
+    "refreshes the activity feed after a task edit: %o",
+    async (patch) => {
+      const { harness, store, project } = setup();
+      const task = store.tasks.createTask({
+        projectId: project.id,
+        title: "Task",
+      });
+      await harness.callRpc("listComments", { taskId: task.id });
+      const tags = harness.rpcTags.get("listComments") ?? [];
+      harness.rpcInvalidations.length = 0;
+      await harness.callRpc("updateTask", { taskId: task.id, ...patch });
+      expect(invalidatedBy(harness, tags)).toBe(true);
+    },
+  );
+
+  it("refreshes linked bb project choices after project changes", async () => {
+    const { harness, project } = setup();
+    harness.sdk.stub("projects.list", async () => []);
+    await harness.callRpc("listBbProjects", null);
+    const tags = harness.rpcTags.get("listBbProjects") ?? [];
+    harness.rpcInvalidations.length = 0;
+    await harness.callRpc("updateProject", {
+      projectId: project.id,
+      name: "Renamed",
+    });
+    expect(invalidatedBy(harness, tags)).toBe(true);
+  });
+
+  it.each(["REV-01", "rev-1", " REV-1 "])(
+    "refreshes a missed task key once the task exists: %s",
+    async (taskKey) => {
+      const { harness, project } = setup();
+      const miss = tasksRpcContract.getTaskByKey.output.parse(
+        await harness.callRpc("getTaskByKey", { taskKey }),
+      );
+      expect(miss.task).toBeNull();
+      const tags = harness.rpcTags.get("getTaskByKey") ?? [];
+      harness.rpcInvalidations.length = 0;
+      await harness.callRpc("createTask", {
+        projectId: project.id,
+        title: "Created",
+      });
+      expect(invalidatedBy(harness, tags)).toBe(true);
+      const hit = tasksRpcContract.getTaskByKey.output.parse(
+        await harness.callRpc("getTaskByKey", { taskKey }),
+      );
+      expect(hit.task?.key).toBe("REV-1");
+    },
+  );
+});
+
 it("keeps batched metadata scoped to each task and omits descriptions from summaries", async () => {
   const { harness, store, project } = setup();
   const first = store.tasks.createTask({

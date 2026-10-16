@@ -23,6 +23,7 @@ type TaskEmbedState =
 
 function useTaskEmbed(taskKey: string): {
   state: TaskEmbedState;
+  refreshFailed: boolean;
   retry: () => void;
 } {
   const query = useTaskRead(
@@ -39,7 +40,11 @@ function useTaskEmbed(taskKey: string): {
       : query.data === null
         ? { kind: "not_found" }
         : { kind: "found", task: query.data };
-  return { state, retry: query.refresh };
+  return {
+    state,
+    refreshFailed: query.data !== undefined && query.error !== null,
+    retry: query.refresh,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,6 +77,15 @@ function OpenInTasksButton({
       }
     >
       <Icon name="ArrowUpRight" className="size-4" />
+    </Button>
+  );
+}
+
+function RetryButton({ onRetry }: { onRetry: () => void }) {
+  return (
+    <Button variant="ghost" size="sm" className="shrink-0" onClick={onRetry}>
+      <Icon name="AlertCircle" className="size-3.5 text-destructive" />
+      Retry
     </Button>
   );
 }
@@ -112,7 +126,7 @@ export function TaskDirectiveCard({ attributes }: PluginMessageDirectiveProps) {
   const taskKey = attributes.key?.trim() ?? "";
   const fallbackTitle = attributes.title?.trim() || null;
   const validKey = TASK_KEY_PATTERN.test(taskKey);
-  const { state, retry } = useTaskEmbed(validKey ? taskKey : "");
+  const { state, refreshFailed, retry } = useTaskEmbed(validKey ? taskKey : "");
 
   if (!validKey) {
     return (
@@ -160,6 +174,7 @@ export function TaskDirectiveCard({ attributes }: PluginMessageDirectiveProps) {
               : "Task not found — deleted, or its key changed"}
           </span>
         </div>
+        {refreshFailed ? <RetryButton onRetry={retry} /> : null}
         <OpenInTasksButton label="Open Tasks" />
       </CardShell>
     );
@@ -230,6 +245,7 @@ export function TaskDirectiveCard({ attributes }: PluginMessageDirectiveProps) {
           </span>
         ) : null}
       </button>
+      {refreshFailed ? <RetryButton onRetry={retry} /> : null}
       <OpenInTasksButton
         label={`Open ${task.key} in Tasks`}
         subPath={taskDetailSubPath(task.key)}

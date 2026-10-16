@@ -1790,6 +1790,68 @@ describe("Tasks RPC domain API", () => {
 
     await harness.dispose();
   });
+
+  it("re-reads watched pull requests on a timer only while one is open or draft", async () => {
+    vi.useFakeTimers();
+    let lookup: PullRequestLookup = { outcome: "absent" };
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "tasks",
+      sdk: {
+        threads: {
+          get: async ({ threadId }: { threadId: string }) =>
+            makeThreadResponse({ id: threadId, environmentId: "env_1" }),
+        },
+        environments: { pullRequest: async () => lookup },
+      },
+    });
+    const store = createStore(bb);
+    registerTasksApi(bb, store);
+    const project = store.tasks.createProject({
+      name: "PRs",
+      prefix: "PR",
+      color: "blue",
+    });
+    const task = store.tasks.createTask({
+      projectId: project.id,
+      title: "Ship it",
+    });
+    store.tasks.upsertTaskThread({
+      taskId: task.id,
+      threadId: "thr_linked00",
+      presetName: "Default",
+      title: "Linked",
+      liveStatus: "working",
+    });
+    const input = { taskId: task.id };
+    const stop = harness.holdRpcWatch("listTaskPullRequests", { input });
+    try {
+      await harness.callRpc("listTaskPullRequests", input);
+      harness.rpcInvalidations.length = 0;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.rpcInvalidations).toEqual([]);
+
+      lookup = {
+        outcome: "available",
+        pullRequest: makePullRequest({ state: "draft" }),
+      };
+      await harness.callRpc("listTaskPullRequests", input);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.rpcInvalidations).toEqual([[`prs:${task.id}`]]);
+
+      lookup = {
+        outcome: "available",
+        pullRequest: makePullRequest({ state: "merged" }),
+      };
+      await harness.callRpc("listTaskPullRequests", input);
+      harness.rpcInvalidations.length = 0;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.rpcInvalidations).toEqual([]);
+    } finally {
+      stop();
+      vi.useRealTimers();
+      await harness.dispose();
+    }
+  });
 });
 
 type PullRequestLookup =

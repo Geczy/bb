@@ -977,7 +977,8 @@ export function createTasksStore(db: PluginDatabase) {
     const { parameters, where } = taskSelection(filters);
     return db
       .prepare<Record<string, SqlParameter>, { id: string }>(`
-      SELECT t.id FROM tasks t JOIN projects p ON p.id = t.project_id ${where} ORDER BY t.id
+      SELECT t.id FROM tasks t JOIN projects p ON p.id = t.project_id ${where}
+      ORDER BY t.status IN ('done', 'canceled'), t.id
     `)
       .all(parameters)
       .map((row) => row.id);

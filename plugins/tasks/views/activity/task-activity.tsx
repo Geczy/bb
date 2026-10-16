@@ -17,6 +17,7 @@ import { TasksEditor } from "../../editor/tasks-editor.js";
 import { experimental_saveFile, useBbNavigate } from "@get-bb/plugin-sdk/app";
 import { useMentionItems, useTaskRead, useTasksRpc } from "../../shell/data.js";
 import { Lightbox } from "../detail/attachments.js";
+import { RefreshError } from "../../components/refresh-error.js";
 import {
   AttachmentChip,
   settleStagedUploads,
@@ -67,28 +68,15 @@ export function activityFeedEntries(
 }
 
 function useActivityFeed(taskId: string) {
-  const comments = useTaskRead(
-    "listComments",
-    { taskId },
-    (value) => value.comments,
-  );
-  const attachments = useTaskRead(
-    "listAttachments",
-    { commentsOfTaskId: taskId },
-    (value) => value.attachments,
-  );
-  return {
-    data:
-      comments.data === undefined || attachments.data === undefined
+  const feed = useTaskRead("listComments", { taskId }, (value) => value);
+  const data = useMemo(
+    () =>
+      feed.data === undefined
         ? undefined
-        : activityFeedEntries(comments.data, attachments.data),
-    error: comments.error ?? attachments.error,
-    isLoading: comments.isLoading || attachments.isLoading,
-    refresh: () => {
-      comments.refresh();
-      attachments.refresh();
-    },
-  };
+        : activityFeedEntries(feed.data.comments, feed.data.attachments),
+    [feed.data],
+  );
+  return { ...feed, data };
 }
 
 type AgentNotificationTarget =
@@ -512,7 +500,7 @@ export function TaskActivity({ taskId }: TaskActivityProps) {
         )}
       >
         {feed.error ? (
-          <div className="text-xs text-destructive">{feed.error}</div>
+          <RefreshError message={feed.error} onRetry={feed.refresh} />
         ) : null}
         {entries.length === 0 && !feed.isLoading && !feed.error ? (
           <div className="text-xs text-muted-foreground">No activity yet.</div>
