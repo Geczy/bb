@@ -158,7 +158,7 @@ function attachReadyEnvironment(
   args: {
     currentEnvironment: EnvironmentRow;
     createdEnvironment: boolean;
-    execution: ResolvedThreadExecutionOptions;
+    execution: ResolvedThreadExecutionOptions | null;
     targetEnvironment: ReadyEnvironment;
     thread: Thread;
     turnId: string;
@@ -191,6 +191,7 @@ function attachReadyEnvironment(
         environmentId: args.targetEnvironment.id,
       });
       if (
+        args.execution !== null &&
         latestThread.status === "active" &&
         getActiveTurnId({ db: tx }, latestThread.id) === args.turnId
       ) {
@@ -390,11 +391,11 @@ export async function handleUpdateEnvironmentDirectoryToolCall(
       ...targetEnvironment,
       threadId: args.thread.id,
     });
-    const execution = await buildExecutionOptions(
-      deps,
-      {},
-      { threadId: args.thread.id },
-    );
+    const execution =
+      getThread(deps.db, args.thread.id)?.status === "active" &&
+      getActiveTurnId(deps, args.thread.id) === args.turnId
+        ? await buildExecutionOptions(deps, {}, { threadId: args.thread.id })
+        : null;
     attachResult = attachReadyEnvironment(deps, {
       execution,
       currentEnvironment: args.currentEnvironment,
