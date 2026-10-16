@@ -56,15 +56,22 @@ function useThreadNotificationsData({
     [query.data],
   );
   const [levels, setLevels] = useState(nextLevels);
-  if (
-    nextLevels !== levels &&
-    (nextLevels.size !== levels.size ||
-      [...nextLevels].some(([id, inputs]) => levels.get(id) !== inputs))
-  )
-    setLevels(nextLevels);
+  const [lastLevels, setLastLevels] = useState(nextLevels);
+  if (lastLevels !== nextLevels) {
+    setLastLevels(nextLevels);
+    if (
+      nextLevels.size !== levels.size ||
+      [...nextLevels].some(([id, inputs]) => levels.get(id) !== inputs)
+    )
+      setLevels(nextLevels);
+  }
   const setLevel = useCallback(
     async (threadId: string, level: OwnNotificationLevel) => {
-      await rpc.call("threadNotifications.set", { threadId, level });
+      const saved = await rpc.call("threadNotifications.set", {
+        threadId,
+        level,
+      });
+      setLevels((current) => new Map(current).set(threadId, saved));
     },
     [rpc],
   );

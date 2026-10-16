@@ -113,6 +113,7 @@ function renderNotifications(
   };
   let current = stored;
   let held: Promise<void> | null = null;
+  let readError: Error | null = null;
   const listInput =
     pushNotificationsRpcContract["threadNotifications.keyed"].input;
   const view = renderSlot(
@@ -128,6 +129,7 @@ function renderNotifications(
       }),
       rpc: {
         "threadNotifications.keyed": async (input) => {
+          if (readError) throw readError;
           const threads = Object.fromEntries(
             listInput
               .parse(input)
@@ -185,6 +187,9 @@ function renderNotifications(
     },
     restore(next: Record<string, ThreadNotificationInputs>) {
       current = next;
+    },
+    failReads() {
+      readError = new Error("Read unavailable");
     },
     holdReads() {
       let release = () => {};
@@ -520,4 +525,18 @@ describe("thread notifications action", () => {
       { threadIds: ["thr_b", "thr_c"] },
     ]);
   });
+});
+
+it("keeps a successfully saved notification level when its reread fails", async () => {
+  const probe = renderNotifications(
+    { thr_top: { own: "all", ancestorCap: null } },
+    ["thr_top"],
+  );
+  await waitFor(() => expect(probe.summary()?.detail).toBe("All activity"));
+  probe.failReads();
+  await act(async () => {
+    await probe.data()!.setLevel("thr_top", "muted");
+  });
+  await waitFor(() => expect(probe.listCalls().length).toBeGreaterThan(1));
+  expect(probe.summary()?.detail).toBe("Muted");
 });
