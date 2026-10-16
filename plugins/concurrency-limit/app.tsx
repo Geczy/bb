@@ -72,6 +72,12 @@ function ConcurrencyLimitSettings() {
     }
   }, [view, applyView]);
   useEffect(() => {
+    if (view !== null && !query.isFetching && query.error === null) {
+      setError(null);
+      setSaveState((current) => (current === "error" ? "idle" : current));
+    }
+  }, [view, query.isFetching, query.error]);
+  useEffect(() => {
     activeRef.current = true;
     return () => {
       activeRef.current = false;
@@ -150,6 +156,15 @@ function ConcurrencyLimitSettings() {
         role={error === null ? "status" : "alert"}
       >
         {error ?? "Loading limits…"}
+        {error !== null && (
+          <button
+            className="ml-2 underline"
+            type="button"
+            onClick={() => void query.refetch()}
+          >
+            Retry
+          </button>
+        )}
       </p>
     );
   }
@@ -253,6 +268,13 @@ function ConcurrencyLimitSettings() {
         ) : error !== null ? (
           <span className="text-xs text-destructive" role="alert">
             {error}
+            <button
+              className="ml-2 underline"
+              type="button"
+              onClick={() => void query.refetch()}
+            >
+              Retry
+            </button>
           </span>
         ) : (
           <span className="text-xs text-muted-foreground" role="status">
