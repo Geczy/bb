@@ -938,7 +938,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Call its server from its UI with schema-checked RPC",
           "Receive webhooks and serve HTTP or WebSocket routes",
-          "Refresh tagged reads after writes, with shared caching and Retry on errors",
+          "Predict shared read values immediately, with rollback and Retry on errors",
           "Publish RPC methods other plugins can discover",
         ],
         apiSymbols: [
@@ -959,6 +959,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "ExperimentalRpcKeyedQueryState",
           "ExperimentalRpcQueryOptions",
           "ExperimentalRpcMutationOptions",
+          "ExperimentalRpcOptimisticCache",
           "ExperimentalRpcMutationState",
           "PluginRpc.experimental_invalidate",
           "PluginRpc.experimental_invalidateAll",
