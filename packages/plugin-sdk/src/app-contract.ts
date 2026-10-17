@@ -3942,6 +3942,7 @@ export interface ExperimentalRpcQueryOptions<
   enabled?: boolean;
   /** Optional positive, finite RPC deadline in milliseconds. Omit for no deadline. Does not cancel server work or bound mutation reconciliation. */
   timeoutMs?: number;
+  refetchOnMount?: boolean | "always";
 }
 
 /**
