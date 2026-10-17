@@ -137,6 +137,7 @@ const pullSchema = z
 
 export const githubRpcContract = defineRpcContract({
   status: {
+    tags: () => ["status"],
     input: z.null(),
     output: z
       .object({
@@ -148,8 +149,14 @@ export const githubRpcContract = defineRpcContract({
       })
       .strict(),
   },
-  refresh: { input: z.null(), output: syncResultSchema },
+  refresh: {
+    input: z.null(),
+    output: syncResultSchema,
+    invalidates: () => ["status", "items:issue", "items:pr", "issues", "pulls"],
+  },
   listItems: {
+    tags: (input) =>
+      input.kind ? [`items:${input.kind}`] : ["items:issue", "items:pr"],
     input: z
       .object({
         kind: z.enum(["issue", "pr"]).optional(),
@@ -162,24 +169,35 @@ export const githubRpcContract = defineRpcContract({
     output: z.object({ items: z.array(itemSchema) }).strict(),
   },
   viewer: {
+    tags: () => ["viewer"],
     input: z.null(),
     output: z.object({ login: z.string().min(1) }).strict(),
   },
   assignableUsers: {
+    tags: (input) => [`assignees:${input.repo}`],
     input: z.object({ repo: repoNameSchema }).strict(),
     output: z.object({ users: z.array(z.string().min(1)) }).strict(),
   },
   repositoryLabels: {
+    tags: (input) => [`labels:${input.repo}`],
     input: z.object({ repo: repoNameSchema }).strict(),
     output: z.object({ labels: z.array(z.string().min(1)) }).strict(),
   },
   setIssueState: {
+    invalidates: (input) => [
+      `issue:${input.repo}#${input.number}`,
+      "items:issue",
+    ],
     input: itemInputSchema
       .extend({ state: z.enum(["open", "closed"]) })
       .strict(),
     output: okResultSchema,
   },
   setAssignees: {
+    invalidates: (input) => [
+      `issue:${input.repo}#${input.number}`,
+      "items:issue",
+    ],
     input: itemInputSchema
       .extend({ assignees: z.array(z.string().min(1)) })
       .strict(),
@@ -188,12 +206,17 @@ export const githubRpcContract = defineRpcContract({
       .strict(),
   },
   setLabels: {
+    invalidates: (input) => [
+      `issue:${input.repo}#${input.number}`,
+      "items:issue",
+    ],
     input: itemInputSchema.extend({ labels: z.array(z.string()) }).strict(),
     output: z
       .object({ ok: z.literal(true), labels: z.array(z.string().min(1)) })
       .strict(),
   },
   getIssue: {
+    tags: (input) => ["issues", `issue:${input.repo}#${input.number}`],
     input: itemInputSchema,
     output: z
       .object({
@@ -216,14 +239,17 @@ export const githubRpcContract = defineRpcContract({
       .strict(),
   },
   getPull: {
+    tags: (input) => ["pulls", `pr:${input.repo}#${input.number}`],
     input: itemInputSchema,
     output: z.object({ pull: pullSchema }).strict(),
   },
   commentPull: {
+    invalidates: (input) => [`pr:${input.repo}#${input.number}`],
     input: itemInputSchema.extend({ body: nonBlankStringSchema }).strict(),
     output: okResultSchema,
   },
   pullForThread: {
+    tags: (input) => ["links", "thread-pulls", `thread:${input.threadId}`],
     input: z.object({ threadId: z.string().min(1) }).strict(),
     output: z
       .object({
@@ -239,10 +265,12 @@ export const githubRpcContract = defineRpcContract({
       .strict(),
   },
   commentIssue: {
+    invalidates: (input) => [`issue:${input.repo}#${input.number}`],
     input: itemInputSchema.extend({ body: nonBlankStringSchema }).strict(),
     output: okResultSchema,
   },
   createIssue: {
+    invalidates: () => ["items:issue", "items:pr", "status"],
     input: z
       .object({
         repo: repoNameSchema,
@@ -255,14 +283,17 @@ export const githubRpcContract = defineRpcContract({
       .strict(),
   },
   startWork: {
+    invalidates: () => ["links", "thread-pulls"],
     input: itemInputSchema,
     output: z.object({ threadId: z.string().min(1) }).strict(),
   },
   startReview: {
+    invalidates: () => ["links", "thread-pulls"],
     input: itemInputSchema,
     output: z.object({ threadId: z.string().min(1) }).strict(),
   },
   listLinks: {
+    tags: () => ["links"],
     input: z.null(),
     output: z
       .object({ links: z.record(z.string(), z.array(threadLinkSchema)) })
@@ -822,13 +853,17 @@ export default async function plugin(bb: BbPluginApi) {
         "UPDATE items SET labels = ? WHERE repo = ? AND kind = 'issue' AND number = ?",
       ).run(JSON.stringify(patch.labels), repo, number);
     }
-    bb.realtime.publish("data-changed", {});
   }
 
   async function syncAll(
     force = false,
   ): Promise<{ repos: number; items: number }> {
-    await checkAuth();
+    try {
+      await checkAuth();
+    } catch (error) {
+      bb.rpc.experimental_invalidate(["status"]);
+      throw error;
+    }
     const repos = await discoverRepos(force);
     const before = JSON.stringify(
       db
@@ -869,12 +904,37 @@ export default async function plugin(bb: BbPluginApi) {
     await bb.storage.kv.set("sync-cursor", {
       lastSyncedAt: new Date().toISOString(),
     });
-    if (before !== after) {
-      bb.realtime.publish("data-changed", { items: total });
-    }
+    bb.rpc.experimental_invalidate(
+      before !== after
+        ? ["status", "items:issue", "items:pr", "issues", "pulls"]
+        : ["status"],
+    );
     bb.log.info(`synced ${total} item(s) across ${repos.length} repo(s)`);
     return { repos: repos.length, items: total };
   }
+
+  bb.background.service("live-metadata", {
+    async start(signal) {
+      const stopThread = bb.sdk.subscribe({
+        event: "thread:changed",
+        callback: (event) =>
+          bb.rpc.experimental_invalidate([`thread:${event.id}`]),
+      });
+      const stopEnvironment = bb.sdk.subscribe({
+        event: "environment:changed",
+        callback: () => bb.rpc.experimental_invalidate(["thread-pulls"]),
+      });
+      try {
+        if (!signal.aborted)
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+      } finally {
+        stopThread();
+        stopEnvironment();
+      }
+    },
+  });
 
   bb.background.service("sync", {
     async start(signal) {
@@ -933,7 +993,7 @@ export default async function plugin(bb: BbPluginApi) {
     const key = linkKey(link.kind, link.repo, link.number);
     const existing = (await bb.storage.kv.get<ThreadLink[]>(key)) ?? [];
     await bb.storage.kv.set(key, [...existing, link]);
-    bb.realtime.publish("links-changed", { key });
+    bb.rpc.experimental_invalidate(["links", `thread:${link.threadId}`]);
   }
 
   async function listAllLinks(): Promise<Record<string, ThreadLink[]>> {
@@ -1514,7 +1574,6 @@ export default async function plugin(bb: BbPluginApi) {
       const number = match !== null ? Number(match[1]) : null;
       try {
         replaceRepoRows(input.repo, await fetchRepoItems(gh, input.repo));
-        bb.realtime.publish("data-changed", {});
       } catch {}
       return { number, url: stdout.trim() };
     },
