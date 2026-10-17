@@ -1,6 +1,6 @@
 {
   "name": "@get-bb/plugin-sdk",
-  "version": "0.6.54",
+  "version": "0.6.55",
   "homepage": "https://github.com/get-bb/bb#readme",
   "bugs": {
     "url": "https://github.com/get-bb/bb/issues"
@@ -152,6 +152,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
     "cross-spawn": "^7.0.6",
     "zod": "^4.6.5"
   },
@@ -180,8 +181,7 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "typescript-7": "npm:typescript@^7.0.2",
     "vitest": "^4.1.1",
-    "@bb/query-tags": "workspace:*",
-    "@tanstack/react-query": "^5.62.0"
+    "@bb/query-tags": "workspace:*"
   },
   "peerDependencies": {
     "@testing-library/react": "^16.3.2",
@@ -191,8 +191,7 @@
     "cron-parser": "^5.5.0",
     "hono": "^4.11.9",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "@tanstack/react-query": "^5.62.0"
+    "react-dom": "^19.0.0"
   },
   "peerDependenciesMeta": {
     "@testing-library/react": {
@@ -217,9 +216,6 @@
       "optional": true
     },
     "react-dom": {
-      "optional": true
-    },
-    "@tanstack/react-query": {
       "optional": true
     }
   }
