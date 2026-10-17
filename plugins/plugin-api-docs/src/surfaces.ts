@@ -947,7 +947,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginRpcMethodContract",
           "ExperimentalPluginRpcHandlersWithContext",
           "ExperimentalPluginRpcHandlerContext",
-          "ExperimentalPluginRpcHandlerContext.experimental_provideKeyed",
+          "ExperimentalPluginRpcHandlerContext.provideKeyed",
           "ExperimentalPluginRpcCaller",
           "PluginBbSdk.plugins.experimental_discoverRpc",
           "PluginHttp",
