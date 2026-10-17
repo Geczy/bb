@@ -139,7 +139,7 @@ import {
   syncPluginCommandsSkill,
   type PluginCliContribution,
 } from "./plugin-commands-skill.js";
-import { readPluginLogTail } from "./plugin-log.js";
+import { flushPluginLogs, readPluginLogTail } from "./plugin-log.js";
 import {
   buildPluginSettingsView,
   pluginSecretsDir,
@@ -1562,6 +1562,7 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
     async stop() {
       for (const watcher of builtinSourceWatchers.splice(0)) watcher.close();
       await disposeAll();
+      await flushPluginLogs();
       await syncCliSkill();
       notifyPluginsChanged();
     },
