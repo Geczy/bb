@@ -305,8 +305,8 @@ export function createConnection(
   const originalClose = sqlite.close.bind(sqlite);
   sqlite.close = () => {
     const result = originalClose();
-    stopCheckpoint();
     queries.clear();
+    stopCheckpoint();
     return result;
   };
 
