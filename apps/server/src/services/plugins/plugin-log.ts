@@ -1,3 +1,4 @@
+import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { appendFile, mkdir, readFile, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -10,7 +11,12 @@ type PluginLogLevel = "debug" | "info" | "warn" | "error";
 type LogOperation =
   | string
   | { tail: number; resolve: (lines: string[]) => void };
-type LogQueue = { operations: LogOperation[]; done: Promise<void> };
+type LogQueue = {
+  operations: LogOperation[];
+  done: Promise<void>;
+  draining: boolean;
+  writingCount: number;
+};
 const queues = new Map<string, LogQueue>();
 
 function pluginLogsDir(dataDir: string, pluginId: string): string {
@@ -26,15 +32,19 @@ function enqueue(dir: string, operation: LogOperation): void {
   const operations = [operation];
   const done = new Promise<void>((resolve) => {
     setImmediate(() => {
-      void drain(dir, operations).finally(() => {
+      void drain(dir, queue).finally(() => {
         resolve();
       });
     });
   });
-  queues.set(dir, { operations, done });
+  const queue = { operations, done, draining: false, writingCount: 0 };
+  if (queues.size === 0) process.once("exit", flushPluginLogsOnExit);
+  queues.set(dir, queue);
 }
 
-async function drain(dir: string, operations: LogOperation[]): Promise<void> {
+async function drain(dir: string, queue: LogQueue): Promise<void> {
+  const { operations } = queue;
+  queue.draining = true;
   const file = join(dir, PLUGIN_LOG_FILE);
   let size: number | undefined;
   while (operations.length > 0) {
@@ -71,14 +81,41 @@ async function drain(dir: string, operations: LogOperation[]): Promise<void> {
         )
           break;
       }
+      queue.writingCount = count;
       await appendFile(file, operations.slice(0, count).join(""), "utf8");
       size += bytes;
     } catch {
       size = undefined;
     }
     operations.splice(0, Math.max(count, 1));
+    queue.writingCount = 0;
   }
   queues.delete(dir);
+  if (queues.size === 0) process.off("exit", flushPluginLogsOnExit);
+}
+
+function flushPluginLogsOnExit(): void {
+  for (const [dir, queue] of queues) {
+    try {
+      mkdirSync(dir, { recursive: true });
+      const file = join(dir, PLUGIN_LOG_FILE);
+      let size = 0;
+      try {
+        size = statSync(file).size;
+      } catch {}
+      for (const operation of queue.operations.slice(queue.writingCount)) {
+        if (typeof operation !== "string") continue;
+        if (!queue.draining && size > PLUGIN_LOG_MAX_BYTES) {
+          try {
+            renameSync(file, join(dir, PLUGIN_LOG_ROTATED_FILE));
+            size = 0;
+          } catch {}
+        }
+        appendFileSync(file, operation, "utf8");
+        size += Buffer.byteLength(operation);
+      }
+    } catch {}
+  }
 }
 
 export function appendPluginLogLine(

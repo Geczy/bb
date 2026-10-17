@@ -148,3 +148,72 @@ test("keeps pending logs alive until natural process exit", async () => {
     Array.from({ length: 2000 }, (_, i) => String(i)),
   );
 });
+
+test.each(["throw new Error('fatal plugin failure')", "process.exit(23)"])(
+  "preserves queued logs when a child terminates with %s",
+  async (terminate) => {
+    const dir = await tempDir();
+    const source = new URL(
+      "../../../src/services/plugins/plugin-log.ts",
+      import.meta.url,
+    ).href;
+    const logs = join(dir, "plugins", "one", "logs");
+    await mkdir(logs, { recursive: true });
+    const seed = "x".repeat(5 * 1024 * 1024) + "\n";
+    await writeFile(join(logs, "plugin.log"), seed);
+    await expect(
+      promisify(execFile)(process.execPath, [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        `import { appendPluginLogLine } from ${JSON.stringify(source)};
+         setImmediate(() => {
+           for (let i = 0; i < 2000; i++) appendPluginLogLine(${JSON.stringify(dir)}, "one", "error", String(i));
+           ${terminate};
+         });`,
+      ]),
+    ).rejects.toMatchObject({ code: terminate.startsWith("throw") ? 1 : 23 });
+    const lines = (await readFile(join(logs, "plugin.log"), "utf8"))
+      .trim()
+      .split("\n");
+    expect(lines.map((line) => JSON.parse(line).message)).toEqual(
+      Array.from({ length: 2000 }, (_, i) => String(i)),
+    );
+    expect(await readFile(join(logs, "plugin.log.1"), "utf8")).toBe(seed);
+  },
+);
+
+test("does not replay a submitted batch when exiting before its completion callback", async () => {
+  const dir = await tempDir();
+  const source = new URL(
+    "../../../src/services/plugins/plugin-log.ts",
+    import.meta.url,
+  ).href;
+  await expect(
+    promisify(execFile)(process.execPath, [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "-e",
+      `import fs from 'node:fs/promises';
+       import { syncBuiltinESMExports } from 'node:module';
+       const appendFile = fs.appendFile;
+       fs.appendFile = async (...args) => {
+         await appendFile(...args);
+         process.exit(24);
+       };
+       syncBuiltinESMExports();
+       const { appendPluginLogLine } = await import(${JSON.stringify(source)});
+       for (let i = 0; i < 2000; i++) appendPluginLogLine(${JSON.stringify(dir)}, "one", "error", String(i));`,
+    ]),
+  ).rejects.toMatchObject({ code: 24 });
+  const lines = (
+    await readFile(join(dir, "plugins", "one", "logs", "plugin.log"), "utf8")
+  )
+    .trim()
+    .split("\n");
+  expect(lines.map((line) => JSON.parse(line).message)).toEqual(
+    Array.from({ length: 2000 }, (_, i) => String(i)),
+  );
+});
