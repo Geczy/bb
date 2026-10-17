@@ -81,3 +81,15 @@ threads without a unique location in the saved machine scans remain queued and
 recheck the inventory hourly without warning on every thread event. Scan the
 relevant machine to make its storage discoverable; manual clearing still reports
 an unresolved location rather than guessing a machine.
+Live reads use the plugin RPC contract’s tags. `hosts`, `host`, and `metadata`
+share the `hosts` tag, so host renames, connections, disconnections, primary-host
+changes, and storage jobs refresh both reports and host labels. `metadata`
+returns persistent machines’ IDs, names, connection states and last-seen times,
+plus the primary host ID. Retention sweeps refresh reports, policy state and
+previews; configuration saves refresh policy state and previews, including
+saves made through `bb storage retention`.
+
+Read failures show an inline error with Try again. A failed refresh keeps the
+loaded page and its controls mounted. Settings show the saved value until the
+write and its affected reads finish; failures keep the previous saved value.
+Cleanup controls remain pending through that same shared mutation lifecycle.
