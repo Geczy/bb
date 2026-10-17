@@ -1123,8 +1123,10 @@ function AccountPoolSettings() {
   }
   function accountPending(accountId: string): boolean {
     return (
-      enable.isPending ||
-      disable.isPending ||
+      (enable.isPending &&
+        enable.pendingInputs.some((input) => input.id === accountId)) ||
+      (disable.isPending &&
+        disable.pendingInputs.some((input) => input.id === accountId)) ||
       ACCOUNT_ACTIONS.some((action) => pending.has(`${action}-${accountId}`))
     );
   }
