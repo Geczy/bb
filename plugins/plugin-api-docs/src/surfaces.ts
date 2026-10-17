@@ -940,7 +940,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Call its server from its UI with schema-checked RPC and typed refusals",
           "Receive webhooks and serve HTTP or WebSocket routes",
           "Predict shared reads with pure, replayable updates; generate IDs and timestamps before the write",
-          "Publish RPC methods other plugins can discover",
+          "Publish RPC methods other plugins can discover and watch; run producers while reads are watched",
         ],
         apiSymbols: [
           "PluginRpc",
@@ -964,6 +964,9 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "ExperimentalRpcMutationState",
           "PluginRpc.experimental_invalidate",
           "PluginRpc.experimental_invalidateAll",
+          "PluginRpc.experimental_whileWatched",
+          "PluginBbSdk.plugins.experimental_watchRpc",
+          "PluginBbSdk.plugins.experimental_watchDiscovery",
           "PluginRpcClient",
           "useRealtime",
           "useRealtimeConnectionState",
