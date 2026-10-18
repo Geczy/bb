@@ -42,6 +42,7 @@
     "bb-plugin-push-notifications": "workspace:*",
     "bb-plugin-bb--mcp": "workspace:*",
     "bb-plugin-bb--prompt-library": "workspace:*",
+    "bb-plugin-bb--prompt-markdown": "workspace:*",
     "bb-plugin-scheduled-send": "workspace:*",
     "bb-plugin-secrets": "workspace:*",
     "bb-plugin-side-chat": "workspace:*",

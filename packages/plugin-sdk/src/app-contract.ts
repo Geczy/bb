@@ -2926,12 +2926,44 @@ export interface ComposerView {
 
 export interface ComposerRichTextSpec {
   /** Content-derived paint: match ranges receive `className`; text is never mutated. */
-  effects?: readonly {
+  effects?: readonly ({
     id: string;
-    /** Plain-text offsets into the current structured draft. */
-    match(text: string): readonly { from: number; to: number }[];
     className: string;
-  }[];
+    /**
+     * Apply `className` only to lines the selection does not touch, so the
+     * line being edited shows its plain text. While the composer is unfocused
+     * no line holds the caret and the class applies everywhere.
+     */
+    experimental_offCaretLineOnly?: boolean;
+  } & (
+    | {
+        /** Plain-text offsets into the current structured draft. */
+        match(text: string): readonly { from: number; to: number }[];
+        experimental_matchDraft?: never;
+      }
+    | {
+        /**
+         * Plain-text offsets into `draft.text`. `draft.mentions` marks the
+         * ranges that render as mention pills.
+         */
+        experimental_matchDraft(
+          draft: ComposerDraft,
+        ): readonly { from: number; to: number }[];
+        match?: never;
+      }
+  ))[];
+  /**
+   * Called when Shift+Enter, or Enter on a touch keyboard, starts a new line
+   * from a collapsed caret in a top-level paragraph. `textBeforeCaret` is the
+   * caret line's plain text up to the caret. Return `{ kind: "continue",
+   * prefix }` to start the new line with `prefix`, `{ kind: "end" }` to clear
+   * `textBeforeCaret` instead of adding a line, or `null` for a plain new
+   * line. The first non-null result across plugins wins, and the whole change
+   * is one undo step.
+   */
+  experimental_continueLine?(
+    textBeforeCaret: string,
+  ): { kind: "continue"; prefix: string } | { kind: "end" } | null;
   /**
    * Debounced, read-only observation of the structured draft.
    * @internal Superseded by `useComposer().draft`; kept for plugins built

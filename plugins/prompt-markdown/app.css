@@ -1,0 +1,53 @@
+.bb-prompt-md-marker {
+  display: none;
+}
+
+.bb-prompt-md-bullet {
+  position: relative;
+  color: transparent;
+}
+
+.bb-prompt-md-bullet::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--muted-foreground);
+}
+
+.bb-prompt-md-ordered {
+  color: var(--muted-foreground);
+}
+
+.bb-prompt-md-h1,
+.bb-prompt-md-h2,
+.bb-prompt-md-h3 {
+  font-weight: 600;
+}
+
+.bb-prompt-md-h1 {
+  font-size: 1.3em;
+}
+
+.bb-prompt-md-h2 {
+  font-size: 1.15em;
+}
+
+.bb-prompt-md-h3 {
+  font-size: 1.05em;
+}
+
+.bb-prompt-md-strong {
+  font-weight: 600;
+}
+
+.bb-prompt-md-em {
+  font-style: italic;
+}
+
+.bb-prompt-md-code {
+  border-radius: 0.25rem;
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+  padding: 0 0.2em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}

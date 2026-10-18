@@ -156,6 +156,116 @@ describe("PromptDecorationExtension", () => {
     editor.destroy();
   });
 
+  it("passes mention pill ranges to draft-aware rules", () => {
+    const seen: unknown[] = [];
+    const editor = createEditor(
+      {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "pre " },
+              {
+                type: "mention",
+                attrs: {
+                  resource: {
+                    kind: "plugin",
+                    pluginId: "sample",
+                    itemId: "people:alice",
+                    label: "@alice",
+                  },
+                  serializedText: "@alice",
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        getDecorationSources: () => [
+          {
+            id: "plugin:draft",
+            generation: 1,
+            effects: [
+              {
+                id: "pre",
+                className: "draft-range",
+                experimental_matchDraft(draft) {
+                  seen.push(draft);
+                  return [{ from: 0, to: 3 }];
+                },
+              },
+            ],
+          },
+        ],
+      },
+    );
+
+    expect(seen.at(-1)).toMatchObject({
+      text: "pre @alice",
+      mentions: [{ from: 4, to: 10, kind: "plugin", provider: "people" }],
+    });
+    expect(decorationClasses(editor)).toContain("draft-range");
+    editor.destroy();
+  });
+
+  it("drops caret-line-only classes on lines the focused selection touches", () => {
+    const editor = createEditor(
+      {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "**a**" }] },
+          { type: "paragraph", content: [{ type: "text", text: "**b**" }] },
+        ],
+      },
+      {
+        getDecorationSources: () => [
+          {
+            id: "plugin:markers",
+            generation: 1,
+            effects: [
+              {
+                id: "marker",
+                className: "marker",
+                experimental_offCaretLineOnly: true,
+                match: (text) =>
+                  Array.from(text.matchAll(/\*\*/g), (match) => ({
+                    from: match.index,
+                    to: match.index + 2,
+                  })),
+              },
+            ],
+          },
+        ],
+      },
+    );
+    const markerPositions = () =>
+      (
+        getPromptDecorationSet(editor.state)?.find(
+          undefined,
+          undefined,
+          (spec) => spec.className === "marker",
+        ) ?? []
+      ).map((decoration) => decoration.from);
+
+    editor.commands.setTextSelection(3);
+    expect(markerPositions()).toEqual([1, 4, 8, 11]);
+
+    editor.view.dom.dispatchEvent(new FocusEvent("focus"));
+    expect(markerPositions()).toEqual([8, 11]);
+
+    editor.commands.setTextSelection(10);
+    expect(markerPositions()).toEqual([1, 4]);
+
+    editor.commands.setTextSelection({ from: 3, to: 10 });
+    expect(markerPositions()).toEqual([]);
+
+    editor.view.dom.dispatchEvent(new FocusEvent("blur"));
+    expect(markerPositions()).toEqual([1, 4, 8, 11]);
+    editor.destroy();
+  });
+
   it("adds and removes content and whole-draft classes across edits", () => {
     let includeWholeDraftEffect = true;
     const editor = createEditor(paragraphContent("tag"), {

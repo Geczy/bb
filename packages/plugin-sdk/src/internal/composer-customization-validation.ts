@@ -4,6 +4,19 @@ import type {
   PluginComposerThreadRowStatus,
 } from "@get-bb/plugin-sdk";
 
+type ComposerEditorEffect = NonNullable<
+  NonNullable<ComposerCustomization["richText"]>["effects"]
+>[number];
+type ComposerTextEffectMatcher = NonNullable<
+  Extract<ComposerEditorEffect, { match(text: string): unknown }>["match"]
+>;
+type ComposerDraftEffectMatcher = NonNullable<
+  Extract<
+    ComposerEditorEffect,
+    { experimental_matchDraft(draft: never): unknown }
+  >["experimental_matchDraft"]
+>;
+
 export const PLUGIN_SLOT_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const PLUGIN_MESSAGE_DIRECTIVE_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
@@ -323,17 +336,50 @@ function parseRegions(
         onRejected,
         (entryKind, value) => {
           const entry = value as Record<string, unknown> | null;
+          const id = requireSlotId(entryKind, entry?.id);
+          const className = requireNonEmptyString(
+            entryKind,
+            "className",
+            entry?.className,
+          );
+          const offCaretLineOnly = entry?.experimental_offCaretLineOnly;
+          if (
+            offCaretLineOnly !== undefined &&
+            typeof offCaretLineOnly !== "boolean"
+          ) {
+            throw new Error(
+              `${entryKind}: "experimental_offCaretLineOnly" must be a boolean when set`,
+            );
+          }
+          const shared = {
+            id,
+            className,
+            ...(offCaretLineOnly === true
+              ? { experimental_offCaretLineOnly: true }
+              : {}),
+          };
+          if (entry?.experimental_matchDraft !== undefined) {
+            if (entry.match !== undefined) {
+              throw new Error(
+                `${entryKind}: set "match" or "experimental_matchDraft", not both`,
+              );
+            }
+            return {
+              ...shared,
+              experimental_matchDraft:
+                requireFunction<ComposerDraftEffectMatcher>(
+                  entryKind,
+                  "experimental_matchDraft",
+                  entry.experimental_matchDraft,
+                ),
+            };
+          }
           return {
-            id: requireSlotId(entryKind, entry?.id),
-            match: requireFunction<
-              NonNullable<
-                NonNullable<ComposerCustomization["richText"]>["effects"]
-              >[number]["match"]
-            >(entryKind, "match", entry?.match),
-            className: requireNonEmptyString(
+            ...shared,
+            match: requireFunction<ComposerTextEffectMatcher>(
               entryKind,
-              "className",
-              entry?.className,
+              "match",
+              entry?.match,
             ),
           };
         },
@@ -344,6 +390,12 @@ function parseRegions(
           `${kind}.richText: "onDraftChange" must be a function when set`,
         );
       }
+      const continueLine = raw.experimental_continueLine;
+      if (continueLine !== undefined && typeof continueLine !== "function") {
+        onRejected(
+          `${kind}.richText: "experimental_continueLine" must be a function when set`,
+        );
+      }
       richText = {
         ...(effects !== undefined ? { effects } : {}),
         ...(typeof onDraftChange === "function"
@@ -351,6 +403,15 @@ function parseRegions(
               onDraftChange: onDraftChange as NonNullable<
                 ComposerCustomization["richText"]
               >["onDraftChange"],
+            }
+          : {}),
+        ...(typeof continueLine === "function"
+          ? {
+              experimental_continueLine: continueLine as NonNullable<
+                NonNullable<
+                  ComposerCustomization["richText"]
+                >["experimental_continueLine"]
+              >,
             }
           : {}),
       };

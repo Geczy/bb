@@ -547,6 +547,8 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Add highlighting to text as someone types a prompt. With this, a plugin can:",
         bullets: [
           "Highlight matches such as ticket numbers or TODOs without changing the text",
+          "Hide or reveal syntax depending on which line holds the caret",
+          "Continue a list when someone presses Shift+Enter",
           "Respond after a message is sent or queued",
         ],
         apiSymbols: [

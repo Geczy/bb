@@ -24,6 +24,7 @@
     "plugins/plugin-api-tester",
     "plugins/mcp",
     "plugins/prompt-library",
+    "plugins/prompt-markdown",
     "plugins/provider-acp",
     "plugins/provider-acp-next",
     "plugins/provider-claude-code",

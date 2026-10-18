@@ -28,6 +28,44 @@ reload and crash recovery, scope suppression, and compact Safari
 keyboard/drawer behavior. Verify multiple popups in one customization and
 popup-id uniqueness across customizations.
 
+## Composer rich-text caret and pill awareness
+
+`ComposerRichTextSpec.effects[]` rules may set `experimental_matchDraft(draft)`
+instead of `match(text)` to receive the draft's mention pill ranges, and
+`experimental_offCaretLineOnly: true` to drop their class on every line the
+selection touches while the composer is focused. Rules stay paint-only.
+
+Docs: `frontend-hooks-and-ui.md`.
+
+Core path: every rule, including bb's built-in `ultracode` highlight, runs
+through the same evaluator in `prompt-decoration-extension.ts`, which caches
+match results per draft and repaints on selection, focus, and blur changes.
+The bundled Prompt Markdown plugin is the first consumer of both members.
+
+Before stabilization, verify caret-line repaint cost on drafts over 100k
+characters, Safari selection and IME behavior with hidden ranges, and whether
+`match` and `experimental_matchDraft` should merge into one signature.
+
+## Composer line continuation
+
+`ComposerRichTextSpec.experimental_continueLine(textBeforeCaret)` runs when
+Shift+Enter (Enter on touch keyboards) splits a top-level paragraph at a
+collapsed caret. It returns `{ kind: "continue", prefix }`, `{ kind: "end" }`
+(clear the caret line's text before the caret instead of splitting), or
+`null`; the first non-null result across plugins wins and the change is one
+undo step.
+
+Docs: `frontend-hooks-and-ui.md`.
+
+Core path: bb's own Shift+Enter paragraph handler
+(`applyPromptParagraphNewline`) calls the hook; core contributes no
+continuation of its own yet, so whether core adopts plain-text list
+continuation through this hook is open. The bundled Prompt Markdown plugin is
+the first consumer.
+
+Before stabilization, decide core's own use, verify ordering between several
+plugins, and audit quotes, hard-break lines, and mention pills at the caret.
+
 ## Composer commands
 
 `PluginAppComposer.experimental_registerCommand({ id, title, defaultShortcut?, run })`

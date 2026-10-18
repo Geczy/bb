@@ -190,6 +190,11 @@ export const BUILTIN_PLUGINS = [
     defaultEnabled: false,
   },
   {
+    name: "prompt-markdown",
+    pluginId: "bb--prompt-markdown",
+    defaultEnabled: false,
+  },
+  {
     name: "mcp",
     pluginId: "bb--mcp",
     defaultEnabled: false,

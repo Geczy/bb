@@ -36,6 +36,7 @@ export const OFF_BY_DEFAULT_BUNDLED_PLUGINS: ReadonlySet<string> = new Set([
   "monaco-editor",
   "plugin-api-docs",
   "prompt-library",
+  "prompt-markdown",
   "storage-retention",
   "workflows",
 ]);

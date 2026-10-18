@@ -133,6 +133,10 @@ Each bundled plugin documents its commands and behavior in its own skill.
   `bb plugin enable bb--prompt-library`. Open **+ → Prompts…** or press
   **Ctrl+R** to search, preview, star, and insert prompts. Its commands and
   behavior are documented in the `prompt-library` skill.
+- Prompt Markdown (builtin, disabled by default): enable with
+  `bb plugin enable bb--prompt-markdown`. Formats Markdown in the prompt box
+  as you type; the line holding the caret shows its symbols, and Shift+Enter
+  continues a list. Sent text is exactly what you typed.
 - Custom instructions (builtin): up to 4,096 characters saved under
   Settings → Custom instructions are added to every agent task on this host.
   `bb instructions get`, `bb instructions set <text...>`, and
