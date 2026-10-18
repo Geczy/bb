@@ -12,7 +12,7 @@
     "name": "Prompt Markdown",
     "description": "Formats Markdown as you type in the prompt box while sending exactly the text you typed.",
     "branding": {
-      "icon": "AlignLeft"
+      "icon": "EditFile"
     },
     "server": "./server.ts",
     "app": "./app.tsx"
