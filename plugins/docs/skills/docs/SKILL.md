@@ -135,3 +135,41 @@ bb docs accept|reject|undo|redo <path> --version N [--vault <id>] [--json]
 `proposal-update` replaces only the pending candidate. The resolution commands
 perform the same actions as the card's buttons. Existing pull/edit/push remains available for direct
 changes the user requested without proposal review.
+
+## Inline comments
+
+When asked to address feedback, list comments first:
+
+```sh
+bb docs comments list <path> --vault <id> --status all --json
+bb docs comments add <path> --vault <id> --quote "exact visible text" --body "…" --json
+bb docs comments reply <path> <comment-id> --vault <id> --body "…" --json
+bb docs comments resolve <path> <comment-id> --vault <id> [--reopen] --json
+bb docs comments list <folder> --vault <id> --folder --json
+```
+
+The default list status is `open`; use `resolved` or `all` to include resolved
+threads. JSON includes the sidecar hash, messages, and each anchor's state,
+quote, source line, and visible UTF-16 offsets. An orphan says `orphaned` with
+null offsets: its text was removed, but its discussion still exists. In the UI,
+select new text and use **Reattach to text** to restore the anchor. `--folder`
+reports sidecars stranded by external renames or deletions; `.` means vault root.
+
+Use visible text, without Markdown syntax or frontmatter, for `--quote`.
+Repeated quotes fail with `ambiguous_quote` and occurrence numbers with source
+lines; select one using `--occurrence N` (1-based). Missing quotes fail with
+`quote_not_found`. Mutations retry sidecar hash conflicts up to three times,
+then exit 3 with `conflict`. Malformed sidecars are never overwritten.
+
+Authorship comes from the invoking `BB_THREAD_ID`. A mention written as
+`@[Thread title](thread:thr_ID)` sends the saved comment to that thread with
+attribution. A comment context names the vault, path, and comment ID: answer
+with `bb docs comments reply`. Reply to questions and unclear requests and
+leave them open. For a clear request, propose the document edit with
+`bb docs propose`, reply with what changed, and resolve the comment.
+
+Comments on files opened outside a vault accept `--source '<JSON>'` instead
+of `--vault`, using the source object supplied in the comment context.
+Never edit `.bb-comments/` files directly and never delete comments. Comments
+live in hidden JSON sidecars beside Markdown files; document bytes, vault sync,
+and existing vault settings are unaffected. HTML pages do not support comments.

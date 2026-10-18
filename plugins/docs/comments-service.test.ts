@@ -1,0 +1,178 @@
+import { createHash } from "node:crypto";
+import { afterEach, describe, expect, it } from "vitest";
+import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import { createCommentsService } from "./comments-service.js";
+import { commentsFileSchema } from "./comments.js";
+
+const disposers: (() => Promise<void>)[] = [];
+afterEach(async () => {
+  await Promise.all(disposers.splice(0).map((dispose) => dispose()));
+});
+const hash = (content: string) =>
+  createHash("sha256").update(content).digest("hex");
+function setup() {
+  const files = new Map([
+    ["/vault/plan.md", "# Plan\n\nShip on November 12.\n"],
+  ]);
+  let beforeWrite: (() => void) | null = null;
+  const host = createFakePluginHost({
+    pluginId: "simple-notes",
+    sdk: {
+      files: {
+        read: async ({ path }) => {
+          const content = files.get(path);
+          if (content === undefined) throw new Error("ENOENT");
+          return {
+            path,
+            content,
+            contentEncoding: "utf8",
+            sizeBytes: Buffer.byteLength(content),
+            sha256: hash(content),
+          };
+        },
+        write: async ({ path, content, expectedSha256 }) => {
+          beforeWrite?.();
+          const current = files.get(path);
+          const currentSha256 = current === undefined ? null : hash(current);
+          if (expectedSha256 !== currentSha256)
+            return { outcome: "conflict", currentSha256 };
+          files.set(path, content);
+          return {
+            outcome: "written",
+            sha256: hash(content),
+            sizeBytes: Buffer.byteLength(content),
+          };
+        },
+      },
+    },
+  });
+  disposers.push(() => host.harness.lifecycle.dispose());
+  const service = createCommentsService(host.bb, async () => ({
+    path: "/vault/plan.md",
+    rootPath: "/vault",
+    hostId: null,
+  }));
+  return {
+    service,
+    files,
+    host,
+    race: (callback: (() => void) | null) => {
+      beforeWrite = callback;
+    },
+  };
+}
+const target = { vaultId: "plans", path: "plan.md" };
+const sidecar = "/vault/.bb-comments/plan.md.json";
+describe("comment sidecar mutations", () => {
+  it("merges competing creates without changing document bytes", async () => {
+    const { service, files } = setup();
+    const original = files.get("/vault/plan.md");
+    await Promise.all([
+      service.add({ ...target, quote: "November 12", body: "One" }),
+      service.add({ ...target, quote: "November 12", body: "Two" }),
+    ]);
+    expect(
+      (await service.list(target)).threads
+        .map((thread) => thread.messages[0].body)
+        .sort(),
+    ).toEqual(["One", "Two"]);
+    expect(files.get("/vault/plan.md")).toBe(original);
+  });
+  it("does not resurrect a deleted root when a concurrent reply retries", async () => {
+    const { service, files, race } = setup();
+    const added = await service.add({
+      ...target,
+      quote: "November 12",
+      body: "Question",
+    });
+    race(() => {
+      files.set(sidecar, JSON.stringify({ version: 1, threads: [] }));
+      race(null);
+    });
+    await expect(
+      service.reply({
+        ...target,
+        commentId: added.threads[0].id,
+        body: "Late answer",
+      }),
+    ).rejects.toThrow("deleted");
+    expect((await service.list(target)).threads).toHaveLength(0);
+  });
+  it("reads malformed sidecars as empty and fails closed on mutation", async () => {
+    const { service, files } = setup();
+    files.set(sidecar, "broken JSON");
+    expect(await service.list(target)).toMatchObject({
+      threads: [],
+      notice: expect.stringContaining("malformed"),
+    });
+    await expect(
+      service.add({ ...target, quote: "November 12", body: "Question" }),
+    ).rejects.toThrow("malformed");
+    expect(files.get(sidecar)).toBe("broken JSON");
+  });
+  it("bounds CAS retries and returns the conflict exit code", async () => {
+    const { service, files, race } = setup();
+    let writes = 0;
+    race(() => {
+      writes++;
+      files.set(
+        sidecar,
+        JSON.stringify({ version: 1, threads: [] }) + " ".repeat(writes),
+      );
+    });
+    await expect(
+      service.add({ ...target, quote: "November 12", body: "Question" }),
+    ).rejects.toMatchObject({ code: "conflict", exitCode: 3 });
+    expect(writes).toBe(4);
+  });
+  it("keeps agent attribution and prevents user editing or deleting agent replies", async () => {
+    const { service, files } = setup();
+    const added = await service.add({
+      ...target,
+      quote: "November 12",
+      body: "Question",
+    });
+    const commentId = added.threads[0].id;
+    const replied = await service.reply(
+      { ...target, commentId, body: "Answer" },
+      { kind: "agent", threadId: "thr_agent", name: "Planner" },
+    );
+    const messageId = replied.threads[0].messages[1].id;
+    await expect(
+      service.edit({ ...target, commentId, messageId, body: "Changed" }),
+    ).rejects.toThrow("author");
+    await expect(
+      service.delete({ ...target, commentId, messageId }),
+    ).rejects.toThrow("author");
+    expect(
+      commentsFileSchema.parse(JSON.parse(files.get(sidecar)!)).threads[0]
+        .messages[1].author,
+    ).toMatchObject({ kind: "agent", threadId: "thr_agent" });
+  });
+  it("preserves orphan discussions through resolve, reopen and reattach", async () => {
+    const { service, files } = setup();
+    const added = await service.add({
+      ...target,
+      quote: "November 12",
+      body: "Question",
+    });
+    const commentId = added.threads[0].id;
+    files.set("/vault/plan.md", "# Replacement\n\nNew date.\n");
+    expect((await service.list(target)).threads[0].anchor.state).toBe(
+      "orphaned",
+    );
+    await service.status({ ...target, commentId, resolved: true });
+    await service.status({ ...target, commentId, resolved: false });
+    const result = await service.reattach({
+      ...target,
+      commentId,
+      quote: "New date",
+      occurrence: 1,
+    });
+    expect(result.threads[0]).toMatchObject({
+      status: "open",
+      anchor: { state: "anchored", quote: "New date" },
+    });
+    expect(result.threads[0].messages[0].body).toBe("Question");
+  });
+});

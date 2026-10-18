@@ -1,3 +1,10 @@
+import {
+  commentsContract,
+  commentSourceSchema,
+  commentSidecar,
+  createCommentsService,
+  type CommentTarget,
+} from "./comments-service.js";
 import { proposalSchema, type Proposal } from "./proposals.js";
 import { watch } from "node:fs";
 import os from "node:os";
@@ -259,6 +266,18 @@ type SyncFile = z.infer<typeof syncSnapshotEntrySchema>;
 type OpenerSource = z.infer<typeof openerSourceSchema>;
 
 export const docsRpcContract = defineRpcContract({
+  ...commentsContract,
+  listCommentFolder: {
+    input: z
+      .object({ vaultId: vaultIdSchema, path: vaultDirectorySchema })
+      .strict(),
+    output: z.object({
+      stranded: z.array(
+        z.object({ path: z.string(), sidecarPath: z.string() }),
+      ),
+      truncated: z.boolean(),
+    }),
+  },
   readProposal: {
     input: z.object({ vaultId: vaultIdSchema, path: vaultPathSchema }).strict(),
     output: proposalSchema.nullable(),
@@ -1199,12 +1218,43 @@ export default async function plugin(
     const from = requireVaultPath(fromValue);
     const to = requireVaultPath(toValue);
     return serializeVault(vault.id, async () => {
+      const oldSidecar = commentSidecar(from);
+      const newSidecar = commentSidecar(to);
+      const sidecar = await readExistingFile(vault, oldSidecar);
+      if (sidecar && (await readExistingFile(vault, newSidecar)))
+        throw new Error(
+          "Destination has stranded comments; restore or move that document before replacing it.",
+        );
       await bb.sdk.files.move({
         ...hostArgs(vault),
         sourcePath: absolutePath(vault, from),
         destinationPath: absolutePath(vault, to),
         rootPath: vault.rootPath,
       });
+      if (sidecar) {
+        try {
+          await bb.sdk.files.mkdir({
+            ...hostArgs(vault),
+            path: absolutePath(vault, path.posix.dirname(newSidecar)),
+            rootPath: vault.rootPath,
+            recursive: true,
+          });
+          await bb.sdk.files.move({
+            ...hostArgs(vault),
+            sourcePath: absolutePath(vault, oldSidecar),
+            destinationPath: absolutePath(vault, newSidecar),
+            rootPath: vault.rootPath,
+          });
+        } catch (error) {
+          await bb.sdk.files.move({
+            ...hostArgs(vault),
+            sourcePath: absolutePath(vault, to),
+            destinationPath: absolutePath(vault, from),
+            rootPath: vault.rootPath,
+          });
+          throw error;
+        }
+      }
       db.transaction(() => {
         const rows = db
           .prepare(
@@ -1249,6 +1299,13 @@ export default async function plugin(
         rootPath: vault.rootPath,
         recursive,
       });
+      const sidecarPath = commentSidecar(relativePath);
+      if (await readExistingFile(vault, sidecarPath))
+        await bb.sdk.files.remove({
+          ...hostArgs(vault),
+          path: absolutePath(vault, sidecarPath),
+          rootPath: vault.rootPath,
+        });
       deleteProposals(vault.id, relativePath);
       mentionSummaries.delete(vault.id);
       bb.realtime.publish("vault-changed", { vaultId: vault.id });
@@ -1652,7 +1709,61 @@ export default async function plugin(
     };
   }
 
+  const comments = createCommentsService(
+    bb,
+    async (input) => {
+      if (!/\.md$/i.test(input.path))
+        throw new Error("Comments are supported on Markdown files only");
+      if (input.source) return resolveOpenerFile(input.source, input.path);
+      const vault = getVault(input.vaultId);
+      const relative = requireVaultPath(input.path, { extension: ".md" });
+      return {
+        path: absolutePath(vault, relative),
+        rootPath: vault.rootPath,
+        hostId: vault.hostId,
+      };
+    },
+    (input, work) =>
+      input.source ? work() : serializeVault(getVault(input.vaultId).id, work),
+  );
+
   const handlers: PluginRpcHandlers<typeof docsRpcContract> = {
+    async listCommentFolder(input) {
+      const vault = getVault(input.vaultId);
+      const folder = input.path ?? "";
+      const root = folder ? absolutePath(vault, folder) : vault.rootPath;
+      const listing = await bb.sdk.files.listPaths({
+        ...hostArgs(vault),
+        path: root,
+        includeHidden: true,
+        includeFiles: true,
+        includeDirectories: false,
+        limit: MAX_TREE_ENTRIES,
+      });
+      const stranded: { path: string; sidecarPath: string }[] = [];
+      for (const item of listing.paths) {
+        if (!/(?:^|\/)\.bb-comments\/[^/]+\.md\.json$/i.test(item.path))
+          continue;
+        const relative = folder ? `${folder}/${item.path}` : item.path;
+        const documentPath = relative
+          .replace(/(^|\/)\.bb-comments\//, "$1")
+          .replace(/\.json$/, "");
+        if (!(await readExistingFile(vault, documentPath)))
+          stranded.push({ path: documentPath, sidecarPath: relative });
+      }
+      return { stranded, truncated: listing.truncated };
+    },
+    listComments: (input) => comments.list(input),
+    addComment: (input) => comments.add(input),
+    replyComment: (input) => comments.reply(input),
+    setCommentStatus: (input) => comments.status(input),
+    editCommentMessage: (input) => comments.edit(input),
+    deleteCommentMessage: (input) => comments.delete(input),
+    reattachComment: (input) => comments.reattach(input),
+    refreshCommentAnchors: (input) => comments.refresh(input),
+    commentProjects: () => comments.projects(),
+    startCommentAgent: (input) => comments.startAgent(input),
+    commentThreads: (input) => comments.suggestions(input.query),
     async readProposal(input) {
       return readProposal(getVault(input.vaultId).id, input.path);
     },
@@ -2060,6 +2171,57 @@ export default async function plugin(
       { auth: "token" },
     );
   }
+
+  routeRpc(
+    "/comments/folder",
+    docsRpcContract.listCommentFolder.input,
+    handlers.listCommentFolder,
+  );
+  routeRpc(
+    "/comments/start-agent",
+    docsRpcContract.startCommentAgent.input,
+    handlers.startCommentAgent,
+  );
+  routeRpc(
+    "/comments/list",
+    docsRpcContract.listComments.input,
+    handlers.listComments,
+  );
+  routeRpc(
+    "/comments/add",
+    docsRpcContract.addComment.input,
+    handlers.addComment,
+  );
+  routeRpc(
+    "/comments/reply",
+    docsRpcContract.replyComment.input,
+    handlers.replyComment,
+  );
+  routeRpc(
+    "/comments/resolve",
+    docsRpcContract.setCommentStatus.input,
+    handlers.setCommentStatus,
+  );
+  routeRpc(
+    "/comments/edit",
+    docsRpcContract.editCommentMessage.input,
+    handlers.editCommentMessage,
+  );
+  routeRpc(
+    "/comments/delete",
+    docsRpcContract.deleteCommentMessage.input,
+    handlers.deleteCommentMessage,
+  );
+  routeRpc(
+    "/comments/reattach",
+    docsRpcContract.reattachComment.input,
+    handlers.reattachComment,
+  );
+  routeRpc(
+    "/comments/refresh",
+    docsRpcContract.refreshCommentAnchors.input,
+    handlers.refreshCommentAnchors,
+  );
 
   routeRpc("/list", docsRpcContract.listNotes.input, handlers.listNotes);
 
@@ -2941,6 +3103,52 @@ export default async function plugin(
     ]),
   );
 
+  const commentOptions = {
+    vault: VAULT_OPTION,
+    json: JSON_OPTION,
+    source: {
+      type: "string",
+      description: "File-opener source JSON for a file outside a vault",
+    },
+  } as const;
+  const commentPositionals = [
+    ...proposalPositionals,
+    { name: "commentId", required: true, description: "Comment thread ID" },
+  ] as const;
+  function commentTarget(input: {
+    positionals: { path: string };
+    options: { vault?: string; source?: string };
+  }): CommentTarget {
+    return {
+      path: input.positionals.path,
+      vaultId: input.options.vault,
+      ...(input.options.source
+        ? {
+            source: commentSourceSchema.parse(JSON.parse(input.options.source)),
+          }
+        : {}),
+    };
+  }
+  function commentOutput(
+    result: Awaited<ReturnType<typeof comments.list>>,
+    json: boolean,
+  ): PluginCliResult {
+    return {
+      exitCode: 0,
+      stdout: json
+        ? JSON.stringify(result, null, 2)
+        : [
+            result.notice,
+            ...result.threads.map(
+              (item) =>
+                `${item.id} · ${item.status} · ${item.anchor.state === "orphaned" ? "Text not found" : `line ${item.anchor.line}`} · “${item.anchor.quote}”\n${item.messages.map((message) => `${message.author.name}: ${message.body}`).join("\n")}`,
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n\n") || "No comments.",
+    };
+  }
+
   bb.cli.register(
     defineCli({
       name: "docs",
@@ -2949,6 +3157,141 @@ export default async function plugin(
       usageErrorExitCode: 2,
       commands: {
         ...proposalCommands,
+        "comments list": cliCommand({
+          summary: "List document comments and their anchor locations",
+          positionals: proposalPositionals,
+          options: {
+            ...commentOptions,
+            status: {
+              type: "string",
+              description: "open, resolved, or all (default open)",
+            },
+            folder: {
+              type: "boolean",
+              description:
+                "Report stranded sidecars beneath this folder (. for vault root)",
+            },
+          },
+          run: (input) =>
+            attemptCli(async () => {
+              if (input.options.folder) {
+                if (input.options.source || input.options.status)
+                  throw new CliUsageError(
+                    "--folder cannot be combined with --source or --status",
+                  );
+                const result = await handlers.listCommentFolder({
+                  vaultId: input.options.vault,
+                  path:
+                    input.positionals.path === "."
+                      ? ""
+                      : requireVaultPath(input.positionals.path),
+                });
+                return {
+                  exitCode: 0,
+                  stdout: input.options.json
+                    ? JSON.stringify(result, null, 2)
+                    : result.stranded
+                        .map((item) => `${item.path} · ${item.sidecarPath}`)
+                        .join("\n") || "No stranded comments.",
+                };
+              }
+              return commentOutput(
+                await comments.list({
+                  ...commentTarget(input),
+                  status: z
+                    .enum(["open", "resolved", "all"])
+                    .parse(input.options.status ?? "open"),
+                }),
+                input.options.json === true,
+              );
+            }),
+        }),
+        "comments add": cliCommand({
+          summary: "Comment on exact visible text without changing Markdown",
+          positionals: proposalPositionals,
+          options: {
+            ...commentOptions,
+            quote: {
+              type: "string",
+              required: true,
+              description: "Exact visible text",
+            },
+            occurrence: {
+              type: "string",
+              description: "1-based occurrence for repeated quotes",
+            },
+            body: {
+              type: "string",
+              required: true,
+              description: "Comment text",
+            },
+          },
+          run: (input, context) =>
+            attemptCli(async () =>
+              commentOutput(
+                await comments.add(
+                  commentsContract.addComment.input.parse({
+                    ...commentTarget(input),
+                    quote: input.options.quote,
+                    body: input.options.body,
+                    occurrence:
+                      input.options.occurrence === undefined
+                        ? undefined
+                        : Number(input.options.occurrence),
+                  }),
+                  await comments.author(context.threadId),
+                ),
+                input.options.json === true,
+              ),
+            ),
+        }),
+        "comments reply": cliCommand({
+          summary: "Reply to a comment as the invoking agent thread",
+          positionals: commentPositionals,
+          options: {
+            ...commentOptions,
+            body: { type: "string", required: true, description: "Reply text" },
+          },
+          run: (input, context) =>
+            attemptCli(async () =>
+              commentOutput(
+                await comments.reply(
+                  commentsContract.replyComment.input.parse({
+                    ...commentTarget(input),
+                    commentId: input.positionals.commentId,
+                    body: input.options.body,
+                  }),
+                  await comments.author(context.threadId),
+                ),
+                input.options.json === true,
+              ),
+            ),
+        }),
+        "comments resolve": cliCommand({
+          summary: "Resolve or reopen a comment thread",
+          positionals: commentPositionals,
+          options: {
+            ...commentOptions,
+            reopen: {
+              type: "boolean",
+              description: "Reopen instead of resolving",
+            },
+          },
+          run: (input, context) =>
+            attemptCli(async () =>
+              commentOutput(
+                await comments.status(
+                  {
+                    ...commentTarget(input),
+                    commentId: input.positionals.commentId,
+                    resolved: !input.options.reopen,
+                  },
+                  await comments.author(context.threadId),
+                ),
+                input.options.json === true,
+              ),
+            ),
+        }),
         proposal: cliCommand({
           summary: "Read the current proposal and its version",
           positionals: proposalPositionals,
@@ -3486,12 +3829,16 @@ export default async function plugin(
       const relativePath = itemId.slice(separator + 1);
       const file = await readFile(vaultId, relativePath);
       const proposal = readProposal(getVault(vaultId).id, relativePath);
+      const openComments = /\.md$/i.test(relativePath)
+        ? await comments.list({ vaultId, path: relativePath, status: "open" })
+        : { threads: [] };
       return {
         context:
           `Docs document (${vaultId}/${relativePath}):\nSHA-256: ${file.sha256}\n\n${file.content}` +
           (proposal
             ? `\n\nDocs proposal metadata:\n${JSON.stringify(proposal)}\nUse bb docs propose with this version and current document hash to propose a revision; do not push over the user's document.`
-            : "\n\nProposal version: none. Use bb docs propose to suggest changes for approval."),
+            : "\n\nProposal version: none. Use bb docs propose to suggest changes for approval.") +
+          `\n\nOpen Docs comments:\n${openComments.threads.map((item) => `${item.id} · “${item.anchor.quote}” · ${item.messages.at(-1)?.body}`).join("\n") || "None"}`,
       };
     },
   });
