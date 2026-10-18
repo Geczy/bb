@@ -3838,7 +3838,9 @@ export default async function plugin(
           (proposal
             ? `\n\nDocs proposal metadata:\n${JSON.stringify(proposal)}\nUse bb docs propose with this version and current document hash to propose a revision; do not push over the user's document.`
             : "\n\nProposal version: none. Use bb docs propose to suggest changes for approval.") +
-          `\n\nOpen Docs comments:\n${openComments.threads.map((item) => `${item.id} · “${item.anchor.quote}” · ${item.messages.at(-1)?.body}`).join("\n") || "None"}`,
+          (openComments.threads.length
+            ? `\n\nOpen Docs comments:\n${openComments.threads.map((item) => `${item.id} · “${item.anchor.quote}” · ${item.messages.at(-1)?.body}`).join("\n")}`
+            : ""),
       };
     },
   });

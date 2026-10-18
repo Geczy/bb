@@ -308,7 +308,13 @@ export function createCommentsService(
       try {
         await bb.sdk.threads.send({
           threadId: mention.id,
-          input: [{ type: "text", text: context(input, id, quote, body, by) }],
+          input: [
+            {
+              type: "text",
+              text: context(input, id, quote, body, by),
+              mentions: [],
+            },
+          ],
           mode: "queue-if-active",
           ...(by.kind === "agent" ? { senderThreadId: by.threadId } : {}),
         });
@@ -337,7 +343,7 @@ export function createCommentsService(
     user,
     async add(
       input: z.infer<typeof commentsContract.addComment.input>,
-      by = user,
+      by: CommentAuthor = user,
     ) {
       const id = `c_${randomUUID()}`;
       const message = {
@@ -369,7 +375,7 @@ export function createCommentsService(
     },
     async reply(
       input: z.infer<typeof commentsContract.replyComment.input>,
-      by = user,
+      by: CommentAuthor = user,
     ) {
       const message = {
         id: `m_${randomUUID()}`,
@@ -397,7 +403,7 @@ export function createCommentsService(
     },
     status: (
       input: z.infer<typeof commentsContract.setCommentStatus.input>,
-      by = user,
+      by: CommentAuthor = user,
     ) =>
       mutate(input, (data) => {
         const item = thread(data, input.commentId);
@@ -507,7 +513,7 @@ export function createCommentsService(
     async suggestions(query: string) {
       const items =
         query.trim().length < 2
-          ? (await bb.sdk.threads.list({ archived: false, limit: 10 })).threads
+          ? await bb.sdk.threads.list({ archived: false, limit: 10 })
           : (
               await bb.sdk.threads.search({ query, limitPerGroup: "10" })
             ).active.results.map((result) => result.thread);

@@ -1870,3 +1870,83 @@ describe("Docs proposals", () => {
     await harness.lifecycle.dispose();
   });
 });
+
+describe("Docs comment lifecycle", () => {
+  it("moves comments with H1 renames and removes them with their document", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": {
+        content: "# New title\n\nShip tomorrow.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+    });
+    try {
+      await host.harness.behavior.callRpc("addComment", {
+        path: "plan.md",
+        quote: "tomorrow",
+        body: "Confirm the date",
+      });
+      await host.harness.behavior.callRpc("renameToTitle", { path: "plan.md" });
+      expect(host.files.has("/vault/.bb-comments/plan.md.json")).toBe(false);
+      expect(
+        host.files.get("/vault/.bb-comments/new-title.md.json")?.content,
+      ).toContain("Confirm the date");
+      await host.harness.behavior.callRpc("deletePath", {
+        path: "new-title.md",
+      });
+      expect(host.files.has("/vault/.bb-comments/new-title.md.json")).toBe(
+        false,
+      );
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("exposes one discussion through CLI, RPC and HTTP and reports external deletion", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": {
+        content: "# Plan\n\nShip tomorrow.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+    });
+    try {
+      const result = await host.harness.behavior.runCli([
+        "comments",
+        "add",
+        "plan.md",
+        "--quote",
+        "tomorrow",
+        "--body",
+        "Confirm the date",
+        "--json",
+      ]);
+      expect(result.exitCode).toBe(0);
+      const listed = await host.harness.behavior.callRpc("listComments", {
+        path: "plan.md",
+      });
+      expect(listed).toMatchObject({
+        threads: [{ messages: [{ body: "Confirm the date" }] }],
+      });
+      const response = await host.harness.behavior.fetchHttp(
+        "POST",
+        "/comments/list",
+        {
+          body: JSON.stringify({ path: "plan.md" }),
+          headers: { "content-type": "application/json" },
+        },
+      );
+      expect(await response.json()).toEqual(listed);
+      host.files.delete("/vault/plan.md");
+      expect(
+        await host.harness.behavior.callRpc("listCommentFolder", { path: "" }),
+      ).toMatchObject({
+        stranded: [
+          { path: "plan.md", sidecarPath: ".bb-comments/plan.md.json" },
+        ],
+      });
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+});

@@ -7,8 +7,10 @@ export function visibleMarkdown(content: string): VisibleDocument {
   const { body, frontmatter } = parseMarkdownDocument(content);
   const offset = (frontmatter.match(/\n/g) ?? []).length;
   const blocks: { text: string; line: number }[] = [];
+  let sourceLine = 0;
   for (const token of parser.parse(body, {})) {
-    const line = offset + (token.map?.[0] ?? 0) + 1;
+    if (token.map) sourceLine = token.map[0];
+    const line = offset + sourceLine + 1;
     if (token.type === "inline") {
       let text = "";
       for (const child of token.children ?? []) {

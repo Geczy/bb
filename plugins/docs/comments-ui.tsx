@@ -666,6 +666,9 @@ export function CommentsSurface({
   const content = useRef<HTMLDivElement>(null);
   const cards = useRef(new Map<string, HTMLDivElement>());
   const request = useRef(0);
+  const invalidateRequests = useCallback(() => {
+    request.current++;
+  }, []);
   const savedSha = useRef(sha256);
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -691,10 +694,8 @@ export function CommentsSurface({
     setActive(null);
     setDraft(null);
     void refresh();
-    return () => {
-      request.current++;
-    };
-  }, [targetKey, refresh]);
+    return invalidateRequests;
+  }, [targetKey, refresh, invalidateRequests]);
   const changed = useCallback(
     (payload: unknown) => {
       if (typeof payload !== "object" || payload === null) return;
@@ -928,7 +929,13 @@ export function CommentsSurface({
     .filter((thread) => resolved || !thread.resolvedAt)
     .sort((a, b) => (a.anchor.start ?? -1) - (b.anchor.start ?? -1));
   useLayoutEffect(() => {
-    if (compact || !editor || !root.current) return;
+    if (
+      compact ||
+      !editor ||
+      !root.current ||
+      (!visibleThreads.length && !draft)
+    )
+      return;
     const layout = () => {
       const container = content.current;
       if (!container) return;
@@ -1097,7 +1104,7 @@ export function CommentsSurface({
             )}
           >
             <div className="min-w-0 flex-1">{children}</div>
-            {!compact && shown && (
+            {!compact && shown && (visibleThreads.length > 0 || draft) && (
               <aside
                 aria-label="Document comments"
                 className="absolute inset-y-0 right-0 w-80 border-l border-border bg-muted/10"
