@@ -306,10 +306,11 @@ describe("sidebar header controls", () => {
 
   it.each([false, true])("selects and reverses status sort (compact: %s)", async (compact) => {
     const { store } = setup("Pinned", false, "project", compact);
-    await openMenu();
     if (compact) {
+      fireEvent.click(screen.getByRole("button", { name: "Pinned actions" }));
       fireEvent.click(await screen.findByRole("menuitem", { name: "Sort by" }));
     } else {
+      await openMenu();
       await openSubmenu("Sort by");
     }
     fireEvent.click(await screen.findByRole("menuitemradio", { name: "Status" }));

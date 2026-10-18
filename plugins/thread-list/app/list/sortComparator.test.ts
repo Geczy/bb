@@ -182,7 +182,7 @@ describe("getSidebarThreadComparator", () => {
   );
 
   it("sorts environment groups and children by status without separating families", () => {
-    const environment = makeSidebarEnvironment({ id: "env_shared" });
+    const environment = makeSidebarEnvironment({ id: "env_shared", isWorktree: true });
     const entries = [
       thread({ id: "idle", status: "idle" }),
       thread({ id: "env_idle", status: "idle", environment }),
