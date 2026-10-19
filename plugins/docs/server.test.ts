@@ -9,6 +9,7 @@ import {
   makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
 import simpleNotes from "./server";
+import { commentsListSchema } from "./comments.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -148,7 +149,12 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
                   }))
               : []),
           ];
-          return { paths, truncated: false };
+          return {
+            paths: args.includeHidden
+              ? paths
+              : paths.filter((entry) => !/(^|\/)\./.test(entry.path)),
+            truncated: false,
+          };
         },
         async read(args) {
           const file = files.get(args.path);
@@ -1908,11 +1914,13 @@ describe("Docs comment lifecycle", () => {
         }
     };
     try {
-      const added = await host.harness.behavior.callRpc("addComment", {
-        path: "notes/push.md",
-        quote: "tomorrow",
-        body: "Confirm the date",
-      });
+      const added = commentsListSchema.parse(
+        await host.harness.behavior.callRpc("addComment", {
+          path: "notes/push.md",
+          quote: "tomorrow",
+          body: "Confirm the date",
+        }),
+      );
       const commentId = added.threads[0]!.id;
       await host.harness.behavior.callRpc("replyComment", {
         path: "notes/push.md",
@@ -1933,7 +1941,10 @@ describe("Docs comment lifecycle", () => {
         ["push", "all", "--delete", "--json"],
         { cwd: "/work" },
       );
-      expect(pushed.exitCode).toBe(0);
+      expect({ ...pushed, stdout: JSON.parse(pushed.stdout) }).toMatchObject({
+        exitCode: 0,
+        stdout: { errors: [] },
+      });
       expect(host.files.has("/vault/notes/push.md")).toBe(false);
       expect(
         await host.harness.behavior.callRpc("listComments", {
@@ -1972,11 +1983,13 @@ describe("Docs comment lifecycle", () => {
       },
     });
     try {
-      const added = await host.harness.behavior.callRpc("addComment", {
-        path: "notes/externally-renamed.md",
-        quote: "Keep this discussion",
-        body: "Still here?",
-      });
+      const added = commentsListSchema.parse(
+        await host.harness.behavior.callRpc("addComment", {
+          path: "notes/externally-renamed.md",
+          quote: "Keep this discussion",
+          body: "Still here?",
+        }),
+      );
       const file = host.files.get("/vault/notes/externally-renamed.md")!;
       host.files.delete("/vault/notes/externally-renamed.md");
       host.setUtf8("/vault/other/externally-renamed.md", file.content);

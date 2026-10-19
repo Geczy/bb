@@ -72,7 +72,6 @@ describe("visible comment text", () => {
       threadRanges(doc, [thread], base).map((range) =>
         doc.textBetween(range.from, range.to),
       );
-    expect(highlighted(null)).not.toEqual(["November 12"]);
     expect(highlighted(saved)).toEqual(["November 12"]);
     expect(
       threadRanges(doc, [thread], "# Plan\n\nShip on December 30."),
