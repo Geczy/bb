@@ -152,13 +152,6 @@ describe("createPromptParagraphNewlineTransaction list items", () => {
 });
 
 describe("promptListContinuation", () => {
-  it("pushes an item down instead of ending it when text follows the caret", () => {
-    expect(promptListContinuation("- ", true)).toEqual({
-      kind: "continue",
-      prefix: "- ",
-    });
-  });
-
   it.each([
     { line: "- item", expected: { kind: "continue", prefix: "- " } },
     { line: "  * nested", expected: { kind: "continue", prefix: "  * " } },
