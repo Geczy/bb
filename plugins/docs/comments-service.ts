@@ -125,6 +125,12 @@ function isMissing(error: unknown): boolean {
 export function threadFingerprint(thread: CommentThread): string {
   return createHash("sha256").update(JSON.stringify(thread)).digest("hex");
 }
+function tombstoned(data: CommentsFile, thread: CommentThread): boolean {
+  const fingerprint = threadFingerprint(thread);
+  return (data.attached ?? []).some((entry) =>
+    entry.threads.includes(fingerprint),
+  );
+}
 export function fullyAttached(content: string): boolean {
   try {
     const saved = commentsFileSchema.parse(JSON.parse(content));
@@ -213,6 +219,7 @@ export function createCommentsService(
       sidecarSha256: saved.sha256,
       notice: saved.notice,
       threads: saved.data.threads
+        .filter((thread) => !tombstoned(saved.data, thread))
         .map((thread) => ({
           ...thread,
           status: thread.resolvedAt ? ("resolved" as const) : ("open" as const),
@@ -240,6 +247,7 @@ export function createCommentsService(
         if (saved.notice) fail("invalid_sidecar", saved.notice);
         const doc = visibleMarkdown(file.content);
         for (const thread of saved.data.threads) {
+          if (tombstoned(saved.data, thread)) continue;
           const located = resolveAnchor(doc, file.sha256, thread.anchor);
           if (located.start !== null && located.end !== null)
             thread.anchor = makeAnchor(

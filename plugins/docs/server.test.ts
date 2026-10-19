@@ -2398,6 +2398,76 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
+  it("starts a new document at a reused path clean while late source writes stay visible", async () => {
+    const content = "# Plan\n\nShip tomorrow.";
+    const sourcePath = "/vault/notes/.bb-comments/source.md.json";
+    const host = await loadVirtualSyncVault({
+      "/vault/notes/source.md": doc(content),
+      "/vault/notes/copy.md": doc(content),
+    });
+    try {
+      const added = commentsListSchema.parse(
+        await host.harness.behavior.callRpc("addComment", {
+          path: "notes/source.md",
+          quote: "tomorrow",
+          body: "Old discussion",
+        }),
+      );
+      const oldId = added.threads[0]!.id;
+      host.files.delete("/vault/notes/source.md");
+      await host.harness.behavior.callRpc("attachComments", {
+        path: "notes/copy.md",
+        sidecarPath: "notes/.bb-comments/source.md.json",
+      });
+
+      host.setUtf8("/vault/notes/source.md", "# New\n\nA different plan.");
+      expect((await listed(host, "notes/source.md")).threads).toEqual([]);
+      await host.harness.behavior.callRpc("addComment", {
+        path: "notes/source.md",
+        quote: "different plan",
+        body: "New discussion",
+      });
+      expect(
+        (await listed(host, "notes/source.md")).threads.map(
+          (thread) => thread.messages[0]!.body,
+        ),
+      ).toEqual(["New discussion"]);
+
+      const data = commentsFileSchema.parse(
+        JSON.parse(host.files.get(sourcePath)!.content),
+      );
+      data.threads
+        .find((thread) => thread.id === oldId)!
+        .messages.push({
+          id: "m_late",
+          author: { kind: "user", name: "You" },
+          body: "Late reply after the tombstone",
+          createdAt: "2026-10-19T05:00:00.000Z",
+          editedAt: null,
+          sentTo: [],
+        });
+      host.setUtf8(sourcePath, JSON.stringify(data));
+      expect(await listed(host, "notes/source.md")).toMatchObject({
+        threads: [
+          {
+            id: oldId,
+            anchor: { state: "orphaned" },
+            messages: [
+              { body: "Old discussion" },
+              { body: "Late reply after the tombstone" },
+            ],
+          },
+          { messages: [{ body: "New discussion" }] },
+        ],
+      });
+      expect(await listed(host, "notes/copy.md")).toMatchObject({
+        threads: [{ id: oldId, messages: [{ body: "Old discussion" }] }],
+      });
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("refuses Docs moves onto stranded comments", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),

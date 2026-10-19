@@ -721,7 +721,7 @@ export function CommentsSurface({
     void refresh();
     return invalidateRequests;
   }, [targetKey, refresh, invalidateRequests]);
-  const commentless = data !== EMPTY && data.sidecarSha256 === null;
+  const commentless = data !== EMPTY && data.threads.length === 0;
   useEffect(() => {
     if (!commentless || targetRef.current.source) return;
     let current = true;
