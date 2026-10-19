@@ -71,13 +71,6 @@ export const commentsContract = {
     input: threadInput.extend({ messageId: z.string().min(1) }),
     output: commentsListSchema,
   },
-  reattachComment: {
-    input: threadInput.extend({
-      quote: z.string().min(1),
-      occurrence: z.number().int().positive(),
-    }),
-    output: commentsListSchema,
-  },
   refreshCommentAnchors: {
     input: commentTargetSchema.extend({
       documentSha256: z.string().min(1),
@@ -516,15 +509,6 @@ export function createCommentsService(
           item.messages = item.messages.filter(
             (candidate) => candidate.id !== message.id,
           );
-      }),
-    reattach: (input: z.infer<typeof commentsContract.reattachComment.input>) =>
-      mutate(input, (data, content, sha256) => {
-        thread(data, input.commentId).anchor = anchor(
-          content,
-          sha256,
-          input.quote,
-          input.occurrence,
-        );
       }),
     refresh: (
       input: z.infer<typeof commentsContract.refreshCommentAnchors.input>,

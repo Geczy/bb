@@ -413,19 +413,16 @@ interface ThreadActions {
   setResolved(id: string, resolved: boolean): void;
   editMessage(id: string, messageId: string, body: string): Promise<void>;
   deleteMessage(id: string, messageId: string): void;
-  startReattach(id: string): void;
   startAgent(id: string, projectId: string): Promise<void>;
 }
 
 function ThreadCard({
   thread,
   active,
-  reattaching,
   actions,
 }: {
   thread: CommentThread;
   active: boolean;
-  reattaching: boolean;
   actions: ThreadActions;
 }) {
   const [root, ...replies] = thread.messages;
@@ -521,15 +518,6 @@ function ThreadCard({
           <p className="mt-1 text-xs italic text-muted-foreground line-through">
             “{thread.anchor.quote}”
           </p>
-          <div className="mt-2 flex gap-1.5">
-            <Button
-              size="sm"
-              variant={reattaching ? "secondary" : "outline"}
-              onClick={() => actions.startReattach(thread.id)}
-            >
-              {reattaching ? "Select text in the doc…" : "Reattach to text"}
-            </Button>
-          </div>
         </div>
       ) : null}
       <div className="space-y-3 px-3 py-2.5">
@@ -792,7 +780,6 @@ export function CommentsSurface({
   const [active, setActive] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [draft, setDraft] = useState<Selection | null>(null);
-  const [reattach, setReattach] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const [reloads, setReloads] = useState(0);
@@ -932,11 +919,6 @@ export function CommentsSurface({
           rpc.call("deleteCommentMessage", { ...target, commentId, messageId }),
         ),
       ),
-    startReattach: (id) => {
-      setReattach(id);
-      setDraft(null);
-      setDrawerOpen(false);
-    },
   };
   const startDraft = useCallback(() => {
     const selected = selectionRef.current;
@@ -1147,9 +1129,7 @@ export function CommentsSurface({
         on “{draft.quote}”
       </p>
       <Composer
-        placeholder={
-          reattach ? "Reattach this thread" : "Comment, or @mention an agent"
-        }
+        placeholder="Comment, or @mention an agent"
         submitLabel="Comment"
         autoFocus
         onCancel={cancelDraft}
@@ -1168,28 +1148,6 @@ export function CommentsSurface({
       />
     </div>
   );
-  const startSelection = () => {
-    if (reattach && selection) {
-      act(
-        flush()
-          .then(() =>
-            apply(
-              rpc.call("reattachComment", {
-                ...target,
-                commentId: reattach,
-                quote: selection.quote,
-                occurrence: selection.occurrence,
-              }),
-            ),
-          )
-          .then(() => {
-            activate(reattach);
-            setReattach(null);
-            setSelection(null);
-          }),
-      );
-    } else startDraft();
-  };
   const threadContent = (
     <div className="space-y-2 p-3">
       {draftCard}
@@ -1199,7 +1157,6 @@ export function CommentsSurface({
             key={thread.id}
             thread={thread}
             active={active === thread.id}
-            reattaching={reattach === thread.id}
             actions={actions}
           />
         ))}
@@ -1317,13 +1274,7 @@ export function CommentsSurface({
         {proposalPending && data.threads.length > 0 && (
           <div className="px-3 py-2 text-xs text-muted-foreground">
             Comments stay on the saved text. Accept or reject the proposal to
-            add or reattach comments.
-          </div>
-        )}
-        {reattach && (
-          <div className="flex items-center gap-2 px-3 py-2 text-xs">
-            Select new text, then choose Reattach.{" "}
-            <button onClick={() => setReattach(null)}>Cancel</button>
+            add comments.
           </div>
         )}
         <div ref={root} className="relative min-h-0 flex-1 overflow-auto">
@@ -1355,7 +1306,6 @@ export function CommentsSurface({
                     <ThreadCard
                       thread={thread}
                       active={active === thread.id}
-                      reattaching={reattach === thread.id}
                       actions={actions}
                     />
                   </div>
@@ -1379,10 +1329,10 @@ export function CommentsSurface({
               className="absolute z-20 flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs shadow-md"
               style={{ top: selection.top, left: selection.left }}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={startSelection}
+              onClick={startDraft}
             >
               <Glyph icon={BubbleChatIcon} />
-              {reattach ? "Reattach" : "Comment"}
+              Comment
             </button>
           )}
         </div>

@@ -105,6 +105,7 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
   const files = new Map<string, VirtualFile>(Object.entries(initial));
   const directories = new Set<string>(["/vault", "/work"]);
   let concurrentWrite: { path: string; content: string } | null = null;
+  let truncated = false;
   const addParents = (filePath: string) => {
     let current = path.posix.dirname(filePath);
     while (current !== "/" && !directories.has(current)) {
@@ -155,7 +156,7 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
             paths: args.includeHidden
               ? paths
               : paths.filter((entry) => !/(^|\/)\./.test(entry.path)),
-            truncated: false,
+            truncated: truncated,
           };
         },
         async read(args) {
@@ -277,6 +278,9 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
     setUtf8,
     conflictNextWrite(path: string, content: string) {
       concurrentWrite = { path, content };
+    },
+    truncateListings(value: boolean) {
+      truncated = value;
     },
   };
 }
@@ -1995,7 +1999,7 @@ describe("Docs comment lifecycle", () => {
       ]);
       const orphan = orphans.find((item) => item.path === "notes/source.md")!;
       expect(orphan.sidecarPath).toMatch(
-        /^\.bb-comments\/orphaned\/[^/]+\/notes\/source\.md\.json$/,
+        /^\.bb-comments\/orphaned\/[^/]+\/notes\/\.bb-comments\/source\.md\.json$/,
       );
       expect(await readFile(host, orphan.sidecarPath)).toContain(commentId);
     } finally {
@@ -2025,7 +2029,9 @@ describe("Docs comment lifecycle", () => {
       expect(await folder(host)).toEqual([
         {
           path: "notes/identity-source.md",
-          sidecarPath: "notes/.bb-comments/identity-source.md.json",
+          sidecarPath: expect.stringMatching(
+            /^\.bb-comments\/orphaned\/[^/]+\/notes\/\.bb-comments\/identity-source\.md\.json$/,
+          ),
         },
       ]);
     } finally {
@@ -2033,9 +2039,10 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
-  it("starts a new document at a reused path clean and lists left comments", async () => {
+  it("starts a new document at a reused path clean once Docs sees the deletion", async () => {
+    const content = "# Plan\n\nShip tomorrow.";
     const host = await loadVirtualSyncVault({
-      "/vault/notes/plan.md": doc("# Plan\n\nShip tomorrow."),
+      "/vault/notes/plan.md": doc(content),
     });
     try {
       const commentId = await comment(
@@ -2045,42 +2052,142 @@ describe("Docs comment lifecycle", () => {
         "Old discussion",
       );
       host.files.delete("/vault/notes/plan.md");
-      expect(await folder(host)).toEqual([
-        {
-          path: "notes/plan.md",
-          sidecarPath: "notes/.bb-comments/plan.md.json",
-        },
-      ]);
-      host.setUtf8("/vault/notes/plan.md", "# New\n\nA different plan.");
-      expect(await listed(host, "notes/plan.md")).toMatchObject({
-        threads: [],
-        outsideChange: 1,
-      });
-      await expect(
-        host.harness.behavior.callRpc("addComment", {
-          path: "notes/plan.md",
-          quote: "different plan",
-          body: "New discussion",
-        }),
-      ).rejects.toThrow("outside Docs");
-      await host.harness.behavior.runCli([
-        "comments",
-        "leave",
-        "notes/plan.md",
-      ]);
+      const [orphan] = await folder(host);
+      expect(orphan!.path).toBe("notes/plan.md");
+      expect(host.files.has("/vault/notes/.bb-comments/plan.md.json")).toBe(
+        false,
+      );
+      host.setUtf8("/vault/notes/plan.md", content);
       expect(await listed(host, "notes/plan.md")).toMatchObject({
         threads: [],
         outsideChange: 0,
       });
-      await comment(host, "notes/plan.md", "different plan", "New discussion");
+      await comment(host, "notes/plan.md", "tomorrow", "New discussion");
       expect(
         (await listed(host, "notes/plan.md")).threads.map(
           (thread) => thread.messages[0]!.body,
         ),
       ).toEqual(["New discussion"]);
-      const [orphan] = await folder(host);
-      expect(orphan!.path).toBe("notes/plan.md");
       expect(await readFile(host, orphan!.sidecarPath)).toContain(commentId);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("starts documents created through Docs at a reused path clean", async () => {
+    const content = "# Plan\n\nShip tomorrow.";
+    const host = await loadVirtualSyncVault({
+      "/vault/same.md": doc(content),
+      "/vault/different.md": doc(content),
+    });
+    try {
+      const sameId = await comment(host, "same.md", "tomorrow", "Same bytes");
+      const differentId = await comment(
+        host,
+        "different.md",
+        "tomorrow",
+        "Different bytes",
+      );
+      host.files.delete("/vault/same.md");
+      host.files.delete("/vault/different.md");
+      await host.harness.behavior.callRpc("saveNote", {
+        path: "same.md",
+        content,
+        expectedSha256: null,
+      });
+      await host.harness.behavior.runCli([
+        "write",
+        "different.md",
+        "--content",
+        "# Different\n\nA new plan.",
+      ]);
+      for (const path of ["same.md", "different.md"])
+        expect(await listed(host, path)).toMatchObject({
+          threads: [],
+          outsideChange: 0,
+        });
+      const text = (
+        await Promise.all(
+          (await folder(host)).map((item) => readFile(host, item.sidecarPath)),
+        )
+      ).join("\n");
+      expect(text).toContain(sameId);
+      expect(text).toContain(differentId);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("shows the banner, not old highlights, when a document is replaced in place", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+    });
+    try {
+      await comment(host, "plan.md", "tomorrow", "Old discussion");
+      host.setUtf8("/vault/plan.md", "# Other\n\nShip tomorrow, maybe.");
+      expect(await listed(host, "plan.md")).toMatchObject({
+        threads: [],
+        outsideChange: 1,
+      });
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("preserves comments when a bound document fails to read", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+    });
+    try {
+      const commentId = await comment(host, "plan.md", "tomorrow", "Keep me");
+      host.files.delete("/vault/plan.md");
+      await expect(
+        host.harness.behavior.callRpc("listComments", { path: "plan.md" }),
+      ).rejects.toThrow();
+      expect(host.files.has("/vault/.bb-comments/plan.md.json")).toBe(false);
+      const [orphan] = await folder(host);
+      expect(await readFile(host, orphan!.sidecarPath)).toContain(commentId);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("moves nested comment folders aside on folder delete and refuses unsafe deletes", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/team/a.md": doc("# A\n\nAlpha line."),
+      "/vault/team/deep/b.md": doc("# B\n\nBeta line."),
+      "/vault/big/c.md": doc("# C\n\nGamma line."),
+    });
+    try {
+      const aId = await comment(host, "team/a.md", "Alpha line", "A note");
+      const bId = await comment(host, "team/deep/b.md", "Beta line", "B note");
+      await comment(host, "big/c.md", "Gamma line", "C note");
+      await host.harness.behavior.callRpc("deletePath", {
+        path: "team",
+        recursive: true,
+      });
+      const orphans = await folder(host);
+      expect(orphans.map((item) => item.path).sort()).toEqual([
+        "team/a.md",
+        "team/deep/b.md",
+      ]);
+      const text = (
+        await Promise.all(
+          orphans.map((item) => readFile(host, item.sidecarPath)),
+        )
+      ).join("\n");
+      expect(text).toContain(aId);
+      expect(text).toContain(bId);
+
+      host.truncateListings(true);
+      await expect(
+        host.harness.behavior.callRpc("deletePath", {
+          path: "big",
+          recursive: true,
+        }),
+      ).rejects.toThrow("too many subfolders");
+      expect(host.files.has("/vault/big/c.md")).toBe(true);
+      expect(host.files.has("/vault/big/.bb-comments/c.md.json")).toBe(true);
     } finally {
       await host.harness.lifecycle.dispose();
     }
@@ -2354,7 +2461,12 @@ describe("Docs comment lifecycle", () => {
         await host.harness.behavior.callRpc("listCommentFolder", { path: "" }),
       ).toMatchObject({
         stranded: [
-          { path: "plan.md", sidecarPath: ".bb-comments/plan.md.json" },
+          {
+            path: "plan.md",
+            sidecarPath: expect.stringMatching(
+              /^\.bb-comments\/orphaned\/[^/]+\/\.bb-comments\/plan\.md\.json$/,
+            ),
+          },
         ],
       });
     } finally {

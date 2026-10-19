@@ -171,7 +171,7 @@ describe("comment sidecar mutations", () => {
         .messages[1].author,
     ).toMatchObject({ kind: "agent", threadId: "thr_agent" });
   });
-  it("preserves orphan discussions through resolve, reopen and reattach", async () => {
+  it("preserves orphan discussions through resolve and reopen", async () => {
     const { service, files } = setup();
     const added = await service.add(
       {
@@ -198,12 +198,11 @@ describe("comment sidecar mutations", () => {
       { ...target, commentId, resolved: false },
       service.user,
     );
-    const result = await service.reattach({
-      ...target,
-      commentId,
-      quote: "New date",
-      occurrence: 1,
+    expect((await service.list(target)).threads[0]).toMatchObject({
+      status: "open",
+      anchor: { state: "orphaned", quote: "November 12" },
     });
+  });
     expect(result.threads[0]).toMatchObject({
       status: "open",
       anchor: { state: "anchored", quote: "New date" },

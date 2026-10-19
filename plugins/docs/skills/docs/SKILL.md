@@ -156,8 +156,7 @@ threads. JSON includes the sidecar hash, messages, and each anchor's state,
 quote, source line, and visible UTF-16 offsets. A comment re-anchors only when
 its quote and surrounding context appear exactly once; edited or duplicated
 text makes it `orphaned` with null offsets, never a different sentence. Its
-discussion still exists: in the UI, select new text and use **Reattach to
-text**.
+discussion still exists and can be replied to, resolved, or deleted.
 
 Comments stay bound to a document only while Docs knows its identity: Docs
 records the document hash it last saw. **Edit commented documents with

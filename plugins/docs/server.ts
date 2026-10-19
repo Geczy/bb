@@ -11,6 +11,7 @@ import {
   commentsListSchema,
   commentThreadSchema,
 } from "./comments.js";
+import { randomUUID } from "node:crypto";
 import { watch } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -1037,6 +1038,8 @@ export default async function plugin(
         : markdown
           ? ((await readExistingFile(vault, relativePath))?.sha256 ?? null)
           : null;
+    if (markdown && previousSha256 === null)
+      await orphanSidecar(vault, relativePath);
     const result = await bb.sdk.files.write({
       ...hostArgs(vault),
       path: absolutePath(vault, relativePath),
@@ -1324,21 +1327,7 @@ export default async function plugin(
     const relativePath = requireVaultPath(rawPath);
     return serializeVault(vault.id, async () => {
       await orphanSidecar(vault, relativePath);
-      if (recursive) {
-        const listing = await bb.sdk.files.listPaths({
-          ...hostArgs(vault),
-          path: absolutePath(vault, relativePath),
-          includeHidden: true,
-          includeFiles: true,
-          includeDirectories: false,
-          limit: MAX_TREE_ENTRIES,
-        });
-        for (const item of listing.paths) {
-          const document = sidecarDocument(`${relativePath}/${item.path}`);
-          if (document && !document.orphaned)
-            await orphanSidecar(vault, document.path);
-        }
-      }
+      if (recursive) await orphanFolderComments(vault, relativePath);
       await bb.sdk.files.remove({
         ...hostArgs(vault),
         path: absolutePath(vault, relativePath),
@@ -1778,10 +1767,18 @@ export default async function plugin(
   ): { path: string; orphaned: boolean } | null {
     if (sidecarPath.split("/").some((part) => !part || part === ".."))
       return null;
-    const orphaned = /^\.bb-comments\/orphaned\/[^/]+\/(.+\.md)\.json$/i.exec(
-      sidecarPath,
-    );
-    if (orphaned) return { path: orphaned[1]!, orphaned: true };
+    const orphaned =
+      /^\.bb-comments\/orphaned\/[^/]+\/(?:(.*)\/)?\.bb-comments\/([^/]+\.md)\.json$/i.exec(
+        sidecarPath,
+      );
+    if (orphaned)
+      return orphaned[1]?.split("/").includes(".bb-comments")
+        ? null
+        : {
+            path: orphaned[1] ? `${orphaned[1]}/${orphaned[2]}` : orphaned[2]!,
+            orphaned: true,
+          };
+    if (sidecarPath.startsWith(".bb-comments/orphaned/")) return null;
     const stranded = /^(?:(.*)\/)?\.bb-comments\/([^/]+\.md)\.json$/i.exec(
       sidecarPath,
     );
@@ -1814,22 +1811,84 @@ export default async function plugin(
     return { vault, sidecarPath: input.sidecarPath };
   }
 
-  async function orphanSidecar(vault: Vault, documentPath: string) {
-    const sidecarPath = commentSidecar(documentPath);
-    if (!(await readExistingFile(vault, sidecarPath))) return;
-    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const destination = `.bb-comments/orphaned/${stamp}/${documentPath}.json`;
+  async function moveIntoOrphanArea(vault: Vault, from: string, to: string) {
     await bb.sdk.files.mkdir({
       ...hostArgs(vault),
-      path: absolutePath(vault, path.posix.dirname(destination)),
+      path: absolutePath(vault, path.posix.dirname(to)),
       rootPath: vault.rootPath,
       recursive: true,
     });
     await bb.sdk.files.move({
       ...hostArgs(vault),
-      sourcePath: absolutePath(vault, sidecarPath),
-      destinationPath: absolutePath(vault, destination),
+      sourcePath: absolutePath(vault, from),
+      destinationPath: absolutePath(vault, to),
       rootPath: vault.rootPath,
+    });
+  }
+
+  async function orphanSidecar(vault: Vault, documentPath: string) {
+    const sidecarPath = commentSidecar(documentPath);
+    if (!(await readExistingFile(vault, sidecarPath))) return;
+    await moveIntoOrphanArea(
+      vault,
+      sidecarPath,
+      `.bb-comments/orphaned/${randomUUID()}/${sidecarPath}`,
+    );
+  }
+
+  async function orphanFolderComments(vault: Vault, folder: string) {
+    const listing = await bb.sdk.files.listPaths({
+      ...hostArgs(vault),
+      path: absolutePath(vault, folder),
+      includeHidden: true,
+      includeFiles: false,
+      includeDirectories: true,
+      limit: MAX_TREE_ENTRIES,
+    });
+    if (listing.truncated)
+      throw new Error(
+        "This folder has too many subfolders to delete safely with its comments. Delete its subfolders first.",
+      );
+    const directories = listing.paths
+      .map((item) => `${folder}/${item.path}`)
+      .filter((directory) => {
+        const parts = directory.split("/");
+        return (
+          parts.at(-1) === ".bb-comments" &&
+          parts.filter((part) => part === ".bb-comments").length === 1
+        );
+      });
+    const id = randomUUID();
+    for (const directory of directories)
+      await moveIntoOrphanArea(
+        vault,
+        directory,
+        `.bb-comments/orphaned/${id}/${directory}`,
+      );
+  }
+
+  async function orphanMissingDocuments(vault: Vault): Promise<void> {
+    const listing = await bb.sdk.files.listPaths({
+      ...hostArgs(vault),
+      path: vault.rootPath,
+      includeHidden: true,
+      includeFiles: true,
+      includeDirectories: false,
+      limit: MAX_TREE_ENTRIES,
+    });
+    if (listing.truncated) return;
+    const files = new Set(listing.paths.map((item) => item.path));
+    const missing = [...files].flatMap((relative) => {
+      const document = sidecarDocument(relative);
+      return document && !document.orphaned && !files.has(document.path)
+        ? [document.path]
+        : [];
+    });
+    if (!missing.length) return;
+    await serializeVault(vault.id, async () => {
+      for (const documentPath of missing)
+        if (!(await readExistingFile(vault, documentPath)))
+          await orphanSidecar(vault, documentPath);
     });
   }
 
@@ -1853,24 +1912,24 @@ export default async function plugin(
     async listCommentFolder(input) {
       const vault = getVault(input.vaultId);
       const folder = input.path ?? "";
-      const root = folder ? absolutePath(vault, folder) : vault.rootPath;
+      await orphanMissingDocuments(vault);
       const listing = await bb.sdk.files.listPaths({
         ...hostArgs(vault),
-        path: root,
+        path: vault.rootPath,
         includeHidden: true,
         includeFiles: true,
         includeDirectories: false,
         limit: MAX_TREE_ENTRIES,
       });
-      const files = new Set(
-        listing.paths.map((item) =>
-          folder ? `${folder}/${item.path}` : item.path,
-        ),
-      );
+      const files = new Set(listing.paths.map((item) => item.path));
       const stranded: { path: string; sidecarPath: string }[] = [];
       for (const relative of files) {
         const document = sidecarDocument(relative);
-        if (document && (document.orphaned || !files.has(document.path)))
+        if (
+          document &&
+          (document.orphaned || !files.has(document.path)) &&
+          (!folder || document.path.startsWith(`${folder}/`))
+        )
           stranded.push({ path: document.path, sidecarPath: relative });
       }
       return { stranded, truncated: listing.truncated };
@@ -1894,13 +1953,20 @@ export default async function plugin(
       });
       return { ok: true as const };
     },
-    listComments: (input) => comments.list(input),
+    async listComments(input) {
+      try {
+        return await comments.list(input);
+      } catch (error) {
+        if (!input.source && isMissingFileError(error))
+          await orphanMissingDocuments(getVault(input.vaultId));
+        throw error;
+      }
+    },
     addComment: (input) => comments.add(input, comments.user),
     replyComment: (input) => comments.reply(input, comments.user),
     setCommentStatus: (input) => comments.status(input, comments.user),
     editCommentMessage: (input) => comments.edit(input),
     deleteCommentMessage: (input) => comments.delete(input),
-    reattachComment: (input) => comments.reattach(input),
     refreshCommentAnchors: (input) => comments.refresh(input),
     commentProjects: () => comments.projects(),
     startCommentAgent: (input) => comments.startAgent(input),
@@ -4063,6 +4129,7 @@ export default async function plugin(
       const watchers = new Map<string, VaultWatcher>();
       const retryNative = new Set<string>();
       let debounce: NodeJS.Timeout | null = null;
+      const sweeps = new Map<string, NodeJS.Timeout>();
       let previous = "";
       try {
         while (!signal.aborted) {
@@ -4081,6 +4148,18 @@ export default async function plugin(
             try {
               const watcher = watchVault(vault.rootPath, () => {
                 mentionSummaries.delete(vault.id);
+                clearTimeout(sweeps.get(vault.id));
+                sweeps.set(
+                  vault.id,
+                  setTimeout(() => {
+                    sweeps.delete(vault.id);
+                    void orphanMissingDocuments(vault).catch((error) =>
+                      bb.log.warn(
+                        `could not preserve comments: ${errorMessage(error)}`,
+                      ),
+                    );
+                  }, 1000),
+                );
                 if (debounce) clearTimeout(debounce);
                 debounce = setTimeout(() => {
                   bb.realtime.publish("vault-changed", {
@@ -4135,6 +4214,7 @@ export default async function plugin(
         }
       } finally {
         if (debounce) clearTimeout(debounce);
+        for (const sweep of sweeps.values()) clearTimeout(sweep);
         for (const watcher of watchers.values()) watcher.close();
       }
     },
