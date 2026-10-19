@@ -280,12 +280,12 @@ describe("ThreadPromptContextBanner", () => {
         </MemoryRouter>,
       );
 
-      const parentCard = screen.getByRole("region", { name: "Parent thread" });
+      const parentCard = screen.getByRole("region", { name: "Parent" });
       expect(parentCard.textContent).toBe("Parent Owner thread");
       expect(
         screen.getByRole("link", { name: "Owner thread" }).getAttribute("href"),
       ).toBe("/threads/thr_parent");
-      expect(screen.queryByRole("button", { name: /Parent thread/ })).toBe(
+      expect(screen.queryByRole("button", { name: /^Parent / })).toBe(
         null,
       );
       const contextCard = screen.queryByRole("region", {

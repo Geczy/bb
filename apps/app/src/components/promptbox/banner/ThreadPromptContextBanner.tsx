@@ -307,7 +307,7 @@ const PARENT_SECTION_COPY: Record<
 > = {
   parent: {
     verb: "Parent",
-    ariaPrefix: "Parent thread",
+    ariaPrefix: "Parent",
   },
   fork: {
     verb: "Forked from",
