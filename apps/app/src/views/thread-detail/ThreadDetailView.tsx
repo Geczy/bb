@@ -210,7 +210,10 @@ import {
   type OpenAttachmentRequest,
 } from "@/components/secondary-panel/AttachmentOpenerContext";
 import { usePluginSlots } from "@/lib/plugin-slots";
-import { usePluginDisplayNames } from "@/lib/plugin-logos";
+import {
+  formatFileOpenerLabel,
+  usePluginDisplayNames,
+} from "@/lib/plugin-logos";
 import { getFileExtension } from "@/lib/plugin-slot-resolvers";
 import { Icon } from "@bb/shared-ui/icon";
 import { getBbDesktopInfo, isDesktopBrowserAvailable } from "@/lib/bb-desktop";
@@ -2136,7 +2139,7 @@ function ThreadDetailViewInternal(
           },
           ...matching.map((opener) => ({
             id: `${opener.pluginId}:${opener.id}`,
-            label: `Open with ${getPluginName(opener.pluginId)} (${opener.title})`,
+            label: `Open with ${formatFileOpenerLabel(getPluginName(opener.pluginId), opener.title)}`,
             onSelect: () => {
               handleOpenTimelineLocalFileLink(link, {
                 viewer: { pluginId: opener.pluginId, openerId: opener.id },

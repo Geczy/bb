@@ -15,7 +15,10 @@ import {
   getExperimentalFileLocationStart,
 } from "@/lib/live-file-navigation";
 import { usePluginSlots } from "@/lib/plugin-slots";
-import { usePluginDisplayNames } from "@/lib/plugin-logos";
+import {
+  formatFileOpenerLabel,
+  usePluginDisplayNames,
+} from "@/lib/plugin-logos";
 
 function getFileExtension(path: string): string | null {
   const name = getFileBasename(path);
@@ -76,7 +79,10 @@ export function ExperimentalFileLinkMenu({
                   })
                 }
               >
-                {getPluginName(opener.pluginId)} ({opener.title})
+                {formatFileOpenerLabel(
+                  getPluginName(opener.pluginId),
+                  opener.title,
+                )}
               </ContextMenuItem>
             ))}
           </ContextMenuSubContent>

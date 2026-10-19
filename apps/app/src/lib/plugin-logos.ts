@@ -65,6 +65,15 @@ export function usePluginDisplayNames(): (pluginId: string) => string {
   );
 }
 
+export function formatFileOpenerLabel(
+  pluginName: string,
+  openerTitle: string,
+): string {
+  return pluginName.trim().toLowerCase() === openerTitle.trim().toLowerCase()
+    ? pluginName
+    : `${pluginName} (${openerTitle})`;
+}
+
 export function usePluginIconUrl(
   glyph: string | undefined,
 ): string | undefined {

@@ -75,6 +75,50 @@ describe("FileOpenersSettingsSection", () => {
     await selectOption(trigger, /Automatic/u);
     expect(storedPreference()).toEqual({});
   });
+
+  it("shows the plugin name once when the opener title repeats it", async () => {
+    setPluginLogoUrls(
+      new Map([
+        [
+          "monaco-editor",
+          {
+            displayName: "File Editor",
+            icon: null,
+            compactIconUrl: null,
+            logoUrl: null,
+            logoDarkUrl: null,
+            icons: new Map(),
+          },
+        ],
+      ]),
+    );
+    setPluginSlotRegistrations(
+      "monaco-editor",
+      makePluginRegistrationSet({
+        fileOpeners: [
+          {
+            id: "editor",
+            title: "File Editor",
+            extensions: ["ts"],
+            component: () => null,
+          },
+        ],
+      }),
+    );
+    render(<FileOpenersSettingsSection />);
+
+    const trigger = screen.getByRole("button", {
+      name: "Default opener for .ts files",
+    });
+    fireEvent.pointerDown(trigger, { button: 0 });
+    const items = await screen.findAllByRole("menuitem");
+    expect(items.map((item) => item.textContent)).toContain("File Editor");
+    expect(
+      items.some((item) =>
+        item.textContent?.includes("File Editor (File Editor)"),
+      ),
+    ).toBe(false);
+  });
 });
 
 async function selectOption(trigger: HTMLElement, name: RegExp) {

@@ -18,7 +18,10 @@ import {
   useFileOpenerPreference,
 } from "@/lib/file-opener-preference";
 import { usePluginSlots, type PluginFileOpenerSlot } from "@/lib/plugin-slots";
-import { usePluginDisplayNames } from "@/lib/plugin-logos";
+import {
+  formatFileOpenerLabel,
+  usePluginDisplayNames,
+} from "@/lib/plugin-logos";
 import { cn } from "@bb/shared-ui/lib/utils";
 import {
   SETTINGS_DROPDOWN_CONTENT_CLASS,
@@ -97,7 +100,10 @@ function ExtensionOpenerControl({
     { key: BUILT_IN_FILE_OPENER_PREFERENCE, label: BUILTIN_LABEL },
     ...openers.map((opener) => ({
       key: buildFileOpenerRef(opener),
-      label: `${getPluginName(opener.pluginId)} (${opener.title})`,
+      label: formatFileOpenerLabel(
+        getPluginName(opener.pluginId),
+        opener.title,
+      ),
     })),
   ];
   const selected =
