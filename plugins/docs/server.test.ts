@@ -1452,16 +1452,16 @@ describe("Docs vault operations", () => {
       ],
       [
         {
-          hostId: "host_primary",
-          path: "/primary/project/docs/plan.md",
-          rootPath: "/primary/project",
+          hostId: "host_remote",
+          path: "/remote/project/docs/.bb-comments/plan.md.json",
+          rootPath: "/remote/project",
         },
       ],
       [
         {
-          hostId: "host_remote",
-          path: "/remote/project/docs/.bb-comments/plan.md.json",
-          rootPath: "/remote/project",
+          hostId: "host_primary",
+          path: "/primary/project/docs/plan.md",
+          rootPath: "/primary/project",
         },
       ],
     ]);
