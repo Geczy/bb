@@ -1031,30 +1031,45 @@ export default async function plugin(
     if (typeof args.content !== "string")
       throw new Error('"content" must be a string');
     const markdown = /\.md$/i.test(relativePath);
-    const previousSha256 = args.createOnly
-      ? null
-      : typeof args.expectedSha256 === "string"
-        ? args.expectedSha256
-        : markdown
-          ? ((await readExistingFile(vault, relativePath))?.sha256 ?? null)
+    const content = args.content;
+    return serializeComments(vault.id, async () => {
+      const previousSha256 = args.createOnly
+        ? null
+        : typeof args.expectedSha256 === "string"
+          ? args.expectedSha256
+          : markdown
+            ? ((await readExistingFile(vault, relativePath))?.sha256 ?? null)
+            : null;
+      const stranded =
+        markdown &&
+        previousSha256 === null &&
+        !(await pathExists(vault, relativePath))
+          ? await orphanSidecar(vault, relativePath)
           : null;
-    if (markdown && previousSha256 === null)
-      await orphanSidecar(vault, relativePath);
-    const result = await bb.sdk.files.write({
-      ...hostArgs(vault),
-      path: absolutePath(vault, relativePath),
-      rootPath: vault.rootPath,
-      content: args.content,
-      contentEncoding: args.contentEncoding ?? "utf8",
-      createParents: true,
-      ...(args.createOnly
-        ? { expectedSha256: null }
-        : args.expectedSha256 === null ||
-            typeof args.expectedSha256 === "string"
-          ? { expectedSha256: args.expectedSha256 }
-          : {}),
-    });
-    if (result.outcome === "written") {
+      let result: Awaited<ReturnType<typeof bb.sdk.files.write>>;
+      try {
+        result = await bb.sdk.files.write({
+          ...hostArgs(vault),
+          path: absolutePath(vault, relativePath),
+          rootPath: vault.rootPath,
+          content,
+          contentEncoding: args.contentEncoding ?? "utf8",
+          createParents: true,
+          ...(args.createOnly
+            ? { expectedSha256: null }
+            : args.expectedSha256 === null ||
+                typeof args.expectedSha256 === "string"
+              ? { expectedSha256: args.expectedSha256 }
+              : {}),
+        });
+      } catch (error) {
+        await restoreSidecar(vault, stranded, relativePath);
+        throw error;
+      }
+      if (result.outcome !== "written") {
+        await restoreSidecar(vault, stranded, relativePath);
+        return result;
+      }
       if (markdown)
         await comments
           .rebind(
@@ -1071,8 +1086,35 @@ export default async function plugin(
         path: relativePath,
         ...(args.proposalOnly ? { proposalOnly: true } : {}),
       });
+      return result;
+    });
+  }
+
+  const commentOperations = new Map<string, Promise<unknown>>();
+
+  async function serializeComments<T>(
+    key: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const previous = commentOperations.get(key) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(work);
+    commentOperations.set(key, current);
+    try {
+      return await current;
+    } finally {
+      if (commentOperations.get(key) === current) commentOperations.delete(key);
     }
-    return result;
+  }
+
+  function serializeDocument<T>(
+    vaultId: string,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    return serializeVault(vaultId, () => serializeComments(vaultId, work));
+  }
+
+  function sourceCommentKey(filePath: string): string {
+    return `source:${filePath}`;
   }
 
   const vaultOperations = new Map<string, Promise<unknown>>();
@@ -1240,19 +1282,27 @@ export default async function plugin(
     const existing = new Set(entries.map((entry) => entry.path.toLowerCase()));
     let relativePath = parent ? `${parent}/${base}.md` : `${base}.md`;
     let counter = 2;
-    while (existing.has(relativePath.toLowerCase())) {
-      relativePath = parent
-        ? `${parent}/${base} ${counter}.md`
-        : `${base} ${counter}.md`;
-      counter += 1;
+    for (;;) {
+      while (
+        existing.has(relativePath.toLowerCase()) ||
+        (await pathExists(vault, relativePath))
+      ) {
+        relativePath = parent
+          ? `${parent}/${base} ${counter}.md`
+          : `${base} ${counter}.md`;
+        counter += 1;
+      }
+      const result = await writeFile({
+        vaultId: vault.id,
+        rawPath: relativePath,
+        content: typeof input.content === "string" ? input.content : "",
+        createOnly: true,
+      });
+      if (result.outcome === "written") return { path: relativePath };
+      existing.add(relativePath.toLowerCase());
+      if (counter > 1000)
+        throw new Error(`Could not find a free name for ${base}.md`);
     }
-    await writeFile({
-      vaultId: vault.id,
-      rawPath: relativePath,
-      content: typeof input.content === "string" ? input.content : "",
-      createOnly: true,
-    });
-    return { path: relativePath };
   }
 
   async function movePath(
@@ -1263,7 +1313,7 @@ export default async function plugin(
     const vault = getVault(vaultId);
     const from = requireVaultPath(fromValue);
     const to = requireVaultPath(toValue);
-    return serializeVault(vault.id, async () => {
+    return serializeDocument(vault.id, async () => {
       const oldSidecar = commentSidecar(from);
       const newSidecar = commentSidecar(to);
       const sidecar = await readExistingFile(vault, oldSidecar);
@@ -1281,13 +1331,7 @@ export default async function plugin(
           rootPath: vault.rootPath,
         });
       } catch (error) {
-        if (stranded)
-          await bb.sdk.files.move({
-            ...hostArgs(vault),
-            sourcePath: absolutePath(vault, stranded),
-            destinationPath: absolutePath(vault, newSidecar),
-            rootPath: vault.rootPath,
-          });
+        await restoreSidecar(vault, stranded, to);
         throw error;
       }
       if (sidecar) {
@@ -1300,6 +1344,7 @@ export default async function plugin(
             destinationPath: absolutePath(vault, from),
             rootPath: vault.rootPath,
           });
+          await restoreSidecar(vault, stranded, to);
           throw error;
         }
       }
@@ -1340,15 +1385,22 @@ export default async function plugin(
   ): Promise<{ ok: true }> {
     const vault = getVault(vaultId);
     const relativePath = requireVaultPath(rawPath);
-    return serializeVault(vault.id, async () => {
-      await orphanSidecar(vault, relativePath);
-      if (recursive) await orphanFolderComments(vault, relativePath);
-      await bb.sdk.files.remove({
-        ...hostArgs(vault),
-        path: absolutePath(vault, relativePath),
-        rootPath: vault.rootPath,
-        recursive,
-      });
+    return serializeDocument(vault.id, async () => {
+      const stranded = await orphanSidecar(vault, relativePath);
+      let moved: [string, string][] = [];
+      try {
+        if (recursive) moved = await orphanFolderComments(vault, relativePath);
+        await bb.sdk.files.remove({
+          ...hostArgs(vault),
+          path: absolutePath(vault, relativePath),
+          rootPath: vault.rootPath,
+          recursive,
+        });
+      } catch (error) {
+        await restoreFolderComments(vault, moved);
+        await restoreSidecar(vault, stranded, relativePath);
+        throw error;
+      }
       deleteProposals(vault.id, relativePath);
       mentionSummaries.delete(vault.id);
       bb.realtime.publish("vault-changed", { vaultId: vault.id });
@@ -1774,7 +1826,11 @@ export default async function plugin(
       };
     },
     (input, work) =>
-      input.source ? work() : serializeVault(getVault(input.vaultId).id, work),
+      input.source
+        ? serializeComments(sourceCommentKey(input.path), work)
+        : serializeVault(getVault(input.vaultId).id, () =>
+            serializeComments(getVault(input.vaultId).id, work),
+          ),
   );
 
   function sidecarDocument(
@@ -1808,7 +1864,7 @@ export default async function plugin(
   async function leaveComments(input: { vaultId?: string; path: string }) {
     const vault = getVault(input.vaultId);
     const relativePath = requireVaultPath(input.path, { extension: ".md" });
-    await serializeVault(vault.id, () => orphanSidecar(vault, relativePath));
+    await serializeDocument(vault.id, () => orphanSidecar(vault, relativePath));
     return comments.list({ vaultId: vault.id, path: relativePath });
   }
 
@@ -1852,6 +1908,22 @@ export default async function plugin(
     return destination;
   }
 
+  async function restoreSidecar(
+    vault: Vault,
+    orphaned: string | null,
+    documentPath: string,
+  ) {
+    if (!orphaned) return;
+    const sidecarPath = commentSidecar(documentPath);
+    if (await readExistingFile(vault, sidecarPath)) return;
+    await bb.sdk.files.move({
+      ...hostArgs(vault),
+      sourcePath: absolutePath(vault, orphaned),
+      destinationPath: absolutePath(vault, sidecarPath),
+      rootPath: vault.rootPath,
+    });
+  }
+
   async function pathExists(vault: Vault, relativePath: string) {
     try {
       return (await readExistingFile(vault, relativePath)) !== null;
@@ -1883,12 +1955,31 @@ export default async function plugin(
         );
       });
     const id = randomUUID();
-    for (const directory of directories)
-      await moveIntoOrphanArea(
-        vault,
-        directory,
-        `.bb-comments/orphaned/${id}/${directory}`,
-      );
+    const moved: [string, string][] = [];
+    try {
+      for (const directory of directories) {
+        const destination = `.bb-comments/orphaned/${id}/${directory}`;
+        await moveIntoOrphanArea(vault, directory, destination);
+        moved.push([directory, destination]);
+      }
+    } catch (error) {
+      await restoreFolderComments(vault, moved);
+      throw error;
+    }
+    return moved;
+  }
+
+  async function restoreFolderComments(
+    vault: Vault,
+    moved: [string, string][],
+  ) {
+    for (const [directory, destination] of moved.reverse())
+      await bb.sdk.files.move({
+        ...hostArgs(vault),
+        sourcePath: absolutePath(vault, destination),
+        destinationPath: absolutePath(vault, directory),
+        rootPath: vault.rootPath,
+      });
   }
 
   async function orphanMissingDocuments(vault: Vault): Promise<void> {
@@ -1909,7 +2000,7 @@ export default async function plugin(
         : [];
     });
     if (!missing.length) return;
-    await serializeVault(vault.id, async () => {
+    await serializeDocument(vault.id, async () => {
       for (const documentPath of missing)
         if (!(await readExistingFile(vault, documentPath)))
           await orphanSidecar(vault, documentPath);
@@ -2324,33 +2415,37 @@ export default async function plugin(
     },
     async saveOpenedFile(input) {
       const target = await resolveOpenerFile(input.source, input.path);
-      const previousSha256 =
-        typeof input.expectedSha256 === "string" ? input.expectedSha256 : null;
-      const result = await bb.sdk.files.write({
-        ...hostIdArgs(target.hostId),
-        path: target.path,
-        rootPath: target.rootPath,
-        content: input.content,
-        ...(input.expectedSha256 === null ||
-        typeof input.expectedSha256 === "string"
-          ? { expectedSha256: input.expectedSha256 }
-          : {}),
+      return serializeComments(sourceCommentKey(input.path), async () => {
+        const previousSha256 =
+          typeof input.expectedSha256 === "string"
+            ? input.expectedSha256
+            : null;
+        const result = await bb.sdk.files.write({
+          ...hostIdArgs(target.hostId),
+          path: target.path,
+          rootPath: target.rootPath,
+          content: input.content,
+          ...(input.expectedSha256 === null ||
+          typeof input.expectedSha256 === "string"
+            ? { expectedSha256: input.expectedSha256 }
+            : {}),
+        });
+        if (result.outcome === "written") {
+          if (/\.md$/i.test(input.path))
+            await comments
+              .rebindFile(
+                target,
+                { path: input.path, source: input.source },
+                previousSha256,
+                result.sha256,
+              )
+              .catch((error) =>
+                bb.log.warn(`comments not rebound: ${errorMessage(error)}`),
+              );
+          mentionSummaries.clear();
+        }
+        return result;
       });
-      if (result.outcome === "written") {
-        if (/\.md$/i.test(input.path))
-          await comments
-            .rebindFile(
-              target,
-              { path: input.path, source: input.source },
-              previousSha256,
-              result.sha256,
-            )
-            .catch((error) =>
-              bb.log.warn(`comments not rebound: ${errorMessage(error)}`),
-            );
-        mentionSummaries.clear();
-      }
-      return result;
     },
   };
 

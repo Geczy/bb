@@ -783,6 +783,117 @@ describe("Docs nav panel", () => {
     expect(editor?.textContent).toContain("Ready now.");
   });
 
+  it("persists mapped anchors when a stale comment list arrives before the save response", async () => {
+    const saved = "# Race\n\nFirst target.\n\nSecond target.";
+    const savedText = "Race\n\nFirst target.\n\nSecond target.";
+    const start = savedText.lastIndexOf("target");
+    const thread = (state: "anchored" | "orphaned") => ({
+      id: "c_00000000-0000-4000-8000-000000000001",
+      status: "open",
+      resolvedAt: null,
+      resolvedBy: null,
+      messages: [
+        {
+          id: "c_00000000-0000-4000-8000-000000000001",
+          author: { kind: "user", name: "You" },
+          body: "Second one",
+          createdAt: "2026-10-19T00:00:00.000Z",
+          editedAt: null,
+          sentTo: [],
+        },
+      ],
+      anchor:
+        state === "anchored"
+          ? { state, quote: "target", start, end: start + 6, line: 5 }
+          : { state, quote: "target", start: null, end: null, line: null },
+    });
+    let list = {
+      sidecarSha256: "sidecar",
+      threads: [thread("anchored")],
+      notice: null,
+      outsideChange: 0,
+      documentSha256: "sha1",
+    };
+    let finishSave: (value: unknown) => void = () => undefined;
+    const saveNote = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const refreshCommentAnchors = vi.fn((input: unknown) => ({
+      ...list,
+      input,
+    }));
+    const slot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "personal/race.md" },
+      {
+        rpc: {
+          listNotes: () =>
+            listNotesResult([
+              {
+                path: "race.md",
+                title: "Race",
+                preview: "First target.",
+                modifiedAtMs: 1,
+              },
+            ]),
+          readNote: () => ({ content: saved, sha256: "sha1" }),
+          preparePreview: () => preview,
+          renameToTitle: () => ({ path: "race.md" }),
+          listComments: () => list,
+          listCommentFolder: () => ({ stranded: [], truncated: false }),
+          refreshCommentAnchors: (input: unknown) => {
+            refreshCommentAnchors(input);
+            return list;
+          },
+          saveNote,
+        },
+      },
+    );
+
+    await slot.findByText("First target.");
+    await waitFor(() =>
+      expect(
+        slot.container.querySelector(".docs-comment-highlight")?.textContent,
+      ).toBe("target"),
+    );
+    const first = [
+      ...slot.container.querySelectorAll('[contenteditable="true"] p'),
+    ].find((paragraph) => paragraph.textContent === "First target.")!;
+    first.textContent = "Added contents. First target.";
+    fireEvent.input(first);
+    await waitFor(() => expect(saveNote).toHaveBeenCalled(), {
+      timeout: 2_000,
+    });
+    list = {
+      ...list,
+      threads: [thread("orphaned")],
+      documentSha256: "sha2",
+    };
+    await slot.emitRealtime("comments-changed", {
+      vaultId: "personal",
+      path: "race.md",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    finishSave({ outcome: "written", sha256: "sha2" });
+    await waitFor(() => expect(refreshCommentAnchors).toHaveBeenCalled());
+    const editedText =
+      "Race\n\nAdded contents. First target.\n\nSecond target.";
+    expect(refreshCommentAnchors.mock.calls[0]![0]).toMatchObject({
+      documentSha256: "sha2",
+      anchors: [
+        {
+          anchor: {
+            quote: "target",
+            start: editedText.lastIndexOf("target"),
+          },
+        },
+      ],
+    });
+  });
+
   it("renders and autosaves editable Markdown tables", async () => {
     const saveNote = vi.fn((_input: unknown) => ({
       outcome: "written",

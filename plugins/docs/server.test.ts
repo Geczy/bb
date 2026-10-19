@@ -106,6 +106,8 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
   const directories = new Set<string>(["/vault", "/work"]);
   let concurrentWrite: { path: string; content: string } | null = null;
   let truncated = false;
+  const omitted = new Set<string>();
+  let failRemove = false;
   const addParents = (filePath: string) => {
     let current = path.posix.dirname(filePath);
     while (current !== "/" && !directories.has(current)) {
@@ -153,9 +155,10 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
               : []),
           ];
           return {
-            paths: args.includeHidden
+            paths: (args.includeHidden
               ? paths
-              : paths.filter((entry) => !/(^|\/)\./.test(entry.path)),
+              : paths.filter((entry) => !/(^|\/)\./.test(entry.path))
+            ).filter((entry) => !omitted.has(`${prefix}${entry.path}`)),
             truncated: truncated,
           };
         },
@@ -213,6 +216,10 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
           return { ok: true as const };
         },
         async remove(args) {
+          if (failRemove) {
+            failRemove = false;
+            throw new Error("EBUSY: resource busy");
+          }
           if (files.delete(args.path)) return { ok: true as const };
           if (!directories.has(args.path))
             throw new Error(`ENOENT: Path does not exist: ${args.path}`);
@@ -281,6 +288,12 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
     },
     truncateListings(value: boolean) {
       truncated = value;
+    },
+    omitFromListings(filePath: string) {
+      omitted.add(filePath);
+    },
+    failNextRemove() {
+      failRemove = true;
     },
   };
 }
@@ -2343,6 +2356,82 @@ describe("Docs comment lifecycle", () => {
         threads: [{ id: commentId }],
       });
       expect(host.files.has("/vault/move-source.md")).toBe(true);
+      expect(await folder(host)).toEqual([]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("never detaches comments when a create collides with an unlisted document", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/zz-final/plan.md": doc("# Plan\n\nShip tomorrow."),
+    });
+    try {
+      const commentId = await comment(
+        host,
+        "zz-final/plan.md",
+        "tomorrow",
+        "Keep me",
+      );
+      const sidecar = host.files.get(
+        "/vault/zz-final/.bb-comments/plan.md.json",
+      )!.content;
+      host.truncateListings(true);
+      host.omitFromListings("/vault/zz-final/plan.md");
+      await expect(
+        host.harness.behavior.callRpc("createNote", {
+          parent: "zz-final",
+          name: "plan",
+        }),
+      ).resolves.toEqual({ path: "zz-final/plan 2.md" });
+      await expect(
+        host.harness.behavior.callRpc("saveNote", {
+          path: "zz-final/plan.md",
+          content: "# Replacement",
+          expectedSha256: null,
+        }),
+      ).resolves.toMatchObject({ outcome: "conflict" });
+      host.truncateListings(false);
+      expect(
+        host.files.get("/vault/zz-final/.bb-comments/plan.md.json")?.content,
+      ).toBe(sidecar);
+      expect(await listed(host, "zz-final/plan.md")).toMatchObject({
+        outsideChange: 0,
+        threads: [{ id: commentId }],
+      });
+      expect(
+        [...host.files.keys()].filter((entry) => entry.includes("/orphaned/")),
+      ).toEqual([]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("restores comments when a Docs delete fails", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/team/a.md": doc("# A\n\nAlpha line."),
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+    });
+    try {
+      const teamId = await comment(host, "team/a.md", "Alpha line", "Team");
+      const planId = await comment(host, "plan.md", "tomorrow", "Plan");
+      host.failNextRemove();
+      await expect(
+        host.harness.behavior.callRpc("deletePath", { path: "plan.md" }),
+      ).rejects.toThrow("EBUSY");
+      host.failNextRemove();
+      await expect(
+        host.harness.behavior.callRpc("deletePath", {
+          path: "team",
+          recursive: true,
+        }),
+      ).rejects.toThrow("EBUSY");
+      expect(await listed(host, "plan.md")).toMatchObject({
+        threads: [{ id: planId }],
+      });
+      expect(await listed(host, "team/a.md")).toMatchObject({
+        threads: [{ id: teamId }],
+      });
       expect(await folder(host)).toEqual([]);
     } finally {
       await host.harness.lifecycle.dispose();

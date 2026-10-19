@@ -813,6 +813,7 @@ export function CommentsSurface({
     request.current++;
   }, []);
   const savedSha = useRef(sha256);
+  const [persistedSha, setPersistedSha] = useState(sha256);
   const activeRef = useRef(active);
   activeRef.current = active;
   const selectionRef = useRef(selection);
@@ -1022,7 +1023,7 @@ export function CommentsSurface({
       commentHighlightKey.getState(editor.state),
       data.threads,
       proposalBase,
-      !dirty && data.documentSha256 === sha256,
+      !dirty && data.documentSha256 === sha256 && persistedSha === sha256,
     );
     editor.view.dispatch(
       editor.state.tr.setMeta(commentHighlightKey, {
@@ -1030,7 +1031,7 @@ export function CommentsSurface({
         active: activeRef.current,
       }),
     );
-  }, [editor, data, proposalBase, reloads, dirty, sha256]);
+  }, [editor, data, proposalBase, reloads, dirty, sha256, persistedSha]);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const decorations = commentHighlightKey.getState(editor.state);
@@ -1045,12 +1046,16 @@ export function CommentsSurface({
   useEffect(() => {
     if (savedSha.current === sha256) return;
     savedSha.current = sha256;
+    const persisted = () => setPersistedSha(sha256);
     if (!editor || !data.threads.length || !sha256 || proposalPending) {
-      void refresh();
+      void refresh().then(persisted);
       return;
     }
     const decorations = commentHighlightKey.getState(editor.state);
-    if (!decorations) return;
+    if (!decorations) {
+      persisted();
+      return;
+    }
     const visible = visibleEditor(editor.state.doc);
     const anchors = commentRanges(editor.state.doc, decorations).flatMap(
       (range) => {
@@ -1076,9 +1081,13 @@ export function CommentsSurface({
           documentSha256: sha256,
           anchors,
         })
-        .then(setData)
-        .catch(() => refresh());
-    else void refresh();
+        .then((result) => {
+          request.current++;
+          setData(result);
+        })
+        .catch(() => refresh())
+        .then(persisted);
+    else void refresh().then(persisted);
   }, [sha256, editor, data.threads.length, rpc, refresh, proposalPending]);
   const visibleThreads = data.threads
     .filter((thread) => resolved || !thread.resolvedAt)
