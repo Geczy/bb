@@ -13,7 +13,6 @@ import {
 } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { PromptTextMention } from "@bb/domain";
-import { composerMentionFromTextMention } from "@/lib/plugin-composer-handle";
 import {
   promptEditorSerializationFromDoc,
   type PromptEditorOffsetSegment,
@@ -132,6 +131,9 @@ function decorationForIntersection(
   if (textFrom >= textTo) return null;
 
   if (segment.kind === "mention") {
+    if (range.from > segment.textFrom || range.to < segment.textTo) {
+      return null;
+    }
     const node = doc.nodeAt(segment.docFrom);
     if (node === null) return null;
     return Decoration.node(
@@ -185,19 +187,6 @@ interface PromptDecorationMatches {
   hasOffCaretLineRules: boolean;
 }
 
-function runRule(
-  rule: PromptDecorationRule,
-  serialization: PromptEditorSerialization,
-): unknown {
-  if (rule.experimental_matchDraft !== undefined) {
-    return rule.experimental_matchDraft({
-      text: serialization.text,
-      mentions: serialization.mentions.map(composerMentionFromTextMention),
-    });
-  }
-  return rule.match(serialization.text);
-}
-
 function matchDecorationRules(
   doc: ProseMirrorNode,
   sources: readonly PromptDecorationSource[],
@@ -221,7 +210,7 @@ function matchDecorationRules(
 
       let ranges: PromptDecorationRange[];
       try {
-        const parsed = parseRanges(runRule(rule, serialization));
+        const parsed = parseRanges(rule.match(serialization.text));
         if (parsed === null) {
           throw new TypeError("match must return valid integer ranges");
         }

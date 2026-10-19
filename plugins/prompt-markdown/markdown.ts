@@ -1,5 +1,3 @@
-import type { ComposerDraft } from "@get-bb/plugin-sdk/app";
-
 export interface TextRange {
   from: number;
   to: number;
@@ -72,33 +70,14 @@ function overlaps(range: TextRange, blocked: readonly TextRange[]): boolean {
   );
 }
 
-function maskRanges(text: string, ranges: readonly TextRange[]): string {
-  let masked = text;
-  for (const range of ranges) {
-    masked =
-      masked.slice(0, range.from) +
-      "\u0000".repeat(range.to - range.from) +
-      masked.slice(range.to);
-  }
-  return masked;
-}
-
 function parseInline(
   line: string,
   lineStart: number,
-  pills: readonly TextRange[],
   ranges: MarkdownRanges,
 ): void {
-  const blocked = [...pills];
-  const masked = maskRanges(
-    line,
-    pills.map((pill) => ({
-      from: Math.max(0, pill.from - lineStart),
-      to: Math.min(line.length, pill.to - lineStart),
-    })),
-  );
+  const blocked: TextRange[] = [];
 
-  for (const match of masked.matchAll(CODE_SPAN)) {
+  for (const match of line.matchAll(CODE_SPAN)) {
     const from = lineStart + match.index;
     const to = from + match[0].length;
     if (overlaps({ from, to }, blocked)) continue;
@@ -108,7 +87,7 @@ function parseInline(
   }
 
   for (const rule of INLINE_RULES) {
-    for (const match of masked.matchAll(rule.pattern)) {
+    for (const match of line.matchAll(rule.pattern)) {
       const from = lineStart + match.index;
       const to = from + match[0].length;
       const content = { from: from + rule.delimiter, to: to - rule.delimiter };
@@ -122,7 +101,6 @@ function parseInline(
 function parseLine(
   line: string,
   lineStart: number,
-  pills: readonly TextRange[],
   ranges: MarkdownRanges,
 ): void {
   const quote = QUOTE.exec(line);
@@ -158,53 +136,31 @@ function parseLine(
     });
   }
 
-  parseInline(
-    body.slice(contentOffset),
-    bodyStart + contentOffset,
-    pills,
-    ranges,
-  );
+  parseInline(body.slice(contentOffset), bodyStart + contentOffset, ranges);
 }
 
-export function parseMarkdownRanges(draft: ComposerDraft): MarkdownRanges {
+export function parseMarkdownRanges(text: string): MarkdownRanges {
   const ranges = emptyRanges();
-  const pills = draft.mentions.map(({ from, to }) => ({ from, to }));
   let lineStart = 0;
   let inFence = false;
-  for (const line of draft.text.split("\n")) {
-    const lineEnd = lineStart + line.length;
+  for (const line of text.split("\n")) {
     if (/^[ \t]*```/.test(line)) {
       inFence = !inFence;
     } else if (!inFence) {
-      const linePills = pills.filter(
-        (pill) => pill.from < lineEnd && pill.to > lineStart,
-      );
-      parseLine(line, lineStart, linePills, ranges);
+      parseLine(line, lineStart, ranges);
     }
-    lineStart = lineEnd + 1;
-  }
-  for (const kind of Object.keys(ranges) as MarkdownRangeKind[]) {
-    ranges[kind] = ranges[kind].filter((range) => !overlaps(range, pills));
+    lineStart += line.length + 1;
   }
   return ranges;
 }
 
-let cachedDraft: ComposerDraft | null = null;
+let cachedText: string | null = null;
 let cachedRanges: MarkdownRanges = emptyRanges();
 
-export function markdownRanges(draft: ComposerDraft): MarkdownRanges {
-  if (
-    cachedDraft === null ||
-    cachedDraft.text !== draft.text ||
-    cachedDraft.mentions.length !== draft.mentions.length ||
-    cachedDraft.mentions.some(
-      (mention, index) =>
-        mention.from !== draft.mentions[index]!.from ||
-        mention.to !== draft.mentions[index]!.to,
-    )
-  ) {
-    cachedDraft = draft;
-    cachedRanges = parseMarkdownRanges(draft);
+export function markdownRanges(text: string): MarkdownRanges {
+  if (cachedText !== text) {
+    cachedText = text;
+    cachedRanges = parseMarkdownRanges(text);
   }
   return cachedRanges;
 }

@@ -7,16 +7,6 @@ import type {
 type ComposerEditorEffect = NonNullable<
   NonNullable<ComposerCustomization["richText"]>["effects"]
 >[number];
-type ComposerTextEffectMatcher = NonNullable<
-  Extract<ComposerEditorEffect, { match(text: string): unknown }>["match"]
->;
-type ComposerDraftEffectMatcher = NonNullable<
-  Extract<
-    ComposerEditorEffect,
-    { experimental_matchDraft(draft: never): unknown }
-  >["experimental_matchDraft"]
->;
-
 export const PLUGIN_SLOT_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const PLUGIN_MESSAGE_DIRECTIVE_ID_PATTERN = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
@@ -358,25 +348,9 @@ function parseRegions(
               ? { experimental_offCaretLineOnly: true }
               : {}),
           };
-          if (entry?.experimental_matchDraft !== undefined) {
-            if (entry.match !== undefined) {
-              throw new Error(
-                `${entryKind}: set "match" or "experimental_matchDraft", not both`,
-              );
-            }
-            return {
-              ...shared,
-              experimental_matchDraft:
-                requireFunction<ComposerDraftEffectMatcher>(
-                  entryKind,
-                  "experimental_matchDraft",
-                  entry.experimental_matchDraft,
-                ),
-            };
-          }
           return {
             ...shared,
-            match: requireFunction<ComposerTextEffectMatcher>(
+            match: requireFunction<ComposerEditorEffect["match"]>(
               entryKind,
               "match",
               entry?.match,

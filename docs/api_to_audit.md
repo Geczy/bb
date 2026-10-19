@@ -28,10 +28,9 @@ reload and crash recovery, scope suppression, and compact Safari
 keyboard/drawer behavior. Verify multiple popups in one customization and
 popup-id uniqueness across customizations.
 
-## Composer rich-text caret and pill awareness
+## Composer rich-text caret awareness
 
-`ComposerRichTextSpec.effects[]` rules may set `experimental_matchDraft(draft)`
-instead of `match(text)` to receive the draft's mention pill ranges, and
+`ComposerRichTextSpec.effects[]` rules may set
 `experimental_offCaretLineOnly: true` to drop their class on every line the
 selection touches while the composer is focused. Rules stay paint-only.
 
@@ -40,11 +39,10 @@ Docs: `frontend-hooks-and-ui.md`.
 Core path: every rule, including bb's built-in `ultracode` highlight, runs
 through the same evaluator in `prompt-decoration-extension.ts`, which caches
 match results per draft and repaints on selection, focus, and blur changes.
-The bundled Prompt Markdown plugin is the first consumer of both members.
+The bundled Prompt Markdown plugin is the first consumer.
 
 Before stabilization, verify caret-line repaint cost on drafts over 100k
-characters, Safari selection and IME behavior with hidden ranges, and whether
-`match` and `experimental_matchDraft` should merge into one signature.
+characters and Safari selection and IME behavior with hidden ranges.
 
 ## Composer line continuation
 

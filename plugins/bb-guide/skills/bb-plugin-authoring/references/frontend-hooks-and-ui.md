@@ -199,10 +199,10 @@ sendMenu?, banners?, richText? })`. Omitted `scopes` means all thread,
   editor (scope `thread`), where the other customizations do not mount.
 - `richText.effects` rules return plain-text `{ from, to }` ranges and a class
   name from plugin CSS. Decorations are paint-only and never mutate the draft.
-  A rule may use `experimental_matchDraft(draft)` instead of `match(text)` to
-  see which ranges are mention pills, and `experimental_offCaretLineOnly: true`
-  to skip lines the selection touches while the composer is focused. bb keeps
-  the plugin's stylesheet loaded while its rules apply.
+  A range paints a mention pill only when it covers the whole pill. Set
+  `experimental_offCaretLineOnly: true` to skip lines the selection touches
+  while the composer is focused. bb keeps the plugin's stylesheet loaded while
+  its rules apply.
 - `richText.experimental_continueLine(textBeforeCaret)` runs on Shift+Enter
   (Enter on touch keyboards) in a top-level paragraph and returns
   `{ kind: "continue", prefix }`, `{ kind: "end" }` to clear the text before

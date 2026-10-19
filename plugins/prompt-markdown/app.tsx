@@ -1,4 +1,4 @@
-import { definePluginApp, type ComposerDraft } from "@get-bb/plugin-sdk/app";
+import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import "./app.css";
 import {
   continueMarkdownLine,
@@ -22,8 +22,7 @@ function effect(kind: MarkdownRangeKind, offCaretLineOnly: boolean) {
     id: kind,
     className: `bb-prompt-md-${kind}`,
     ...(offCaretLineOnly ? { experimental_offCaretLineOnly: true } : {}),
-    experimental_matchDraft: (draft: ComposerDraft) =>
-      markdownRanges(draft)[kind],
+    match: (text: string) => markdownRanges(text)[kind],
   };
 }
 

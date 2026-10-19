@@ -156,8 +156,7 @@ describe("PromptDecorationExtension", () => {
     editor.destroy();
   });
 
-  it("passes mention pill ranges to draft-aware rules", () => {
-    const seen: unknown[] = [];
+  it("paints a mention pill only when a range covers all of it", () => {
     const editor = createEditor(
       {
         type: "doc",
@@ -165,17 +164,17 @@ describe("PromptDecorationExtension", () => {
           {
             type: "paragraph",
             content: [
-              { type: "text", text: "pre " },
+              { type: "text", text: "_see " },
               {
                 type: "mention",
                 attrs: {
                   resource: {
                     kind: "plugin",
                     pluginId: "sample",
-                    itemId: "people:alice",
-                    label: "@alice",
+                    itemId: "files:init",
+                    label: "@src/__init__.py",
                   },
-                  serializedText: "@alice",
+                  serializedText: "@src/__init__.py",
                 },
               },
             ],
@@ -185,16 +184,13 @@ describe("PromptDecorationExtension", () => {
       {
         getDecorationSources: () => [
           {
-            id: "plugin:draft",
+            id: "plugin:partial",
             generation: 1,
             effects: [
               {
-                id: "pre",
-                className: "draft-range",
-                experimental_matchDraft(draft) {
-                  seen.push(draft);
-                  return [{ from: 0, to: 3 }];
-                },
+                id: "into-pill",
+                className: "partial-range",
+                match: (text) => [{ from: 0, to: text.indexOf("_init") + 1 }],
               },
             ],
           },
@@ -202,11 +198,13 @@ describe("PromptDecorationExtension", () => {
       },
     );
 
-    expect(seen.at(-1)).toMatchObject({
-      text: "pre @alice",
-      mentions: [{ from: 4, to: 10, kind: "plugin", provider: "people" }],
-    });
-    expect(decorationClasses(editor)).toContain("draft-range");
+    const decorations =
+      getPromptDecorationSet(editor.state)?.find(
+        undefined,
+        undefined,
+        (spec) => spec.className === "partial-range",
+      ) ?? [];
+    expect(decorations.map(({ from, to }) => [from, to])).toEqual([[1, 6]]);
     editor.destroy();
   });
 

@@ -13,9 +13,7 @@ describe("Prompt Markdown app", () => {
         .map((effect) => effect.id),
     ).toEqual(["marker", "bullet"]);
     const strong = effects.find((effect) => effect.id === "strong");
-    expect(
-      strong?.experimental_matchDraft?.({ text: "a **b**", mentions: [] }),
-    ).toEqual([{ from: 4, to: 5 }]);
+    expect(strong?.match("a **b**")).toEqual([{ from: 4, to: 5 }]);
     expect(
       customization?.richText?.experimental_continueLine?.("- one"),
     ).toEqual({ kind: "continue", prefix: "- " });

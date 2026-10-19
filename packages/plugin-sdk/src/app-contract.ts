@@ -2926,8 +2926,10 @@ export interface ComposerView {
 
 export interface ComposerRichTextSpec {
   /** Content-derived paint: match ranges receive `className`; text is never mutated. */
-  effects?: readonly ({
+  effects?: readonly {
     id: string;
+    /** Plain-text offsets into the current structured draft. */
+    match(text: string): readonly { from: number; to: number }[];
     className: string;
     /**
      * Apply `className` only to lines the selection does not touch, so the
@@ -2935,23 +2937,7 @@ export interface ComposerRichTextSpec {
      * no line holds the caret and the class applies everywhere.
      */
     experimental_offCaretLineOnly?: boolean;
-  } & (
-    | {
-        /** Plain-text offsets into the current structured draft. */
-        match(text: string): readonly { from: number; to: number }[];
-        experimental_matchDraft?: never;
-      }
-    | {
-        /**
-         * Plain-text offsets into `draft.text`. `draft.mentions` marks the
-         * ranges that render as mention pills.
-         */
-        experimental_matchDraft(
-          draft: ComposerDraft,
-        ): readonly { from: number; to: number }[];
-        match?: never;
-      }
-  ))[];
+  }[];
   /**
    * Called when Shift+Enter, or Enter on a touch keyboard, starts a new line
    * from a collapsed caret in a top-level paragraph. `textBeforeCaret` is the
