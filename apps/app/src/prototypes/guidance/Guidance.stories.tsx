@@ -3,14 +3,12 @@ import { Button } from "@bb/shared-ui/button";
 import { Icon } from "@bb/shared-ui/icon";
 import { Switch } from "@bb/shared-ui/switch";
 import { Popover, PopoverAnchor, PopoverContent } from "@bb/shared-ui/popover";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppPageHeader } from "@/components/layout/AppPageHeader";
 import { PageShell } from "@/components/ui/page-shell";
 import { SettingsSection, SettingsWithControl } from "@/components/ui/settings-section";
-import { ConversationMessageContent } from "@/components/thread/timeline/ConversationMessageContent";
 import { ThreadStatusGlyph } from "@/components/thread/ThreadStatusGlyph";
 import { AppToastContent } from "@/components/ui/app-toast";
 import { ThreadQrCode } from "../../../../../plugins/connect/guidance-qr.prototype";
+import { Frame, Message } from "./story-frame";
 import { Composer } from "./composer";
 import { InlineConfirmation } from "./inline-confirmation";
 import { Hint, SuggestionCard, type Evidence } from "./suggestion-card";
@@ -33,46 +31,6 @@ const suggestions: Partial<Record<Kind, { title: string; why: string; action: st
   integration: { title: "Send failing CI runs to your team channel", why: "Build your own connection with run links and failing test names. Starts from Hooks in BB Community.", action: "Build this", evidence: { label: "Your CI request", title: "CI failures · Your message", text: "“Send failed CI runs to our team webhook with run links and failing test names.”\n\nNo existing match handles this exact job. Hooks is the closest community template: it already sends webhooks and stores credentials. Start from its source to build your own plugin." } },
   instructions: { title: "Remember how you like PR descriptions written", why: "You’ve asked for the same format in your last 3 reviews.", action: "Remember this", evidence: { label: "3 review messages", title: "Your PR description preferences", text: "“Lead with the problem and resulting behavior.”\n“Keep it short; include what you checked.”\n“Again, problem first, then behavior and verification.”\n\nProposed instruction: Start with the problem and resulting behavior. Keep descriptions short and include relevant verification." } },
 };
-
-function Message({ text, user = false }: { text: string; user?: boolean }) {
-  return user ? <ConversationMessageContent role="user" initiator="user" senderThreadId={null} senderThreadTitle={null} senderIsPluginSideChat={false} systemMessageKind="unlabeled" systemMessageSubject={null} text={text} timestamp={0} attachments={null} mentions={[]} turnRequest={{ isGrouped: false, kind: "message", status: "accepted" }} /> : <ConversationMessageContent role="assistant" id="guidance-reply" threadId="guidance-thread" turnId="guidance-turn" text={text} timestamp={0} attachments={null} showActions mobileActionDisplay="inline" streaming={false} />;
-}
-
-function Frame({ title, threadTitle, empty, running, waiting, children, onNew, onSettings, threads, onOpenThread }: {
-  title: string;
-  threadTitle: string;
-  empty: boolean;
-  running: boolean;
-  waiting: boolean;
-  children: ReactNode;
-  onNew(): void;
-  onSettings(): void;
-  threads: string[];
-  onOpenThread(title: string): void;
-}) {
-  return <div className="h-dvh bg-background text-foreground" data-guidance-story>
-    <SidebarProvider defaultOpen className="h-full">
-      <Sidebar>
-        <div className="flex h-12 items-center px-4 text-sm font-semibold">bb</div>
-        <SidebarContent className="px-2">
-          <SidebarMenu>
-            <SidebarMenuItem><SidebarMenuButton onClick={onNew} isActive={empty}><Icon name="Plus" /><span>New thread</span></SidebarMenuButton></SidebarMenuItem>
-          </SidebarMenu>
-          {!empty && <div className="mt-5">
-            <p className="px-2 pb-2 text-xs text-subtle-foreground">bb</p>
-            <SidebarMenu><SidebarMenuItem><SidebarMenuButton isActive onClick={() => onOpenThread(threadTitle)}><ThreadStatusGlyph indicator={waiting ? "waiting-for-input" : running ? "runtime" : "none"} /><span className="truncate">{threadTitle}</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
-            {threads.length > 0 && <SidebarMenu className="ml-3 w-auto border-l border-border pl-2">{threads.map(item => <SidebarMenuItem key={item}><SidebarMenuButton onClick={() => onOpenThread(item)}><ThreadStatusGlyph indicator="runtime" /><span className="truncate">{item}</span></SidebarMenuButton></SidebarMenuItem>)}</SidebarMenu>}
-          </div>}
-        </SidebarContent>
-        <SidebarFooter className="p-2"><SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={onSettings}><Icon name="Settings" /><span>Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarFooter>
-      </Sidebar>
-      <SidebarInset className="min-w-0 overflow-hidden">
-        <AppPageHeader center={<><SidebarTrigger /><span className="truncate text-sm">{title}</span></>} />
-        <div className="flex min-h-0 flex-1 flex-col px-4 pt-4 md:px-5 md:pt-5">{children}</div>
-      </SidebarInset>
-    </SidebarProvider>
-  </div>;
-}
 
 function Guidance({ kind, initial = "suggested" }: { kind: Kind; initial?: Stage }) {
   const [stage, setStage] = useState(initial);

@@ -1,6 +1,6 @@
 # Guidance prototypes
 
-28 clickable states for Next step, Hint, and Attention, using production bb components. Source chips open evidence; accepting a suggestion changes the local story into its resulting work. Reload resets the fixture. The three first-run grounded tasks each have a separate story so only one promotion is visible at a time.
+31 clickable states for Next step, Hint, and Attention, using production bb components. Source chips open evidence; accepting a suggestion changes the local story into its resulting work. Reload resets the fixture. The three first-run grounded tasks each have a separate story so only one promotion is visible at a time.
 
 ## Preview ownership
 
@@ -9,8 +9,8 @@
 - Host: `host_57pj4zhqxr` (`brsbl-gmktec`)
 - Environment: `env_nsmu7rmqvu`
 - Worktree: `/home/bersabel/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_e4bcx727qf-1/bb`
-- Persistent environment terminal: `term_f8mvzg3hkr`. `bb terminal restart term_9rxswckezn` created this replacement shell in the same environment.
-- Launch command from the worktree: `cd apps/app && pnpm storybook --port 61001 --stories src/prototypes/guidance/Guidance.stories.tsx`
+- Persistent environment terminal: `term_w2nga4twp4`; managed preview job: `job_16c9a869d43044cb92a5b8f8e13c6a77`. The earlier terminal exited after a daemon disconnect; this replacement uses the same environment and port.
+- Launch from the persistent environment terminal: `bb host-care start --thread thr_e4bcx727qf --title "Guidance story preview" --command 'cd apps/app && pnpm storybook --port 61001 --stories "src/prototypes/guidance/*.stories.tsx"' --retention preview --json`
 - Local: <http://localhost:61001>
 - Shared: <https://brsbl-bbox--61001.getbb.app>
 - The local story route answers on IPv4 loopback. BB Connect requires the owning account to sign in; the isolated QA browser reaches that sign-in gate on the shared URL. Keep the terminal and environment alive for review.
@@ -49,6 +49,11 @@ Add `&mode=preview` to hide the Ladle navigation. Set `theme=dark` for dark mode
 | Dismissed | [Open](http://localhost:61001/?story=guidance--dismissed&theme=light) | [Open](https://brsbl-bbox--61001.getbb.app/?story=guidance--dismissed&theme=light) |
 | Suggestions on | [Open](http://localhost:61001/?story=guidance--suggestions-on&theme=light) | [Open](https://brsbl-bbox--61001.getbb.app/?story=guidance--suggestions-on&theme=light) |
 | Suggestions off | [Open](http://localhost:61001/?story=guidance--suggestions-off&theme=light) | [Open](https://brsbl-bbox--61001.getbb.app/?story=guidance--suggestions-off&theme=light) |
+| Day 2 offer | [Open](http://localhost:61001/?story=guidance--day-2--day2-offer&theme=light) | [Open](https://brsbl-bbox--61001.getbb.app/?story=guidance--day-2--day2-offer&theme=light) |
+| Day 2 scheduled | [Open](http://localhost:61001/?story=guidance--day-2--day2-scheduled&theme=light) | [Open](https://brsbl-bbox--61001.getbb.app/?story=guidance--day-2--day2-scheduled&theme=light) |
+| Day 2 result | [Open](http://localhost:61001/?story=guidance--day-2--day2-result&theme=light) | [Open](https://brsbl-bbox--61001.getbb.app/?story=guidance--day-2--day2-result&theme=light) |
+
+The Day 2 group offers a one-time CI triage, confirms the next morning’s schedule with Undo, and opens the finished result from an Attention notification. The result includes two flaky tests, one reproducible failure, and an editable reply composer.
 
 ## Story boundary
 
@@ -78,3 +83,5 @@ Only story/prototype code, its Ladle style source, and a Ladle adapter export fo
 Chrome for Testing 155.0.8059.39, one isolated instance at a time. Exercised source evidence, task acceptance, parallel work, recurring Undo, install transitions and Undo, saved instructions, dismissal, the community-template build thread, editable reading state, sign-in with the draft retained, notification confirmation timing, Suggestions off, Attention opening its thread, phone QR opening its destination, and a reply from the 390×844 phone layout. The completed interaction passes reported no page exceptions.
 
 Every story has a desktop light PNG at 2×. There is also a 390×844 phone capture at 2× and one desktop dark capture per surface. Files live under the gitignored `.tmp/guidance/screenshots/`; `manifest.json` records absolute paths and PNG dimensions. Desktop images are 2880×1800; phone images are 780×1688. Files ending `-v2` are the latest captures for the corresponding state; earlier captures remain intact. No tests, typecheck, or lint ran locally. The QA browser is closed after verification; the persistent preview stays running.
+
+Day 2 verification on October 19 covered source evidence, Schedule it, Undo, dismissal, and the notification opening the result thread. The extracted shared frame also rendered an existing parallel-work story. Desktop light, dark and compact rendering reported no page exceptions. The requested desktop light captures are `day2-offer-desktop-light-20261019-v2.png`, `day2-scheduled-desktop-light-20261019.png`, and `day2-result-desktop-light-20261019.png`; `day2-result-opened-desktop-light-20261019.png` shows the opened result. All four are 2880×1800 and live in the screenshot directory above.
