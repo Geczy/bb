@@ -772,7 +772,7 @@ function ThreadRowComponent({
           <span
             data-sidebar-thread-cross-project=""
             title={crossProjectLabel}
-            className="relative max-w-24 shrink-0 truncate text-2xs font-normal text-muted-foreground"
+            className="relative max-w-[min(4rem,25%)] shrink-0 truncate text-2xs font-normal text-muted-foreground"
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
