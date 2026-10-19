@@ -1755,6 +1755,32 @@ export default async function plugin(
     };
   }
 
+  async function attachComments(input: {
+    vaultId?: string;
+    path: string;
+    sidecarPath: string;
+  }) {
+    const vault = getVault(input.vaultId);
+    const target = requireVaultPath(input.path, { extension: ".md" });
+    const source = sidecarDocument(input.sidecarPath);
+    if (!source || input.sidecarPath === commentSidecar(target))
+      throw new Error("Choose a stranded or orphaned comments file.");
+    if (!source.orphaned && (await readExistingFile(vault, source.path)))
+      throw new Error("Those comments still belong to an existing document.");
+    const file = await readExistingFile(vault, input.sidecarPath);
+    if (!file) throw new Error("Those comments were already attached.");
+    const result = await comments.attach(
+      { vaultId: vault.id, path: target },
+      commentsFileSchema.parse(JSON.parse(file.content)).threads,
+    );
+    await bb.sdk.files.remove({
+      ...hostArgs(vault),
+      path: absolutePath(vault, input.sidecarPath),
+      rootPath: vault.rootPath,
+    });
+    return result;
+  }
+
   async function orphanSidecar(vault: Vault, documentPath: string) {
     const sidecarPath = commentSidecar(documentPath);
     if (!(await readExistingFile(vault, sidecarPath))) return;
@@ -1816,27 +1842,7 @@ export default async function plugin(
       }
       return { stranded, truncated: listing.truncated };
     },
-    async attachComments(input) {
-      const vault = getVault(input.vaultId);
-      const target = requireVaultPath(input.path, { extension: ".md" });
-      const source = sidecarDocument(input.sidecarPath);
-      if (!source || input.sidecarPath === commentSidecar(target))
-        throw new Error("Choose a stranded or orphaned comments file.");
-      if (!source.orphaned && (await readExistingFile(vault, source.path)))
-        throw new Error("Those comments still belong to an existing document.");
-      const file = await readExistingFile(vault, input.sidecarPath);
-      if (!file) throw new Error("Those comments were already attached.");
-      const result = await comments.attach(
-        { vaultId: vault.id, path: target },
-        commentsFileSchema.parse(JSON.parse(file.content)).threads,
-      );
-      await bb.sdk.files.remove({
-        ...hostArgs(vault),
-        path: absolutePath(vault, input.sidecarPath),
-        rootPath: vault.rootPath,
-      });
-      return result;
-    },
+    attachComments: (input) => attachComments(input),
     listComments: (input) => comments.list(input),
     addComment: (input) => comments.add(input, comments.user),
     replyComment: (input) => comments.reply(input, comments.user),
@@ -3327,7 +3333,7 @@ export default async function plugin(
           run: (input) =>
             attemptCli(async () =>
               commentOutput(
-                await handlers.attachComments({
+                await attachComments({
                   vaultId: input.options.vault,
                   path: input.positionals.path,
                   sidecarPath: input.options.from,
