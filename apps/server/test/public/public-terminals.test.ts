@@ -24,6 +24,7 @@ import {
   terminalSessionSchema,
 } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { readJson } from "../helpers/json.js";
 import {
   expireArchiveUndoGrace,
@@ -694,6 +695,88 @@ describe("public terminal routes", () => {
       }),
     ]);
   });
+
+  it.each(["list", "create"] as const)(
+    "does not scan terminal history during host terminal %s",
+    async (operation) => {
+      const fixture = await createTerminalRouteFixture();
+      harnesses.push(fixture.harness);
+      const otherHost = seedHost(fixture.harness.deps, {
+        id: "other-terminal-host",
+      });
+      const sessions = [
+        { hostId: fixture.host.id, status: "running" },
+        { hostId: otherHost.id, status: "running" },
+        { hostId: fixture.host.id, status: "exited" },
+      ] as const;
+      const seeded = sessions.map((session) =>
+        createTerminalSession(fixture.harness.db, {
+          cols: 100,
+          daemonSessionId: null,
+          environmentId: null,
+          initialCwd: "/tmp/standalone-terminal",
+          rows: 30,
+          threadId: null,
+          title: "Existing terminal",
+          ...session,
+        }),
+      );
+      seedExitedTerminalSession(fixture, {
+        daemonSessionId: fixture.session.id,
+      });
+      const prepare = vi.spyOn(fixture.harness.db.$client, "prepare");
+      let queries: string[];
+      try {
+        if (operation === "list") {
+          const response = await fixture.harness.app.request(
+            `/api/v1/terminals?hostId=${encodeURIComponent(fixture.host.id)}`,
+          );
+          expect(response.status).toBe(200);
+          const list = terminalListResponseSchema.parse(
+            await readJson(response),
+          );
+          expect(list.sessions.map((session) => session.id)).toEqual([
+            seeded[0]?.id,
+          ]);
+        } else {
+          const pending = await startPendingStandaloneTerminalOpen(fixture);
+          expect(
+            getTerminalSession(fixture.harness.db, {
+              kind: "terminal",
+              terminalId: pending.openMessage.terminalId,
+            })?.title,
+          ).toBe("Terminal 2");
+          acknowledgeTerminalOpen(
+            fixture,
+            pending.openMessage,
+            "/tmp/standalone-terminal",
+          );
+          expect((await pending.responsePromise).status).toBe(201);
+        }
+        queries = prepare.mock.calls
+          .map(([query]) => query)
+          .filter((query) =>
+            /^select\b.*\bfrom "terminal_sessions"/i.test(query),
+          );
+      } finally {
+        prepare.mockRestore();
+      }
+      expect(queries.length).toBeGreaterThan(0);
+      for (const query of queries) {
+        const parameters = Array.from(query.matchAll(/\?/g), () => null);
+        const plan = z
+          .array(z.object({ detail: z.string() }))
+          .parse(
+            fixture.harness.db.$client
+              .prepare(`EXPLAIN QUERY PLAN ${query}`)
+              .all(...parameters),
+          );
+        expect(plan.map((step) => step.detail)).not.toContainEqual(
+          expect.stringMatching(/\bSCAN terminal_sessions\b/),
+        );
+      }
+    },
+  );
 
   it("creates a host terminal without an environment or cwd", async () => {
     const fixture = await createTerminalRouteFixture();

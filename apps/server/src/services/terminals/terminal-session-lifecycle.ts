@@ -660,7 +660,7 @@ export class TerminalSessionLifecycle {
       { hostId },
     );
     return listTerminalSessions(this.options.db, {
-      scope: { kind: "all" },
+      scope: { kind: "host", hostId },
       visible: true,
     })
       .filter(
@@ -719,7 +719,7 @@ export class TerminalSessionLifecycle {
         }).length;
       case "host_path":
         return listTerminalSessions(this.options.db, {
-          scope: { kind: "all" },
+          scope: { kind: "host", hostId: target.hostId },
           visible: true,
         }).filter(
           (session) =>
