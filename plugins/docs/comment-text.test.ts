@@ -3,7 +3,12 @@ import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { afterEach, describe, expect, it } from "vitest";
-import { threadRanges, visibleEditor } from "./comment-editor.js";
+import {
+  commentHighlightKey,
+  createCommentHighlights,
+  threadRanges,
+  visibleEditor,
+} from "./comment-editor.js";
 import { visibleMarkdown } from "./comment-text.js";
 
 let editor: Editor | null = null;
@@ -36,9 +41,10 @@ describe("visible comment text", () => {
     expect(stored.lines[stored.text.indexOf("After the starred")]).toBe(11);
   });
   it("places saved-text comments on the matching proposal draft text", () => {
-    const saved = "# Plan\n\nShip on November 12.";
-    const proposal =
-      "# Plan\n\nA new paragraph from the proposal.\n\nShip on November 12.";
+    const context =
+      "This paragraph stays in place and gives the date its context.";
+    const saved = `# Plan\n\n${context}\n\nShip on November 12.`;
+    const proposal = `# Plan\n\nA new paragraph from the proposal.\n\n${context}\n\nShip on November 12.`;
     editor = new Editor({
       extensions: [StarterKit, Markdown.configure({ html: true })],
       content: proposal,
@@ -64,7 +70,7 @@ describe("visible comment text", () => {
         quote: "November 12",
         start,
         end: start + 11,
-        line: 3,
+        line: 5,
       },
     };
     const doc = editor.state.doc;
@@ -74,10 +80,14 @@ describe("visible comment text", () => {
       );
     expect(highlighted(saved)).toEqual(["November 12"]);
     expect(
-      threadRanges(doc, [thread], "# Plan\n\nShip on December 30."),
+      threadRanges(
+        doc,
+        [thread],
+        `# Plan\n\n${context}\n\nShip on December 30.`,
+      ),
     ).toEqual([]);
   });
-  it("re-finds stale saved offsets by quote and never highlights another sentence", () => {
+  it("never highlights from stale saved offsets after a live external edit", () => {
     const original =
       "# Plan\n\nIntro.\n\n---\n\nAfter dash rule target sentence.\n\n***\n\nAfter star rule target sentence.";
     const edited = original
@@ -124,6 +134,37 @@ describe("visible comment text", () => {
         ],
         null,
       ).map((range) => [range.id, doc.textBetween(range.from, range.to)]),
-    ).toEqual([["dash", "After dash rule target sentence."]]);
+    ).toEqual([]);
+  });
+  it("clears comment highlights when an external load replaces the document", () => {
+    editor = new Editor({
+      extensions: [
+        StarterKit,
+        Markdown.configure({ html: true }),
+        createCommentHighlights(),
+      ],
+      content: "# Plan\n\nAfter star rule target sentence.",
+    });
+    const visible = visibleEditor(editor.state.doc);
+    const start = visible.text.indexOf("After star");
+    editor.view.dispatch(
+      editor.state.tr.setMeta(commentHighlightKey, {
+        ranges: [
+          {
+            id: "c_1",
+            from: visible.positions[start]!,
+            to: visible.positions[start + 31]! + 1,
+          },
+        ],
+        active: null,
+      }),
+    );
+    expect(commentHighlightKey.getState(editor.state)?.find()).toHaveLength(1);
+    editor.view.dispatch(
+      editor.state.tr
+        .insertText(" rewritten", visible.positions[start + 15]! + 1)
+        .setMeta("preventUpdate", true),
+    );
+    expect(commentHighlightKey.getState(editor.state)?.find()).toEqual([]);
   });
 });

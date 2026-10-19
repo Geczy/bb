@@ -2,11 +2,11 @@ import {
   commentsContract,
   commentSourceSchema,
   commentSidecar,
-  sidecarMatchesDocument,
   createCommentsService,
   type CommentTarget,
 } from "./comments-service.js";
 import { proposalSchema, type Proposal } from "./proposals.js";
+import { commentsFileSchema, commentsListSchema } from "./comments.js";
 import { watch } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -278,6 +278,16 @@ export const docsRpcContract = defineRpcContract({
       ),
       truncated: z.boolean(),
     }),
+  },
+  attachComments: {
+    input: z
+      .object({
+        vaultId: vaultIdSchema,
+        path: vaultPathSchema,
+        sidecarPath: z.string().min(1),
+      })
+      .strict(),
+    output: commentsListSchema,
   },
   readProposal: {
     input: z.object({ vaultId: vaultIdSchema, path: vaultPathSchema }).strict(),
@@ -764,14 +774,6 @@ export default async function plugin(
       data TEXT NOT NULL,
       PRIMARY KEY (vault_id, path)
     )`,
-    `CREATE TABLE IF NOT EXISTS comment_sidecars (
-      vault_id TEXT NOT NULL,
-      path TEXT NOT NULL,
-      document_sha256 TEXT NOT NULL,
-      PRIMARY KEY (vault_id, path)
-    )`,
-    `CREATE INDEX IF NOT EXISTS comment_sidecars_document
-      ON comment_sidecars (vault_id, document_sha256)`,
   ]);
 
   let seededDefaultVault = false;
@@ -1230,15 +1232,7 @@ export default async function plugin(
       const oldSidecar = commentSidecar(from);
       const newSidecar = commentSidecar(to);
       const sidecar = await readExistingFile(vault, oldSidecar);
-      const stranded = await readExistingFile(vault, newSidecar);
-      const document =
-        stranded && !sidecar && /\.md$/i.test(from)
-          ? await readExistingFile(vault, from)
-          : null;
-      if (
-        stranded &&
-        !(document && sidecarMatchesDocument(stranded.content, document.sha256))
-      )
+      if (await readExistingFile(vault, newSidecar))
         throw new Error(
           "Destination has stranded comments; restore or move that document before replacing it.",
         );
@@ -1261,7 +1255,6 @@ export default async function plugin(
           throw error;
         }
       }
-      moveSidecarRecords(vault.id, from, to);
       db.transaction(() => {
         const rows = db
           .prepare(
@@ -1670,21 +1663,7 @@ export default async function plugin(
           });
           continue;
         }
-        const renamed = written.filter(
-          (entry) =>
-            entry.sha256 === current?.sha256 && /\.md$/i.test(entry.localPath),
-        );
-        if (
-          renamed.length === 1 &&
-          (await readExistingFile(vault, commentSidecar(deletion.path))) &&
-          !(await readExistingFile(
-            vault,
-            commentSidecar(renamed[0]!.localPath),
-          ))
-        ) {
-          await moveSidecar(vault, deletion.path, renamed[0]!.localPath);
-          moveSidecarRecords(vault.id, deletion.path, renamed[0]!.localPath);
-        }
+        await orphanSidecar(vault, deletion.path);
         await removePath(vault.id, deletion.path, false);
         deleted.push(deletion.path);
       } catch (error) {
@@ -1754,24 +1733,45 @@ export default async function plugin(
     },
     (input, work) =>
       input.source ? work() : serializeVault(getVault(input.vaultId).id, work),
-    (input, documentSha256) => {
-      if (!input.source)
-        recordSidecar(
-          getVault(input.vaultId).id,
-          requireVaultPath(input.path),
-          documentSha256,
-        );
-    },
   );
 
-  function recordSidecar(
-    vaultId: string,
-    relativePath: string,
-    documentSha256: string,
-  ) {
-    db.prepare(
-      "INSERT INTO comment_sidecars (vault_id, path, document_sha256) VALUES (?, ?, ?) ON CONFLICT (vault_id, path) DO UPDATE SET document_sha256 = excluded.document_sha256",
-    ).run(vaultId, relativePath, documentSha256);
+  function sidecarDocument(
+    sidecarPath: string,
+  ): { path: string; orphaned: boolean } | null {
+    if (sidecarPath.split("/").some((part) => !part || part === ".."))
+      return null;
+    const orphaned = /^\.bb-comments\/orphaned\/[^/]+\/(.+\.md)\.json$/i.exec(
+      sidecarPath,
+    );
+    if (orphaned) return { path: orphaned[1]!, orphaned: true };
+    const stranded = /^(?:(.*)\/)?\.bb-comments\/([^/]+\.md)\.json$/i.exec(
+      sidecarPath,
+    );
+    if (!stranded || stranded[1]?.split("/").includes(".bb-comments"))
+      return null;
+    return {
+      path: stranded[1] ? `${stranded[1]}/${stranded[2]}` : stranded[2]!,
+      orphaned: false,
+    };
+  }
+
+  async function orphanSidecar(vault: Vault, documentPath: string) {
+    const sidecarPath = commentSidecar(documentPath);
+    if (!(await readExistingFile(vault, sidecarPath))) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const destination = `.bb-comments/orphaned/${stamp}/${documentPath}.json`;
+    await bb.sdk.files.mkdir({
+      ...hostArgs(vault),
+      path: absolutePath(vault, path.posix.dirname(destination)),
+      rootPath: vault.rootPath,
+      recursive: true,
+    });
+    await bb.sdk.files.move({
+      ...hostArgs(vault),
+      sourcePath: absolutePath(vault, sidecarPath),
+      destinationPath: absolutePath(vault, destination),
+      rootPath: vault.rootPath,
+    });
   }
 
   async function moveSidecar(vault: Vault, from: string, to: string) {
@@ -1790,55 +1790,6 @@ export default async function plugin(
     });
   }
 
-  function moveSidecarRecords(vaultId: string, from: string, to: string) {
-    db.prepare(
-      "UPDATE OR REPLACE comment_sidecars SET path = ? || substr(path, length(?) + 1) WHERE vault_id = ? AND (path = ? OR substr(path, 1, length(?)) = ?)",
-    ).run(to, from, vaultId, from, `${from}/`, `${from}/`);
-  }
-
-  async function adoptStrandedComments(
-    vault: Vault,
-    relativePath: string,
-    documentSha256: string,
-  ) {
-    const candidates = db
-      .prepare(
-        "SELECT path FROM comment_sidecars WHERE vault_id = ? AND document_sha256 = ? AND path != ?",
-      )
-      .pluck()
-      .all(vault.id, documentSha256, relativePath)
-      .map((value) => z.string().parse(value));
-    if (!candidates.length) return;
-    await serializeVault(vault.id, async () => {
-      if (await readExistingFile(vault, commentSidecar(relativePath))) return;
-      const stranded: string[] = [];
-      for (const candidate of candidates) {
-        if (
-          !(await readExistingFile(vault, candidate)) &&
-          (await readExistingFile(vault, commentSidecar(candidate)))
-        )
-          stranded.push(candidate);
-      }
-      if (stranded.length !== 1) return;
-      await moveSidecar(vault, stranded[0]!, relativePath);
-      moveSidecarRecords(vault.id, stranded[0]!, relativePath);
-    });
-  }
-
-  async function listVaultComments(
-    input: CommentTarget & { status?: "open" | "resolved" | "all" },
-  ) {
-    if (input.source) return comments.list(input);
-    const vault = getVault(input.vaultId);
-    const relativePath = requireVaultPath(input.path, { extension: ".md" });
-    const document = await readFile(vault.id, relativePath);
-    await adoptStrandedComments(vault, relativePath, document.sha256);
-    const result = await comments.list(input, document);
-    if (result.sidecarSha256 !== null)
-      recordSidecar(vault.id, relativePath, document.sha256);
-    return result;
-  }
-
   const handlers: PluginRpcHandlers<typeof docsRpcContract> = {
     async listCommentFolder(input) {
       const vault = getVault(input.vaultId);
@@ -1852,20 +1803,41 @@ export default async function plugin(
         includeDirectories: false,
         limit: MAX_TREE_ENTRIES,
       });
+      const files = new Set(
+        listing.paths.map((item) =>
+          folder ? `${folder}/${item.path}` : item.path,
+        ),
+      );
       const stranded: { path: string; sidecarPath: string }[] = [];
-      for (const item of listing.paths) {
-        if (!/(?:^|\/)\.bb-comments\/[^/]+\.md\.json$/i.test(item.path))
-          continue;
-        const relative = folder ? `${folder}/${item.path}` : item.path;
-        const documentPath = relative
-          .replace(/(^|\/)\.bb-comments\//, "$1")
-          .replace(/\.json$/, "");
-        if (!(await readExistingFile(vault, documentPath)))
-          stranded.push({ path: documentPath, sidecarPath: relative });
+      for (const relative of files) {
+        const document = sidecarDocument(relative);
+        if (document && (document.orphaned || !files.has(document.path)))
+          stranded.push({ path: document.path, sidecarPath: relative });
       }
       return { stranded, truncated: listing.truncated };
     },
-    listComments: (input) => listVaultComments(input),
+    async attachComments(input) {
+      const vault = getVault(input.vaultId);
+      const target = requireVaultPath(input.path, { extension: ".md" });
+      const source = sidecarDocument(input.sidecarPath);
+      if (!source || input.sidecarPath === commentSidecar(target))
+        throw new Error("Choose a stranded or orphaned comments file.");
+      if (!source.orphaned && (await readExistingFile(vault, source.path)))
+        throw new Error("Those comments still belong to an existing document.");
+      const file = await readExistingFile(vault, input.sidecarPath);
+      if (!file) throw new Error("Those comments were already attached.");
+      const result = await comments.attach(
+        { vaultId: vault.id, path: target },
+        commentsFileSchema.parse(JSON.parse(file.content)).threads,
+      );
+      await bb.sdk.files.remove({
+        ...hostArgs(vault),
+        path: absolutePath(vault, input.sidecarPath),
+        rootPath: vault.rootPath,
+      });
+      return result;
+    },
+    listComments: (input) => comments.list(input),
     addComment: (input) => comments.add(input, comments.user),
     replyComment: (input) => comments.reply(input, comments.user),
     setCommentStatus: (input) => comments.status(input, comments.user),
@@ -3268,7 +3240,7 @@ export default async function plugin(
                 };
               }
               return commentOutput(
-                await listVaultComments({
+                await comments.list({
                   ...commentTarget(input),
                   status: z
                     .enum(["open", "resolved", "all"])
@@ -3335,6 +3307,31 @@ export default async function plugin(
                   }),
                   await comments.author(context.threadId),
                 ),
+                input.options.json === true,
+              ),
+            ),
+        }),
+        "comments attach": cliCommand({
+          summary:
+            "Attach stranded or orphaned comments (see comments list --folder) to a document",
+          positionals: proposalPositionals,
+          options: {
+            vault: VAULT_OPTION,
+            json: JSON_OPTION,
+            from: {
+              type: "string",
+              required: true,
+              description: "Comments file path from comments list --folder",
+            },
+          },
+          run: (input) =>
+            attemptCli(async () =>
+              commentOutput(
+                await handlers.attachComments({
+                  vaultId: input.options.vault,
+                  path: input.positionals.path,
+                  sidecarPath: input.options.from,
+                }),
                 input.options.json === true,
               ),
             ),

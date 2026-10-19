@@ -660,6 +660,11 @@ export function CommentsSurface({
   const [reattach, setReattach] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [reloads, setReloads] = useState(0);
+  const [moved, setMoved] = useState<{ path: string; sidecarPath: string }[]>(
+    [],
+  );
+  const [movedOpen, setMovedOpen] = useState(false);
   const compactViewport = useIsCompactViewport();
   const [narrowPane, setNarrowPane] = useState(false);
   const compact = compactViewport || narrowPane;
@@ -711,9 +716,25 @@ export function CommentsSurface({
     setData(EMPTY);
     setActive(null);
     setDraft(null);
+    setMoved([]);
+    setMovedOpen(false);
     void refresh();
     return invalidateRequests;
   }, [targetKey, refresh, invalidateRequests]);
+  const commentless = data !== EMPTY && data.sidecarSha256 === null;
+  useEffect(() => {
+    if (!commentless || targetRef.current.source) return;
+    let current = true;
+    void rpc
+      .call("listCommentFolder", { vaultId: targetRef.current.vaultId })
+      .then((result) => {
+        if (current) setMoved(result.stranded);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [commentless, targetKey, rpc]);
   const changed = useCallback(
     (payload: unknown) => {
       if (typeof payload !== "object" || payload === null) return;
@@ -832,7 +853,13 @@ export function CommentsSurface({
         ),
       });
     };
-    const onTransaction = () => {
+    const onTransaction = ({
+      transaction,
+    }: {
+      transaction: { getMeta(key: string): unknown };
+    }) => {
+      if (transaction.getMeta("preventUpdate"))
+        setReloads((reloads) => reloads + 1);
       setRevision((revision) => revision + 1);
       onSelection();
     };
@@ -880,7 +907,7 @@ export function CommentsSurface({
         active: activeRef.current,
       }),
     );
-  }, [editor, data, proposalBase]);
+  }, [editor, data, proposalBase, reloads]);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const decorations = commentHighlightKey.getState(editor.state);
@@ -1060,6 +1087,15 @@ export function CommentsSurface({
       .docs-comment-highlight[data-active="true"] { background:color-mix(in oklab,var(--warning) 34%,transparent); border-bottom-color:var(--warning); }
     `}</style>
         <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+          {commentless && moved.length > 0 && (
+            <button
+              aria-expanded={movedOpen}
+              className="rounded px-2 py-1 hover:bg-state-hover"
+              onClick={() => setMovedOpen(!movedOpen)}
+            >
+              Document moved?
+            </button>
+          )}
           {data.threads.some((thread) => thread.resolvedAt) && (
             <button
               aria-pressed={resolved}
@@ -1088,6 +1124,39 @@ export function CommentsSurface({
             {data.threads.filter((thread) => !thread.resolvedAt).length}
           </button>
         </div>
+        {commentless && movedOpen && moved.length > 0 && (
+          <div className="flex flex-col gap-1 border-b border-border px-3 py-2 text-xs">
+            <span className="text-muted-foreground">
+              Comments whose document is missing. Attach them here, then
+              reattach any “Text not found” threads.
+            </span>
+            {moved.map((item) => (
+              <div key={item.sidecarPath} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate">{item.path}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    act(
+                      apply(
+                        rpc.call("attachComments", {
+                          vaultId: target.vaultId,
+                          path: target.path,
+                          sidecarPath: item.sidecarPath,
+                        }),
+                      ).then(() => {
+                        setMoved([]);
+                        setMovedOpen(false);
+                      }),
+                    )
+                  }
+                >
+                  Attach here
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
         {(error || data.notice) && (
           <div role="alert" className="px-3 py-2 text-xs text-destructive">
             {error || data.notice}{" "}

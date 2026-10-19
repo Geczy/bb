@@ -98,72 +98,6 @@ export function makeAnchor(
     documentSha256: sha256,
   };
 }
-function contextScore(
-  text: string,
-  start: number,
-  end: number,
-  anchor: CommentAnchor,
-): number {
-  let score = 0;
-  for (let i = 1; i <= anchor.prefix.length && i <= start; i++) {
-    if (text[start - i] !== anchor.prefix[anchor.prefix.length - i]) break;
-    score++;
-  }
-  for (let i = 0; i < anchor.suffix.length && end + i < text.length; i++) {
-    if (text[end + i] !== anchor.suffix[i]) break;
-    score++;
-  }
-  return score;
-}
-function fuzzyRange(
-  text: string,
-  anchor: CommentAnchor,
-): { start: number; end: number } | null {
-  const quote = anchor.quote;
-  if (quote.length < 8 || quote.length > 2048) return null;
-  const errors = Math.floor(quote.length / 4);
-  const left = Math.max(0, anchor.start - 512);
-  const right = Math.min(text.length, anchor.end + 512);
-  let costs = Array.from({ length: quote.length + 1 }, (_, i) => i);
-  let starts = costs.map(() => left);
-  let best: { start: number; end: number; score: number } | null = null;
-  for (let end = left; end < right; end++) {
-    const next = [0];
-    const nextStarts = [end + 1];
-    for (let i = 1; i <= quote.length; i++) {
-      const choices = [
-        costs[i - 1] + (quote[i - 1] === text[end] ? 0 : 1),
-        costs[i] + 1,
-        next[i - 1] + 1,
-      ];
-      const cost = Math.min(...choices);
-      const choice = choices.indexOf(cost);
-      next[i] = cost;
-      nextStarts[i] =
-        choice === 0
-          ? starts[i - 1]
-          : choice === 1
-            ? starts[i]
-            : nextStarts[i - 1];
-    }
-    const distance = next[quote.length];
-    const start = nextStarts[quote.length];
-    if (distance <= errors && end + 1 > start) {
-      const context = contextScore(text, start, end + 1, anchor);
-      if (
-        context >= Math.min(8, anchor.prefix.length + anchor.suffix.length) &&
-        context > 0
-      ) {
-        const score =
-          context * 4 - distance * 2 - Math.abs(start - anchor.start) / 1024;
-        if (!best || score > best.score) best = { start, end: end + 1, score };
-      }
-    }
-    costs = next;
-    starts = nextStarts;
-  }
-  return best;
-}
 export function resolveAnchor(
   doc: VisibleDocument,
   sha256: string,
@@ -185,17 +119,14 @@ export function resolveAnchor(
     doc.text.slice(anchor.start, anchor.end) === anchor.quote
   )
     return result(anchor.start, anchor.end, "anchored");
-  const matches = exactOccurrences(doc.text, anchor.quote);
-  matches.sort(
-    (a, b) =>
-      contextScore(doc.text, b, b + anchor.quote.length, anchor) -
-        contextScore(doc.text, a, a + anchor.quote.length, anchor) ||
-      Math.abs(a - anchor.start) - Math.abs(b - anchor.start),
+  const matches = exactOccurrences(
+    doc.text,
+    anchor.prefix + anchor.quote + anchor.suffix,
   );
-  if (matches.length)
-    return result(matches[0], matches[0] + anchor.quote.length, "moved");
-  const fuzzy = fuzzyRange(doc.text, anchor);
-  if (fuzzy) return result(fuzzy.start, fuzzy.end, "moved");
+  if (matches.length === 1) {
+    const start = matches[0]! + anchor.prefix.length;
+    return result(start, start + anchor.quote.length, "moved");
+  }
   return {
     state: "orphaned",
     quote: anchor.quote,

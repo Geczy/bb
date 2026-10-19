@@ -224,10 +224,13 @@ describe("comment sidecar mutations", () => {
     )!.id;
     const edited = original
       .replace("Intro.", "Intro.\n\nInserted externally.")
-      .replace("After star rule target sentence.", "Totally different words.");
+      .replace(
+        "After star rule target sentence.",
+        "After star rule rewritten sentence.",
+      );
     files.set("/vault/plan.md", edited);
     const text = visibleMarkdown(edited).text;
-    const dashStart = text.indexOf("After dash rule target sentence.");
+    const rewrittenStart = text.indexOf("After star rule rewritten sentence.");
     await service.refresh({
       ...target,
       documentSha256: hash(edited),
@@ -236,13 +239,17 @@ describe("comment sidecar mutations", () => {
           id: starId,
           anchor: makeAnchor(
             text,
-            dashStart,
-            dashStart + "After dash rule target sentence.".length,
+            rewrittenStart,
+            rewrittenStart + "After star rule rewritten sentence.".length,
             hash(edited),
           ),
         },
       ],
     });
+    await service.reply(
+      { ...target, commentId: starId, body: "Later reply" },
+      service.user,
+    );
     const stored = commentsFileSchema
       .parse(JSON.parse(files.get(sidecar)!))
       .threads.find((thread) => thread.id === starId)!;

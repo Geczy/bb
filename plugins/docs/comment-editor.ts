@@ -53,15 +53,7 @@ export function threadRanges(
         "",
         makeAnchor(saved, start, end, "saved"),
       ));
-    else if (visible.text.slice(start, end) !== thread.anchor.quote)
-      ({ start, end } = resolveAnchor({ text: visible.text, lines: [] }, "", {
-        quote: thread.anchor.quote,
-        prefix: "",
-        suffix: "",
-        start,
-        end,
-        documentSha256: "",
-      }));
+    else if (visible.text.slice(start, end) !== thread.anchor.quote) continue;
     if (start === null || end === null) continue;
     const from = visible.positions[start];
     const to = visible.positions[end - 1];
@@ -95,6 +87,8 @@ export function createCommentHighlights() {
               const update:
                 | { ranges: CommentRange[]; active: string | null }
                 | undefined = transaction.getMeta(commentHighlightKey);
+              if (transaction.getMeta("preventUpdate"))
+                return DecorationSet.empty;
               if (update)
                 return DecorationSet.create(
                   transaction.doc,

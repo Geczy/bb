@@ -119,20 +119,6 @@ export function commentSidecar(file: string): string {
     `${api.basename(file)}.json`,
   );
 }
-export function sidecarMatchesDocument(
-  sidecar: string,
-  documentSha256: string,
-): boolean {
-  try {
-    return commentsFileSchema
-      .parse(JSON.parse(sidecar))
-      .threads.some(
-        (thread) => thread.anchor.documentSha256 === documentSha256,
-      );
-  } catch {
-    return false;
-  }
-}
 function isMissing(error: unknown): boolean {
   return /\bENOENT\b|path does not exist|not found/i.test(String(error));
 }
@@ -149,7 +135,6 @@ export function createCommentsService(
     _input,
     work,
   ) => work(),
-  onWritten: (input: CommentTarget, documentSha256: string) => void = () => {},
 ) {
   const user: CommentAuthor = { kind: "user", name: "You" };
   const fileArgs = (target: CommentFileTarget) => ({
@@ -248,7 +233,6 @@ export function createCommentsService(
           expectedSha256: saved.sha256,
         });
         if (result.outcome === "conflict") continue;
-        onWritten(input, file.sha256);
         bb.realtime.publish("comments-changed", {
           vaultId: input.vaultId ?? null,
           path: input.path,
@@ -463,6 +447,12 @@ export function createCommentsService(
             (candidate) => candidate.id !== message.id,
           );
       }),
+    attach: (input: CommentTarget, threads: CommentThread[]) =>
+      mutate(input, (data) => {
+        for (const item of threads)
+          if (!data.threads.some((existing) => existing.id === item.id))
+            data.threads.push(item);
+      }),
     reattach: (input: z.infer<typeof commentsContract.reattachComment.input>) =>
       mutate(input, (data, content, sha256) => {
         thread(data, input.commentId).anchor = anchor(
@@ -488,9 +478,7 @@ export function createCommentsService(
           );
           if (
             item &&
-            item.anchor.documentSha256 === sha256 &&
-            updated.anchor.start < item.anchor.end &&
-            updated.anchor.end > item.anchor.start &&
+            updated.anchor.quote === item.anchor.quote &&
             updated.anchor.documentSha256 === sha256 &&
             doc.text.slice(updated.anchor.start, updated.anchor.end) ===
               updated.anchor.quote

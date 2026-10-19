@@ -22,20 +22,29 @@ describe("comment anchors", () => {
     );
     expect(exactOccurrences(original, "November 12")).toHaveLength(2);
   });
-  it("reanchors a changed quote only with confirming context", () => {
+  it("orphans edited quote text instead of guessing", () => {
     const original = "The beta ships on November 12, behind a toggle.";
     const start = original.indexOf("November");
     const anchor = makeAnchor(original, start, start + 11, "before");
-    const changed = original.replace("12", "19");
-    expect(resolveAnchor(doc(changed), "after", anchor)).toMatchObject({
-      state: "moved",
-      start,
-      end: start + 11,
-    });
     expect(
-      resolveAnchor(doc("Unrelated November 19 release"), "after", anchor)
-        .state,
+      resolveAnchor(doc(original.replace("12", "19")), "after", anchor).state,
     ).toBe("orphaned");
+  });
+  it("orphans a removed duplicate quote instead of moving it to another sentence", () => {
+    const original =
+      "Original context before.\n\nShared quoted sentence.\n\nOther context before.\n\nShared quoted sentence.";
+    const start = original.indexOf("Shared quoted sentence.");
+    const anchor = makeAnchor(original, start, start + 23, "before");
+    const removed = original.replace(
+      "Original context before.\n\nShared quoted sentence.\n\n",
+      "Original context before.\n\n",
+    );
+    expect(resolveAnchor(doc(removed), "after", anchor).state).toBe("orphaned");
+    const shifted = "Inserted far above.\n\n" + original;
+    expect(resolveAnchor(doc(shifted), "after", anchor)).toMatchObject({
+      state: "moved",
+      start: start + "Inserted far above.\n\n".length,
+    });
   });
   it("restores an orphan when external undo restores its quote", () => {
     const original = "Ship today.";
