@@ -37,9 +37,9 @@ settings are the Claude Code memory and Codex memory toggles under
 Settings → Plugins → Claude Code provider and Settings → Plugins → Codex
 provider. There is no memory control on Settings → Providers.
 
-The setting applies when a bb thread starts, resumes, or forks; Claude Code
-also applies a change on a running thread's next turn. It never changes an
-active turn. bb passes it to each bb thread's provider session and does not
+The setting applies when a bb thread starts, resumes, or forks, and from a
+running thread's next message; Codex rebuilds its session to apply a change.
+bb passes it to each bb thread's provider session and does not
 modify the provider's global configuration, so the provider's own sessions
 outside bb keep their setting. Turning it off does not delete memories the
 provider already stored.

@@ -85,9 +85,9 @@ provider, or `bb plugin config provider-codex set memoryEnabled false` and
 controls both recall (`memories.use_memories`) and future generation
 (`memories.generate_memories`). Claude Code memory controls native auto-memory
 reads and writes (`autoMemoryEnabled`). Both preferences default on and apply
-when a provider thread is started, resumed, or forked; Claude Code also applies
-a change on a running thread's next turn. They do not interrupt an active turn
-or modify the provider's global configuration. These settings are separate
+when a provider thread is started, resumed, or forked, and from a running
+thread's next message; Codex rebuilds its session to apply a change. They do
+not modify the provider's global configuration. These settings are separate
 from bb's optional Memory plugin, an official plugin bundled with the app.
 
 Provider-native subagents can also be disabled on those provider pages: Codex
