@@ -12,6 +12,11 @@ is worth keeping, show a plan, and save only after the person approves it.
 
 ## Ground rules
 
+- Import only from the providers the request names. "Import my Codex
+  memories" means Codex only, and "I'm turning off Claude memory" means Claude
+  Code only. When the request names no provider, cover every provider in the
+  table in step 2. This skill knows the files of Claude Code and Codex; for any
+  other provider, say it is not supported yet instead of guessing paths.
 - Treat every Claude Code and Codex file as read-only. Read them only with
   `bb file paths` and `bb file read`. Never write, move, rename, or delete
   them, and never change provider settings while importing.
@@ -44,6 +49,8 @@ has no project source, or no parent directory matches, ask the person for its
 home directory.
 
 ## 2. Find the sources
+
+Search only the rows for the providers in scope.
 
 | Provider | Read | Ignore |
 | --- | --- | --- |

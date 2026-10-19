@@ -3,6 +3,7 @@ import {
   definePluginApp,
   useBbNavigate,
   useRpc,
+  useSdk,
   type PluginRpcResult,
 } from "@get-bb/plugin-sdk/app";
 import type { memoryRpcContract } from "./server.js";
@@ -16,8 +17,125 @@ type MemoryRecord = PluginRpcResult<
   (typeof memoryRpcContract)["listMemories"]
 >["memories"][number];
 
-const IMPORT_NATIVE_MEMORIES_PROMPT =
-  "Import my Claude Code and Codex memories into bb Memory with the import-native-memories skill. Show me the plan before saving anything.";
+interface NativeMemoryProvider {
+  pluginId: string;
+  providerName: string;
+  settingLabel: string;
+  pluginName: string;
+}
+
+function listPhrase(items: string[]): string {
+  if (items.length <= 2) return items.join(" and ");
+  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
+}
+
+function importPrompt(providers: NativeMemoryProvider[]): string {
+  const names = listPhrase(providers.map((provider) => provider.providerName));
+  return `Import my ${names} memories into bb Memory with the import-native-memories skill. Show me the plan before saving anything.`;
+}
+
+function useNativeMemoryProviders(): NativeMemoryProvider[] | null {
+  const sdk = useSdk();
+  const [providers, setProviders] = useState<NativeMemoryProvider[] | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const resolve = async (): Promise<NativeMemoryProvider[]> => {
+      const catalog = await sdk.providers.catalog();
+      const enabled = new Map<string, (typeof catalog)[number]>();
+      for (const entry of catalog) {
+        if (
+          entry.enabled &&
+          entry.pluginEnabled &&
+          !enabled.has(entry.pluginId)
+        ) {
+          enabled.set(entry.pluginId, entry);
+        }
+      }
+      const resolved = await Promise.all(
+        [...enabled.values()].map(async (entry) => {
+          try {
+            const settings = await sdk.plugins.getSettings({
+              pluginId: entry.pluginId,
+            });
+            const descriptor = settings.schema.memoryEnabled;
+            if (descriptor?.type !== "boolean") return null;
+            return {
+              pluginId: entry.pluginId,
+              providerName: entry.displayName,
+              settingLabel: descriptor.label,
+              pluginName: entry.pluginName,
+            };
+          } catch {
+            return null;
+          }
+        }),
+      );
+      return resolved.filter(
+        (provider): provider is NativeMemoryProvider => provider !== null,
+      );
+    };
+    resolve()
+      .catch(() => [])
+      .then((next) => {
+        if (!cancelled) setProviders(next);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sdk]);
+
+  return providers;
+}
+
+function NativeMemoryNotice({
+  providers,
+}: {
+  providers: NativeMemoryProvider[] | null;
+}) {
+  const navigate = useBbNavigate();
+  const active = providers ?? [];
+  return (
+    <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+      This plugin shares memory across providers.
+      {active.length > 0 ? (
+        <>
+          {" "}
+          To avoid duplicate or conflicting memories, turn off{" "}
+          {listPhrase(active.map((provider) => provider.settingLabel))} in
+          Settings → Plugins →{" "}
+          {listPhrase(active.map((provider) => provider.pluginName))}.
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+            <div className="min-w-0 flex-1 basis-64">
+              <p className="text-foreground">
+                Bring what{" "}
+                {listPhrase(active.map((provider) => provider.providerName))}{" "}
+                learned into bb Memory.
+              </p>
+              <p className="mt-0.5 text-xs">
+                An agent finds them on your machines and shows you what it will
+                save first.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              onClick={() =>
+                navigate.toCompose({
+                  focusPrompt: true,
+                  initialPrompt: importPrompt(active),
+                })
+              }
+            >
+              Import memories
+            </Button>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -160,7 +278,7 @@ function MemoryEditor({
 
 function MemorySettings() {
   const rpc = useRpc<typeof memoryRpcContract>();
-  const navigate = useBbNavigate();
+  const nativeMemoryProviders = useNativeMemoryProviders();
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -189,33 +307,7 @@ function MemorySettings() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-        This plugin shares memory across providers. To avoid duplicate or
-        conflicting memories, turn off Claude Code memory and Codex memory in
-        Settings → Plugins → Claude Code provider and Codex provider.
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-          <div className="min-w-0 flex-1 basis-64">
-            <p className="text-foreground">
-              Bring what Claude Code and Codex learned into bb Memory.
-            </p>
-            <p className="mt-0.5 text-xs">
-              An agent finds them on your machines and shows you what it will
-              save first.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            onClick={() =>
-              navigate.toCompose({
-                focusPrompt: true,
-                initialPrompt: IMPORT_NATIVE_MEMORIES_PROMPT,
-              })
-            }
-          >
-            Import memories
-          </Button>
-        </div>
-      </div>
+      <NativeMemoryNotice providers={nativeMemoryProviders} />
       {error ? (
         <p className="text-sm text-destructive" role="alert">
           {error}

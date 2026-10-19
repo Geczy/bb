@@ -63,7 +63,8 @@ each setting controls and when it applies.
 
 To keep what Claude Code and Codex already learned, click **Import memories**
 in Settings → Plugins → Memory. It opens a new thread with the request filled
-in. The bundled [`import-native-memories`](skills/import-native-memories/SKILL.md)
+in. The card names only the providers you have enabled whose plugin defines a
+`memoryEnabled` setting, and hides the import when there are none. The bundled [`import-native-memories`](skills/import-native-memories/SKILL.md)
 skill has the agent find those memories on every connected machine, propose
 what to keep, and save only after you approve. It only reads the provider
 files.
