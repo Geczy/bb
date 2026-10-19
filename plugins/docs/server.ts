@@ -7,6 +7,7 @@ import {
 } from "./comments-service.js";
 import { proposalSchema, type Proposal } from "./proposals.js";
 import { commentsFileSchema, commentsListSchema } from "./comments.js";
+import { randomUUID } from "node:crypto";
 import { watch } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -1767,18 +1768,59 @@ export default async function plugin(
       throw new Error("Choose a stranded or orphaned comments file.");
     if (!source.orphaned && (await readExistingFile(vault, source.path)))
       throw new Error("Those comments still belong to an existing document.");
-    const file = await readExistingFile(vault, input.sidecarPath);
-    if (!file) throw new Error("Those comments were already attached.");
-    const result = await comments.attach(
-      { vaultId: vault.id, path: target },
-      commentsFileSchema.parse(JSON.parse(file.content)).threads,
-    );
+    const claimed = `${input.sidecarPath}.attaching-${randomUUID()}`;
+    try {
+      await bb.sdk.files.move({
+        ...hostArgs(vault),
+        sourcePath: absolutePath(vault, input.sidecarPath),
+        destinationPath: absolutePath(vault, claimed),
+        rootPath: vault.rootPath,
+      });
+    } catch (error) {
+      if (isMissingFileError(error))
+        throw new Error("Those comments were already attached.");
+      throw error;
+    }
+    let result;
+    try {
+      const file = await readExistingFile(vault, claimed);
+      if (!file) throw new Error("Those comments were already attached.");
+      result = await comments.attach(
+        { vaultId: vault.id, path: target },
+        commentsFileSchema.parse(JSON.parse(file.content)).threads,
+      );
+    } catch (error) {
+      await orphanClaimedSidecar(vault, claimed, input.sidecarPath);
+      throw error;
+    }
     await bb.sdk.files.remove({
       ...hostArgs(vault),
-      path: absolutePath(vault, input.sidecarPath),
+      path: absolutePath(vault, claimed),
       rootPath: vault.rootPath,
     });
     return result;
+  }
+
+  async function orphanClaimedSidecar(
+    vault: Vault,
+    claimed: string,
+    original: string,
+  ) {
+    const destination = (await readExistingFile(vault, original))
+      ? `.bb-comments/orphaned/${randomUUID()}/${sidecarDocument(original)!.path}.json`
+      : original;
+    await bb.sdk.files.mkdir({
+      ...hostArgs(vault),
+      path: absolutePath(vault, path.posix.dirname(destination)),
+      rootPath: vault.rootPath,
+      recursive: true,
+    });
+    await bb.sdk.files.move({
+      ...hostArgs(vault),
+      sourcePath: absolutePath(vault, claimed),
+      destinationPath: absolutePath(vault, destination),
+      rootPath: vault.rootPath,
+    });
   }
 
   async function orphanSidecar(vault: Vault, documentPath: string) {

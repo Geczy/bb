@@ -126,8 +126,7 @@ function threadState(thread: CommentThread): string {
   return JSON.stringify([thread.resolvedAt, thread.resolvedBy]);
 }
 function anchorText(thread: CommentThread): string {
-  const { quote, prefix, suffix } = thread.anchor;
-  return JSON.stringify([quote, prefix, suffix]);
+  return JSON.stringify(thread.anchor);
 }
 function containsAll(outer: CommentThread, inner: CommentThread): boolean {
   const records = new Set(outer.messages.map((item) => JSON.stringify(item)));

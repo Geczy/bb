@@ -10,7 +10,8 @@ import {
 } from "@get-bb/plugin-sdk/testing";
 import { z } from "zod";
 import simpleNotes from "./server";
-import { commentsListSchema } from "./comments.js";
+import { commentsFileSchema, commentsListSchema } from "./comments.js";
+import { visibleMarkdown } from "./comment-text.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -104,6 +105,7 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
   const files = new Map<string, VirtualFile>(Object.entries(initial));
   const directories = new Set<string>(["/vault", "/work"]);
   let concurrentWrite: { path: string; content: string } | null = null;
+  let writeHook: ((path: string) => void) | null = null;
   const addParents = (filePath: string) => {
     let current = path.posix.dirname(filePath);
     while (current !== "/" && !directories.has(current)) {
@@ -172,6 +174,9 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
           };
         },
         async write(args) {
+          const hook = writeHook;
+          writeHook = null;
+          hook?.(args.path);
           const pending = concurrentWrite;
           if (pending && pending.path === args.path) {
             concurrentWrite = null;
@@ -276,6 +281,9 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
     setUtf8,
     conflictNextWrite(path: string, content: string) {
       concurrentWrite = { path, content };
+    },
+    beforeNextWrite(hook: (path: string) => void) {
+      writeHook = hook;
     },
   };
 }
@@ -2197,6 +2205,100 @@ describe("Docs comment lifecycle", () => {
         ["open", "the team"],
         ["resolved", "tomorrow"],
       ]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("keeps both copies when attached anchors differ only by position", async () => {
+    const filler = "Filler words that give both repeats the same context.";
+    const content = `# Plan\n\n${filler}\n\nRepeat me.\n\n${filler}\n\nRepeat me.\n\n${filler}`;
+    const host = await loadVirtualSyncVault({
+      "/vault/notes/source.md": doc(content),
+    });
+    try {
+      const added = commentsListSchema.parse(
+        await host.harness.behavior.callRpc("addComment", {
+          path: "notes/source.md",
+          quote: "Repeat me.",
+          occurrence: 1,
+          body: "Which repeat?",
+        }),
+      );
+      const commentId = added.threads[0]!.id;
+      host.setUtf8("/vault/notes/copy.md", content);
+      host.setUtf8(
+        "/vault/notes/.bb-comments/copy.md.json",
+        host.files.get("/vault/notes/.bb-comments/source.md.json")!.content,
+      );
+      await host.harness.behavior.callRpc("reattachComment", {
+        path: "notes/source.md",
+        commentId,
+        quote: "Repeat me.",
+        occurrence: 2,
+      });
+      host.files.delete("/vault/notes/source.md");
+      await host.harness.behavior.callRpc("attachComments", {
+        path: "notes/copy.md",
+        sidecarPath: "notes/.bb-comments/source.md.json",
+      });
+      const starts = (await listed(host, "notes/copy.md")).threads.map(
+        (thread) => thread.anchor.start,
+      );
+      const text = visibleMarkdown(content).text;
+      expect(starts).toEqual([
+        text.indexOf("Repeat me."),
+        text.lastIndexOf("Repeat me."),
+      ]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("never deletes a source write that lands during attach", async () => {
+    const content = "# Plan\n\nShip tomorrow.";
+    const host = await loadVirtualSyncVault({
+      "/vault/notes/source.md": doc(content),
+      "/vault/notes/copy.md": doc(content),
+    });
+    try {
+      await host.harness.behavior.callRpc("addComment", {
+        path: "notes/source.md",
+        quote: "tomorrow",
+        body: "Before attach",
+      });
+      host.files.delete("/vault/notes/source.md");
+      const late = JSON.stringify({
+        version: 1,
+        threads: [
+          {
+            ...commentsFileSchema.parse(
+              JSON.parse(
+                host.files.get("/vault/notes/.bb-comments/source.md.json")!
+                  .content,
+              ),
+            ).threads[0]!,
+            id: "c_late",
+          },
+        ],
+      });
+      host.beforeNextWrite((written) => {
+        if (written === "/vault/notes/.bb-comments/copy.md.json")
+          host.setUtf8("/vault/notes/.bb-comments/source.md.json", late);
+      });
+      await host.harness.behavior.callRpc("attachComments", {
+        path: "notes/copy.md",
+        sidecarPath: "notes/.bb-comments/source.md.json",
+      });
+      expect(
+        host.files.get("/vault/notes/.bb-comments/source.md.json")?.content,
+      ).toBe(late);
+      expect(await listed(host, "notes/copy.md")).toMatchObject({
+        threads: [{ messages: [{ body: "Before attach" }] }],
+      });
+      expect(
+        [...host.files.keys()].filter((entry) => entry.includes(".attaching-")),
+      ).toEqual([]);
     } finally {
       await host.harness.lifecycle.dispose();
     }

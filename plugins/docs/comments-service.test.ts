@@ -261,12 +261,17 @@ describe("comment sidecar mutations", () => {
     ).toBe("orphaned");
   });
   it("attach never reduces the set of replies, edits, states or anchors", async () => {
-    const content = "# Plan\n\nShip on November 12.\n";
+    const filler = "Filler words that give both repeats the same context.";
+    const content = `# Plan\n\nShip on November 12.\n\n${filler}\n\nRepeat me.\n\n${filler}\n\nRepeat me.\n\n${filler}\n`;
     const text = visibleMarkdown(content).text;
-    const spans = ["November 12", "Ship"].map((quote) => {
-      const start = text.indexOf(quote);
-      return makeAnchor(text, start, start + quote.length, hash(content));
-    });
+    const span = (start: number, quote: string) =>
+      makeAnchor(text, start, start + quote.length, hash(content));
+    const spans = [
+      span(text.indexOf("November 12"), "November 12"),
+      span(text.indexOf("Ship"), "Ship"),
+      span(text.indexOf("Repeat me."), "Repeat me."),
+      span(text.lastIndexOf("Repeat me."), "Repeat me."),
+    ];
     let seed = 7;
     const random = (limit: number) => {
       seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -323,7 +328,7 @@ describe("comment sidecar mutations", () => {
             ? { kind: "user", name: "You" }
             : null;
         }
-        if (operation === 4) next.anchor = spans[random(2)]!;
+        if (operation === 4) next.anchor = spans[random(spans.length)]!;
       }
       return next;
     };
@@ -332,7 +337,7 @@ describe("comment sidecar mutations", () => {
         messages: unknown[];
         resolvedAt: string | null;
         resolvedBy: unknown;
-        anchor: { quote: string };
+        anchor: unknown;
       }[],
     ) => ({
       messages: new Set(
@@ -345,7 +350,7 @@ describe("comment sidecar mutations", () => {
           JSON.stringify([thread.resolvedAt, thread.resolvedBy]),
         ),
       ),
-      anchors: new Set(threads.map((thread) => thread.anchor.quote)),
+      anchors: new Set(threads.map((thread) => JSON.stringify(thread.anchor))),
     });
     for (let round = 0; round < 60; round++) {
       const { service, files } = setup();
