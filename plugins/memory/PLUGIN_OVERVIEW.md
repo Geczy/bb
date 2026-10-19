@@ -7,7 +7,7 @@ Give your agents a memory that survives across threads, projects, and providers.
 - A summary catalog that bb adds to the agent's instructions on every turn. The catalog holds summaries only, up to 3,900 characters.
 - A table in Settings → Plugins → Memory where you review, edit, and delete every stored memory.
 - Kinds, tags, importance, pinning, provenance, and version history for each record.
-- An **Import memories** button that asks an agent to bring memories from your enabled Claude Code and Codex providers into bb. The agent shows its plan before saving and never changes the provider files.
+- An **Import memories** button that asks an agent to bring over what your agents already remember. The agent shows its plan before saving and never changes the original files.
 
 ## How it works
 
@@ -17,4 +17,4 @@ Project writes use the project of the current thread. Global writes must pass `-
 
 ## Requirements
 
-Turn off Claude Code memory and Codex memory so agents keep one memory store. The toggles are in Settings → Plugins → Claude Code provider and Codex provider, or ask an agent to turn them off. The CLI connects to the local bb server. Some provider sandboxes ask for approval before they allow that connection.
+Turn off your agents' built-in memory so they keep one memory store. Each agent provider's plugin settings has the switch, or ask an agent to turn it off. The CLI connects to the local bb server. Some provider sandboxes ask for approval before they allow that connection.

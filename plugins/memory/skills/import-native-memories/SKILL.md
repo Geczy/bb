@@ -1,6 +1,6 @@
 ---
 name: import-native-memories
-description: "Import, migrate, or keep Claude Code and Codex native memories in bb memory, for example before or after turning provider memory off. Finds them on every connected machine, proposes what to keep, and saves only after approval."
+description: "Import, migrate, or keep your agents' built-in memories (Claude Code and Codex native memory) in bb memory, for example before or after turning built-in memory off. Finds them on every connected machine, proposes what to keep, and saves only after approval."
 ---
 
 # Import native memories into bb memory
@@ -12,11 +12,13 @@ is worth keeping, show a plan, and save only after the person approves it.
 
 ## Ground rules
 
-- Import only from the providers the request names. "Import my Codex
-  memories" means Codex only, and "I'm turning off Claude memory" means Claude
-  Code only. When the request names no provider, cover every provider in the
-  table in step 2. This skill knows the files of Claude Code and Codex; for any
-  other provider, say it is not supported yet instead of guessing paths.
+- Import only from the providers in scope. A request that names providers
+  limits it: "I'm turning off Claude memory" means Claude Code only. A request
+  that names none, such as "Import my agents' built-in memories", covers the
+  providers enabled in bb: run `bb provider list --json` and keep `claude-code`
+  and `codex` if listed. This skill knows the files of Claude Code and Codex;
+  for any other provider, say it is not supported yet instead of guessing
+  paths.
 - Treat every Claude Code and Codex file as read-only. Read them only with
   `bb file paths` and `bb file read`. Never write, move, rename, or delete
   them, and never change provider settings while importing.

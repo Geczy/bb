@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   definePluginApp,
+  UrlLink,
   useBbNavigate,
   useRpc,
   useSdk,
@@ -17,21 +18,11 @@ type MemoryRecord = PluginRpcResult<
   (typeof memoryRpcContract)["listMemories"]
 >["memories"][number];
 
+const IMPORT_NATIVE_MEMORIES_PROMPT =
+  "Import my agents' built-in memories into bb Memory. Show me the plan before saving.";
+
 interface NativeMemoryProvider {
   pluginId: string;
-  providerName: string;
-  settingLabel: string;
-  pluginName: string;
-}
-
-function listPhrase(items: string[]): string {
-  if (items.length <= 2) return items.join(" and ");
-  return `${items.slice(0, -1).join(", ")}, and ${items.at(-1)}`;
-}
-
-function importPrompt(providers: NativeMemoryProvider[]): string {
-  const names = listPhrase(providers.map((provider) => provider.providerName));
-  return `Import my ${names} memories into bb Memory with the import-native-memories skill. Show me the plan before saving anything.`;
 }
 
 function useNativeMemoryProviders(): NativeMemoryProvider[] | null {
@@ -62,12 +53,7 @@ function useNativeMemoryProviders(): NativeMemoryProvider[] | null {
             });
             const descriptor = settings.schema.memoryEnabled;
             if (descriptor?.type !== "boolean") return null;
-            return {
-              pluginId: entry.pluginId,
-              providerName: entry.displayName,
-              settingLabel: descriptor.label,
-              pluginName: entry.pluginName,
-            };
+            return { pluginId: entry.pluginId };
           } catch {
             return null;
           }
@@ -96,43 +82,40 @@ function NativeMemoryNotice({
   providers: NativeMemoryProvider[] | null;
 }) {
   const navigate = useBbNavigate();
-  const active = providers ?? [];
+  if (providers === null || providers.length === 0) return null;
+  const [onlyProvider] = providers;
+  const settingsHref =
+    providers.length === 1 && onlyProvider !== undefined
+      ? `/settings/plugins/${encodeURIComponent(onlyProvider.pluginId)}`
+      : "/settings/plugins";
   return (
     <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
-      This plugin shares memory across providers.
-      {active.length > 0 ? (
-        <>
-          {" "}
-          To avoid duplicate or conflicting memories, turn off{" "}
-          {listPhrase(active.map((provider) => provider.settingLabel))} in
-          Settings → Plugins →{" "}
-          {listPhrase(active.map((provider) => provider.pluginName))}.
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
-            <div className="min-w-0 flex-1 basis-64">
-              <p className="text-foreground">
-                Bring what{" "}
-                {listPhrase(active.map((provider) => provider.providerName))}{" "}
-                learned into bb Memory.
-              </p>
-              <p className="mt-0.5 text-xs">
-                An agent finds them on your machines and shows you what it will
-                save first.
-              </p>
-            </div>
-            <Button
-              size="sm"
-              onClick={() =>
-                navigate.toCompose({
-                  focusPrompt: true,
-                  initialPrompt: importPrompt(active),
-                })
-              }
-            >
-              Import memories
-            </Button>
-          </div>
-        </>
-      ) : null}
+      <p>
+        Turn off your agents&apos;{" "}
+        <UrlLink
+          href={settingsHref}
+          className="text-foreground underline underline-offset-2"
+        >
+          built-in memory
+        </UrlLink>{" "}
+        to avoid duplicates.
+      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+        <p className="min-w-0 flex-1 basis-48 text-foreground">
+          Bring over what your agents already remember.
+        </p>
+        <Button
+          size="sm"
+          onClick={() =>
+            navigate.toCompose({
+              focusPrompt: true,
+              initialPrompt: IMPORT_NATIVE_MEMORIES_PROMPT,
+            })
+          }
+        >
+          Import memories
+        </Button>
+      </div>
     </div>
   );
 }

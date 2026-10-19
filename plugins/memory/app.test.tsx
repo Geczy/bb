@@ -103,7 +103,7 @@ describe("memory settings", () => {
     await waitFor(() => expect(slot.queryByText("validation")).toBeNull());
   });
 
-  it("opens a new thread prefilled with the import skill request", async () => {
+  it("opens a new thread prefilled with the generic import request", async () => {
     const slot = renderSlot(
       app.settingsSections[0]!,
       {},
@@ -117,7 +117,25 @@ describe("memory settings", () => {
       await slot.findByRole("button", { name: "Import memories" }),
     );
 
-    const skillName = /^name: (.+)$/m.exec(
+    expect(slot.navigateCalls).toEqual([
+      {
+        method: "toCompose",
+        options: {
+          focusPrompt: true,
+          initialPrompt:
+            "Import my agents' built-in memories into bb Memory. Show me the plan before saving.",
+        },
+      },
+    ]);
+    expect(
+      slot.getByText("Bring over what your agents already remember."),
+    ).toBeTruthy();
+    expect(
+      slot.getByRole("link", { name: "built-in memory" }).getAttribute("href"),
+    ).toBe("/settings/plugins");
+    expect(slot.queryByText(/Claude Code|Codex/)).toBeNull();
+
+    const skillDescription = /^description: (.+)$/m.exec(
       readFileSync(
         join(
           dirname(fileURLToPath(import.meta.url)),
@@ -126,22 +144,10 @@ describe("memory settings", () => {
         "utf8",
       ),
     )?.[1];
-    expect(skillName).toBe("import-native-memories");
-    expect(slot.navigateCalls).toEqual([
-      {
-        method: "toCompose",
-        options: {
-          focusPrompt: true,
-          initialPrompt: `Import my Claude Code and Codex memories into bb Memory with the ${skillName} skill. Show me the plan before saving anything.`,
-        },
-      },
-    ]);
-    expect(
-      slot.getByText(/turn off Claude Code memory and Codex memory in/),
-    ).toBeTruthy();
+    expect(skillDescription).toContain("built-in memories");
   });
 
-  it("names only enabled providers that have native memory", async () => {
+  it("links to the only enabled provider with built-in memory", async () => {
     const slot = renderSlot(
       app.settingsSections[0]!,
       {},
@@ -151,24 +157,13 @@ describe("memory settings", () => {
       },
     );
 
-    expect(
-      await slot.findByText("Bring what Codex learned into bb Memory."),
-    ).toBeTruthy();
-    expect(slot.getByText(/turn off Codex memory in/)).toBeTruthy();
-    expect(slot.queryByText(/Claude Code/)).toBeNull();
-    fireEvent.click(slot.getByRole("button", { name: "Import memories" }));
-    expect(slot.navigateCalls).toEqual([
-      {
-        method: "toCompose",
-        options: {
-          focusPrompt: true,
-          initialPrompt: expect.stringMatching(/^Import my Codex memories /),
-        },
-      },
-    ]);
+    const link = await slot.findByRole("link", { name: "built-in memory" });
+    expect(link.getAttribute("href")).toBe("/settings/plugins/provider-codex");
+    expect(slot.getByRole("button", { name: "Import memories" })).toBeTruthy();
+    expect(slot.queryByText(/Claude Code|Codex/)).toBeNull();
   });
 
-  it("hides the import and provider advice when no provider has native memory", async () => {
+  it("hides the notice when no enabled provider has built-in memory", async () => {
     const sdk = providerFakes(["pi"]);
     const slot = renderSlot(
       app.settingsSections[0]!,
@@ -181,11 +176,9 @@ describe("memory settings", () => {
         slot.sdkCalls.filter((call) => call.method === "plugins.getSettings"),
       ).toHaveLength(1),
     );
-    expect(
-      slot.getByText("This plugin shares memory across providers."),
-    ).toBeTruthy();
+    await slot.findByText("No memories stored yet.");
     expect(slot.queryByRole("button", { name: "Import memories" })).toBeNull();
-    expect(slot.queryByText(/turn off/)).toBeNull();
+    expect(slot.queryByText(/built-in memory/)).toBeNull();
   });
 });
 
