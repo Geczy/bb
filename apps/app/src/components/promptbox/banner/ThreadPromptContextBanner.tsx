@@ -385,9 +385,6 @@ function stackPromptCards(cards: readonly ReactNode[]): ReactNode {
   if (visibleCards.length === 0) {
     return null;
   }
-  if (visibleCards.length === 1) {
-    return visibleCards[0];
-  }
   return <div className="min-w-0 space-y-2">{visibleCards}</div>;
 }
 
