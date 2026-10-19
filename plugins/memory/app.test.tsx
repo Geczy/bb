@@ -234,20 +234,18 @@ function providerFakes(enabled: ProviderFixtureId[]) {
         const fixture = ids
           .map((id) => PROVIDER_FIXTURES[id])
           .find((entry) => entry.pluginId === pluginId);
-        return {
-          ok: true as const,
-          schema:
-            fixture?.memoryLabel == null
-              ? {}
-              : {
-                  memoryEnabled: {
-                    type: "boolean" as const,
-                    label: fixture.memoryLabel,
-                    default: true,
-                  },
-                },
-          values: {},
-        };
+        const schema: Record<
+          string,
+          { type: "boolean"; label: string; default: boolean }
+        > = {};
+        if (fixture?.memoryLabel) {
+          schema.memoryEnabled = {
+            type: "boolean",
+            label: fixture.memoryLabel,
+            default: true,
+          };
+        }
+        return { ok: true as const, schema, values: {} };
       },
     },
   };
