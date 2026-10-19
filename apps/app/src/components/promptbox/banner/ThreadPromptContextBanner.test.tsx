@@ -285,9 +285,7 @@ describe("ThreadPromptContextBanner", () => {
       expect(
         screen.getByRole("link", { name: "Owner thread" }).getAttribute("href"),
       ).toBe("/threads/thr_parent");
-      expect(screen.queryByRole("button", { name: /^Parent / })).toBe(
-        null,
-      );
+      expect(screen.queryByRole("button", { name: /^Parent / })).toBe(null);
       const contextCard = screen.queryByRole("region", {
         name: "Thread context before sending",
       });
