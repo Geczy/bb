@@ -449,9 +449,34 @@ export function createCommentsService(
       }),
     attach: (input: CommentTarget, threads: CommentThread[]) =>
       mutate(input, (data) => {
-        for (const item of threads)
-          if (!data.threads.some((existing) => existing.id === item.id))
+        for (const item of threads) {
+          const existing = data.threads.find(
+            (candidate) => candidate.id === item.id,
+          );
+          if (!existing) {
             data.threads.push(item);
+            continue;
+          }
+          const conflict = item.messages.some((message) => {
+            const match = existing.messages.find(
+              (candidate) => candidate.id === message.id,
+            );
+            return match && JSON.stringify(match) !== JSON.stringify(message);
+          });
+          if (conflict) {
+            data.threads.push({ ...item, id: `c_${randomUUID()}` });
+            continue;
+          }
+          existing.messages = [
+            ...existing.messages,
+            ...item.messages.filter(
+              (message) =>
+                !existing.messages.some(
+                  (candidate) => candidate.id === message.id,
+                ),
+            ),
+          ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        }
       }),
     reattach: (input: z.infer<typeof commentsContract.reattachComment.input>) =>
       mutate(input, (data, content, sha256) => {

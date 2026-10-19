@@ -2059,6 +2059,83 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
+  it("merges divergent attached comments without dropping a reply", async () => {
+    const content = "# Plan\n\nShip tomorrow.";
+    const host = await loadVirtualSyncVault({
+      "/vault/notes/original.md": doc(content),
+    });
+    try {
+      const added = commentsListSchema.parse(
+        await host.harness.behavior.callRpc("addComment", {
+          path: "notes/original.md",
+          quote: "tomorrow",
+          body: "Confirm the date",
+        }),
+      );
+      const commentId = added.threads[0]!.id;
+      host.setUtf8("/vault/notes/copy.md", content);
+      host.setUtf8(
+        "/vault/notes/.bb-comments/copy.md.json",
+        host.files.get("/vault/notes/.bb-comments/original.md.json")!.content,
+      );
+      host.setUtf8("/vault/notes/edited.md", content);
+      host.setUtf8(
+        "/vault/notes/.bb-comments/edited.md.json",
+        host.files.get("/vault/notes/.bb-comments/original.md.json")!.content,
+      );
+      await host.harness.behavior.callRpc("replyComment", {
+        path: "notes/original.md",
+        commentId,
+        body: "Reply only on the original",
+      });
+      await host.harness.behavior.callRpc("editCommentMessage", {
+        path: "notes/edited.md",
+        commentId,
+        messageId: commentId,
+        body: "Edited on the copy",
+      });
+      const original = host.files.get(
+        "/vault/notes/.bb-comments/original.md.json",
+      )!.content;
+      host.files.delete("/vault/notes/original.md");
+
+      await host.harness.behavior.runCli([
+        "comments",
+        "attach",
+        "notes/copy.md",
+        "--from",
+        "notes/.bb-comments/original.md.json",
+      ]);
+      expect(await listed(host, "notes/copy.md")).toMatchObject({
+        threads: [
+          {
+            id: commentId,
+            messages: [
+              { body: "Confirm the date" },
+              { body: "Reply only on the original" },
+            ],
+          },
+        ],
+      });
+
+      host.setUtf8("/vault/notes/.bb-comments/original.md.json", original);
+      await host.harness.behavior.callRpc("attachComments", {
+        path: "notes/edited.md",
+        sidecarPath: "notes/.bb-comments/original.md.json",
+      });
+      const threads = (await listed(host, "notes/edited.md")).threads;
+      expect(
+        threads.map((thread) => thread.messages.map((message) => message.body)),
+      ).toEqual([
+        ["Edited on the copy"],
+        ["Confirm the date", "Reply only on the original"],
+      ]);
+      expect(new Set(threads.map((thread) => thread.id)).size).toBe(2);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("refuses Docs moves onto stranded comments", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
