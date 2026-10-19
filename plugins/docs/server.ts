@@ -3830,7 +3830,10 @@ export default async function plugin(
       const file = await readFile(vaultId, relativePath);
       const proposal = readProposal(getVault(vaultId).id, relativePath);
       const openComments = /\.md$/i.test(relativePath)
-        ? await comments.list({ vaultId, path: relativePath, status: "open" })
+        ? await comments.list(
+            { vaultId, path: relativePath, status: "open" },
+            file,
+          )
         : { threads: [] };
       return {
         context:

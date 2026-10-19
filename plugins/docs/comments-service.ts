@@ -170,11 +170,12 @@ export function createCommentsService(
   }
   async function list(
     input: CommentTarget & { status?: "open" | "resolved" | "all" },
+    document?: { content: string; sha256: string },
   ): Promise<CommentsList> {
     const target = await resolve(input);
     const [saved, file] = await Promise.all([
       read(target),
-      bb.sdk.files.read(fileArgs(target)),
+      document ?? bb.sdk.files.read(fileArgs(target)),
     ]);
     const doc = visibleMarkdown(file.content);
     return {

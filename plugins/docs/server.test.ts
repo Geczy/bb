@@ -614,6 +614,16 @@ describe("Docs mention provider", () => {
           rootPath: temporaryDirectories[0],
         },
       ],
+      [
+        {
+          path: path.join(
+            temporaryDirectories[0]!,
+            ".bb-comments",
+            "ideas.md.json",
+          ),
+          rootPath: temporaryDirectories[0],
+        },
+      ],
     ]);
   });
 });
