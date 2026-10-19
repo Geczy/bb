@@ -18,11 +18,14 @@ const LIST_ITEM =
 
 export function promptListContinuation(
   textBeforeCaret: string,
+  hasTextAfterCaret: boolean,
 ): PromptListContinuation | null {
   const item = LIST_ITEM.exec(textBeforeCaret);
   if (item === null) return null;
   const [, indent, bullet, number, delimiter, spacing, task, content] = item;
-  if (content!.trim().length === 0) return { kind: "end" };
+  if (content!.trim().length === 0 && !hasTextAfterCaret) {
+    return { kind: "end" };
+  }
   const marker =
     bullet !== undefined ? bullet : `${Number(number) + 1}${delimiter}`;
   return {
@@ -31,16 +34,17 @@ export function promptListContinuation(
   };
 }
 
-function caretLineStart(state: EditorState): number {
+function caretLineBounds(state: EditorState): { start: number; end: number } {
   const { $from } = state.selection;
-  const paragraph = $from.parent;
-  let lineStart = $from.start();
-  paragraph.forEach((child, offset) => {
-    if (offset < $from.parentOffset && child.type.name === "hardBreak") {
-      lineStart = $from.start() + offset + child.nodeSize;
-    }
+  let start = $from.start();
+  let end = $from.end();
+  $from.parent.forEach((child, offset) => {
+    if (child.type.name !== "hardBreak") return;
+    const position = $from.start() + offset;
+    if (offset < $from.parentOffset) start = position + child.nodeSize;
+    else if (position < end) end = position;
   });
-  return lineStart;
+  return { start, end };
 }
 
 export function createPromptParagraphNewlineTransaction(args: {
@@ -55,10 +59,12 @@ export function createPromptParagraphNewlineTransaction(args: {
     return null;
   }
 
-  const lineStart = caretLineStart(args.state);
+  const line = caretLineBounds(args.state);
+  const lineStart = line.start;
   const continuation = promptListContinuation(
     promptEditorSerializationFromDoc(args.state.doc.cut(lineStart, $from.pos))
       .text,
+    line.end > $from.pos,
   );
 
   const transaction = args.state.tr;

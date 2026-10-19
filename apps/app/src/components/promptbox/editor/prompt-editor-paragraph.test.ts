@@ -129,7 +129,36 @@ describe("createPromptParagraphNewlineTransaction", () => {
   });
 });
 
+describe("createPromptParagraphNewlineTransaction list items", () => {
+  it("keeps the item's text when Shift+Enter follows its marker", () => {
+    const state = stateFromJson(
+      {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "1. fix" }] },
+        ],
+      },
+      4,
+    );
+    const transaction = createPromptParagraphNewlineTransaction({
+      state,
+      editor: editorContext,
+    });
+
+    expect(promptEditorValueFromDoc(state.apply(transaction!).doc).text).toBe(
+      "1. \n2. fix",
+    );
+  });
+});
+
 describe("promptListContinuation", () => {
+  it("pushes an item down instead of ending it when text follows the caret", () => {
+    expect(promptListContinuation("- ", true)).toEqual({
+      kind: "continue",
+      prefix: "- ",
+    });
+  });
+
   it.each([
     { line: "- item", expected: { kind: "continue", prefix: "- " } },
     { line: "  * nested", expected: { kind: "continue", prefix: "  * " } },
@@ -144,6 +173,6 @@ describe("promptListContinuation", () => {
     { line: "1.5 apples", expected: null },
     { line: "@src/app.ts - item", expected: null },
   ])("$line", ({ line, expected }) => {
-    expect(promptListContinuation(line)).toEqual(expected);
+    expect(promptListContinuation(line, false)).toEqual(expected);
   });
 });
