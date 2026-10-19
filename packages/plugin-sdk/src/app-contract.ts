@@ -2939,18 +2939,6 @@ export interface ComposerRichTextSpec {
     experimental_offCaretLineOnly?: boolean;
   }[];
   /**
-   * Called when Shift+Enter, or Enter on a touch keyboard, starts a new line
-   * from a collapsed caret in a top-level paragraph. `textBeforeCaret` is the
-   * caret line's plain text up to the caret. Return `{ kind: "continue",
-   * prefix }` to start the new line with `prefix`, `{ kind: "end" }` to clear
-   * `textBeforeCaret` instead of adding a line, or `null` for a plain new
-   * line. The first non-null result across plugins wins, and the whole change
-   * is one undo step.
-   */
-  experimental_continueLine?(
-    textBeforeCaret: string,
-  ): { kind: "continue"; prefix: string } | { kind: "end" } | null;
-  /**
    * Debounced, read-only observation of the structured draft.
    * @internal Superseded by `useComposer().draft`; kept for plugins built
    * against older SDKs.

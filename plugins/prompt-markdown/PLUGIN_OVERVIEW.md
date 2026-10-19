@@ -8,7 +8,6 @@ Disabled by default. Enable **Prompt Markdown** in Settings → Plugins or run
 - Headings, **bold**, _italic_, and `code` display formatted in every prompt box.
 - Bullets display as dots; numbered items keep the numbers you typed.
 - The line holding the caret shows its `#`, `**`, `` ` `` and `- `, so you always edit the real text.
-- **Shift+Enter** continues a bullet, numbered, or checkbox list; pressing it on an empty item ends the list. On touch keyboards, Enter does the same.
 
 ## How it works
 

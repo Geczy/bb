@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  continueMarkdownLine,
-  parseMarkdownRanges,
-  type MarkdownRangeKind,
-} from "./markdown.js";
+import { parseMarkdownRanges, type MarkdownRangeKind } from "./markdown.js";
 
 function texts(text: string, kind: MarkdownRangeKind) {
   return parseMarkdownRanges(text)[kind].map(({ from, to }) =>
@@ -55,23 +51,5 @@ describe("parseMarkdownRanges", () => {
     const text = "> **quoted**\n```\n# not a heading\n```\n# heading";
     expect(texts(text, "strong")).toEqual(["quoted"]);
     expect(texts(text, "h1")).toEqual(["heading"]);
-  });
-});
-
-describe("continueMarkdownLine", () => {
-  it.each([
-    { line: "- item", expected: { kind: "continue", prefix: "- " } },
-    { line: "  * nested", expected: { kind: "continue", prefix: "  * " } },
-    { line: "3. third", expected: { kind: "continue", prefix: "4. " } },
-    { line: "9) ninth", expected: { kind: "continue", prefix: "10) " } },
-    { line: "- [x] done", expected: { kind: "continue", prefix: "- [ ] " } },
-    { line: "- ", expected: { kind: "end" } },
-    { line: "  1.  ", expected: { kind: "end" } },
-    { line: "- [ ] ", expected: { kind: "end" } },
-    { line: "plain text", expected: null },
-    { line: "-dash", expected: null },
-    { line: "@src/app.ts - item", expected: null },
-  ])("$line", ({ line, expected }) => {
-    expect(continueMarkdownLine(line)).toEqual(expected);
   });
 });

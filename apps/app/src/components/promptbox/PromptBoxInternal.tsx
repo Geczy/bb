@@ -175,11 +175,7 @@ import {
   insertParagraphBeforeBlockquote,
   removeEmptyBlockquotes,
 } from "./editor/prompt-editor-blockquote";
-import {
-  applyPromptParagraphNewline,
-  parsePromptLineContinuation,
-  type PromptLineContinuation,
-} from "./editor/prompt-editor-paragraph";
+import { applyPromptParagraphNewline } from "./editor/prompt-editor-paragraph";
 import {
   MentionMenu,
   typeaheadSuggestionKey,
@@ -1670,30 +1666,6 @@ export function PromptBoxInternal({
     }
     return { sources, observers };
   }, [resolvedComposerEditor, textEffects]);
-  const pluginLineContinuationsRef = useRef(
-    resolvedComposerEditor.lineContinuations,
-  );
-  pluginLineContinuationsRef.current = resolvedComposerEditor.lineContinuations;
-  const continuePluginLine = useCallback(
-    (textBeforeCaret: string): PromptLineContinuation | null => {
-      for (const contribution of pluginLineContinuationsRef.current) {
-        let result: unknown;
-        try {
-          result = contribution.continueLine(textBeforeCaret);
-        } catch (error) {
-          console.warn(
-            `[composer-line-continuation:${contribution.pluginId}/${contribution.customizationId}] continueLine failed`,
-            error,
-          );
-          continue;
-        }
-        const continuation = parsePromptLineContinuation(result);
-        if (continuation !== null) return continuation;
-      }
-      return null;
-    },
-    [],
-  );
   const pluginEffectPluginIds = useMemo(
     () =>
       [
@@ -3731,7 +3703,7 @@ export function PromptBoxInternal({
       if (
         isPromptNewlineKey &&
         currentEditor &&
-        applyPromptParagraphNewline(currentEditor, continuePluginLine)
+        applyPromptParagraphNewline(currentEditor)
       ) {
         event.preventDefault();
         return true;
@@ -3755,7 +3727,6 @@ export function PromptBoxInternal({
       commandError,
       commandHasMore,
       commandIsLoadingMore,
-      continuePluginLine,
       dispatchAppCommandKey,
       handleComposerMenuKeyDown,
       history,

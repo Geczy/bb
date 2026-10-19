@@ -6,7 +6,6 @@ import {
   resolveComposerBanners,
   resolveComposerDraftObservers,
   resolveComposerEditorEffects,
-  resolveComposerLineContinuations,
   resolveComposerPlusMenuItems,
   resolveComposerSendMenuItems,
 } from "@/lib/plugin-slot-resolvers";
@@ -53,14 +52,12 @@ function resolveComposerEditor(
   return {
     effects: resolveComposerEditorEffects(registrations, kind),
     observers: resolveComposerDraftObservers(registrations, kind),
-    lineContinuations: resolveComposerLineContinuations(registrations, kind),
   };
 }
 
 const emptyComposerEditor = () => ({
   effects: [],
   observers: [],
-  lineContinuations: [],
 });
 
 export function useResolvedComposerActions(scopeKind: ComposerScopeKind) {

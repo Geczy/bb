@@ -16,8 +16,6 @@ export type MarkdownRangeKind =
 
 export type MarkdownRanges = Record<MarkdownRangeKind, TextRange[]>;
 
-type LineContinuation = { kind: "continue"; prefix: string } | { kind: "end" };
-
 const HEADING = /^(#{1,6})[ \t]+(?=\S)/;
 const BULLET = /^([ \t]*)([-*+])([ \t]+)(?=\S)/;
 const ORDERED = /^([ \t]*)(\d{1,9})([.)])([ \t]+)(?=\S)/;
@@ -163,22 +161,4 @@ export function markdownRanges(text: string): MarkdownRanges {
     cachedRanges = parseMarkdownRanges(text);
   }
   return cachedRanges;
-}
-
-const LIST_ITEM =
-  /^([ \t]*)(?:([-*+])|(\d{1,9})([.)]))([ \t]+)(\[[ xX]\][ \t]+)?(.*)$/;
-
-export function continueMarkdownLine(
-  textBeforeCaret: string,
-): LineContinuation | null {
-  const item = LIST_ITEM.exec(textBeforeCaret);
-  if (item === null) return null;
-  const [, indent, bullet, number, delimiter, spacing, task, content] = item;
-  if (content!.trim().length === 0) return { kind: "end" };
-  const marker =
-    bullet !== undefined ? bullet : `${Number(number) + 1}${delimiter}`;
-  return {
-    kind: "continue",
-    prefix: `${indent}${marker}${spacing}${task === undefined ? "" : "[ ] "}`,
-  };
 }

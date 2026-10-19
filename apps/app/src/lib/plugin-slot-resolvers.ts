@@ -20,9 +20,6 @@ type ComposerEditorEffect = NonNullable<
 type ComposerDraftObserver = NonNullable<
   NonNullable<ComposerCustomization["richText"]>["onDraftChange"]
 >;
-type ComposerLineContinuation = NonNullable<
-  NonNullable<ComposerCustomization["richText"]>["experimental_continueLine"]
->;
 
 interface ResolvedComposerContribution {
   key: string;
@@ -49,10 +46,6 @@ interface ResolvedComposerEditorEffects extends ResolvedComposerContribution {
 
 interface ResolvedComposerDraftObserver extends ResolvedComposerContribution {
   onDraftChange: ComposerDraftObserver;
-}
-
-interface ResolvedComposerLineContinuation extends ResolvedComposerContribution {
-  continueLine: ComposerLineContinuation;
 }
 
 function composerContributionKey(
@@ -186,23 +179,6 @@ export function resolveComposerDraftObservers(
     resolved.push({
       ...resolvedComposerContribution(customization, "draft-observer"),
       onDraftChange,
-    });
-  }
-  return resolved;
-}
-
-export function resolveComposerLineContinuations(
-  customizations: readonly PluginComposerCustomizationSlot[],
-  scopeKind: PluginComposerScope["kind"],
-): readonly ResolvedComposerLineContinuation[] {
-  const resolved: ResolvedComposerLineContinuation[] = [];
-  for (const customization of customizations) {
-    if (!composerCustomizationApplies(customization, scopeKind)) continue;
-    const continueLine = customization.richText?.experimental_continueLine;
-    if (continueLine === undefined) continue;
-    resolved.push({
-      ...resolvedComposerContribution(customization, "line-continuation"),
-      continueLine,
     });
   }
   return resolved;

@@ -4,7 +4,7 @@ import { loadPluginApp } from "@get-bb/plugin-sdk/testing/app";
 const app = await loadPluginApp(() => import("./app"));
 
 describe("Prompt Markdown app", () => {
-  it("registers paint-only rules and Shift+Enter list continuation", () => {
+  it("registers paint-only rules, hiding symbols off the caret line", () => {
     const [customization] = app.composerCustomizations;
     const effects = customization?.richText?.effects ?? [];
     expect(
@@ -14,8 +14,5 @@ describe("Prompt Markdown app", () => {
     ).toEqual(["marker", "bullet"]);
     const strong = effects.find((effect) => effect.id === "strong");
     expect(strong?.match("a **b**")).toEqual([{ from: 4, to: 5 }]);
-    expect(
-      customization?.richText?.experimental_continueLine?.("- one"),
-    ).toEqual({ kind: "continue", prefix: "- " });
   });
 });

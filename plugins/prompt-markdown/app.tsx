@@ -1,10 +1,6 @@
 import { definePluginApp } from "@get-bb/plugin-sdk/app";
 import "./app.css";
-import {
-  continueMarkdownLine,
-  markdownRanges,
-  type MarkdownRangeKind,
-} from "./markdown.js";
+import { markdownRanges, type MarkdownRangeKind } from "./markdown.js";
 
 const STYLED_KINDS: readonly MarkdownRangeKind[] = [
   "ordered",
@@ -34,7 +30,6 @@ export default definePluginApp((app) => {
         ...STYLED_KINDS.map((kind) => effect(kind, false)),
         ...OFF_CARET_LINE_KINDS.map((kind) => effect(kind, true)),
       ],
-      experimental_continueLine: continueMarkdownLine,
     },
   });
 });

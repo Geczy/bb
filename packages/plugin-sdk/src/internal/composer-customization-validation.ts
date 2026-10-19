@@ -364,12 +364,6 @@ function parseRegions(
           `${kind}.richText: "onDraftChange" must be a function when set`,
         );
       }
-      const continueLine = raw.experimental_continueLine;
-      if (continueLine !== undefined && typeof continueLine !== "function") {
-        onRejected(
-          `${kind}.richText: "experimental_continueLine" must be a function when set`,
-        );
-      }
       richText = {
         ...(effects !== undefined ? { effects } : {}),
         ...(typeof onDraftChange === "function"
@@ -377,15 +371,6 @@ function parseRegions(
               onDraftChange: onDraftChange as NonNullable<
                 ComposerCustomization["richText"]
               >["onDraftChange"],
-            }
-          : {}),
-        ...(typeof continueLine === "function"
-          ? {
-              experimental_continueLine: continueLine as NonNullable<
-                NonNullable<
-                  ComposerCustomization["richText"]
-                >["experimental_continueLine"]
-              >,
             }
           : {}),
       };

@@ -203,11 +203,6 @@ sendMenu?, banners?, richText? })`. Omitted `scopes` means all thread,
   `experimental_offCaretLineOnly: true` to skip lines the selection touches
   while the composer is focused. bb keeps the plugin's stylesheet loaded while
   its rules apply.
-- `richText.experimental_continueLine(textBeforeCaret)` runs on Shift+Enter
-  (Enter on touch keyboards) in a top-level paragraph and returns
-  `{ kind: "continue", prefix }`, `{ kind: "end" }` to clear the text before
-  the caret instead of adding a line, or `null`. The first non-null result
-  across plugins wins; the change is one undo step.
 - A `messageAction`'s `run` receives `context.composer`: the composer of the
   message's thread, or null.
 - Composer popups register `[{ id, label, component }]` through `experimental_popups`.
