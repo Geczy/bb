@@ -327,7 +327,14 @@ describe("comment sidecar mutations", () => {
       }
       return next;
     };
-    const records = (threads: Thread[]) => ({
+    const records = (
+      threads: {
+        messages: unknown[];
+        resolvedAt: string | null;
+        resolvedBy: unknown;
+        anchor: { quote: string };
+      }[],
+    ) => ({
       messages: new Set(
         threads.flatMap((thread) =>
           thread.messages.map((item) => JSON.stringify(item)),
