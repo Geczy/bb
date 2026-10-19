@@ -21,6 +21,12 @@ import {
   type FollowUpSubmitMode,
 } from "@/components/promptbox/FollowUpPromptBox";
 import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
+import { MemoryRouter } from "react-router-dom";
+import {
+  ThreadPromptContextBanner,
+  type ThreadPromptGitSection,
+  type ThreadPromptParentThreadSection,
+} from "@/components/promptbox/banner/ThreadPromptContextBanner";
 
 const mocks = vi.hoisted(() => {
   const values = {
@@ -334,6 +340,70 @@ function createFollowUpPromptBoxProps(
   };
 }
 
+const STUBBED_CARD_HEIGHTS: Record<string, number> = {
+  Parent: 32,
+  "Thread context before sending": 35,
+};
+
+function stubbedCardHeight(element: Element): number {
+  return STUBBED_CARD_HEIGHTS[element.getAttribute("aria-label") ?? ""] ?? 0;
+}
+
+function stubbedOffsetHeight(element: HTMLElement): number {
+  const ownHeight = stubbedCardHeight(element);
+  if (ownHeight > 0) return ownHeight;
+  const cards = Object.keys(STUBBED_CARD_HEIGHTS).flatMap((label) =>
+    Array.from(element.querySelectorAll(`[aria-label="${label}"]`)),
+  );
+  if (cards.length === 0) return 0;
+  return (
+    cards.reduce((total, card) => total + stubbedCardHeight(card), 0) +
+    8 * (cards.length - 1)
+  );
+}
+
+const uncommittedGitSection: ThreadPromptGitSection = {
+  changedFiles: {
+    kind: "uncommitted",
+    label: "Uncommitted",
+    files: [{ path: "src/a.ts", status: "M", insertions: 1, deletions: 0 }],
+    mergeBaseRef: null,
+    stats: {
+      insertions: 1,
+      deletions: 0,
+      lineStatsComplete: true,
+      fileCount: 1,
+      files: [{ path: "src/a.ts", status: "M", insertions: 1, deletions: 0 }],
+    },
+  },
+  mergeBase: null,
+  onPromptBannerFileClick: () => {},
+};
+
+function renderBannerStack({
+  gitSection,
+  gitSectionPending,
+  parentThreadSection,
+}: {
+  gitSection: ThreadPromptGitSection | null;
+  gitSectionPending: boolean;
+  parentThreadSection: ThreadPromptParentThreadSection | null;
+}) {
+  return (
+    <ThreadPromptContextBanner
+      gitSection={gitSection}
+      gitSectionPending={gitSectionPending}
+      archivedSection={null}
+      environmentGoneSection={null}
+      parentThreadSection={parentThreadSection}
+      childThreadsSection={null}
+      pullRequestSection={null}
+      expandedSection={null}
+      onToggleSection={() => {}}
+    />
+  );
+}
+
 afterEach(() => {
   cleanup();
   resetPluginSlotStoreForTest();
@@ -475,6 +545,72 @@ describe("FollowUpPromptBox", () => {
     expect(initialMinHeight).toBe(103);
     expect(promptBox.getAttribute("data-min-height")).toBe("79");
   });
+
+  it.each([
+    {
+      label: "with a parent card",
+      parentThreadSection: {
+        parentThreadTitle: "Owner thread",
+        href: "/threads/thr_parent",
+        relationship: "parent" as const,
+      },
+      expectedTotals: [143, 143, 143],
+    },
+    {
+      label: "without a parent card",
+      parentThreadSection: null,
+      expectedTotals: [103, 103, 103],
+    },
+  ])(
+    "keeps the composer height constant as git context loads and clears $label",
+    ({ parentThreadSection, expectedTotals }) => {
+      const offsetHeight = vi
+        .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+        .mockImplementation(function (this: HTMLElement) {
+          return stubbedOffsetHeight(this);
+        });
+      try {
+        const props = createFollowUpPromptBoxProps({ kind: "ready" });
+        const states = [
+          { gitSection: null, gitSectionPending: true },
+          { gitSection: uncommittedGitSection, gitSectionPending: false },
+          { gitSection: null, gitSectionPending: false },
+        ];
+        const renderState = (state: (typeof states)[number]) => (
+          <MemoryRouter>
+            <FollowUpPromptBox
+              {...props}
+              stack={renderBannerStack({ ...state, parentThreadSection })}
+            />
+          </MemoryRouter>
+        );
+        const [initialState, ...nextStates] = states;
+        if (!initialState) throw new Error("Expected initial banner state");
+        const { container, rerender } = render(renderState(initialState));
+        const measureTotal = () => {
+          const stackElement = container.querySelector<HTMLElement>(
+            "[data-follow-up-composer-anchor]",
+          )?.previousElementSibling;
+          if (!(stackElement instanceof HTMLElement)) {
+            throw new Error("Expected measured composer stack");
+          }
+          return (
+            stackElement.offsetHeight +
+            Number(screen.getByTestId("prompt-box").dataset.minHeight)
+          );
+        };
+        const totals = [measureTotal()];
+        for (const state of nextStates) {
+          rerender(renderState(state));
+          totals.push(measureTotal());
+        }
+
+        expect(totals).toEqual(expectedTotals);
+      } finally {
+        offsetHeight.mockRestore();
+      }
+    },
+  );
 
   it("renders plugin banners above native stack content", () => {
     setPluginSlotRegistrations(

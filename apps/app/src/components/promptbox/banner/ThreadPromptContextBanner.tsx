@@ -34,6 +34,7 @@ import {
   PROMPT_STACK_CARD_HEADER_BUTTON_CLASS,
   PROMPT_STACK_CARD_ROW_HEIGHT,
   PROMPT_CONTEXT_BANNER_COLLAPSED_HEIGHT,
+  PROMPT_STACK_CARD_GAP,
   PROMPT_STACK_INLAY_INSET_CLASS,
   PROMPT_STACK_INLAY_SEGMENT_CLASS,
 } from "@/components/promptbox/banner/PromptStackCard";
@@ -343,6 +344,7 @@ function ParentThreadCard({
       ariaLabel={PARENT_SECTION_COPY[section.relationship].ariaPrefix}
       className="overflow-hidden"
       style={{ minHeight: PROMPT_STACK_CARD_ROW_HEIGHT }}
+      pinned
     >
       <div
         className={cn(
@@ -385,7 +387,14 @@ function stackPromptCards(cards: readonly ReactNode[]): ReactNode {
   if (visibleCards.length === 0) {
     return null;
   }
-  return <div className="min-w-0 space-y-2">{visibleCards}</div>;
+  return (
+    <div
+      className="flex min-w-0 flex-col"
+      style={{ rowGap: PROMPT_STACK_CARD_GAP }}
+    >
+      {visibleCards}
+    </div>
+  );
 }
 
 function shouldShowPullRequestAttentionLabel(

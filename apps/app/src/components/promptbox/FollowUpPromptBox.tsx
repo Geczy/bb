@@ -67,6 +67,8 @@ import {
 } from "@/components/promptbox/CompactBeforeSendChip";
 import {
   PROMPT_CONTEXT_BANNER_COLLAPSED_HEIGHT,
+  PROMPT_STACK_CARD_GAP,
+  PROMPT_STACK_PINNED_CARD_SELECTOR,
   PROMPT_STACK_TRACK_CLASS,
 } from "@/components/promptbox/banner/PromptStackCard";
 
@@ -118,6 +120,39 @@ const FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT = 68;
 const FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT =
   FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT +
   PROMPT_CONTEXT_BANNER_COLLAPSED_HEIGHT;
+interface ComposerStackLayout {
+  height: number;
+  pinnedHeight: number;
+}
+
+const EMPTY_COMPOSER_STACK_LAYOUT: ComposerStackLayout = {
+  height: 0,
+  pinnedHeight: 0,
+};
+
+function measureComposerStackLayout(
+  stack: HTMLElement,
+  height: number,
+): ComposerStackLayout {
+  const pinnedCards = Array.from(
+    stack.querySelectorAll<HTMLElement>(PROMPT_STACK_PINNED_CARD_SELECTOR),
+  );
+  const pinnedHeight = pinnedCards.reduce(
+    (total, card) => total + card.offsetHeight + PROMPT_STACK_CARD_GAP,
+    0,
+  );
+  return { height, pinnedHeight };
+}
+
+function isSameComposerStackLayout(
+  left: ComposerStackLayout,
+  right: ComposerStackLayout,
+): boolean {
+  return (
+    left.height === right.height && left.pinnedHeight === right.pinnedHeight
+  );
+}
+
 const COMPOSER_CONTROL_SELECTOR = "button, [role='button'], [aria-haspopup]";
 const COMPOSER_OVERLAY_TRIGGER_SELECTOR = "[aria-haspopup]";
 const OPEN_COMPOSER_OVERLAY_TRIGGER_SELECTOR = `${COMPOSER_OVERLAY_TRIGGER_SELECTOR}[aria-expanded="true"]`;
@@ -662,20 +697,22 @@ function FollowUpPromptBoxWithComposer({
     ],
   );
   const stackRef = useRef<HTMLDivElement>(null);
-  const lastStackHeightRef = useRef(0);
-  const [stackHeight, setStackHeight] = useState(0);
-  const applyStackHeight = useCallback((measured: number) => {
-    if (lastStackHeightRef.current === measured) return;
-    lastStackHeightRef.current = measured;
-    setStackHeight(measured);
+  const lastStackLayoutRef = useRef(EMPTY_COMPOSER_STACK_LAYOUT);
+  const [stackLayout, setStackLayout] = useState(EMPTY_COMPOSER_STACK_LAYOUT);
+  const applyStackLayout = useCallback((measured: ComposerStackLayout) => {
+    if (isSameComposerStackLayout(lastStackLayoutRef.current, measured)) return;
+    lastStackLayoutRef.current = measured;
+    setStackLayout(measured);
   }, []);
 
   useLayoutEffect(() => {
     const element = stackRef.current;
     if (element) {
-      applyStackHeight(element.offsetHeight);
+      applyStackLayout(
+        measureComposerStackLayout(element, element.offsetHeight),
+      );
     }
-  }, [applyStackHeight, stack]);
+  }, [applyStackLayout, stack]);
 
   useEffect(() => {
     const element = stackRef.current;
@@ -686,19 +723,26 @@ function FollowUpPromptBoxWithComposer({
       const borderBoxSize = Array.isArray(entry.borderBoxSize)
         ? entry.borderBoxSize[0]
         : entry.borderBoxSize;
-      const measured = borderBoxSize?.blockSize ?? entry.contentRect.height;
-      if (lastStackHeightRef.current === measured) return;
-      flushSync(() => applyStackHeight(measured));
+      const measured = measureComposerStackLayout(
+        element,
+        borderBoxSize?.blockSize ?? entry.contentRect.height,
+      );
+      if (isSameComposerStackLayout(lastStackLayoutRef.current, measured)) {
+        return;
+      }
+      flushSync(() => applyStackLayout(measured));
     });
     observer.observe(element);
     return () => observer.disconnect();
-  }, [applyStackHeight]);
+  }, [applyStackLayout]);
   const elasticTextareaMinHeight =
     stack === null
       ? FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT
       : Math.max(
           FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT,
-          FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT - stackHeight,
+          FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT +
+            stackLayout.pinnedHeight -
+            stackLayout.height,
         );
 
   const composerElement = (
