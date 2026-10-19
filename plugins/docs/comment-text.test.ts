@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import { Editor } from "@tiptap/core";
+import Image from "@tiptap/extension-image";
+import Link from "@tiptap/extension-link";
+import TaskItem from "@tiptap/extension-task-item";
+import TaskList from "@tiptap/extension-task-list";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,6 +15,8 @@ import {
   visibleEditor,
 } from "./comment-editor.js";
 import { visibleMarkdown } from "./comment-text.js";
+import { loadMarkdownBlocks } from "./markdown-blocks.js";
+import { HtmlBlock, HtmlSource } from "./raw-html.js";
 
 let editor: Editor | null = null;
 afterEach(() => {
@@ -252,5 +258,45 @@ describe("visible comment text", () => {
     expect(
       highlightRanges(editor.state.doc, undefined, [reply], null, false),
     ).toEqual([]);
+  });
+  it.each([
+    "# Plan\n\n<div>literal HTML</div>\n\nTarget here.",
+    '# Plan\n\nHello <strong class="marked">bold</strong>.\n\nTarget here.',
+    "# Plan\n\n[x] ordinary paragraph\n\nTarget here.",
+    "# Plan\n\nSoft\nbreak\n\nTarget here.",
+    '# Plan\n\nHello <strong>bold</strong> and <a href="https://x.com">link</a>.\n\nTarget here.',
+    "# Plan\n\n- [x] Done task\n- [ ] Open task\n\nTarget here.",
+    "# Plan\n\nIntro\n\n---\n\nTarget here.",
+  ])("matches the production editor's visible text for %j", (markdown) => {
+    editor = new Editor({
+      extensions: [
+        StarterKit,
+        Link.configure({ openOnClick: false, autolink: true }),
+        Image,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        HtmlBlock,
+        HtmlSource,
+        createCommentHighlights(),
+        Markdown.configure({
+          html: true,
+          tightLists: true,
+          bulletListMarker: "-",
+          linkify: true,
+        }),
+      ],
+      content: "",
+    });
+    loadMarkdownBlocks(editor, markdown, (source) => source, false);
+    const stored = visibleMarkdown(markdown);
+    const live = visibleEditor(editor.state.doc);
+    expect(stored.text).toBe(live.text);
+    const start = stored.text.indexOf("Target here.");
+    expect(
+      editor.state.doc.textBetween(
+        live.positions[start]!,
+        live.positions[start + 11]! + 1,
+      ),
+    ).toBe("Target here.");
   });
 });

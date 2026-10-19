@@ -1115,6 +1115,7 @@ function InlineDocument({
                   editor={editor}
                   sha256={state.sha256}
                   flush={session.flush}
+                  reload={session.refresh}
                   proposalBase={pending ? state.content : null}
                   dirty={state.dirty}
                 >
@@ -1381,6 +1382,7 @@ function SavedDocumentEditor({
         editor={editor}
         sha256={state.sha256}
         flush={session.flush}
+        reload={session.refresh}
         proposalBase={null}
         dirty={state.dirty}
       >

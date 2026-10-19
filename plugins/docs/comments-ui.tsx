@@ -155,6 +155,7 @@ function Composer({
   autoFocus,
   onSubmit,
   onCancel,
+  onChange,
 }: {
   placeholder: string;
   initial?: string;
@@ -162,8 +163,14 @@ function Composer({
   autoFocus: boolean;
   onSubmit(body: string): Promise<void>;
   onCancel?: () => void;
+  onChange?(value: string): void;
 }) {
   const [value, setValue] = useState(initial);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    onChangeRef.current?.(value);
+  }, [value]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const mentionQuery = /(?:^|\s)@([\w ]*)$/.exec(value)?.[1] ?? null;
   const rpc = useRpc<typeof docsRpcContract>();
@@ -414,6 +421,8 @@ interface ThreadActions {
   editMessage(id: string, messageId: string, body: string): Promise<void>;
   deleteMessage(id: string, messageId: string): void;
   startAgent(id: string, projectId: string): Promise<void>;
+  replyDraft(id: string): string;
+  setReplyDraft(id: string, value: string): void;
 }
 
 function ThreadCard({
@@ -603,10 +612,11 @@ function ThreadCard({
         )}
         {resolved ? null : (
           <Composer
-            key={thread.messages.length}
             placeholder="Reply, or @mention an agent"
             submitLabel="Reply"
             autoFocus={false}
+            initial={actions.replyDraft(thread.id)}
+            onChange={(value) => actions.setReplyDraft(thread.id, value)}
             onSubmit={(body) => actions.reply(thread.id, body)}
           />
         )}
@@ -760,6 +770,7 @@ export function CommentsSurface({
   editor,
   sha256,
   flush,
+  reload,
   proposalBase,
   dirty,
   children,
@@ -768,6 +779,7 @@ export function CommentsSurface({
   editor: Editor | null;
   sha256: string;
   flush(): Promise<void>;
+  reload(): Promise<void>;
   proposalBase: string | null;
   dirty: boolean;
   children: ReactNode;
@@ -787,6 +799,7 @@ export function CommentsSurface({
   const [revision, setRevision] = useState(0);
   const [reloads, setReloads] = useState(0);
   const [documentless, setDocumentless] = useState<DocumentlessItem[]>([]);
+  const replyDrafts = useRef(new Map<string, string>());
   const [documentlessOpen, setDocumentlessOpen] = useState(false);
   const compactViewport = useIsCompactViewport();
   const [narrowPane, setNarrowPane] = useState(false);
@@ -842,22 +855,52 @@ export function CommentsSurface({
     setDraft(null);
     setDocumentless([]);
     setDocumentlessOpen(false);
+    replyDrafts.current.clear();
     void refresh();
     return invalidateRequests;
   }, [targetKey, refresh, invalidateRequests]);
-  useEffect(() => {
+  const inventoryRequest = useRef(0);
+  const refreshInventory = useCallback(() => {
     if (targetRef.current.source) return;
-    let current = true;
+    const version = ++inventoryRequest.current;
     void rpc
       .call("listCommentFolder", { vaultId: targetRef.current.vaultId })
       .then((result) => {
-        if (current) setDocumentless(result.stranded);
+        if (version === inventoryRequest.current)
+          setDocumentless(result.stranded);
       })
       .catch(() => undefined);
+  }, [rpc]);
+  useEffect(() => {
+    refreshInventory();
     return () => {
-      current = false;
+      inventoryRequest.current++;
     };
-  }, [targetKey, rpc]);
+  }, [targetKey, refreshInventory]);
+  const inventoryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inventoryChanged = useCallback(
+    (payload: unknown) => {
+      if (
+        typeof payload === "object" &&
+        payload !== null &&
+        "vaultId" in payload &&
+        payload.vaultId &&
+        payload.vaultId !== targetRef.current.vaultId
+      )
+        return;
+      if (inventoryTimer.current) clearTimeout(inventoryTimer.current);
+      inventoryTimer.current = setTimeout(refreshInventory, 500);
+    },
+    [refreshInventory],
+  );
+  useEffect(
+    () => () => {
+      if (inventoryTimer.current) clearTimeout(inventoryTimer.current);
+    },
+    [],
+  );
+  useRealtime("comments-changed", inventoryChanged);
+  useRealtime("vault-changed", inventoryChanged);
   const changed = useCallback(
     (payload: unknown) => {
       if (typeof payload !== "object" || payload === null) return;
@@ -898,6 +941,11 @@ export function CommentsSurface({
   };
   const actions: ThreadActions = {
     activate,
+    replyDraft: (id) => replyDrafts.current.get(id) ?? "",
+    setReplyDraft: (id, value) => {
+      if (value) replyDrafts.current.set(id, value);
+      else replyDrafts.current.delete(id);
+    },
     startAgent: (commentId, projectId) =>
       apply(rpc.call("startCommentAgent", { ...target, commentId, projectId })),
     reply: (commentId, body) =>
@@ -1254,7 +1302,7 @@ export function CommentsSurface({
               size="sm"
               variant="ghost"
               onClick={() =>
-                act(apply(rpc.call("keepComments", { ...target })))
+                act(apply(rpc.call("keepComments", { ...target })).then(reload))
               }
             >
               Keep on this document
@@ -1270,11 +1318,7 @@ export function CommentsSurface({
                         vaultId: target.vaultId,
                         path: target.path,
                       }),
-                    ).then(() =>
-                      rpc
-                        .call("listCommentFolder", { vaultId: target.vaultId })
-                        .then((result) => setDocumentless(result.stranded)),
-                    ),
+                    ).then(refreshInventory),
                   )
                 }
               >

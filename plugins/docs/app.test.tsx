@@ -894,6 +894,155 @@ describe("Docs nav panel", () => {
     });
   });
 
+  const commentThread = (
+    messages: string[],
+    anchor: { start: number; end: number } | null,
+  ) => ({
+    id: "c_00000000-0000-4000-8000-000000000002",
+    status: "open",
+    resolvedAt: null,
+    resolvedBy: null,
+    messages: messages.map((body, index) => ({
+      id:
+        index === 0
+          ? "c_00000000-0000-4000-8000-000000000002"
+          : `m_00000000-0000-4000-8000-00000000000${index}`,
+      author: { kind: "user", name: "You" },
+      body,
+      createdAt: `2026-10-19T00:0${index}:00.000Z`,
+      editedAt: null,
+      sentTo: [],
+    })),
+    anchor: anchor
+      ? { state: "anchored", quote: "target", ...anchor, line: 3 }
+      : {
+          state: "orphaned",
+          quote: "target",
+          start: null,
+          end: null,
+          line: null,
+        },
+  });
+
+  it("re-reads the document after Keep so highlights return without reload", async () => {
+    const before = "# Keep\n\nOld target.";
+    const after = "# Keep\n\nChanged outside, still a target.";
+    const afterText = "Keep\n\nChanged outside, still a target.";
+    const start = afterText.indexOf("target");
+    let kept = false;
+    let reads = 0;
+    const slot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "personal/keep.md" },
+      {
+        rpc: {
+          listNotes: () =>
+            listNotesResult([
+              { path: "keep.md", title: "Keep", preview: "", modifiedAtMs: 1 },
+            ]),
+          readNote: () =>
+            ++reads === 1
+              ? { content: before, sha256: "sha1" }
+              : { content: after, sha256: "sha2" },
+          preparePreview: () => preview,
+          renameToTitle: () => ({ path: "keep.md" }),
+          listCommentFolder: () => ({ stranded: [], truncated: false }),
+          listComments: () =>
+            kept
+              ? {
+                  sidecarSha256: "sidecar",
+                  threads: [commentThread(["Kept"], { start, end: start + 6 })],
+                  notice: null,
+                  outsideChange: 0,
+                  documentSha256: "sha2",
+                }
+              : {
+                  sidecarSha256: "sidecar",
+                  threads: [],
+                  notice: null,
+                  outsideChange: 1,
+                  documentSha256: "sha2",
+                },
+          keepComments: () => {
+            kept = true;
+            return {
+              sidecarSha256: "sidecar",
+              threads: [commentThread(["Kept"], { start, end: start + 6 })],
+              notice: null,
+              outsideChange: 0,
+              documentSha256: "sha2",
+            };
+          },
+        },
+      },
+    );
+
+    fireEvent.click(await slot.findByText("Keep on this document"));
+    await waitFor(() => expect(reads).toBe(2));
+    await waitFor(() =>
+      expect(
+        slot.container.querySelector(".docs-comment-highlight")?.textContent,
+      ).toBe("target"),
+    );
+    expect(slot.queryByText("Keep on this document")).toBeNull();
+  });
+
+  it("keeps an unsent reply draft through incoming replies", async () => {
+    const content = "# Draft\n\nA target here.";
+    const start = "Draft\n\nA target here.".indexOf("target");
+    let messages = ["Root"];
+    const slot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "personal/draft.md" },
+      {
+        rpc: {
+          listNotes: () =>
+            listNotesResult([
+              {
+                path: "draft.md",
+                title: "Draft",
+                preview: "",
+                modifiedAtMs: 1,
+              },
+            ]),
+          readNote: () => ({ content, sha256: "sha1" }),
+          preparePreview: () => preview,
+          renameToTitle: () => ({ path: "draft.md" }),
+          listCommentFolder: () => ({ stranded: [], truncated: false }),
+          listComments: () => ({
+            sidecarSha256: "sidecar",
+            threads: [commentThread(messages, { start, end: start + 6 })],
+            notice: null,
+            outsideChange: 0,
+            documentSha256: "sha1",
+          }),
+        },
+      },
+    );
+
+    fireEvent.click(await slot.findByLabelText("Comments"));
+    fireEvent.click(await slot.findByText("Root"));
+    const reply = (await slot.findByPlaceholderText(
+      "Reply, or @mention an agent",
+    )) as HTMLTextAreaElement;
+    fireEvent.change(reply, {
+      target: { value: "Unsent draft should survive" },
+    });
+    messages = ["Root", "Incoming reply"];
+    await slot.emitRealtime("comments-changed", {
+      vaultId: "personal",
+      path: "draft.md",
+    });
+    await slot.findByText("Incoming reply");
+    expect(
+      (
+        slot.getByPlaceholderText(
+          "Reply, or @mention an agent",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("Unsent draft should survive");
+  });
+
   it("renders and autosaves editable Markdown tables", async () => {
     const saveNote = vi.fn((_input: unknown) => ({
       outcome: "written",

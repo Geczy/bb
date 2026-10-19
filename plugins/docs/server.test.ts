@@ -157,12 +157,16 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
                   }))
               : []),
           ];
-          return {
-            paths: (args.includeHidden
+          const visible = (
+            args.includeHidden
               ? paths
               : paths.filter((entry) => !/(^|\/)\./.test(entry.path))
-            ).filter((entry) => !omitted.has(`${prefix}${entry.path}`)),
-            truncated: truncated,
+          ).filter((entry) => !omitted.has(`${prefix}${entry.path}`));
+          return {
+            paths: visible.slice(0, args.limit ?? visible.length),
+            truncated:
+              truncated ||
+              (args.limit !== undefined && visible.length > args.limit),
           };
         },
         async read(args) {
@@ -2590,6 +2594,35 @@ describe("Docs comment lifecycle", () => {
         threads: [{ id: zId }],
       });
       expect(await folder(host)).toEqual([]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("refuses to delete a folder with more commented documents than it can restore", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/big/one.md": doc("# One\n\nAlpha line."),
+    });
+    try {
+      const commentId = await comment(host, "big/one.md", "Alpha line", "Keep");
+      for (let index = 0; index < 5_001; index++)
+        host.setUtf8(
+          `/vault/big/.bb-comments/n${index}.md.json`,
+          '{"version":1,"threads":[]}',
+        );
+      await expect(
+        host.harness.behavior.callRpc("deletePath", {
+          path: "big",
+          recursive: true,
+        }),
+      ).rejects.toThrow("too many commented documents");
+      expect(host.files.has("/vault/big/one.md")).toBe(true);
+      expect(await listed(host, "big/one.md")).toMatchObject({
+        threads: [{ id: commentId }],
+      });
+      expect(
+        [...host.files.keys()].filter((entry) => entry.includes("/orphaned/")),
+      ).toEqual([]);
     } finally {
       await host.harness.lifecycle.dispose();
     }

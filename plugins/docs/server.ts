@@ -1993,6 +1993,20 @@ export default async function plugin(
           parts.filter((part) => part === ".bb-comments").length === 1
         );
       });
+    for (const directory of directories) {
+      const sidecars = await bb.sdk.files.listPaths({
+        ...hostArgs(vault),
+        path: absolutePath(vault, directory),
+        includeHidden: true,
+        includeFiles: true,
+        includeDirectories: false,
+        limit: MAX_TREE_ENTRIES,
+      });
+      if (sidecars.truncated)
+        throw new Error(
+          "This folder has too many commented documents to delete safely in one step. Delete its subfolders first.",
+        );
+    }
     const id = randomUUID();
     const moved: [string, string][] = [];
     try {
