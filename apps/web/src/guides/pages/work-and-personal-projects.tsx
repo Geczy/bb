@@ -28,10 +28,10 @@ const AGENT_PROMPT = withIntake(
     },
     {
       label: "Switching",
-      hint: "start with two local browser tabs; ask separately before registering servers for remote access",
+      hint: "use two local browser tabs; remote registration and the signed-in server switcher are outside this setup",
     },
   ],
-  `Set up two bb instances so I can keep work and personal project lists, threads, and Codex accounts separate.
+  `Set up two bb instances with separate work and personal project lists and threads. Help me configure and verify the intended Codex account in each; do not assume separate bb data means separate credentials.
 Guide: https://getbb.app/guides/work-and-personal-projects
 
 This is a two-instance setup, not built-in profiles or a security boundary. Both instances still have the OS user's file and tool access. Limit this setup to Codex with two ChatGPT accounts; do not claim other providers are isolated. Never inspect, print, copy, or import my existing credentials. Stop if company policy requires stronger isolation.
@@ -52,8 +52,8 @@ Check: exactly one intended Codex account is enabled in each instance, the accou
 5. Add only the approved folders to each instance. Check bb project create --help before creating anything. Do not move files or change Git/SSH credentials. Create one harmless test thread in each instance and verify which account the pool actually routed. Check the configured native Codex homes remain separate and empty unless I explicitly signed in there. Verify missing or unavailable credentials cannot route to the other context. Do not mark the setup complete on an account list alone.
 Check: the project lists and thread histories differ, and a real test turn uses the intended account in each. If account attribution or the fallback behavior cannot be verified, stop and report that gap.
 
-6. Keep the two local URLs available. For the Server Switcher, inspect the current plugin and install it only as agreed. In the browser, it lists servers registered to my bb account; two localhost instances do not automatically appear. Ask before signing these instances into my bb account and registering remote access. In the desktop app, use its own configured server list. Do not reuse another server's Connect identity. After registration, switch work → personal → work and check the destination, projects and account each time.
-Check: switching reaches the right instance. If registration isn't approved, keep the local tabs and state that the switcher flow is not yet configured.
+6. Keep the two local URLs available in separate browser tabs. Open work → personal → work and check the destination and project list each time. Do not register either server for remote access or configure the signed-in Server Switcher as part of this setup.
+Check: each local link reaches the intended instance. State separately whether account routing passed verification; navigating to the right project list does not prove credential separation.
 
 If any step fails, stop and report the command, redacted error, and next action. Do not push, publish, migrate existing data or send messages. Stop only the PIDs you recorded for this setup, never processes by name.
 Reply with the two clickable local URLs, data and Codex-home paths, terminal IDs and restart instructions, account-routing and switching results, the shared-OS limitations, and any checks still blocked.`,
@@ -62,7 +62,7 @@ Reply with the two clickable local URLs, data and Codex-home paths, terminal IDs
 export const guide: Guide = {
   ...meta,
   description:
-    "Give work and side projects their own project lists, conversations, and account setup. Ask an agent to set up two bb instances, then choose which one to open.",
+    "Give work and side projects their own project lists and conversations. Ask an agent to set up two bb instances, then open the one you need. Provider accounts need their own setup and verification.",
   heroTop: null,
   concept: (
     <div>
@@ -104,7 +104,7 @@ export const guide: Guide = {
     {
       id: "step-2",
       title: "Sign in to the right account in each instance",
-      lead: "Keep one intended Codex account in each instance's pool.",
+      lead: "Configure one intended Codex account per pool, then verify it before using that instance.",
       body: (
         <>
           <Substeps>
@@ -124,6 +124,11 @@ export const guide: Guide = {
             </li>
           </Substeps>
           <p>
+            Separate project lists do not prove that your accounts are separate.
+            Do not use this setup for work until a test turn confirms the
+            intended account and the check with unavailable credentials passes.
+          </p>
+          <p>
             Account Pooler selects accounts by availability; it does not assign
             accounts to projects. Putting both accounts in one pool would not
             keep work tied to one account. An empty or bypassed pool can fall
@@ -141,8 +146,8 @@ export const guide: Guide = {
     },
     {
       id: "step-3",
-      title: "Open the context you want to work in",
-      lead: "Start with your two local links; add the server switcher when both servers are registered.",
+      title: "Switch with your two local links",
+      lead: "Keep a work tab and a personal tab open, and check which one you are using.",
       body: (
         <>
           <Substeps>
@@ -151,28 +156,21 @@ export const guide: Guide = {
               the destination before starting a thread.
             </li>
             <li>
-              To use <strong>Server Switcher</strong> in a browser, ask your
-              agent to help register both servers to your bb account. This is
-              separate from signing in to your provider accounts and requires
-              your approval for remote access.
+              Open <strong>Settings → Projects</strong> in each tab and confirm
+              that it shows the intended project list.
             </li>
             <li>
-              Once configured, choose the current server above the sidebar
-              footer, then choose the other server. In the desktop app, the
-              switcher uses the desktop app's configured server list.
+              Switch back to the work tab and check its address and projects
+              again before sending a request.
             </li>
           </Substeps>
           <p>
-            Two local instances do not appear in the browser switcher
-            automatically. Until registration is complete, use their local
-            links.
+            This guide uses local browser tabs. Remote registration and the
+            signed-in Server Switcher flow are separate setup tasks.
           </p>
         </>
       ),
-      shot: shot(
-        "server-switcher",
-        "The Server Switcher in a fresh bb instance, asking for bb account sign-in before it can list servers",
-      ),
+      shot: WORK_PROJECTS,
       options: [],
     },
     {
