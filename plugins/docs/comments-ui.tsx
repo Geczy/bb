@@ -872,9 +872,10 @@ export function CommentsSurface({
       .catch(() => undefined);
   }, [rpc]);
   useEffect(() => {
+    const requests = inventoryRequest;
     refreshInventory();
     return () => {
-      inventoryRequest.current++;
+      requests.current++;
     };
   }, [targetKey, refreshInventory]);
   const inventoryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -893,12 +894,12 @@ export function CommentsSurface({
     },
     [refreshInventory],
   );
-  useEffect(
-    () => () => {
-      if (inventoryTimer.current) clearTimeout(inventoryTimer.current);
-    },
-    [],
-  );
+  useEffect(() => {
+    const timer = inventoryTimer;
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, []);
   useRealtime("comments-changed", inventoryChanged);
   useRealtime("vault-changed", inventoryChanged);
   const changed = useCallback(
