@@ -1,4 +1,3 @@
-import type { LoadOlderTimelineRows } from "./load-older-timeline-rows.js";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
@@ -6,10 +5,14 @@ import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/pr
 import { Button } from "@bb/shared-ui/button";
 import { ConversationTimeline } from "@/components/ui/conversation.js";
 import { HeightTransition } from "@/components/ui/height-transition.js";
-import { useDelayedBusyIndicator } from "@/components/ui/route-navigation-indicator";
 import { Icon } from "@bb/shared-ui/icon";
-import { Skeleton } from "@bb/shared-ui/skeleton";
+import { isRouteLoadingSkeletonMounted } from "@/components/ui/route-loading-skeleton";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
+import {
+  SHORT_LIVED_STATUS_DELAY_MS,
+  useSustainedFlag,
+} from "@/hooks/useSustainedFlag";
+import { ThreadTimelineLoadingSkeleton } from "./ThreadTimelineLoadingSkeleton.js";
 import { ThreadTimelineRows } from "./ThreadTimelineRows.js";
 import { useAutoLoadOlderRows } from "./useAutoLoadOlderRows.js";
 import { TimelineStatusIndicator } from "./TimelineStatusIndicator.js";
@@ -51,7 +54,7 @@ export interface ThreadTimelineSurfaceProps {
   onSelectionAddToChat?: ThreadTimelineAddToChatHandler;
   consumerMessageActions?: readonly ThreadTimelineConsumerMessageAction[];
   includePluginMessageActions?: boolean;
-  onLoadOlderRows?: LoadOlderTimelineRows;
+  onLoadOlderRows?: () => Promise<void> | void;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onOpenPluginPanel?: ThreadTimelineOpenPluginPanelHandler;
@@ -173,9 +176,10 @@ export function ThreadTimelineSurface({
   workspaceRootPath,
 }: ThreadTimelineSurfaceProps) {
   const showCatchUpIndicator =
-    useDelayedBusyIndicator(
-      isCatchingUpTimeline && !isThreadTimelinePending && !timelineError,
-    ) && !showOngoingIndicator;
+    isCatchingUpTimeline &&
+    !isThreadTimelinePending &&
+    !timelineError &&
+    !showOngoingIndicator;
   const showActiveThinking =
     activeThinking !== null && ongoingIndicatorLabel === undefined;
   const activeThinkingText = activeThinking?.text.trim() ?? "";
@@ -193,6 +197,13 @@ export function ThreadTimelineSurface({
     stoppingAnchorAt,
     threadId,
   });
+  const isOngoingIndicatorSustained = useSustainedFlag(
+    showOngoingIndicator,
+    SHORT_LIVED_STATUS_DELAY_MS,
+  );
+  const isOngoingIndicatorVisible =
+    showOngoingIndicator &&
+    (timelineRowsWithPendingStop.length > 0 || isOngoingIndicatorSustained);
   const showLoadOlderRows =
     hasOlderTimelineRows &&
     onLoadOlderRows !== undefined &&
@@ -254,18 +265,9 @@ export function ThreadTimelineSurface({
           />
         ) : null}
         <HeightTransition visible={showCatchUpIndicator}>
-          {showCatchUpIndicator ? (
-            <TimelineStatusIndicator
-              label={
-                <span role="status" className="animate-shine">
-                  {CATCH_UP_INDICATOR_LABEL}
-                </span>
-              }
-              className="mt-4 flex min-h-7 items-center"
-            />
-          ) : null}
+          {showCatchUpIndicator ? <DelayedCatchUpIndicator /> : null}
         </HeightTransition>
-        <HeightTransition visible={showOngoingIndicator}>
+        <HeightTransition visible={isOngoingIndicatorVisible}>
           <TimelineWorkingIndicator
             key={ongoingIndicatorKey}
             details={activeThinkingDetails}
@@ -286,7 +288,7 @@ function LoadOlderMessages({
 }: {
   hasOlderTimelineRows: boolean;
   isLoadingOlderTimelineRows: boolean;
-  onLoadOlderRows: LoadOlderTimelineRows;
+  onLoadOlderRows: () => Promise<void> | void;
 }) {
   const { sentinelRef, isAutoLoadEnabled, loadOlderRows } =
     useAutoLoadOlderRows({
@@ -326,15 +328,44 @@ function LoadOlderMessages({
 const LOADING_INDICATOR_REVEAL_DELAY_MS = 200;
 const CATCH_UP_INDICATOR_LABEL = "Loading latest messages…";
 
-function DelayedThreadLoadingIndicator() {
+const CATCH_UP_INDICATOR_REVEAL_DELAY_MS = 1_000;
+
+function DelayedCatchUpIndicator() {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
+    const id = window.setTimeout(
+      () => setVisible(true),
+      CATCH_UP_INDICATOR_REVEAL_DELAY_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <TimelineStatusIndicator
+      label={
+        <span role="status" className="animate-shine">
+          {CATCH_UP_INDICATOR_LABEL}
+        </span>
+      }
+      className="mt-4 flex min-h-7 items-center"
+    />
+  );
+}
+
+function DelayedThreadLoadingIndicator() {
+  const [visible, setVisible] = useState(isRouteLoadingSkeletonMounted);
+  useEffect(() => {
+    if (visible) {
+      return;
+    }
     const id = window.setTimeout(
       () => setVisible(true),
       LOADING_INDICATOR_REVEAL_DELAY_MS,
     );
     return () => window.clearTimeout(id);
-  }, []);
+  }, [visible]);
 
   if (!visible) {
     return null;
@@ -343,35 +374,3 @@ function DelayedThreadLoadingIndicator() {
   return <ThreadTimelineLoadingSkeleton />;
 }
 
-function ThreadTimelineLoadingSkeleton() {
-  return (
-    <div className="mt-6 space-y-5" role="status" aria-label="Loading thread">
-      <div className="flex justify-end px-2">
-        <Skeleton className="h-12 w-3/5" />
-      </div>
-      <div className="space-y-2 px-2">
-        <Skeleton className="h-3.5 w-11/12" />
-        <Skeleton className="h-3.5 w-full" />
-        <Skeleton className="h-3.5 w-3/4" />
-      </div>
-      <div className="space-y-2.5 px-2">
-        <div className="flex items-center gap-2">
-          <Skeleton className="size-3.5 shrink-0 rounded" />
-          <Skeleton className="h-3 w-2/5" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Skeleton className="size-3.5 shrink-0 rounded" />
-          <Skeleton className="h-3 w-1/2" />
-        </div>
-        <div className="flex items-center gap-2">
-          <Skeleton className="size-3.5 shrink-0 rounded" />
-          <Skeleton className="h-3 w-1/3" />
-        </div>
-      </div>
-      <div className="space-y-2 px-2">
-        <Skeleton className="h-3.5 w-5/6" />
-        <Skeleton className="h-3.5 w-2/3" />
-      </div>
-    </div>
-  );
-}

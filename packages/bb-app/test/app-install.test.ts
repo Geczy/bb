@@ -19,7 +19,12 @@ const tempDirs: string[] = [];
 afterEach(() => {
   for (const fixture of fixtures.splice(0)) fixture.cleanup();
   for (const dir of tempDirs.splice(0)) {
-    rmSync(dir, { force: true, recursive: true });
+    rmSync(dir, {
+      force: true,
+      recursive: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   }
 });
 
@@ -30,8 +35,8 @@ async function checkoutWithOrigin(url: string): Promise<string> {
   return fixture.checkout;
 }
 
-describe("app install resolution", () => {
-  it("recognizes get-bb/bb over https and ssh, and nothing else", () => {
+describe("app install resolution", { timeout: 30_000 }, () => {
+  it("recognizes current and legacy official remotes over https and ssh", () => {
     expect(isOfficialSourceRemote("https://github.com/get-bb/bb.git")).toBe(
       true,
     );
@@ -43,6 +48,19 @@ describe("app install resolution", () => {
     expect(
       isOfficialSourceRemote("https://x-access-token@github.com/get-bb/bb.git"),
     ).toBe(true);
+    expect(isOfficialSourceRemote("https://github.com/ymichael/bb.git")).toBe(
+      true,
+    );
+    expect(isOfficialSourceRemote("git@github.com:YMichael/bb.git")).toBe(true);
+    expect(isOfficialSourceRemote("ssh://git@github.com/ymichael/bb.git")).toBe(
+      true,
+    );
+    expect(isOfficialSourceRemote("https://github.com/ymichael/bb-fork")).toBe(
+      false,
+    );
+    expect(isOfficialSourceRemote("https://gitlab.com/ymichael/bb.git")).toBe(
+      false,
+    );
     expect(isOfficialSourceRemote("git@github.com:someone/bb.git")).toBe(false);
     expect(isOfficialSourceRemote("https://github.com/get-bb/bb-fork")).toBe(
       false,

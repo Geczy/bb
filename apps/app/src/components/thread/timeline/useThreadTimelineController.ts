@@ -1,5 +1,4 @@
-import type { CommitOlderTimelineRows } from "./load-older-timeline-rows.js";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   useQueryClient,
   type QueryObserverResult,
@@ -48,21 +47,17 @@ export interface UseThreadTimelineControllerResult {
   contextBoundarySeq: ThreadTimelineResponse["contextBoundarySeq"];
   contextWindowUsage: ThreadTimelineResponse["contextWindowUsage"];
   goal: ThreadTimelineResponse["goal"];
+  providerCommands: ThreadTimelineResponse["providerCommands"];
+  sessionOptions: ThreadTimelineResponse["sessionOptions"];
   modelFallback: ThreadTimelineResponse["modelFallback"];
   hasOlderTimelineRows: boolean;
   isCatchingUpTimeline: boolean;
   isLoadingOlderTimelineRows: boolean;
-  loadOlderTimelineRows: (commit?: CommitOlderTimelineRows) => Promise<void>;
+  loadOlderTimelineRows: () => Promise<void>;
   pendingTodos: ThreadTimelineResponse["pendingTodos"];
   timelineError: Error | null;
   timelineLoading: boolean;
   timelineRows: TimelineRow[];
-}
-
-interface MountFetchState {
-  hasNewEvents: boolean;
-  key: string | null;
-  settled: boolean;
 }
 
 interface LoadedTimelineTracker {
@@ -88,6 +83,7 @@ function buildEmptyLoadedTimelineState(
   surfaceKey: string,
 ): LoadedTimelineState {
   return buildLoadedTimelineState({
+    historySnapshot: null,
     latestWindowEndSequence: null,
     latestRows: [],
     olderCursor: null,
@@ -119,25 +115,8 @@ export function useThreadTimelineController({
   threadId,
 }: UseThreadTimelineControllerArgs): UseThreadTimelineControllerResult {
   const queryClient = useQueryClient();
-  const mountFetchKey = enabled ? threadId : null;
-  const [mountFetch, setMountFetch] = useState<MountFetchState>({
-    hasNewEvents: false,
-    key: null,
-    settled: false,
-  });
-  const isNewMountFetch = mountFetch.key !== mountFetchKey;
-  const mountFetchHasNewEvents = isNewMountFetch
-    ? mountFetchKey !== null &&
-      hasThreadTimelineUnseenEvents(queryClient, mountFetchKey)
-    : mountFetch.hasNewEvents;
-  const isTrackingMountFetch =
-    mountFetchKey !== null &&
-    mountFetchHasNewEvents &&
-    (isNewMountFetch || !mountFetch.settled);
-  const isTrackingMountFetchRef = useRef(isTrackingMountFetch);
-  isTrackingMountFetchRef.current = isTrackingMountFetch;
   const notifyOnChangeProps = useCallback((): TimelineQueryResultProp[] => {
-    if (isTrackingMountFetchRef.current) {
+    if (hasThreadTimelineUnseenEvents(queryClient, threadId)) {
       return TIMELINE_CONTROLLER_PROPS_WITHOUT_ROWS;
     }
     const cachedTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
@@ -196,119 +175,104 @@ export function useThreadTimelineController({
       ? loadedTimeline.olderCursor
       : null;
   const hasOlderTimelineRows = nextOlderCursor !== null;
-  const loadOlderTimelineRows = useCallback(
-    async (commit?: CommitOlderTimelineRows): Promise<void> => {
-      if (
-        !enabled ||
-        !nextOlderCursor ||
-        !threadId ||
-        isLoadingOlderTimelineRows
-      ) {
-        return;
-      }
+  const loadOlderTimelineRows = useCallback(async (): Promise<void> => {
+    if (
+      !enabled ||
+      !nextOlderCursor ||
+      !threadId ||
+      isLoadingOlderTimelineRows
+    ) {
+      return;
+    }
 
-      setIsLoadingOlderTimelineRows(true);
-      try {
-        const response = await sdk.threads.timeline({
-          beforeAnchorId: nextOlderCursor.anchorId,
-          beforeAnchorSeq: String(nextOlderCursor.anchorSeq),
-          threadId,
-        });
-        const olderRows = [...response.rows];
-        const update = () =>
-          updateLoadedTimeline((current) => {
-            if (
-              current.surfaceKey !== surfaceKey ||
-              !areTimelinePaginationCursorsEqual({
-                left: current.olderCursor,
-                right: nextOlderCursor,
-              })
-            ) {
-              return current;
-            }
-            return {
-              ...current,
-              olderCursor: response.timelinePage.olderCursor,
-              rows: prependOlderTimelineRows({
-                loadedRows: current.rows,
-                olderRows,
-              }),
-            };
-          });
-        if (commit) await commit(update);
-        else update();
-      } catch (error) {
+    setIsLoadingOlderTimelineRows(true);
+    try {
+      const response = await sdk.threads.timeline({
+        beforeAnchorId: nextOlderCursor.anchorId,
+        beforeAnchorSeq: String(nextOlderCursor.anchorSeq),
+        deferContent: "true",
+        threadId,
+      });
+      const olderRows = [...response.rows];
+      updateLoadedTimeline((current) => {
         if (
-          !(error instanceof Error) ||
-          !isStaleTimelinePaginationCursorError(error)
+          current.surfaceKey !== surfaceKey ||
+          !areTimelinePaginationCursorsEqual({
+            left: current.olderCursor,
+            right: nextOlderCursor,
+          })
         ) {
-          throw error;
+          return current;
         }
-
-        const latestTimelineResult = await refetchLatestTimeline();
-        const recoveredLatestTimeline =
-          latestTimelineResult.data ?? latestTimeline;
-        updateLoadedTimeline((current) => {
-          if (current.surfaceKey !== surfaceKey) {
-            return current;
-          }
-          if (!recoveredLatestTimeline) {
-            return {
-              ...current,
-              olderCursor: null,
-            };
-          }
-          return recoverLoadedTimelineAfterStaleCursor({
-            current,
-            latestTimeline: recoveredLatestTimeline,
-            surfaceKey,
-          });
-        });
-      } finally {
-        setIsLoadingOlderTimelineRows(false);
+        return {
+          ...current,
+          olderCursor: response.timelinePage.olderCursor,
+          rows: prependOlderTimelineRows({
+            loadedRows: current.rows,
+            olderRows,
+          }),
+        };
+      });
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !isStaleTimelinePaginationCursorError(error)
+      ) {
+        throw error;
       }
-    },
-    [
-      enabled,
-      isLoadingOlderTimelineRows,
-      latestTimeline,
-      nextOlderCursor,
-      refetchLatestTimeline,
-      surfaceKey,
-      threadId,
-      updateLoadedTimeline,
-    ],
-  );
+
+      const latestTimelineResult = await refetchLatestTimeline();
+      const recoveredLatestTimeline =
+        latestTimelineResult.data ?? latestTimeline;
+      updateLoadedTimeline((current) => {
+        if (current.surfaceKey !== surfaceKey) {
+          return current;
+        }
+        if (!recoveredLatestTimeline) {
+          return {
+            ...current,
+            olderCursor: null,
+          };
+        }
+        return recoverLoadedTimelineAfterStaleCursor({
+          current,
+          latestTimeline: recoveredLatestTimeline,
+          surfaceKey,
+        });
+      });
+    } finally {
+      setIsLoadingOlderTimelineRows(false);
+    }
+  }, [
+    enabled,
+    isLoadingOlderTimelineRows,
+    latestTimeline,
+    nextOlderCursor,
+    refetchLatestTimeline,
+    surfaceKey,
+    threadId,
+    updateLoadedTimeline,
+  ]);
   const timelineRows =
     loadedTimeline.surfaceKey === surfaceKey && loadedTimeline.rows.length > 0
       ? loadedTimeline.rows
       : (latestTimeline?.rows ?? []);
+  const hasResolvedTimeline =
+    latestTimelineQuery.data !== undefined || timelineRows.length > 0;
   const timelineQueryState = useConnectionAwareQueryState({
-    hasResolvedData:
-      latestTimelineQuery.data !== undefined || timelineRows.length > 0,
+    hasResolvedData: hasResolvedTimeline,
     isFetching: latestTimelineQuery.isFetching,
     isLoadingError: latestTimelineQuery.isLoadingError,
     isRecoverableLoadingError: isTransientReadError(latestTimelineQuery.error),
   });
   const timelineLoading =
     latestTimelineQuery.isLoading ||
-    (timelineQueryState.status === "loading" && timelineRows.length === 0) ||
-    (latestTimelineQuery.isFetching && timelineRows.length === 0);
-  const isMountFetchIdle =
-    mountFetchKey !== null && !latestTimelineQuery.isFetching;
-  if (
-    isNewMountFetch ||
-    (mountFetch.hasNewEvents && isMountFetchIdle && !mountFetch.settled)
-  ) {
-    setMountFetch({
-      hasNewEvents: mountFetchHasNewEvents,
-      key: mountFetchKey,
-      settled: isMountFetchIdle,
-    });
-  }
+    (!hasResolvedTimeline &&
+      (timelineQueryState.status === "loading" ||
+        latestTimelineQuery.isFetching));
   const isCatchingUpTimeline =
-    isTrackingMountFetch &&
-    latestTimelineQuery.isFetching &&
+    enabled &&
+    hasThreadTimelineUnseenEvents(queryClient, threadId) &&
     timelineRows.length > 0;
   const timelineError =
     timelineLoading || timelineQueryState.status !== "unavailable"
@@ -323,6 +287,8 @@ export function useThreadTimelineController({
     contextBoundarySeq: latestTimeline?.contextBoundarySeq ?? null,
     contextWindowUsage: latestTimeline?.contextWindowUsage,
     goal: latestTimeline?.goal ?? null,
+    providerCommands: latestTimeline?.providerCommands ?? null,
+    sessionOptions: latestTimeline?.sessionOptions ?? null,
     modelFallback: latestTimeline?.modelFallback ?? null,
     hasOlderTimelineRows,
     isCatchingUpTimeline,

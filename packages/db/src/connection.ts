@@ -1,8 +1,14 @@
 import Database from "better-sqlite3";
+import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
-import { threadCpuUsage } from "node:process";
+import { resourceUsage, threadCpuUsage } from "node:process";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { registerHostPathSqlFunctions } from "./data/host-path-sql.js";
+import {
+  createWalSampler,
+  finishQueryDiagnostics,
+  type QueryDiagnosticsLogFields,
+} from "./query-diagnostics.js";
 import * as schema from "./schema.js";
 
 export interface SlowDbQueryLogFields {
@@ -12,6 +18,7 @@ export interface SlowDbQueryLogFields {
   operation: SlowDbQueryOperation;
   sql: string;
   thresholdMs: number;
+  diagnostics?: QueryDiagnosticsLogFields;
 }
 
 export interface SlowDbQueryLogger {
@@ -21,6 +28,7 @@ export interface SlowDbQueryLogger {
 export interface CreateConnectionOptions {
   slowQueryLogger?: SlowDbQueryLogger;
   slowQueryThresholdMs?: number | (() => number);
+  slowQueryDiagnosticsEnabled?: () => boolean;
 }
 
 export type DbConnection = ReturnType<typeof createConnection>;
@@ -35,9 +43,31 @@ export type SlowDbQueryOperation =
   | "exec"
   | "transaction";
 
+const compiledQueries = new WeakMap<
+  DbQueryConnection,
+  Map<(db: DbQueryConnection) => unknown, unknown>
+>();
+
+export function prepareCachedQuery<TQuery>(
+  db: DbQueryConnection,
+  build: (db: DbQueryConnection) => TQuery,
+): TQuery {
+  let queries = compiledQueries.get(db);
+  if (!queries) {
+    queries = new Map();
+    compiledQueries.set(db, queries);
+  }
+  if (queries.has(build)) return queries.get(build) as TQuery;
+  const query = build(db);
+  queries.set(build, query);
+  return query;
+}
+
 interface SlowDbQueryConfig {
   logger: SlowDbQueryLogger;
   thresholdMs: number | (() => number);
+  sampleWal: () => QueryDiagnosticsLogFields["wal"];
+  diagnosticsEnabled: () => boolean;
 }
 
 interface TimedStatementOperationArgs<TValue> {
@@ -76,6 +106,9 @@ function formatSqlForLog(source: string): string {
 function runTimedStatementOperation<TValue>(
   args: TimedStatementOperationArgs<TValue>,
 ): TValue {
+  const startedUsage = args.config.diagnosticsEnabled()
+    ? resourceUsage()
+    : null;
   const startedCpu = threadCpuUsage();
   const startedAt = performance.now();
   try {
@@ -88,6 +121,7 @@ function runTimedStatementOperation<TValue>(
         : args.config.thresholdMs;
     if (durationMs >= thresholdMs) {
       const cpu = threadCpuUsage(startedCpu);
+      const finishedUsage = startedUsage ? resourceUsage() : null;
       args.config.logger.info(
         {
           bindingArgumentCount: args.bindingArgumentCount,
@@ -96,6 +130,15 @@ function runTimedStatementOperation<TValue>(
           operation: args.operation,
           sql: formatSqlForLog(args.source),
           thresholdMs,
+          ...(startedUsage && finishedUsage
+            ? {
+                diagnostics: finishQueryDiagnostics(
+                  startedUsage,
+                  finishedUsage,
+                  args.config.sampleWal(),
+                ),
+              }
+            : {}),
         },
         "Slow DB query",
       );
@@ -152,6 +195,10 @@ function instrumentSqliteClient(
     logger: options.slowQueryLogger,
     thresholdMs:
       options.slowQueryThresholdMs ?? DEFAULT_SLOW_DB_QUERY_LOG_THRESHOLD_MS,
+    sampleWal: createWalSampler(
+      sqlite.memory ? null : `${resolve(sqlite.name)}-wal`,
+    ),
+    diagnosticsEnabled: options.slowQueryDiagnosticsEnabled ?? (() => false),
   };
   const originalExec = sqlite.exec.bind(sqlite);
   sqlite.exec = (source) =>
@@ -245,6 +292,20 @@ export function createConnection(
   instrumentSqliteClient(sqlite, options);
 
   const db = drizzle({ client: sqlite, schema });
+  const queries = new Map<(db: DbQueryConnection) => unknown, unknown>();
+  compiledQueries.set(db, queries);
+  const originalTransaction = db.transaction.bind(db);
+  db.transaction = (work, config) =>
+    originalTransaction((tx) => {
+      compiledQueries.set(tx, queries);
+      return work(tx);
+    }, config);
+  const originalClose = sqlite.close.bind(sqlite);
+  sqlite.close = () => {
+    const result = originalClose();
+    queries.clear();
+    return result;
+  };
 
   return db;
 }

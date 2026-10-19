@@ -23,16 +23,7 @@ import {
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { makeThreadResponse } from "@/test/fixtures/thread-responses";
 import { bindSdkToPlugin, getPluginBoundSdk } from "./plugin-bound-sdk";
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((done, fail) => {
-    resolve = done;
-    reject = fail;
-  });
-  return { promise, reject, resolve };
-}
+import { createDeferredPromise } from "@bb/test-helpers";
 
 function makeSdk() {
   const threads = {
@@ -207,10 +198,13 @@ describe("bindSdkToPlugin", () => {
     const { sdk, queryClient, threads } = makeSdk();
     const pending = new Map<
       string,
-      ReturnType<typeof deferred<ReturnType<typeof makeThreadResponse>>>
+      ReturnType<
+        typeof createDeferredPromise<ReturnType<typeof makeThreadResponse>>
+      >
     >();
     threads.update.mockImplementation(({ threadId }: { threadId: string }) => {
-      const request = deferred<ReturnType<typeof makeThreadResponse>>();
+      const request =
+        createDeferredPromise<ReturnType<typeof makeThreadResponse>>();
       pending.set(threadId, request);
       return request.promise;
     });
@@ -282,6 +276,63 @@ describe("bindSdkToPlugin", () => {
     ).toEqual(["section-a", "section-a"]);
   });
 
+  it("keeps an in-flight move over refetched sidebar data until the write settles", async () => {
+    const { sdk, queryClient, threads } = makeSdk();
+    const request =
+      createDeferredPromise<ReturnType<typeof makeThreadResponse>>();
+    threads.update.mockImplementation(() => request.promise);
+    const sidebarKey = sidebarNavigationQueryKey();
+    const serverNavigation = (sectionId: string) =>
+      makeSidebarBootstrapResponse({
+        projects: [
+          makeProjectWithThreadsResponse({
+            threads: [
+              makeThreadListEntry({ id: "thr_moved", sectionId }),
+              makeThreadListEntry({
+                id: "thr_child",
+                parentThreadId: "thr_moved",
+              }),
+            ],
+          }),
+        ],
+      });
+    const sidebarSectionId = () =>
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarKey)
+        ?.projects[0]?.threads.find((thread) => thread.id === "thr_moved")
+        ?.sectionId;
+    const refetchSidebar = (sectionId: string) =>
+      queryClient.fetchQuery({
+        queryKey: sidebarKey,
+        queryFn: async () => serverNavigation(sectionId),
+        staleTime: 0,
+      });
+    queryClient.setQueryData(sidebarKey, serverNavigation("section-a"));
+    const bound = bindSdkToPlugin(sdk, "thread-list", queryClient);
+
+    const update = bound.threads.update({
+      threadId: "thr_moved",
+      sectionId: "section-b",
+    });
+    await vi.waitFor(() => expect(sidebarSectionId()).toBe("section-b"));
+
+    await refetchSidebar("section-a");
+    expect(sidebarSectionId()).toBe("section-b");
+    expect(
+      queryClient
+        .getQueryData<SidebarBootstrapResponse>(sidebarKey)
+        ?.projects[0]?.threads.map((thread) => thread.id),
+    ).toContain("thr_child");
+
+    request.resolve(
+      makeThreadResponse({ id: "thr_moved", sectionId: "section-b" }),
+    );
+    await update;
+    await refetchSidebar("section-a");
+    expect(sidebarSectionId()).toBe("section-a");
+    queryClient.clear();
+  });
+
   it("applies the server's pinned order before the caller clears its drag preview", async () => {
     const { sdk, queryClient } = makeSdk();
     const entry = makeThreadListEntry({
@@ -335,7 +386,7 @@ describe("bindSdkToPlugin", () => {
           ],
         }),
       );
-      const pending = deferred<{ ok: true }>();
+      const pending = createDeferredPromise<{ ok: true }>();
       threads.unarchive.mockReturnValueOnce(pending.promise);
       const bound = bindSdkToPlugin(sdk, "thread-list", queryClient);
       const restore = bound.threads.unarchive({ threadId: entry.id });
@@ -381,7 +432,8 @@ describe("bindSdkToPlugin", () => {
           projects: [makeProjectWithThreadsResponse({ threads: [entry] })],
         }),
       );
-      const pending = deferred<ReturnType<typeof makeThreadResponse>>();
+      const pending =
+        createDeferredPromise<ReturnType<typeof makeThreadResponse>>();
       threads.unpin.mockReturnValueOnce(pending.promise);
       threads.update.mockResolvedValueOnce(
         makeThreadResponse({ id: entry.id, pinnedAt: null, sectionId: "new" }),
@@ -444,7 +496,7 @@ describe("bindSdkToPlugin", () => {
       queryClient.setQueryData(projectsQueryKey(), [project]);
       queryClient.setQueryData(hostsQueryKey(), [host]);
       queryClient.setQueryData(hostQueryKey(host.id), host);
-      const pending = deferred<never>();
+      const pending = createDeferredPromise<never>();
       const bound = bindSdkToPlugin(sdk, "thread-list", queryClient);
       const current = () =>
         kind === "host"
@@ -516,7 +568,7 @@ describe("bindSdkToPlugin", () => {
           sections: [section],
         }),
       );
-      const pending = deferred<never>();
+      const pending = createDeferredPromise<never>();
       const bound = bindSdkToPlugin(sdk, "thread-list", queryClient);
       let removal;
       if (kind === "project") {
@@ -570,7 +622,9 @@ describe("bindSdkToPlugin", () => {
     async (outcome) => {
       const { sdk, environments, queryClient } = makeSdk();
       const pending =
-        deferred<Awaited<ReturnType<typeof sdk.environments.archiveThreads>>>();
+        createDeferredPromise<
+          Awaited<ReturnType<typeof sdk.environments.archiveThreads>>
+        >();
       environments.archiveThreads.mockReturnValueOnce(pending.promise);
       const entries = [
         makeThreadListEntry({ id: "thr_1", environmentId: "env_1" }),
@@ -685,7 +739,7 @@ describe("bindSdkToPlugin", () => {
     { label: "clear", name: null },
   ])("optimistically applies a plugin environment $label", async ({ name }) => {
     const { sdk, environments, queryClient } = makeSdk();
-    const pending = deferred<ReturnType<typeof makeEnvironment>>();
+    const pending = createDeferredPromise<ReturnType<typeof makeEnvironment>>();
     environments.update.mockReturnValueOnce(pending.promise);
     queryClient.setQueryData(
       environmentQueryKey("env_1"),
@@ -716,7 +770,7 @@ describe("bindSdkToPlugin", () => {
 
   it("rolls back a failed plugin environment rename", async () => {
     const { sdk, environments, queryClient } = makeSdk();
-    const pending = deferred<ReturnType<typeof makeEnvironment>>();
+    const pending = createDeferredPromise<ReturnType<typeof makeEnvironment>>();
     environments.update.mockReturnValueOnce(pending.promise);
     queryClient.setQueryData(
       environmentQueryKey("env_1"),

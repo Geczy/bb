@@ -12,7 +12,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { console as inspectorConsole } from "node:inspector";
+import { setTimeout as delay } from "node:timers/promises";
 import { startPerformanceDiagnostics } from "../src/performance-diagnostics.js";
 
 describe("performance diagnostics", () => {
@@ -29,8 +31,11 @@ describe("performance diagnostics", () => {
       },
     });
     try {
-      const until = performance.now() + 40;
-      while (performance.now() < until) Math.sqrt(performance.now());
+      function mainThreadWork() {
+        const until = performance.now() + 80;
+        while (performance.now() < until) Math.sqrt(performance.now());
+      }
+      mainThreadWork();
       await Promise.all([monitor.stop(), monitor.stop()]);
       const directory = join(dataDir, "logs", "performance");
       const files = await readdir(directory);
@@ -38,7 +43,15 @@ describe("performance diagnostics", () => {
       expect(files[0]).toMatch(/^profile-\d+-[0-9a-f-]+\.cpuprofile$/);
       const path = join(directory, files[0]!);
       const profile = JSON.parse(await readFile(path, "utf8"));
-      expect(profile.nodes.length).toBeGreaterThan(0);
+      expect(profile.nodes).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            callFrame: expect.objectContaining({
+              functionName: "mainThreadWork",
+            }),
+          }),
+        ]),
+      );
       expect(profile.samples.length).toBeGreaterThan(0);
       expect(profile.endTime).toBeGreaterThan(profile.startTime);
       if (process.platform !== "win32")
@@ -46,6 +59,122 @@ describe("performance diagnostics", () => {
       expect(warnings).toEqual([]);
     } finally {
       await monitor.stop();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("logs the sampled blocker without attributing an adjacent short callback", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "bb-stall-attribution-"));
+    const records: object[] = [];
+    const warnings: object[] = [];
+    const monitor = await startPerformanceDiagnostics({
+      dataDir,
+      logger: {
+        info: (fields, message) => {
+          if (message === "Event loop stall attribution") records.push(fields);
+        },
+        warn: (fields) => {
+          warnings.push(fields);
+        },
+      },
+    });
+    function unwrappedPluginBlocker() {
+      const until = performance.now() + 200;
+      while (performance.now() < until) Math.sqrt(performance.now());
+    }
+    function shortHeartbeat() {
+      return 1;
+    }
+    try {
+      await delay(40);
+      unwrappedPluginBlocker();
+      shortHeartbeat();
+      await delay(40);
+      await monitor.stop();
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            stallAttribution: "sampled",
+            stacks: expect.arrayContaining([
+              expect.objectContaining({
+                frames: expect.arrayContaining([
+                  expect.objectContaining({
+                    functionName: "unwrappedPluginBlocker",
+                  }),
+                ]),
+                sampledMs: expect.any(Number),
+              }),
+            ]),
+          }),
+        ]),
+      );
+      const files = await readdir(join(dataDir, "logs", "performance"));
+      expect(files).toHaveLength(1);
+      expect(files[0]).toMatch(/\.cpuprofile$/);
+      expect(warnings).toEqual([]);
+      expect(JSON.stringify(records)).not.toContain(
+        '"functionName":"shortHeartbeat"',
+      );
+    } finally {
+      await monitor.stop();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rotates bounded main-thread windows and ignores unrelated console captures", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "bb-perf-rotation-"));
+    const savedPaths: string[] = [];
+    const warnings: unknown[] = [];
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const monitor = await startPerformanceDiagnostics({
+      dataDir,
+      logger: {
+        info: (fields, message) => {
+          if (
+            message === "Server CPU profile saved" &&
+            "path" in fields &&
+            typeof fields.path === "string"
+          )
+            savedPaths.push(fields.path);
+        },
+        warn: (fields) => {
+          warnings.push(fields);
+        },
+      },
+    });
+    try {
+      for (let window = 1; window <= 2; window++) {
+        inspectorConsole.profile("unrelated-user-capture");
+        const until = performance.now() + 40;
+        while (performance.now() < until) Math.sqrt(performance.now());
+        inspectorConsole.profileEnd("unrelated-user-capture");
+        await vi.advanceTimersByTimeAsync(30_000);
+        const deadline = Date.now() + 5_000;
+        while (savedPaths.length < window && Date.now() < deadline)
+          await delay(10);
+        expect(savedPaths).toHaveLength(window);
+      }
+      await Promise.all([monitor.stop(), monitor.stop()]);
+      expect(savedPaths).toHaveLength(3);
+      const profiles = await Promise.all(
+        savedPaths.map(async (path) =>
+          JSON.parse(await readFile(path, "utf8")),
+        ),
+      );
+      for (const profile of profiles) {
+        expect(profile.nodes.length).toBeGreaterThan(0);
+        expect(profile.endTime).toBeGreaterThan(profile.startTime);
+      }
+      expect(profiles[0].samples.length).toBeGreaterThan(0);
+      expect(profiles[1].samples.length).toBeGreaterThan(0);
+      expect(profiles[1].startTime).toBeLessThanOrEqual(profiles[0].endTime);
+      expect(profiles[2].startTime).toBeLessThanOrEqual(profiles[1].endTime);
+      expect(profiles[1].startTime).toBeGreaterThan(profiles[0].startTime);
+      expect(profiles[2].startTime).toBeGreaterThan(profiles[1].startTime);
+      expect(warnings).toEqual([]);
+    } finally {
+      await monitor.stop();
+      vi.useRealTimers();
       await rm(dataDir, { recursive: true, force: true });
     }
   });
@@ -107,6 +236,31 @@ describe("performance diagnostics", () => {
       );
       expect(warnings).toEqual([]);
     } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("stops cleanly when saving a capture fails", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "bb-perf-save-failure-"));
+    const warnings: unknown[] = [];
+    const monitor = await startPerformanceDiagnostics({
+      dataDir,
+      logger: {
+        info: () => {},
+        warn: (fields) => {
+          warnings.push(fields);
+        },
+      },
+    });
+    try {
+      await rm(join(dataDir, "logs", "performance"), {
+        recursive: true,
+        force: true,
+      });
+      await Promise.all([monitor.stop(), monitor.stop()]);
+      expect(warnings).toHaveLength(1);
+    } finally {
+      await monitor.stop();
       await rm(dataDir, { recursive: true, force: true });
     }
   });

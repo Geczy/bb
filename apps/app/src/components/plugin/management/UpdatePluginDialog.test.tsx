@@ -1,3 +1,4 @@
+import { pluginUpdateJobsQueryKey } from "@/hooks/queries/query-keys";
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -32,19 +33,20 @@ function plugin(updateState: Partial<PluginUpdateState>): PluginListItem {
   });
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
 const queryClients: QueryClient[] = [];
 
 function createDialogTestHarness() {
   const harness = createQueryClientTestHarness();
   queryClients.push(harness.queryClient);
-  return harness;
+  const Wrapper = harness.wrapper;
+  return {
+    ...harness,
+    wrapper: ({ children }: { children: import("react").ReactNode }) => (
+      <MemoryRouter>
+        <Wrapper>{children}</Wrapper>
+      </MemoryRouter>
+    ),
+  };
 }
 
 afterEach(async () => {
@@ -58,6 +60,7 @@ afterEach(async () => {
   } finally {
     for (const client of queryClients.splice(0)) client.clear();
     resetNotificationStore();
+    sessionStorage.clear();
     vi.unstubAllGlobals();
   }
 });
@@ -119,12 +122,18 @@ describe("UpdatePluginDialog", () => {
 
   it("opens persisted failure details and retries an available update", async () => {
     const fetchMock = vi.fn(async () =>
-      jsonResponse({
-        applied: true,
-        from: { version: "1.6.2", display: "1.6.2" },
-        to: { version: "1.8.0", display: "1.8.0" },
-        outcome: "updated",
-      }),
+      Response.json(
+        {
+          job: {
+            id: "update-1",
+            pluginId: "linear",
+            displayName: "Linear",
+            state: "running",
+            phase: "preparing",
+          },
+        },
+        { status: 202 },
+      ),
     );
     vi.stubGlobal("fetch", fetchMock);
     const onOpenChange = vi.fn();
@@ -185,45 +194,43 @@ describe("UpdatePluginDialog", () => {
     expect(screen.queryByRole("button", { name: /Retry update/ })).toBeNull();
   });
 
-  it("renders a rolled-back outcome pointing at the canonical failure state", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        jsonResponse({
-          applied: false,
-          from: { version: "1.6.2", display: "1.6.2" },
-          to: { version: "1.7.0", display: "1.7.0" },
-          outcome: "rolled-back",
-          detail: "factory threw during activation",
-        }),
-      ),
+  it("closes on job acceptance without waiting for the update to finish", async () => {
+    const job = {
+      id: "update-1",
+      pluginId: "linear",
+      displayName: "Linear",
+      state: "running",
+      phase: "checking",
+    };
+    const fetchMock = vi.fn(async () =>
+      Response.json({ job }, { status: 202 }),
     );
-    const { wrapper } = createDialogTestHarness();
+    vi.stubGlobal("fetch", fetchMock);
+    const { wrapper, queryClient } = createDialogTestHarness();
+    const onOpenChange = vi.fn();
     render(
       <UpdatePluginDialog
         plugin={plugin({ availableVersion: "1.7.0" })}
         open
-        onOpenChange={() => {}}
+        onOpenChange={onOpenChange}
       />,
       { wrapper },
     );
-
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
-
-    expect(await screen.findByText("Update failed")).toBeTruthy();
-    expect(screen.getByText("factory threw during activation")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "The plugin is marked “Update failed” in the installed list until an update succeeds.",
-      ),
-    ).toBeTruthy();
+    await vi.waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+    expect(queryClient.getQueryData(pluginUpdateJobsQueryKey())).toEqual([job]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getNotifications()).toHaveLength(0);
   });
 
   it("records one alert when an update request fails", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        jsonResponse({ error: "plugin source is unavailable" }, 502),
+        Response.json(
+          { error: "plugin source is unavailable" },
+          { status: 502 },
+        ),
       ),
     );
     const { wrapper } = createDialogTestHarness();
@@ -244,19 +251,15 @@ describe("UpdatePluginDialog", () => {
     const notification = getNotifications()[0];
     expect(notification?.title).toBe("Plugin update failed");
 
-    render(<MemoryRouter>{notification?.description}</MemoryRouter>);
-    expect(
-      screen.getByRole("link", { name: "Linear" }).getAttribute("href"),
-    ).toBe("/settings/plugins/linear?view=installed");
-    expect(
-      screen.getByRole("link", { name: "Linear" }).parentElement?.textContent,
-    ).toBe("Linear — plugin source is unavailable");
+    expect(notification?.description).toBe(
+      "Linear — plugin source is unavailable",
+    );
   });
 
   it("treats a malformed 2xx update response as an error, never success", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse({ status: "ok" })),
+      vi.fn(async () => Response.json({ status: "ok" })),
     );
     const { wrapper } = createDialogTestHarness();
     render(

@@ -128,12 +128,20 @@ export interface PluginCatalogService {
     selector: PluginCatalogEntrySelector,
   ): Promise<PluginCatalogInstallPlan>;
   install(input: PluginCatalogInstallInput): Promise<InstalledPlugin>;
+  describeEntry(selector: PluginCatalogEntrySelector): {
+    entryId: string;
+    marketplace: string;
+    displayName: string;
+  };
   icon(
     marketplace: string,
     entryId: string,
   ): Promise<PluginCatalogIcon | undefined>;
   listMarketplaces(): PluginMarketplace[];
-  addMarketplace(source: string): Promise<PluginMarketplace>;
+  addMarketplace(input: {
+    source: string;
+    subdirectory: string | null;
+  }): Promise<PluginMarketplace>;
   removeMarketplace(name: string): Promise<{ convertedPluginIds: string[] }>;
   startPeriodicRefresh(): void;
   stopPeriodicRefresh(): void;
@@ -204,6 +212,7 @@ export function createPluginCatalogService(deps: {
       sourceKind: "path",
       manifestUrl: bundled.directory,
       sourceGitRef: null,
+      sourceGitSubdirectory: null,
       sourceGitCommit: null,
       manifestJson: bundled.manifestJson,
       statsJson: null,
@@ -240,6 +249,7 @@ export function createPluginCatalogService(deps: {
             sourceKind: "https",
             manifestUrl: curatedManifestUrls.primary,
             sourceGitRef: null,
+            sourceGitSubdirectory: null,
             sourceGitCommit: null,
             manifestJson: existing.manifestJson,
             statsJson: existing.statsJson,
@@ -262,6 +272,7 @@ export function createPluginCatalogService(deps: {
       sourceKind: "https",
       manifestUrl: curatedManifestUrls.primary,
       sourceGitRef: null,
+      sourceGitSubdirectory: null,
       sourceGitCommit: null,
       manifestJson: JSON.stringify(BUNDLED_CURATED_MARKETPLACE),
       statsJson: existing?.statsJson ?? null,
@@ -305,6 +316,7 @@ export function createPluginCatalogService(deps: {
       official: isReservedMarketplace(row.name),
       sourceKind: row.sourceKind,
       source: marketplaceSourceDisplay(marketplaceSourceFromRow(row)),
+      subdirectory: row.sourceGitSubdirectory,
       resolvedCommit: row.sourceGitCommit,
       entryCount: catalog?.plugins.length ?? 0,
       lastRefreshAt: row.lastSuccessfulRefreshAt,
@@ -1013,9 +1025,9 @@ export function createPluginCatalogService(deps: {
       return [...reservedCollections.categories];
     },
 
-    async addMarketplace(rawSource) {
+    async addMarketplace(input) {
       return withLock(ADD_LOCK_KEY, async () => {
-        const source = parseMarketplaceSource(rawSource);
+        const source = parseMarketplaceSource(input.source, input.subdirectory);
         if (source.kind === "git") await prepareMarketplaceStaging();
         const materialized = await materializeMarketplace({
           source,
@@ -1228,6 +1240,15 @@ export function createPluginCatalogService(deps: {
       };
     },
 
+    describeEntry(selector) {
+      const { row, entry } = resolveEntry(selector);
+      return {
+        entryId: bundledRegistration(entry)?.name ?? entry.id,
+        marketplace: row.name,
+        displayName: entry.displayName,
+      };
+    },
+
     async install(input) {
       const resolved = resolveEntry(input);
       return withLock(resolved.row.name, async () => {
@@ -1333,7 +1354,10 @@ function installedPluginMayComeFromEntry(
 }
 
 function gitRepositoryKey(url: string): string {
-  return url.replace(/\/+$/u, "").replace(/\.git$/u, "").toLowerCase();
+  return url
+    .replace(/\/+$/u, "")
+    .replace(/\.git$/u, "")
+    .toLowerCase();
 }
 
 function catalogEntryKey(marketplace: string, entryId: string): string {
