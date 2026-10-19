@@ -43,7 +43,21 @@ export const commentThreadSchema = z
   })
   .strict();
 export const commentsFileSchema = z
-  .object({ version: z.literal(1), threads: z.array(commentThreadSchema) })
+  .object({
+    version: z.literal(1),
+    threads: z.array(commentThreadSchema),
+    attached: z
+      .array(
+        z
+          .object({
+            path: z.string().min(1),
+            at: z.iso.datetime(),
+            threads: z.array(z.string().min(1)),
+          })
+          .strict(),
+      )
+      .optional(),
+  })
   .strict();
 export const resolvedAnchorSchema = z
   .object({

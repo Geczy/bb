@@ -170,7 +170,7 @@ export function saveMarkdownBlocks(
       parts.push({ text: serialize(edited).replace(/\n+$/, "") });
     edited = [];
   };
-  for (let index = 0; index < children.length; ) {
+  for (let index = 0; index < children.length;) {
     const block = owner.get(children[index]!);
     const nodes = block === undefined ? [] : blocks[block]!.nodes;
     if (

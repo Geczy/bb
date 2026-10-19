@@ -159,6 +159,8 @@ text**. Docs moves and renames carry comments; external moves, and documents
 deleted by `bb docs push --delete`, leave them stranded or in the vault's
 orphan area. `--folder` lists those comment files (`.` means vault root);
 attach one to the right document with `comments attach --from <sidecar-path>`.
+Attach copies comments forward and leaves the source file in place with an
+`attached` record; later changes to that source list it again.
 
 Use visible text, without Markdown syntax or frontmatter, for `--quote`.
 Repeated quotes fail with `ambiguous_quote` and occurrence numbers with source

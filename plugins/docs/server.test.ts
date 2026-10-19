@@ -12,6 +12,7 @@ import { z } from "zod";
 import simpleNotes from "./server";
 import { commentsFileSchema, commentsListSchema } from "./comments.js";
 import { visibleMarkdown } from "./comment-text.js";
+import { fullyAttached } from "./comments-service.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -1996,7 +1997,10 @@ describe("Docs comment lifecycle", () => {
           },
         ],
       });
-      expect(host.files.has(`/vault/${orphan.sidecarPath}`)).toBe(false);
+      expect(host.files.has(`/vault/${orphan.sidecarPath}`)).toBe(true);
+      expect(
+        (await folder(host)).map((item) => item.sidecarPath),
+      ).not.toContain(orphan.sidecarPath);
     } finally {
       await host.harness.lifecycle.dispose();
     }
@@ -2255,52 +2259,142 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
-  it("never deletes a source write that lands during attach", async () => {
+  it("keeps a source edit that lands during attach and re-lists later source writes", async () => {
     const content = "# Plan\n\nShip tomorrow.";
+    const sourcePath = "/vault/notes/.bb-comments/source.md.json";
     const host = await loadVirtualSyncVault({
       "/vault/notes/source.md": doc(content),
       "/vault/notes/copy.md": doc(content),
     });
+    const editSource = (
+      edit: (data: z.infer<typeof commentsFileSchema>) => void,
+    ) => {
+      const data = commentsFileSchema.parse(
+        JSON.parse(host.files.get(sourcePath)!.content),
+      );
+      edit(data);
+      host.setUtf8(sourcePath, JSON.stringify(data));
+    };
     try {
       await host.harness.behavior.callRpc("addComment", {
         path: "notes/source.md",
         quote: "tomorrow",
-        body: "Before attach",
+        body: "ORIGINAL",
       });
       host.files.delete("/vault/notes/source.md");
-      const late = JSON.stringify({
-        version: 1,
-        threads: [
-          {
-            ...commentsFileSchema.parse(
-              JSON.parse(
-                host.files.get("/vault/notes/.bb-comments/source.md.json")!
-                  .content,
-              ),
-            ).threads[0]!,
-            id: "c_late",
-          },
-        ],
-      });
       host.beforeNextWrite((written) => {
         if (written === "/vault/notes/.bb-comments/copy.md.json")
-          host.setUtf8("/vault/notes/.bb-comments/source.md.json", late);
+          editSource((data) => {
+            data.threads[0]!.messages[0]!.body = "CHANGED!";
+          });
       });
-      await host.harness.behavior.callRpc("attachComments", {
-        path: "notes/copy.md",
-        sidecarPath: "notes/.bb-comments/source.md.json",
-      });
+      await host.harness.behavior.runCli([
+        "comments",
+        "attach",
+        "notes/copy.md",
+        "--from",
+        "notes/.bb-comments/source.md.json",
+      ]);
+      const source = commentsFileSchema.parse(
+        JSON.parse(host.files.get(sourcePath)!.content),
+      );
+      expect(source.threads[0]!.messages[0]!.body).toBe("CHANGED!");
+      expect(source.attached).toHaveLength(1);
       expect(
-        host.files.get("/vault/notes/.bb-comments/source.md.json")?.content,
-      ).toBe(late);
-      expect(await listed(host, "notes/copy.md")).toMatchObject({
-        threads: [{ messages: [{ body: "Before attach" }] }],
+        (await listed(host, "notes/copy.md")).threads.map(
+          (thread) => thread.messages[0]!.body,
+        ),
+      ).toEqual(["ORIGINAL", "CHANGED!"]);
+      expect(await folder(host)).toEqual([]);
+
+      editSource((data) => {
+        data.threads[0]!.messages.push({
+          id: "m_late",
+          author: { kind: "user", name: "You" },
+          body: "Written after attach",
+          createdAt: "2026-10-19T03:00:00.000Z",
+          editedAt: null,
+          sentTo: [],
+        });
       });
-      expect(
-        [...host.files.keys()].filter((entry) => entry.includes(".attaching-")),
-      ).toEqual([]);
+      expect(await folder(host)).toEqual([
+        {
+          path: "notes/source.md",
+          sidecarPath: "notes/.bb-comments/source.md.json",
+        },
+      ]);
     } finally {
       await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("never loses a reply when attaches and source writes interleave", async () => {
+    const content = "# Plan\n\nShip tomorrow.";
+    const sourcePath = "/vault/notes/.bb-comments/source.md.json";
+    for (let round = 0; round < 12; round++) {
+      const host = await loadVirtualSyncVault({
+        "/vault/notes/source.md": doc(content),
+        "/vault/notes/one.md": doc(content),
+        "/vault/notes/two.md": doc(content),
+      });
+      try {
+        await host.harness.behavior.callRpc("addComment", {
+          path: "notes/source.md",
+          quote: "tomorrow",
+          body: "Root",
+        });
+        host.files.delete("/vault/notes/source.md");
+        const written: string[] = [];
+        const writer = (async () => {
+          for (let index = 0; index < 4; index++) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, (round * 7 + index * 3) % 4),
+            );
+            const data = commentsFileSchema.parse(
+              JSON.parse(host.files.get(sourcePath)!.content),
+            );
+            const body = `Reply ${round}-${index}`;
+            data.threads[0]!.messages.push({
+              id: `m_${round}_${index}`,
+              author: { kind: "user", name: "You" },
+              body,
+              createdAt: `2026-10-19T04:00:0${index}.000Z`,
+              editedAt: null,
+              sentTo: [],
+            });
+            host.setUtf8(sourcePath, JSON.stringify(data));
+            written.push(body);
+          }
+        })();
+        const attach = (target: string) =>
+          host.harness.behavior.callRpc("attachComments", {
+            path: target,
+            sidecarPath: "notes/.bb-comments/source.md.json",
+          });
+        await Promise.all([
+          writer,
+          attach("notes/one.md"),
+          attach("notes/two.md"),
+        ]);
+        const bodies = new Set(
+          [
+            sourcePath,
+            "/vault/notes/.bb-comments/one.md.json",
+            "/vault/notes/.bb-comments/two.md.json",
+          ].flatMap((file) =>
+            commentsFileSchema
+              .parse(JSON.parse(host.files.get(file)!.content))
+              .threads.flatMap((thread) =>
+                thread.messages.map((message) => message.body),
+              ),
+          ),
+        );
+        for (const body of ["Root", ...written]) expect(bodies).toContain(body);
+        const source = host.files.get(sourcePath)!.content;
+        expect((await folder(host)).length).toBe(fullyAttached(source) ? 0 : 1);
+      } finally {
+        await host.harness.lifecycle.dispose();
+      }
     }
   });
 

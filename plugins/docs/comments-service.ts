@@ -1,5 +1,5 @@
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { PluginCliError, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
@@ -121,6 +121,22 @@ export function commentSidecar(file: string): string {
 }
 function isMissing(error: unknown): boolean {
   return /\bENOENT\b|path does not exist|not found/i.test(String(error));
+}
+export function threadFingerprint(thread: CommentThread): string {
+  return createHash("sha256").update(JSON.stringify(thread)).digest("hex");
+}
+export function fullyAttached(content: string): boolean {
+  try {
+    const saved = commentsFileSchema.parse(JSON.parse(content));
+    const attached = new Set(
+      (saved.attached ?? []).flatMap((entry) => entry.threads),
+    );
+    return saved.threads.every((thread) =>
+      attached.has(threadFingerprint(thread)),
+    );
+  } catch {
+    return false;
+  }
 }
 function threadState(thread: CommentThread): string {
   return JSON.stringify([thread.resolvedAt, thread.resolvedBy]);
