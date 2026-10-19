@@ -7,7 +7,7 @@ const parser = new MarkdownIt({ html: true, linkify: true });
 export function visibleMarkdown(content: string): VisibleDocument {
   const { body, frontmatter } = parseMarkdownDocument(content);
   const offset = (frontmatter.match(/\n/g) ?? []).length;
-  const blocks: { text: string; line: number }[] = [];
+  const blocks: { text: string; line: number; lines?: number[] }[] = [];
   let sourceLine = 0;
   let listItems = 0;
   let itemStart = false;
@@ -24,22 +24,39 @@ export function visibleMarkdown(content: string): VisibleDocument {
       const children = token.children ?? [];
       const rendered = renderedTags(children);
       let text = "";
+      const lines: number[] = [];
+      let current = line;
+      const add = (value: string) => {
+        for (const character of value) {
+          text += character;
+          for (let unit = 0; unit < character.length; unit++)
+            lines.push(current);
+          if (character === "\n") current++;
+        }
+      };
       children.forEach((child, position) => {
-        if (["text", "code_inline"].includes(child.type)) text += child.content;
-        else if (child.type === "image") text += "\ufffc";
-        else if (child.type === "softbreak") text += " ";
-        else if (child.type === "hardbreak") text += "\n";
+        if (["text", "code_inline"].includes(child.type)) add(child.content);
+        else if (child.type === "image") add("\ufffc");
+        else if (child.type === "softbreak") {
+          add(" ");
+          current++;
+        } else if (child.type === "hardbreak") add("\n");
         else if (child.type === "html_inline")
-          text += rendered.has(position)
-            ? /^<br/i.test(child.content)
-              ? "\n"
-              : ""
-            : child.content;
+          add(
+            rendered.has(position)
+              ? /^<br/i.test(child.content)
+                ? "\n"
+                : ""
+              : child.content,
+          );
       });
-      if (listItems && itemStart) text = text.replace(/^\[[ xX]\] /, "");
+      if (listItems && itemStart && /^\[[ xX]\] /.test(text)) {
+        text = text.slice(4);
+        lines.splice(0, 4);
+      }
       itemStart = false;
-      if (/^::html\{/.test(text)) text = "\ufffc";
-      blocks.push({ text, line });
+      if (/^::html\{/.test(text)) blocks.push({ text: "\ufffc", line });
+      else blocks.push({ text, line, lines });
     } else if (token.type === "fence" || token.type === "code_block") {
       blocks.push({
         text: token.content.replace(/\n$/, ""),
@@ -63,10 +80,13 @@ export function visibleMarkdown(content: string): VisibleDocument {
       lines.push(block.line, block.line);
     }
     text += block.text;
-    let line = block.line;
-    for (let i = 0; i < block.text.length; i++) {
-      lines.push(line);
-      if (block.text[i] === "\n") line++;
+    if (block.lines) lines.push(...block.lines);
+    else {
+      let line = block.line;
+      for (let i = 0; i < block.text.length; i++) {
+        lines.push(line);
+        if (block.text[i] === "\n") line++;
+      }
     }
   });
   return { text, lines };

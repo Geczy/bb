@@ -1878,10 +1878,33 @@ export default async function plugin(
     };
   }
 
+  async function listObserved(
+    input: CommentTarget & { status?: "open" | "resolved" | "all" },
+  ) {
+    try {
+      return await lockedList(input);
+    } catch (error) {
+      if (!input.source && isMissingFileError(error))
+        await orphanMissingDocuments(getVault(input.vaultId)).catch((failure) =>
+          bb.log.warn(`could not preserve comments: ${errorMessage(failure)}`),
+        );
+      throw error;
+    }
+  }
+
+  function commentsChanged(vaultId: string, documentPath: string) {
+    bb.realtime.publish("comments-changed", {
+      vaultId,
+      path: documentPath,
+      source: null,
+    });
+  }
+
   async function leaveComments(input: { vaultId?: string; path: string }) {
     const vault = getVault(input.vaultId);
     const relativePath = requireVaultPath(input.path, { extension: ".md" });
     await serializeDocument(vault.id, () => orphanSidecar(vault, relativePath));
+    commentsChanged(vault.id, relativePath);
     return lockedList({ vaultId: vault.id, path: relativePath });
   }
 
@@ -2080,8 +2103,10 @@ export default async function plugin(
     if (!missing.length) return;
     await serializeDocument(vault.id, async () => {
       for (const documentPath of missing)
-        if (!(await readExistingFile(vault, documentPath)))
+        if (!(await readExistingFile(vault, documentPath))) {
           await orphanSidecar(vault, documentPath);
+          commentsChanged(vault.id, documentPath);
+        }
     });
   }
 
@@ -2144,17 +2169,10 @@ export default async function plugin(
         path: absolutePath(vault, sidecarPath),
         rootPath: vault.rootPath,
       });
+      commentsChanged(vault.id, sidecarDocument(sidecarPath)!.path);
       return { ok: true as const };
     },
-    async listComments(input) {
-      try {
-        return await lockedList(input);
-      } catch (error) {
-        if (!input.source && isMissingFileError(error))
-          await orphanMissingDocuments(getVault(input.vaultId));
-        throw error;
-      }
-    },
+    listComments: (input) => listObserved(input),
     addComment: (input) => comments.add(input, comments.user),
     replyComment: (input) => comments.reply(input, comments.user),
     setCommentStatus: (input) => comments.status(input, comments.user),
@@ -3578,7 +3596,7 @@ export default async function plugin(
                 };
               }
               return commentOutput(
-                await lockedList({
+                await listObserved({
                   ...commentTarget(input),
                   status: z
                     .enum(["open", "resolved", "all"])

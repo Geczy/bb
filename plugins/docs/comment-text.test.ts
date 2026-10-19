@@ -299,4 +299,90 @@ describe("visible comment text", () => {
       ),
     ).toBe("Target here.");
   });
+  const production = (markdown: string) => {
+    editor = new Editor({
+      extensions: [
+        StarterKit,
+        Link.configure({ openOnClick: false, autolink: true }),
+        Image,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        HtmlBlock,
+        HtmlSource,
+        createCommentHighlights(),
+        Markdown.configure({
+          html: true,
+          tightLists: true,
+          bulletListMarker: "-",
+          linkify: true,
+        }),
+      ],
+      content: "",
+    });
+    loadMarkdownBlocks(editor, markdown, (source) => source, false);
+    return editor;
+  };
+  const storedThread = (markdown: string, quote: string) => {
+    const text = visibleMarkdown(markdown).text;
+    const start = text.lastIndexOf(quote);
+    return {
+      id: "c_1",
+      status: "open" as const,
+      resolvedAt: null,
+      resolvedBy: null,
+      messages: [
+        {
+          id: "c_1",
+          author: { kind: "user" as const, name: "You" },
+          body: "Here",
+          createdAt: "2026-10-19T00:00:00.000Z",
+          editedAt: null,
+          sentTo: [],
+        },
+      ],
+      anchor: {
+        state: "anchored" as const,
+        quote,
+        start,
+        end: start + quote.length,
+        line: 1,
+      },
+    };
+  };
+  it.each([
+    [
+      "# Plan\n\n1. [x] Ordered item\n2. Next item\n\nTarget here.",
+      "Target here.",
+    ],
+    ["# Plan\n\nBefore ![cat](cat.png) after\n\nTarget here.", "after"],
+    ["# Plan\n\n- item ![a](x.png) tail\n\nTarget here.", "Target here."],
+  ])("maps stored offsets onto the editor for %j", (markdown, quote) => {
+    const doc = production(markdown).state.doc;
+    expect(
+      threadRanges(doc, [storedThread(markdown, quote)], null, markdown).map(
+        (range) => doc.textBetween(range.from, range.to),
+      ),
+    ).toEqual([quote]);
+  });
+  it.each([
+    "# Plan\n\n![cat](cat.png)\n\nAfter.",
+    "# Plan\n\nIntro\n\n---\n\nAfter.",
+  ])("visibly marks a whole block atom comment in %j", (markdown) => {
+    const live = production(markdown);
+    const ranges = threadRanges(
+      live.state.doc,
+      [storedThread(markdown, "\ufffc")],
+      null,
+      markdown,
+    );
+    expect(ranges).toHaveLength(1);
+    live.view.dispatch(
+      live.state.tr.setMeta(commentHighlightKey, { ranges, active: null }),
+    );
+    expect(
+      live.view.dom.querySelector(
+        "img.docs-comment-highlight, hr.docs-comment-highlight",
+      ),
+    ).toBeTruthy();
+  });
 });

@@ -16,6 +16,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { docsRpcContract } from "./server.js";
 import type { CommentTarget } from "./comments-service.js";
+import { visibleMarkdown } from "./comment-text.js";
 import {
   commentMentions,
   exactOccurrences,
@@ -28,7 +29,9 @@ import {
 } from "./comments.js";
 import {
   commentHighlightKey,
+  alignOffsets,
   commentRanges,
+  mapRange,
   visibleEditor,
   highlightRanges,
 } from "./comment-editor.js";
@@ -772,6 +775,7 @@ export function CommentsSurface({
   flush,
   reload,
   proposalBase,
+  savedContent,
   dirty,
   children,
 }: {
@@ -781,6 +785,7 @@ export function CommentsSurface({
   flush(): Promise<void>;
   reload(): Promise<void>;
   proposalBase: string | null;
+  savedContent: string;
   dirty: boolean;
   children: ReactNode;
 }) {
@@ -826,6 +831,10 @@ export function CommentsSurface({
     request.current++;
   }, []);
   const savedSha = useRef(sha256);
+  const savedContentRef = useRef(savedContent);
+  savedContentRef.current = savedContent;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
   const [persistedSha, setPersistedSha] = useState(sha256);
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -1001,9 +1010,25 @@ export function CommentsSurface({
       }
       const bounds = root.current?.getBoundingClientRect();
       const coords = editor.view.coordsAtPos(to);
+      const stored = dirtyRef.current
+        ? null
+        : visibleMarkdown(savedContentRef.current).text;
+      const mapped =
+        stored === null
+          ? null
+          : mapRange(
+              visible.text,
+              stored,
+              alignOffsets(visible.text, stored),
+              start,
+              start + quote.length,
+            );
       setSelection({
         quote,
-        occurrence: exactOccurrences(visible.text, quote).indexOf(start) + 1,
+        occurrence:
+          stored !== null && mapped
+            ? exactOccurrences(stored, quote).indexOf(mapped.start) + 1
+            : exactOccurrences(visible.text, quote).indexOf(start) + 1,
         from,
         to,
         top:
@@ -1073,6 +1098,7 @@ export function CommentsSurface({
       data.threads,
       proposalBase,
       !dirty && data.documentSha256 === sha256 && persistedSha === sha256,
+      savedContentRef.current,
     );
     editor.view.dispatch(
       editor.state.tr.setMeta(commentHighlightKey, {
@@ -1106,6 +1132,8 @@ export function CommentsSurface({
       return;
     }
     const visible = visibleEditor(editor.state.doc);
+    const stored = visibleMarkdown(savedContentRef.current).text;
+    const map = alignOffsets(visible.text, stored);
     const anchors = commentRanges(editor.state.doc, decorations).flatMap(
       (range) => {
         const start = visible.positions.indexOf(range.from);
@@ -1113,14 +1141,18 @@ export function CommentsSurface({
           (position) => position >= range.to,
         );
         if (end < 0) end = visible.text.length;
-        return start < 0 || end <= start
-          ? []
-          : [
+        const mapped =
+          start < 0 || end <= start
+            ? null
+            : mapRange(visible.text, stored, map, start, end);
+        return mapped
+          ? [
               {
                 id: range.id,
-                anchor: makeAnchor(visible.text, start, end, sha256),
+                anchor: makeAnchor(stored, mapped.start, mapped.end, sha256),
               },
-            ];
+            ]
+          : [];
       },
     );
     if (anchors.length)
@@ -1240,6 +1272,7 @@ export function CommentsSurface({
         <style>{`
       .bb-docs-comment-surface .bb-simple-notes-editor { overflow: visible; }
       .docs-comment-highlight { background: color-mix(in oklab, var(--warning) 16%, transparent); border-bottom: 2px solid color-mix(in oklab, var(--warning) 50%, transparent); cursor:pointer; }
+      img.docs-comment-highlight, hr.docs-comment-highlight { outline: 2px solid color-mix(in oklab, var(--warning) 50%, transparent); outline-offset: 2px; }
       .docs-comment-highlight[data-active="true"] { background:color-mix(in oklab,var(--warning) 34%,transparent); border-bottom-color:var(--warning); }
     `}</style>
         <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">

@@ -58,4 +58,20 @@ describe("comment anchors", () => {
       end: 10,
     });
   });
+  it("projects hostile unmatched tags in linear time with literal text", () => {
+    const markdown = `before ${"<b>".repeat(40_000)}target`;
+    const started = performance.now();
+    const result = visibleMarkdown(markdown);
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(result.text).toBe(markdown);
+    expect(visibleMarkdown("A <b>one <b>two</b> three</b> <b>open").text).toBe(
+      "A one two three <b>open",
+    );
+  });
+  it("reports the source line of text after a soft break", () => {
+    const result = visibleMarkdown("# Softbreak\n\nFirst line\nSecond target.");
+    expect(result.text).toBe("Softbreak\n\nFirst line Second target.");
+    expect(result.lines[result.text.indexOf("target")]).toBe(4);
+    expect(result.lines[result.text.indexOf("First")]).toBe(3);
+  });
 });

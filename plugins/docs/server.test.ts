@@ -2628,6 +2628,77 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
+  it("signals other panes when comments are left or deleted without a visible change", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+    });
+    try {
+      await comment(host, "plan.md", "tomorrow", "Leave me");
+      const signals = () =>
+        host.harness.realtimeSignals.filter(
+          (signal) => signal.channel === "comments-changed",
+        ).length;
+      const before = signals();
+      await host.harness.behavior.callRpc("leaveComments", { path: "plan.md" });
+      expect(signals()).toBe(before + 1);
+      const [orphan] = await folder(host);
+      await host.harness.behavior.callRpc("deleteOrphanedComments", {
+        sidecarPath: orphan!.sidecarPath,
+      });
+      expect(signals()).toBe(before + 2);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("preserves comments when the CLI observes a missing document", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+    });
+    try {
+      const commentId = await comment(host, "plan.md", "tomorrow", "Old");
+      host.files.delete("/vault/plan.md");
+      const listedByCli = await host.harness.behavior.runCli([
+        "comments",
+        "list",
+        "plan.md",
+      ]);
+      expect(listedByCli.exitCode).not.toBe(0);
+      expect(host.files.has("/vault/.bb-comments/plan.md.json")).toBe(false);
+      host.setUtf8("/vault/plan.md", "# New\n\nDifferent bytes.");
+      expect(await listed(host, "plan.md")).toMatchObject({
+        threads: [],
+        outsideChange: 0,
+      });
+      const [orphan] = await folder(host);
+      expect(await readFile(host, orphan!.sidecarPath)).toContain(commentId);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("reports the original missing-document error when preserving comments fails", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+    });
+    try {
+      await comment(host, "plan.md", "tomorrow", "Keep");
+      const sidecar = host.files.get(
+        "/vault/.bb-comments/plan.md.json",
+      )!.content;
+      host.files.delete("/vault/plan.md");
+      host.failNextMoveTo("/.bb-comments/orphaned/");
+      await expect(
+        host.harness.behavior.callRpc("listComments", { path: "plan.md" }),
+      ).rejects.toThrow("ENOENT");
+      expect(host.files.get("/vault/.bb-comments/plan.md.json")?.content).toBe(
+        sidecar,
+      );
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("moves stranded comments aside when a Docs move reuses their path", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),

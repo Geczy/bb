@@ -35,14 +35,47 @@ export function visibleEditor(doc: Node): {
   });
   return { text, positions };
 }
+export function alignOffsets(from: string, to: string): Int32Array {
+  const map = new Int32Array(from.length).fill(-1);
+  let i = 0;
+  let j = 0;
+  while (i < from.length && j < to.length) {
+    if (from[i] === to[j]) map[i++] = j++;
+    else if (/\s/.test(from[i]!)) i++;
+    else if (/\s/.test(to[j]!)) j++;
+    else break;
+  }
+  return map;
+}
+export function mapRange(
+  from: string,
+  to: string,
+  map: Int32Array,
+  start: number,
+  end: number,
+): { start: number; end: number } | null {
+  const first = map[start];
+  const last = map[end - 1];
+  if (first === undefined || last === undefined || first < 0 || last < first)
+    return null;
+  return to.slice(first, last + 1) === from.slice(start, end)
+    ? { start: first, end: last + 1 }
+    : null;
+}
 export function threadRanges(
   doc: Node,
   threads: ListedComment[],
   proposalBase: string | null,
+  savedContent: string | null = null,
 ): CommentRange[] {
   const visible = visibleEditor(doc);
   const saved =
     proposalBase === null ? null : visibleMarkdown(proposalBase).text;
+  const stored =
+    saved === null && savedContent !== null
+      ? visibleMarkdown(savedContent).text
+      : null;
+  const map = stored === null ? null : alignOffsets(stored, visible.text);
   const ranges: CommentRange[] = [];
   for (const thread of threads) {
     let { start, end } = thread.anchor;
@@ -53,7 +86,14 @@ export function threadRanges(
         "",
         makeAnchor(saved, start, end, "saved"),
       ));
-    else if (visible.text.slice(start, end) !== thread.anchor.quote) continue;
+    else if (stored !== null && map !== null) {
+      const mapped =
+        stored.slice(start, end) === thread.anchor.quote
+          ? mapRange(stored, visible.text, map, start, end)
+          : null;
+      if (!mapped) continue;
+      ({ start, end } = mapped);
+    } else if (visible.text.slice(start, end) !== thread.anchor.quote) continue;
     if (start === null || end === null) continue;
     const from = visible.positions[start];
     const to = visible.positions[end - 1];
@@ -68,9 +108,10 @@ export function highlightRanges(
   threads: ListedComment[],
   proposalBase: string | null,
   authoritative: boolean,
+  savedContent: string | null = null,
 ): CommentRange[] {
   if (proposalBase !== null || authoritative)
-    return threadRanges(doc, threads, proposalBase);
+    return threadRanges(doc, threads, proposalBase, savedContent);
   const open = new Set(
     threads.filter((thread) => !thread.resolvedAt).map((thread) => thread.id),
   );
@@ -114,22 +155,25 @@ export function createCommentHighlights() {
                         range.from < range.to &&
                         range.to <= transaction.doc.content.size,
                     )
-                    .map((range) =>
-                      Decoration.inline(
-                        range.from,
-                        range.to,
-                        {
-                          class: "docs-comment-highlight",
-                          "data-comment-id": range.id,
-                          "data-active": String(range.id === update.active),
-                        },
-                        {
-                          id: range.id,
-                          inclusiveStart: false,
-                          inclusiveEnd: false,
-                        },
-                      ),
-                    ),
+                    .map((range) => {
+                      const attrs = {
+                        class: "docs-comment-highlight",
+                        "data-comment-id": range.id,
+                        "data-active": String(range.id === update.active),
+                      };
+                      const node = transaction.doc.nodeAt(range.from);
+                      return node?.isBlock &&
+                        node.isAtom &&
+                        range.to === range.from + node.nodeSize
+                        ? Decoration.node(range.from, range.to, attrs, {
+                            id: range.id,
+                          })
+                        : Decoration.inline(range.from, range.to, attrs, {
+                            id: range.id,
+                            inclusiveStart: false,
+                            inclusiveEnd: false,
+                          });
+                    }),
                 );
               return current.map(transaction.mapping, transaction.doc);
             },

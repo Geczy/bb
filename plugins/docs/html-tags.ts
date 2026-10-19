@@ -29,7 +29,11 @@ export function renderedTags(tokens: InlineToken[]): Set<number> {
           : !attributes
     ) {
       if (tag === "br") rendered.add(index);
-      else open.set(tag, [...(open.get(tag) ?? []), index]);
+      else {
+        const stack = open.get(tag);
+        if (stack) stack.push(index);
+        else open.set(tag, [index]);
+      }
     }
   });
   return rendered;
