@@ -62,7 +62,7 @@ const promptDecorationPluginKey = new PluginKey<PromptDecorationPluginState>(
   "promptDecorations",
 );
 
-type PromptDecorationMeta = "refresh" | "deferred-rebuild" | "focus" | "blur";
+type PromptDecorationMeta = "refresh" | "deferred-rebuild";
 
 export const PROMPT_DECORATION_LARGE_DOC_SIZE = 100_000;
 export const PROMPT_DECORATION_LARGE_DOC_REBUILD_DELAY_MS = 200;
@@ -405,12 +405,7 @@ function promptDecorationMeta(
   transaction: Transaction,
 ): PromptDecorationMeta | null {
   const meta: unknown = transaction.getMeta(promptDecorationPluginKey);
-  return meta === "refresh" ||
-    meta === "deferred-rebuild" ||
-    meta === "focus" ||
-    meta === "blur"
-    ? meta
-    : null;
+  return meta === "refresh" || meta === "deferred-rebuild" ? meta : null;
 }
 
 export function getPromptDecorationSet(
@@ -455,9 +450,9 @@ export const PromptDecorationExtension =
             apply(transaction, previous, _oldState, newState) {
               const meta = promptDecorationMeta(transaction);
               const focused =
-                meta === "focus"
+                transaction.getMeta("focus") !== undefined
                   ? true
-                  : meta === "blur"
+                  : transaction.getMeta("blur") !== undefined
                     ? false
                     : previous.focused;
               const rebuild =
@@ -538,26 +533,6 @@ export const PromptDecorationExtension =
               return (
                 promptDecorationPluginKey.getState(state)?.decorations ?? null
               );
-            },
-            handleDOMEvents: {
-              focus(view) {
-                view.dispatch(
-                  view.state.tr.setMeta(
-                    promptDecorationPluginKey,
-                    "focus" satisfies PromptDecorationMeta,
-                  ),
-                );
-                return false;
-              },
-              blur(view) {
-                view.dispatch(
-                  view.state.tr.setMeta(
-                    promptDecorationPluginKey,
-                    "blur" satisfies PromptDecorationMeta,
-                  ),
-                );
-                return false;
-              },
             },
           },
           view(initialView) {
