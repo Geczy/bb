@@ -66,6 +66,10 @@
     "category": "agents-and-providers",
     "screenshots": []
   },
+  "provider-acp-next": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
   "keep-awake": {
     "category": "utilities",
     "screenshots": []
@@ -96,6 +100,10 @@
   },
   "drafts": {
     "category": "tasks-and-workflows",
+    "screenshots": []
+  },
+  "navigation": {
+    "category": "thread-management",
     "screenshots": []
   },
   "thread-list": {
@@ -171,6 +179,10 @@
   },
   "prompt-library": {
     "category": "memory-and-context",
+    "screenshots": []
+  },
+  "mcp": {
+    "category": "cloud-and-remote",
     "screenshots": []
   },
   "storage-retention": {

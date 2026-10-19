@@ -105,7 +105,7 @@ import {
   type PluginCatalogService,
 } from "./services/plugin-catalog/plugin-catalog-service.js";
 import { callHostRetryableOnlineRpcForWork } from "./services/hosts/online-rpc.js";
-import { requestMatchesEntityTag } from "./services/hosts/daemon-file-response.js";
+import { requestMatchesEntityTag } from "./services/files/entity-tag.js";
 import {
   allowedAppOrigins,
   browserRequestProblem,
@@ -488,6 +488,11 @@ export function createApp(
   };
   const pendingServerMove = serverMoveOptions.pending;
 
+  app.use("*", async (context, next) => {
+    const signal = context.req.raw.signal;
+    await next();
+    if (signal.aborted) await context.res.body?.cancel(signal.reason);
+  });
   app.use("*", async (context, next) => {
     const problem = requestHostProblem(context, deps);
     if (problem !== null) {

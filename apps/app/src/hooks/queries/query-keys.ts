@@ -18,6 +18,7 @@ const HOST_CLONE_DEFAULT_PATH_QUERY_KEY = "hostCloneDefaultPath";
 const PROJECTS_QUERY_KEY = "projects";
 const PROJECT_PATHS_QUERY_KEY = "projectPaths";
 const PROJECT_FILE_PREVIEW_QUERY_KEY = "projectFilePreview";
+const PROJECT_ATTACHMENT_PREVIEW_QUERY_KEY = "projectAttachmentPreview";
 export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
 const PROJECT_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "projectDefaultExecutionOptions";
@@ -65,6 +66,7 @@ const UI_PREFERENCES_QUERY_KEY = "uiPreferences";
 const SYSTEM_THEME_QUERY_KEY = "systemTheme";
 export const SYSTEM_EXECUTION_OPTIONS_QUERY_KEY = "systemExecutionOptions";
 const SYSTEM_CLI_SKILLS_QUERY_KEY = "systemCliSkills";
+const SYSTEM_CLI_COMMAND_QUERY_KEY = "systemCliCommand";
 const SYSTEM_VERSION_QUERY_KEY = "systemVersion";
 const SYSTEM_APP_UPDATE_QUERY_KEY = "systemAppUpdate";
 const SERVER_MOVE_STATUS_QUERY_KEY = "serverMoveStatus";
@@ -165,6 +167,11 @@ type ProjectFilePreviewQueryKey = readonly [
   string | null,
   string | null,
   string | null,
+];
+type ProjectAttachmentPreviewQueryKey = readonly [
+  typeof PROJECT_ATTACHMENT_PREVIEW_QUERY_KEY,
+  string,
+  string,
 ];
 type ProjectSourceBranchesQueryKey = readonly [
   typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
@@ -478,6 +485,7 @@ type UiPreferencesQueryKey = readonly [typeof UI_PREFERENCES_QUERY_KEY];
 type SystemThemeQueryKey = readonly [typeof SYSTEM_THEME_QUERY_KEY, string];
 type AllSystemThemesQueryKeyPrefix = readonly [typeof SYSTEM_THEME_QUERY_KEY];
 type SystemCliSkillsQueryKey = readonly [typeof SYSTEM_CLI_SKILLS_QUERY_KEY];
+type SystemCliCommandQueryKey = readonly [typeof SYSTEM_CLI_COMMAND_QUERY_KEY];
 type SystemVersionQueryKey = readonly [typeof SYSTEM_VERSION_QUERY_KEY];
 type SystemAppUpdateQueryKey = readonly [typeof SYSTEM_APP_UPDATE_QUERY_KEY];
 type ServerMoveStatusQueryKey = readonly [typeof SERVER_MOVE_STATUS_QUERY_KEY];
@@ -492,6 +500,7 @@ type SystemProviderStatesQueryKey = readonly [
 ];
 type SystemExecutionOptionsQueryKey = readonly [
   typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
+  string | null,
   string | null,
   string | null,
   string | null,
@@ -603,6 +612,13 @@ export function projectFilePreviewQueryKey(
     hostId,
     path,
   ];
+}
+
+export function projectAttachmentPreviewQueryKey(
+  projectId: string,
+  path: string,
+): ProjectAttachmentPreviewQueryKey {
+  return [PROJECT_ATTACHMENT_PREVIEW_QUERY_KEY, projectId, path];
 }
 
 export function allProjectPathsQueryKeyPrefix(): AllProjectPathsQueryKeyPrefix {
@@ -1150,6 +1166,10 @@ export function systemCliSkillsQueryKey(): SystemCliSkillsQueryKey {
   return [SYSTEM_CLI_SKILLS_QUERY_KEY];
 }
 
+export function systemCliCommandQueryKey(): SystemCliCommandQueryKey {
+  return [SYSTEM_CLI_COMMAND_QUERY_KEY];
+}
+
 export function systemConfigQueryKey(): SystemConfigQueryKey {
   return [SYSTEM_CONFIG_QUERY_KEY];
 }
@@ -1198,18 +1218,21 @@ interface SystemExecutionOptionsQueryKeyArgs {
   environmentId: string | null;
   hostId: string | null;
   providerId: string | null;
+  projectId?: string | null;
 }
 
 export function systemExecutionOptionsQueryKey({
   environmentId,
   hostId,
   providerId,
+  projectId = null,
 }: SystemExecutionOptionsQueryKeyArgs): SystemExecutionOptionsQueryKey {
   return [
     SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
     environmentId,
     hostId,
     providerId,
+    projectId,
   ];
 }
 

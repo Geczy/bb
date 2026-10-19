@@ -3,6 +3,7 @@ import { pluginSdkAppImplementation } from "../src/lib/plugin-sdk-app-impl";
 export type * from "@get-bb/plugin-sdk";
 
 export const {
+  experimental_ThreadStatusGlyph,
   experimental_Icon,
   experimental_ProviderIcon,
   definePluginApp,
@@ -30,6 +31,12 @@ export const {
   useComposerView,
   experimental_useSidebarThreads,
   experimental_useSidebarThreadActions,
+  experimental_useThreadActions,
+  experimental_useThreadActionRegistrations,
+  experimental_useArchiveEnvironmentThreads,
+  experimental_ThreadActionsMenu,
+  experimental_ThreadActionsContextMenu,
+  experimental_THREAD_ACTION_GROUPS,
   experimental_useSidebarThreadPullRequest,
   experimental_useSidebarThreadSplit,
   useSidebarThreadDraft,

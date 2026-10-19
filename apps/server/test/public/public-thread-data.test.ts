@@ -53,6 +53,7 @@ import {
 import {
   registerHostRpcResponder,
   type HostRpcHandlerResult,
+  EMPTY_WORKSPACE_AGENT_CONTEXT,
 } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import { textInput } from "../helpers/prompt-input.js";
@@ -373,6 +374,42 @@ describe("public thread data routes", () => {
       expect(listed.map((thread) => thread.id).sort()).toEqual(
         [onFirst.id, onSecond.id].sort(),
       );
+    });
+  });
+
+  it("lists only the requested thread IDs, treats an empty list as no threads and caps the list", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const first = seedThread(harness.deps, { projectId: project.id });
+      const second = seedThread(harness.deps, { projectId: project.id });
+      seedThread(harness.deps, { projectId: project.id });
+      const list = async (threadIds: string) => {
+        const response = await harness.app.request(
+          `/api/v1/threads?threadIds=${threadIds}`,
+        );
+        expect(response.status).toBe(200);
+        return z
+          .array(threadSchema)
+          .parse(await readJson(response))
+          .map((thread) => thread.id)
+          .sort();
+      };
+
+      await expect(
+        list(`${first.id},thr_unknown,${second.id}`),
+      ).resolves.toEqual([first.id, second.id].sort());
+      await expect(list("")).resolves.toEqual([]);
+      const tooMany = await harness.app.request(
+        `/api/v1/threads?threadIds=${Array.from({ length: 201 }, (_, index) => `thr_${index}`).join(",")}`,
+      );
+      expect(tooMany.status).toBe(400);
+      const blank = await harness.app.request(
+        `/api/v1/threads?threadIds=${first.id},,${second.id}`,
+      );
+      expect(blank.status).toBe(400);
     });
   });
 
@@ -708,7 +745,7 @@ describe("public thread data routes", () => {
       const timeline = threadTimelineResponseSchema.parse(
         await readJson(timelineResponse),
       );
-      expect(timeline.timelinePage.hasOlderRows).toBe(true);
+      expect(timeline.timelinePage.olderCursor).not.toBeNull();
       const windowedConversationIds = timeline.rows
         .filter((row) => row.kind === "conversation")
         .map((row) => row.id);
@@ -1073,6 +1110,13 @@ describe("public thread data routes", () => {
         imageUrls: [],
         localImagePaths: [],
         localFilePaths: [uploaded.path],
+        localFileDetails: [
+          {
+            path: uploaded.path,
+            name: uploaded.name,
+            sizeBytes: uploaded.sizeBytes,
+          },
+        ],
       });
     });
   });
@@ -1236,6 +1280,7 @@ describe("public thread data routes", () => {
           status,
           taskStatus,
           skipTranscript: false,
+          foreground: false,
           workflowName: "fixture-mini",
           ...(status === "completed" ? { summary: "done" } : {}),
         },
@@ -1461,6 +1506,7 @@ describe("public thread data routes", () => {
           status: "pending" as const,
           taskStatus: "running" as const,
           skipTranscript: false,
+          foreground: false,
           ...(args.taskType === "local_workflow"
             ? { workflowName: "fixture-mini" }
             : {}),
@@ -3948,18 +3994,8 @@ describe("public thread data routes", () => {
               result: { providerThreadId: "provider-immediate-reprovision" },
             };
           }
-          if (request.command.type === "host.list_files") {
-            return {
-              ok: true,
-              result: { files: [], truncated: false },
-            };
-          }
-          if (request.command.type === "host.read_file") {
-            return {
-              ok: false,
-              errorCode: "ENOENT",
-              errorMessage: `Path does not exist: ${request.command.path}`,
-            };
+          if (request.command.type === "host.read_workspace_agent_context") {
+            return { ok: true, result: EMPTY_WORKSPACE_AGENT_CONTEXT };
           }
           throw new Error(`Unexpected RPC command ${request.command.type}`);
         },
@@ -4692,7 +4728,7 @@ describe("public thread data routes", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           permissionMode: "full",
-          claimedAt: null,
+          state: "queued",
           sortKey: "V",
           createdAt: now,
           updatedAt: now,

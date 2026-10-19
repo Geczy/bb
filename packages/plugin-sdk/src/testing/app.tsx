@@ -1,7 +1,9 @@
 import * as React from "react";
 import {
   createContext,
+  useCallback,
   useContext,
+  useLayoutEffect,
   useEffect,
   useMemo,
   useRef,
@@ -25,10 +27,17 @@ import {
   type ComposerSubmitOptions,
   type ComposerView,
   type ExperimentalAppOverlayRegistration,
+  type ExperimentalSidebarNavigationActions,
+  type ExperimentalSidebarNavigationIconProps,
+  type ExperimentalSidebarNavigationItem,
+  type ExperimentalSidebarNavigationRegistration,
+  type ExperimentalSidebarNavigationSplit,
+  type ExperimentalSidebarNavigationState,
   type ExperimentalQuestionFormHost,
   type PluginAppDefinition,
   type PluginAppSetup,
   type ExperimentalClipboardContent,
+  type ExperimentalSaveFileOutcome,
   type PluginCodeThemeState,
   type PluginContentScriptDisposer,
   type PluginContentScriptRegistration,
@@ -41,6 +50,7 @@ import {
   type PluginHomepageSectionRegistration,
   type PluginMessageActionRegistration,
   type PluginMessageDirectiveRegistration,
+  type ExperimentalCodeFenceRendererRegistration,
   type PluginDiffRendererRegistration,
   type PluginNavPanelRegistration,
   type PluginNewThreadPanelActionRegistration,
@@ -67,6 +77,14 @@ import {
   type PluginSidebarThreadsState,
   type PluginSourceCodeRendererRegistration,
   type PluginThreadHeaderActionRegistration,
+  type PluginThreadActionEntry,
+  type PluginThreadActionRegistration,
+  type PluginThreadActionRegistrationInfo,
+  type PluginThreadActionsContextMenuProps,
+  type PluginThreadActionsMenuProps,
+  type PluginThreadStatusGlyphProps,
+  type PluginThreadActionsOptions,
+  type PluginThreadActionTarget,
   type ExperimentalPluginBrowserToolbarActionRegistration,
   type PluginThreadListRegistration,
   type PluginThreadPanelActionRegistration,
@@ -103,6 +121,7 @@ import {
 } from "../internal/composer-handle.js";
 import { normalizePluginThreadRowStatus } from "../internal/composer-customization-validation.js";
 import { normalizeExperimentalFileOpenOptions } from "../internal/file-navigation-validation.js";
+import { experimental_THREAD_ACTION_GROUPS } from "../thread-action-groups.js";
 import {
   collectPluginAppRegistrations,
   type CollectedPluginProviderIconRegistration,
@@ -161,7 +180,11 @@ type PluginSdkFakeTree<T> = {
  */
 export type PluginSdkTestFakes = PluginSdkFakeTree<PluginBrowserBbSdk>;
 export type NavigateCall =
-  | { method: "toThread"; threadId: string }
+  | {
+      method: "toThread";
+      threadId: string;
+      options?: Parameters<BbNavigate["toThread"]>[1];
+    }
   | { method: "toProject"; projectId: string }
   | {
       method: "toPluginPanel";
@@ -170,7 +193,7 @@ export type NavigateCall =
     }
   | {
       method: "toCompose";
-      options?: { initialPrompt?: string; focusPrompt?: boolean };
+      options?: Parameters<BbNavigate["toCompose"]>[0];
     }
   | {
       method: "openThreadPanel";
@@ -269,6 +292,11 @@ interface SlotEnv {
   sidebarThreads: PluginSidebarThreadsState;
   sidebarActions: PluginSidebarThreadActions;
   sidebarActionCalls: SidebarActionCall[];
+  sidebarNavigation: ExperimentalSidebarNavigationState;
+  sidebarNavigationCalls: SidebarNavigationCall[];
+  environmentArchiveCalls: string[];
+  threadActions: TestThreadActionsResolver;
+  threadActionRegistrations: readonly PluginThreadActionRegistrationInfo[];
   sidebarPullRequests: ReadonlyMap<string, PluginSidebarPullRequest>;
   sidebarDraftThreadIds: ReadonlySet<string>;
   sidebarRowStatuses: ReadonlyMap<string, PluginSidebarThreadRowStatus>;
@@ -294,7 +322,22 @@ interface TestFixedTabTargetStore {
   subscribe(listener: () => void): () => void;
 }
 
-/** One recorded `experimental_useSidebarThreadActions()` call. */
+/**
+ * What `experimental_useThreadActions(thread)` returns in a test, in menu
+ * order; the host's own actions are not emulated. `requestRename` is the
+ * caller's rename editor (a no-op when it passed none), for entries whose
+ * `run` renames. The fake applies `keys`. Omitted → an empty list. The fake
+ * `experimental_ThreadActionsMenu` opens on a trigger click and the fake
+ * context menu on right-click; each lists these entries and its `inline`
+ * items as `menuitem` buttons, and closes after one runs (calling
+ * `onOpenChange(false)` and `onCloseAutoFocus`).
+ */
+export type TestThreadActionsResolver = (
+  thread: PluginThreadActionTarget,
+  options: { requestRename(threadId: string): void },
+) => readonly PluginThreadActionEntry[];
+
+/** @internal One recorded `experimental_useSidebarThreadActions()` call; kept for plugins built against older SDKs. */
 export interface SidebarActionCall {
   method: keyof PluginSidebarThreadActions;
   threadId?: string;
@@ -303,6 +346,33 @@ export interface SidebarActionCall {
   title?: string;
   pinned?: boolean;
   read?: boolean;
+}
+
+/**
+ * One recorded `experimental_useSidebarNavigation()` action, or a split drag
+ * started from `experimental_useSidebarNavigationSplit()` (`beginSplitDrag`).
+ */
+export interface SidebarNavigationCall {
+  method: keyof ExperimentalSidebarNavigationActions | "beginSplitDrag";
+  itemId?: string;
+  itemIds?: string[];
+  isVisible?: boolean;
+  openInSplit?: boolean;
+}
+
+function TestSidebarNavigationIcon({
+  icon,
+  className,
+}: ExperimentalSidebarNavigationIconProps) {
+  return (
+    <span
+      aria-hidden="true"
+      className={className}
+      data-sidebar-navigation-icon={
+        icon.kind === "host" ? icon.name : `${icon.pluginId}/${icon.icon ?? ""}`
+      }
+    />
+  );
 }
 
 function testComposerKey(scope: PluginComposerScope): string {
@@ -327,6 +397,7 @@ function testComposerMentionText(mention: ComposerMention): string {
     case "command":
       return `${mention.trigger}${mention.name}`;
     case "plugin":
+    case "attachment":
       return `@${mention.label}`;
     case "path": {
       const path =
@@ -385,6 +456,30 @@ function TestThreadTitle({ threadId }: { threadId: string }) {
   return <span data-thread-title={threadId}>{thread.displayTitle}</span>;
 }
 
+/**
+ * `experimental_ThreadStatusGlyph` draws nothing for "none" without a row
+ * status, and otherwise exposes what the row asked for as data attributes:
+ * the indicator (or "archived"), the row status label and tone, and the size.
+ */
+function TestThreadStatusGlyph({
+  indicator,
+  archived = false,
+  rowStatus = null,
+  hideIdleDraftLabel = false,
+  size = "default",
+}: PluginThreadStatusGlyphProps) {
+  if (!archived && indicator === "none" && rowStatus === null) return null;
+  return (
+    <span
+      data-thread-status-glyph={archived ? "archived" : indicator}
+      data-row-status={rowStatus?.label}
+      data-row-status-tone={rowStatus?.tone}
+      data-hide-idle-draft-label={hideIdleDraftLabel ? "" : undefined}
+      data-size={size}
+    />
+  );
+}
+
 function SlotLifecycleGuard({
   children,
   onUnmount,
@@ -403,6 +498,184 @@ interface TestRealtimeConnectionStore {
 }
 
 const SlotEnvContext = createContext<SlotEnv | null>(null);
+
+const NO_THREAD_ACTIONS: TestThreadActionsResolver = () => [];
+const NO_THREAD_ACTION_REGISTRATIONS: readonly PluginThreadActionRegistrationInfo[] =
+  [];
+
+function noRenameEditor(): void {}
+
+function useTestThreadActions(
+  hook: string,
+  thread: PluginThreadActionTarget,
+  options?: PluginThreadActionsOptions,
+): readonly PluginThreadActionEntry[] {
+  const entries = useSlotEnv(hook).threadActions(thread, {
+    requestRename: options?.requestRename ?? noRenameEditor,
+  });
+  const keys = options?.keys;
+  if (keys === undefined) return entries;
+  return keys.flatMap((key) => {
+    const entry = entries.find((candidate) => candidate.key === key);
+    return entry === undefined ? [] : [entry];
+  });
+}
+
+function TestThreadActionsMenuItems({
+  hook,
+  thread,
+  inline = [],
+  requestRename,
+  onClose,
+}: {
+  hook: string;
+  thread: PluginThreadActionTarget;
+  inline?: PluginThreadActionsMenuProps["inline"];
+  requestRename?: (threadId: string) => void;
+  onClose: () => void;
+}) {
+  const rename = requestRename ?? noRenameEditor;
+  const entries = useTestThreadActions(hook, thread, { requestRename: rename });
+  const rows = [
+    ...entries.map((entry) => ({
+      key: entry.key,
+      action: entry.action,
+      run: () => entry.action.run(),
+    })),
+    ...inline.map((item) => ({
+      key: item.key,
+      action: item.action,
+      run: () => item.action.run({ requestRename: rename }),
+    })),
+  ];
+  return (
+    <div role="menu" aria-label="Thread actions">
+      {rows.map((row) => (
+        <button
+          key={row.key}
+          type="button"
+          role="menuitem"
+          data-thread-action={row.key}
+          disabled={row.action.disabled}
+          onClick={() => {
+            void row.run();
+            onClose();
+          }}
+        >
+          {row.action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function useTestMenuOpenState({
+  onOpenChange,
+  onCloseAutoFocus,
+}: {
+  onOpenChange?: (open: boolean) => void;
+  onCloseAutoFocus?: (event: Event) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return {
+    open,
+    show: () => {
+      setOpen(true);
+      onOpenChange?.(true);
+    },
+    close: () => {
+      setOpen(false);
+      onOpenChange?.(false);
+      onCloseAutoFocus?.(new Event("focus", { cancelable: true }));
+    },
+  };
+}
+
+const TEST_TRIGGER_HOST_CLASS = "bb-test-thread-actions-trigger";
+
+function TestThreadActionsMenu({
+  thread,
+  trigger,
+  inline,
+  requestRename,
+  onOpenChange,
+  onCloseAutoFocus,
+}: PluginThreadActionsMenuProps) {
+  const menu = useTestMenuOpenState({ onOpenChange, onCloseAutoFocus });
+  const triggerElement = useRef<HTMLButtonElement | null>(null);
+  useLayoutEffect(() => {
+    const element = triggerElement.current;
+    if (element?.getAttribute("aria-haspopup") !== "menu") {
+      throw new Error(
+        "experimental_ThreadActionsMenu: `trigger` must spread the props and ref it receives onto the button it renders, or the menu never opens",
+      );
+    }
+    if (!element.classList.contains(TEST_TRIGGER_HOST_CLASS)) {
+      throw new Error(
+        "experimental_ThreadActionsMenu: `trigger` replaced the host's className; merge props.className into its own",
+      );
+    }
+  });
+  return (
+    <span data-testid="bb-thread-actions-menu" data-thread-id={thread.id}>
+      {trigger({
+        ref: triggerElement,
+        type: "button",
+        className: TEST_TRIGGER_HOST_CLASS,
+        "aria-haspopup": "menu",
+        "aria-expanded": menu.open,
+        onClick: menu.show,
+      })}
+      {menu.open ? (
+        <TestThreadActionsMenuItems
+          hook="experimental_ThreadActionsMenu"
+          thread={thread}
+          inline={inline}
+          requestRename={requestRename}
+          onClose={menu.close}
+        />
+      ) : null}
+    </span>
+  );
+}
+
+function TestThreadActionsContextMenu({
+  thread,
+  children,
+  inline,
+  requestRename,
+  onOpenChange,
+  onCloseAutoFocus,
+  disabled,
+  dragging,
+}: PluginThreadActionsContextMenuProps) {
+  const menu = useTestMenuOpenState({ onOpenChange, onCloseAutoFocus });
+  return (
+    <div
+      data-testid="bb-thread-actions-context-menu"
+      data-thread-id={thread.id}
+      data-disabled={disabled === true ? "true" : "false"}
+      data-dragging={dragging === true ? "true" : "false"}
+      className="contents"
+      onContextMenu={(event) => {
+        if (disabled === true || dragging === true) return;
+        event.preventDefault();
+        menu.show();
+      }}
+    >
+      {children}
+      {menu.open ? (
+        <TestThreadActionsMenuItems
+          hook="experimental_ThreadActionsContextMenu"
+          thread={thread}
+          inline={inline}
+          requestRename={requestRename}
+          onClose={menu.close}
+        />
+      ) : null}
+    </div>
+  );
+}
 
 function useSlotEnv(hook: string): SlotEnv {
   const env = useContext(SlotEnvContext);
@@ -935,7 +1208,9 @@ function TestDiff({
   );
 }
 
-type TestClipboard = (content: ExperimentalClipboardContent) => Promise<boolean>;
+type TestClipboard = (
+  content: ExperimentalClipboardContent,
+) => Promise<boolean>;
 
 let activeClipboard: TestClipboard | null = null;
 
@@ -1109,9 +1384,67 @@ const testPluginSdkApp = {
   ): Promise<boolean> {
     return activeClipboard?.(content) ?? Promise.resolve(true);
   },
+  experimental_saveFile(): Promise<ExperimentalSaveFileOutcome> {
+    return Promise.resolve("started");
+  },
   experimental_useSidebarThreadActions(): PluginSidebarThreadActions {
     return useSlotEnv("experimental_useSidebarThreadActions").sidebarActions;
   },
+  experimental_useThreadActions(
+    thread: PluginThreadActionTarget,
+    options?: PluginThreadActionsOptions,
+  ): readonly PluginThreadActionEntry[] {
+    return useTestThreadActions(
+      "experimental_useThreadActions",
+      thread,
+      options,
+    );
+  },
+  experimental_useArchiveEnvironmentThreads(): (
+    environmentId: string,
+  ) => Promise<void> {
+    const calls = useSlotEnv(
+      "experimental_useArchiveEnvironmentThreads",
+    ).environmentArchiveCalls;
+    return useCallback(
+      async (environmentId: string) => {
+        calls.push(environmentId);
+      },
+      [calls],
+    );
+  },
+  experimental_useThreadActionRegistrations(): readonly PluginThreadActionRegistrationInfo[] {
+    return useSlotEnv("experimental_useThreadActionRegistrations")
+      .threadActionRegistrations;
+  },
+  experimental_ThreadActionsMenu: TestThreadActionsMenu,
+  experimental_ThreadActionsContextMenu: TestThreadActionsContextMenu,
+  experimental_THREAD_ACTION_GROUPS,
+  experimental_useSidebarNavigation(): ExperimentalSidebarNavigationState {
+    return useSlotEnv("experimental_useSidebarNavigation").sidebarNavigation;
+  },
+  experimental_useSidebarNavigationSplit(
+    itemId,
+    _options,
+  ): ExperimentalSidebarNavigationSplit {
+    const env = useSlotEnv("experimental_useSidebarNavigationSplit");
+    return useMemo(
+      () => ({
+        splitProps: {
+          onPointerDown: () => {
+            env.sidebarNavigationCalls.push({
+              method: "beginSplitDrag",
+              itemId,
+            });
+          },
+        },
+        isAvailable: true,
+        layout: null,
+      }),
+      [env, itemId],
+    );
+  },
+  experimental_SidebarNavigationIcon: TestSidebarNavigationIcon,
   experimental_useSidebarThreadSplit(threadId): PluginSidebarThreadSplit {
     const env = useSlotEnv("experimental_useSidebarThreadSplit");
     return useMemo(
@@ -1155,6 +1488,7 @@ const testPluginSdkApp = {
     return env.sidebarShortcuts.get(threadId) ?? null;
   },
   ThreadTitle: TestThreadTitle,
+  experimental_ThreadStatusGlyph: TestThreadStatusGlyph,
   useEnvironmentProviders(): PluginEnvironmentProvidersState {
     return useSlotEnv("useEnvironmentProviders").environmentProviders;
   },
@@ -1233,12 +1567,15 @@ export interface CapturedPluginApp {
   sidebarFooterActions: PluginSidebarFooterActionRegistration[];
   experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
   threadLists: PluginThreadListRegistration[];
+  experimentalSidebarNavigations: ExperimentalSidebarNavigationRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
+  threadActions: PluginThreadActionRegistration<unknown>[];
   browserToolbarActions: ExperimentalPluginBrowserToolbarActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];
   sourceCodeRenderers: PluginSourceCodeRendererRegistration[];
   diffRenderers: PluginDiffRendererRegistration[];
   messageDirectives: PluginMessageDirectiveRegistration[];
+  codeFenceRenderers: ExperimentalCodeFenceRendererRegistration[];
   messageActions: PluginMessageActionRegistration[];
   providerIcons: CollectedPluginProviderIconRegistration[];
   icons: ExperimentalIconRegistration[];
@@ -1525,6 +1862,27 @@ export interface RenderSlotOptions<
   /** The split layout `useSidebarSplitLayout()` reports. Omitted → null. */
   sidebarSplitLayout?: PluginSidebarSplitLayout;
   /**
+   * Items and the active item `experimental_useSidebarNavigation()` reports.
+   * Omitted → no items. Actions are recorded in `sidebarNavigationCalls` and
+   * do not change the items.
+   */
+  sidebarNavigation?: {
+    items?: readonly ExperimentalSidebarNavigationItem[];
+    activeItemId?: string | null;
+    isHomeActive?: boolean;
+    isShortcutModifierHeld?: boolean;
+  };
+  /**
+   * What `experimental_useThreadActions()` reports for a thread, in menu
+   * order. Omitted → an empty list.
+   */
+  threadActions?: TestThreadActionsResolver;
+  /**
+   * What `experimental_useThreadActionRegistrations()` reports. Omitted → an
+   * empty list.
+   */
+  threadActionRegistrations?: readonly PluginThreadActionRegistrationInfo[];
+  /**
    * The environment provider catalog `useEnvironmentProviders()` reports.
    * Omitted → a ready, empty list. Pass `{ status: "loading" }` to test that
    * branch.
@@ -1584,8 +1942,18 @@ export interface RenderedSlotInspectionState {
   readonly navigateCalls: NavigateCall[];
   /** Every validated `experimental_useAppPanel().openFixedTab` call. */
   readonly experimental_fixedTabOpenCalls: ExperimentalFixedTabOpenCall[];
-  /** Every `experimental_useSidebarThreadActions()` call, in order. */
+  /** @internal Every `experimental_useSidebarThreadActions()` call, in order; kept for plugins built against older SDKs. */
   readonly sidebarActionCalls: SidebarActionCall[];
+  /**
+   * Every `experimental_useSidebarNavigation()` action and navigation split
+   * drag, in order.
+   */
+  readonly sidebarNavigationCalls: SidebarNavigationCall[];
+  /**
+   * The environment id of every `experimental_useArchiveEnvironmentThreads()`
+   * call, in order.
+   */
+  readonly experimental_environmentArchiveCalls: string[];
   /** Every `useSdk()` call, in order, as `"<area>.<method>"`. */
   readonly sdkCalls: SdkCall[];
   /** Every `experimental_copyToClipboard()` write, in order. */
@@ -1778,6 +2146,49 @@ export function renderSlot<
     },
   };
   const sidebarActionCalls: SidebarActionCall[] = [];
+  const sidebarNavigationCalls: SidebarNavigationCall[] = [];
+  const sidebarNavigation: ExperimentalSidebarNavigationState = {
+    items: options.sidebarNavigation?.items ?? [],
+    activeItemId: options.sidebarNavigation?.activeItemId ?? null,
+    isHomeActive: options.sidebarNavigation?.isHomeActive ?? true,
+    isShortcutModifierHeld:
+      options.sidebarNavigation?.isShortcutModifierHeld ?? false,
+    actions: {
+      activate(itemId, activationOptions) {
+        sidebarNavigationCalls.push({
+          method: "activate",
+          itemId,
+          openInSplit: activationOptions.openInSplit,
+        });
+      },
+      goHome() {
+        sidebarNavigationCalls.push({ method: "goHome" });
+      },
+      setVisible(itemId, isVisible) {
+        sidebarNavigationCalls.push({
+          method: "setVisible",
+          itemId,
+          isVisible,
+        });
+      },
+      setOrder(itemIds) {
+        sidebarNavigationCalls.push({
+          method: "setOrder",
+          itemIds: [...itemIds],
+        });
+      },
+      openCustomize() {
+        sidebarNavigationCalls.push({ method: "openCustomize" });
+      },
+      openDetails(itemId) {
+        sidebarNavigationCalls.push({ method: "openDetails", itemId });
+      },
+      async disablePlugin(itemId) {
+        sidebarNavigationCalls.push({ method: "disablePlugin", itemId });
+      },
+    },
+  };
+  const environmentArchiveCalls: string[] = [];
   const sidebarPullRequests = new Map(
     Object.entries(options.sidebarPullRequests ?? {}),
   );
@@ -1854,8 +2265,12 @@ export function renderSlot<
     },
   };
   const navigate: BbNavigate = {
-    toThread(threadId) {
-      navigateCalls.push({ method: "toThread", threadId });
+    toThread(threadId, threadOptions) {
+      navigateCalls.push({
+        method: "toThread",
+        threadId,
+        ...(threadOptions !== undefined ? { options: threadOptions } : {}),
+      });
     },
     toProject(projectId) {
       navigateCalls.push({ method: "toProject", projectId });
@@ -2184,6 +2599,12 @@ export function renderSlot<
     sidebarThreads,
     sidebarActions,
     sidebarActionCalls,
+    sidebarNavigation,
+    sidebarNavigationCalls,
+    environmentArchiveCalls,
+    threadActions: options.threadActions ?? NO_THREAD_ACTIONS,
+    threadActionRegistrations:
+      options.threadActionRegistrations ?? NO_THREAD_ACTION_REGISTRATIONS,
     sidebarPullRequests,
     sidebarDraftThreadIds,
     sidebarRowStatuses,
@@ -2279,6 +2700,8 @@ export function renderSlot<
     navigateCalls,
     experimental_fixedTabOpenCalls,
     sidebarActionCalls,
+    sidebarNavigationCalls,
+    experimental_environmentArchiveCalls: environmentArchiveCalls,
     sdkCalls,
     experimental_clipboardWrites,
     composer: composerLog,
@@ -2293,6 +2716,8 @@ export function renderSlot<
       navigateCalls,
       experimental_fixedTabOpenCalls,
       sidebarActionCalls,
+      sidebarNavigationCalls,
+      experimental_environmentArchiveCalls: environmentArchiveCalls,
       sdkCalls,
       experimental_clipboardWrites,
       composer: composerLog,
