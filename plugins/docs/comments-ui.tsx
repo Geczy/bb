@@ -630,6 +630,7 @@ type Selection = {
   left: number;
 };
 const EMPTY: CommentsList = { sidecarSha256: null, threads: [], notice: null };
+const MIN_MARGIN_PANE_WIDTH = 720;
 export function CommentsSurface({
   target,
   editor,
@@ -657,13 +658,25 @@ export function CommentsSurface({
   const [reattach, setReattach] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [revision, setRevision] = useState(0);
-  const compact = useIsCompactViewport();
+  const compactViewport = useIsCompactViewport();
+  const [narrowPane, setNarrowPane] = useState(false);
+  const compact = compactViewport || narrowPane;
   const { isContentRealized } = useResponsiveDrawerRealization({
     open: drawerOpen,
     enabled: compact,
   });
   const root = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = root.current;
+    if (!element) return;
+    const measure = () =>
+      setNarrowPane(element.clientWidth < MIN_MARGIN_PANE_WIDTH);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const cards = useRef(new Map<string, HTMLDivElement>());
   const request = useRef(0);
   const invalidateRequests = useCallback(() => {
@@ -1062,7 +1075,10 @@ export function CommentsSurface({
                 "rounded px-2 py-1 hover:bg-state-hover",
                 resolved && "bg-muted",
               )}
-              onClick={() => setResolved(!resolved)}
+              onClick={() => {
+                setResolved(!resolved);
+                if (compact && !resolved) setDrawerOpen(true);
+              }}
             >
               {data.threads.filter((thread) => thread.resolvedAt).length}{" "}
               resolved
@@ -1099,7 +1115,7 @@ export function CommentsSurface({
               "relative flex min-w-0",
               !compact &&
                 shown &&
-                (data.threads.length > 0 || draft) &&
+                (visibleThreads.length > 0 || draft) &&
                 "pr-80",
             )}
           >
