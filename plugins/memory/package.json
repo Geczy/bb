@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Provider-independent durable memory for agents. We recommend disabling provider-native memory when using this plugin.",
+  "description": "Provider-independent durable memory for agents. Works best with Claude Code and Codex memory turned off.",
   "license": "MIT",
   "homepage": "https://github.com/get-bb/bb#readme",
   "bugs": {
@@ -27,7 +27,7 @@
   },
   "bb": {
     "name": "Memory",
-    "description": "Provider-independent durable memory for agents. We recommend disabling provider-native memory when using this plugin.",
+    "description": "Provider-independent durable memory for agents. Works best with Claude Code and Codex memory turned off.",
     "branding": {
       "icon": "Brain"
     },
