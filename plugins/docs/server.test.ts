@@ -2699,6 +2699,34 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
+  it("lists and adds comments in a 150 KB paragraph with and without a sidecar", async () => {
+    const large = `# Large\n\n${"word ".repeat(30_000)}target`;
+    const host = await loadVirtualSyncVault({ "/vault/large.md": doc(large) });
+    try {
+      expect(await listed(host, "large.md")).toMatchObject({
+        threads: [],
+        outsideChange: 0,
+      });
+      const commentId = await comment(host, "large.md", "target", "Big one");
+      expect(await listed(host, "large.md")).toMatchObject({
+        threads: [{ id: commentId, anchor: { state: "anchored", line: 3 } }],
+      });
+      const sidecar = host.files.get(
+        "/vault/.bb-comments/large.md.json",
+      )!.content;
+      host.setUtf8("/vault/large.md", `${large} changed`);
+      expect(await listed(host, "large.md")).toMatchObject({
+        threads: [],
+        outsideChange: 1,
+      });
+      expect(host.files.get("/vault/.bb-comments/large.md.json")?.content).toBe(
+        sidecar,
+      );
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("moves stranded comments aside when a Docs move reuses their path", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),

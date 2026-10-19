@@ -74,4 +74,24 @@ describe("comment anchors", () => {
     expect(result.lines[result.text.indexOf("target")]).toBe(4);
     expect(result.lines[result.text.indexOf("First")]).toBe(3);
   });
+  it.each([
+    ["100 KB", 20_000],
+    ["150 KB", 30_000],
+    ["1 MB", 200_000],
+    ["the 25 MiB server read limit", 5_242_880],
+  ])("projects a single %s paragraph", (_size, words) => {
+    const markdown = "word ".repeat(words) + "target";
+    const result = visibleMarkdown(`# Large\n\n${markdown}`);
+    expect(result.text.length).toBe("Large\n\n".length + markdown.length);
+    expect(result.lines.length).toBe(result.text.length);
+    expect(result.lines[result.text.length - 1]).toBe(3);
+    const start = result.text.lastIndexOf("target");
+    expect(
+      resolveAnchor(
+        result,
+        "other",
+        makeAnchor(result.text, start, start + 6, "sha"),
+      ),
+    ).toMatchObject({ state: "moved", start, line: 3 });
+  });
 });

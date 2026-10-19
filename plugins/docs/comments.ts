@@ -85,7 +85,7 @@ export type CommentThread = z.infer<typeof commentThreadSchema>;
 export type CommentsFile = z.infer<typeof commentsFileSchema>;
 export type ListedComment = z.infer<typeof listedCommentSchema>;
 export type CommentsList = z.infer<typeof commentsListSchema>;
-export type VisibleDocument = { text: string; lines: number[] };
+export type VisibleDocument = { text: string; lines: ArrayLike<number> };
 
 export function exactOccurrences(text: string, quote: string): number[] {
   if (!quote) return [];

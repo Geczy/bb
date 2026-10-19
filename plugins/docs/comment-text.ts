@@ -4,10 +4,23 @@ import { HTML_EMBED_BLOCK, renderedTags } from "./html-tags.js";
 import type { VisibleDocument } from "./comments.js";
 
 const parser = new MarkdownIt({ html: true, linkify: true });
+type Block = { text: string; changes: [offset: number, line: number][] };
+
+function lineChanges(text: string, line: number): Block["changes"] {
+  const changes: Block["changes"] = [[0, line]];
+  for (
+    let index = text.indexOf("\n");
+    index >= 0;
+    index = text.indexOf("\n", index + 1)
+  )
+    changes.push([index + 1, ++line]);
+  return changes;
+}
+
 export function visibleMarkdown(content: string): VisibleDocument {
   const { body, frontmatter } = parseMarkdownDocument(content);
   const offset = (frontmatter.match(/\n/g) ?? []).length;
-  const blocks: { text: string; line: number; lines?: number[] }[] = [];
+  const blocks: Block[] = [];
   let sourceLine = 0;
   let listItems = 0;
   let itemStart = false;
@@ -23,23 +36,26 @@ export function visibleMarkdown(content: string): VisibleDocument {
     if (token.type === "inline") {
       const children = token.children ?? [];
       const rendered = renderedTags(children);
-      let text = "";
-      const lines: number[] = [];
+      const parts: string[] = [];
+      let length = 0;
       let current = line;
+      const changes: Block["changes"] = [[0, line]];
       const add = (value: string) => {
-        for (const character of value) {
-          text += character;
-          for (let unit = 0; unit < character.length; unit++)
-            lines.push(current);
-          if (character === "\n") current++;
-        }
+        for (
+          let index = value.indexOf("\n");
+          index >= 0;
+          index = value.indexOf("\n", index + 1)
+        )
+          changes.push([length + index + 1, ++current]);
+        parts.push(value);
+        length += value.length;
       };
       children.forEach((child, position) => {
         if (["text", "code_inline"].includes(child.type)) add(child.content);
         else if (child.type === "image") add("\ufffc");
         else if (child.type === "softbreak") {
           add(" ");
-          current++;
+          changes.push([length, ++current]);
         } else if (child.type === "hardbreak") add("\n");
         else if (child.type === "html_inline")
           add(
@@ -50,44 +66,45 @@ export function visibleMarkdown(content: string): VisibleDocument {
               : child.content,
           );
       });
+      let text = parts.join("");
       if (listItems && itemStart && /^\[[ xX]\] /.test(text)) {
         text = text.slice(4);
-        lines.splice(0, 4);
+        for (const change of changes) change[0] = Math.max(0, change[0] - 4);
       }
       itemStart = false;
-      if (/^::html\{/.test(text)) blocks.push({ text: "\ufffc", line });
-      else blocks.push({ text, line, lines });
+      blocks.push(
+        /^::html\{/.test(text)
+          ? { text: "\ufffc", changes: [[0, line]] }
+          : { text, changes },
+      );
     } else if (token.type === "fence" || token.type === "code_block") {
+      const text = token.content.replace(/\n$/, "");
       blocks.push({
-        text: token.content.replace(/\n$/, ""),
-        line: line + (token.type === "fence" ? 1 : 0),
+        text,
+        changes: lineChanges(text, line + (token.type === "fence" ? 1 : 0)),
       });
     } else if (token.type === "html_block") {
-      blocks.push({
-        text: HTML_EMBED_BLOCK.test(token.content)
-          ? "\ufffc"
-          : token.content.replace(/\n$/, ""),
-        line,
-      });
+      const text = HTML_EMBED_BLOCK.test(token.content)
+        ? "\ufffc"
+        : token.content.replace(/\n$/, "");
+      blocks.push({ text, changes: lineChanges(text, line) });
       itemStart = false;
-    } else if (token.type === "hr") blocks.push({ text: "\ufffc", line });
+    } else if (token.type === "hr")
+      blocks.push({ text: "\ufffc", changes: [[0, line]] });
   }
-  let text = "";
-  const lines: number[] = [];
+  const text = blocks.map((block) => block.text).join("\n\n");
+  const lines = new Int32Array(text.length);
+  let position = 0;
   blocks.forEach((block, index) => {
     if (index) {
-      text += "\n\n";
-      lines.push(block.line, block.line);
+      lines.fill(block.changes[0]![1], position, position + 2);
+      position += 2;
     }
-    text += block.text;
-    if (block.lines) lines.push(...block.lines);
-    else {
-      let line = block.line;
-      for (let i = 0; i < block.text.length; i++) {
-        lines.push(line);
-        if (block.text[i] === "\n") line++;
-      }
-    }
+    block.changes.forEach(([from, line], change) => {
+      const to = block.changes[change + 1]?.[0] ?? block.text.length;
+      if (to > from) lines.fill(line, position + from, position + to);
+    });
+    position += block.text.length;
   });
   return { text, lines };
 }
