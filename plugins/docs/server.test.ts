@@ -11,6 +11,7 @@ import {
 import { z } from "zod";
 import simpleNotes from "./server";
 import { commentsListSchema } from "./comments.js";
+import { commentSidecar } from "./comments-service.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -1324,6 +1325,7 @@ describe("Docs vault operations", () => {
 
     expect(host.harness.sdk.callsTo("files.read")).toEqual([
       [{ hostId: "host_remote", path: filePath, rootPath }],
+      [{ hostId: "host_remote", path: commentSidecar(filePath), rootPath }],
     ]);
     expect(host.harness.sdk.callsTo("files.createPreview")).toEqual([
       [{ hostId: "host_remote", rootPath }],
@@ -1455,6 +1457,13 @@ describe("Docs vault operations", () => {
           rootPath: "/primary/project",
         },
       ],
+      [
+        {
+          hostId: "host_remote",
+          path: "/remote/project/docs/.bb-comments/plan.md.json",
+          rootPath: "/remote/project",
+        },
+      ],
     ]);
     expect(host.harness.sdk.callsTo("files.createPreview")).toEqual([
       [{ hostId: "host_remote", rootPath: "/remote/project" }],
@@ -1547,6 +1556,13 @@ describe("Docs vault operations", () => {
         {
           hostId: "host_remote",
           path: openedPath,
+          rootPath: storageRootPath,
+        },
+      ],
+      [
+        {
+          hostId: "host_remote",
+          path: commentSidecar(openedPath),
           rootPath: storageRootPath,
         },
       ],

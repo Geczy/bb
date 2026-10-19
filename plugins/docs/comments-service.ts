@@ -122,6 +122,9 @@ export function commentSidecar(file: string): string {
 function isMissing(error: unknown): boolean {
   return /\bENOENT\b|path does not exist|not found/i.test(String(error));
 }
+function emptyComments(): CommentsFile {
+  return { version: 1, threads: [] };
+}
 function bound(data: CommentsFile, documentSha256: string): boolean {
   return !data.threads.length || data.document?.sha256 === documentSha256;
 }
@@ -155,7 +158,7 @@ export function createCommentsService(
     } catch (error) {
       if (isMissing(error))
         return {
-          data: { version: 1, threads: [] } satisfies CommentsFile,
+          data: emptyComments(),
           sha256: null,
           notice: null,
         };
@@ -169,7 +172,7 @@ export function createCommentsService(
       };
     } catch {
       return {
-        data: { version: 1, threads: [] } satisfies CommentsFile,
+        data: emptyComments(),
         sha256: file.sha256,
         notice:
           "Comments couldn’t be read. The sidecar is malformed and has not been changed.",
@@ -270,7 +273,20 @@ export function createCommentsService(
     documentSha256: string,
   ) {
     if (previousSha256 === null || previousSha256 === documentSha256) return;
-    const target = await resolve(input);
+    await rebindFile(
+      await resolve(input),
+      input,
+      previousSha256,
+      documentSha256,
+    );
+  }
+  async function rebindFile(
+    target: CommentFileTarget,
+    input: CommentTarget,
+    previousSha256: string | null,
+    documentSha256: string,
+  ) {
+    if (previousSha256 === null || previousSha256 === documentSha256) return;
     for (let attempt = 0; attempt < 4; attempt++) {
       const saved = await read(target);
       if (
@@ -287,7 +303,14 @@ export function createCommentsService(
         contentEncoding: "utf8",
         expectedSha256: saved.sha256,
       });
-      if (result.outcome === "written") return;
+      if (result.outcome === "written") {
+        bb.realtime.publish("comments-changed", {
+          vaultId: input.vaultId ?? null,
+          path: input.path,
+          source: input.source ?? null,
+        });
+        return;
+      }
     }
   }
   function thread(data: CommentsFile, id: string): CommentThread {
@@ -390,6 +413,7 @@ export function createCommentsService(
   return {
     list,
     rebind,
+    rebindFile,
     keep: (input: CommentTarget) => mutate(input, () => {}, true),
     author,
     user,

@@ -1053,11 +1053,15 @@ export default async function plugin(
     });
     if (result.outcome === "written") {
       if (markdown)
-        await comments.rebind(
-          { vaultId: vault.id, path: relativePath },
-          previousSha256,
-          result.sha256,
-        );
+        await comments
+          .rebind(
+            { vaultId: vault.id, path: relativePath },
+            previousSha256,
+            result.sha256,
+          )
+          .catch((error) =>
+            bb.log.warn(`comments not rebound: ${errorMessage(error)}`),
+          );
       mentionSummaries.delete(vault.id);
       bb.realtime.publish("vault-changed", {
         vaultId: vault.id,
@@ -1789,6 +1793,13 @@ export default async function plugin(
     };
   }
 
+  async function leaveComments(input: { vaultId?: string; path: string }) {
+    const vault = getVault(input.vaultId);
+    const relativePath = requireVaultPath(input.path, { extension: ".md" });
+    await serializeVault(vault.id, () => orphanSidecar(vault, relativePath));
+    return comments.list({ vaultId: vault.id, path: relativePath });
+  }
+
   async function documentlessSidecar(input: {
     vaultId?: string;
     sidecarPath: string;
@@ -1865,12 +1876,7 @@ export default async function plugin(
       return { stranded, truncated: listing.truncated };
     },
     keepComments: (input) => comments.keep(input),
-    async leaveComments(input) {
-      const vault = getVault(input.vaultId);
-      const relativePath = requireVaultPath(input.path, { extension: ".md" });
-      await serializeVault(vault.id, () => orphanSidecar(vault, relativePath));
-      return comments.list({ vaultId: vault.id, path: relativePath });
-    },
+    leaveComments: (input) => leaveComments(input),
     async readOrphanedComments(input) {
       const { vault, sidecarPath } = await documentlessSidecar(input);
       const file = await readExistingFile(vault, sidecarPath);
@@ -2242,11 +2248,16 @@ export default async function plugin(
       });
       if (result.outcome === "written") {
         if (/\.md$/i.test(input.path))
-          await comments.rebind(
-            { path: input.path, source: input.source },
-            previousSha256,
-            result.sha256,
-          );
+          await comments
+            .rebindFile(
+              target,
+              { path: input.path, source: input.source },
+              previousSha256,
+              result.sha256,
+            )
+            .catch((error) =>
+              bb.log.warn(`comments not rebound: ${errorMessage(error)}`),
+            );
         mentionSummaries.clear();
       }
       return result;
@@ -3395,7 +3406,7 @@ export default async function plugin(
           run: (input) =>
             attemptCli(async () =>
               commentOutput(
-                await handlers.leaveComments({
+                await leaveComments({
                   vaultId: input.options.vault,
                   path: input.positionals.path,
                 }),
