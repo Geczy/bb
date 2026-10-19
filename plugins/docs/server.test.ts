@@ -1943,7 +1943,7 @@ describe("Docs comment lifecycle", () => {
       );
       expect({ ...pushed, stdout: JSON.parse(pushed.stdout) }).toMatchObject({
         exitCode: 0,
-        stdout: { errors: [] },
+        stdout: { applied: { outcome: "applied", errors: [] } },
       });
       expect(host.files.has("/vault/notes/push.md")).toBe(false);
       expect(
