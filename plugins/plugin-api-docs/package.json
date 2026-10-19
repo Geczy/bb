@@ -6,7 +6,7 @@
   "description": "Browse the bb plugin API as an annotated map of the product.",
   "engines": {
     "bb": ">=0.0",
-    "bbPluginSdk": ">=0.6.66"
+    "bbPluginSdk": ">=0.6.68"
   },
   "bb": {
     "name": "Plugin Guide",
