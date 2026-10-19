@@ -78,4 +78,53 @@ describe("visible comment text", () => {
       threadRanges(doc, [thread], "# Plan\n\nShip on December 30."),
     ).toEqual([]);
   });
+  it("re-finds stale saved offsets by quote and never highlights another sentence", () => {
+    const original =
+      "# Plan\n\nIntro.\n\n---\n\nAfter dash rule target sentence.\n\n***\n\nAfter star rule target sentence.";
+    const edited = original
+      .replace("Intro.", "Intro.\n\nInserted externally.")
+      .replace("After star rule target sentence.", "Totally different words.");
+    editor = new Editor({
+      extensions: [StarterKit, Markdown.configure({ html: true })],
+      content: edited,
+    });
+    const before = visibleMarkdown(original).text;
+    const listed = (id: string, quote: string) => {
+      const start = before.indexOf(quote);
+      return {
+        id,
+        status: "open" as const,
+        resolvedAt: null,
+        resolvedBy: null,
+        messages: [
+          {
+            id,
+            author: { kind: "user" as const, name: "You" },
+            body: id,
+            createdAt: "2026-10-19T00:00:00.000Z",
+            editedAt: null,
+            sentTo: [],
+          },
+        ],
+        anchor: {
+          state: "anchored" as const,
+          quote,
+          start,
+          end: start + quote.length,
+          line: 1,
+        },
+      };
+    };
+    const doc = editor.state.doc;
+    expect(
+      threadRanges(
+        doc,
+        [
+          listed("dash", "After dash rule target sentence."),
+          listed("star", "After star rule target sentence."),
+        ],
+        null,
+      ).map((range) => [range.id, doc.textBetween(range.from, range.to)]),
+    ).toEqual([["dash", "After dash rule target sentence."]]);
+  });
 });

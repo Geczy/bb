@@ -149,6 +149,7 @@ export function createCommentsService(
     _input,
     work,
   ) => work(),
+  onWritten: (input: CommentTarget, documentSha256: string) => void = () => {},
 ) {
   const user: CommentAuthor = { kind: "user", name: "You" };
   const fileArgs = (target: CommentFileTarget) => ({
@@ -214,72 +215,6 @@ export function createCommentsService(
         ),
     };
   }
-  async function adoptStranded(input: CommentTarget): Promise<void> {
-    const target = await resolve(input);
-    const api = pathApi(target.path);
-    const sidecarPath = commentSidecar(target.path);
-    const directory = api.dirname(sidecarPath);
-    let names: string[];
-    try {
-      const listing = await bb.sdk.files.listPaths({
-        ...(target.hostId ? { hostId: target.hostId } : {}),
-        path: directory,
-        includeHidden: true,
-        includeFiles: true,
-        includeDirectories: false,
-        limit: 500,
-      });
-      names = listing.paths
-        .map((item) => item.path)
-        .filter(
-          (name) =>
-            /\.md\.json$/i.test(name) &&
-            !/[\\/]/.test(name) &&
-            name !== api.basename(sidecarPath),
-        );
-    } catch (error) {
-      if (isMissing(error)) return;
-      throw error;
-    }
-    if (!names.length) return;
-    await serialize(input, async () => {
-      const [saved, file] = await Promise.all([
-        read(target),
-        bb.sdk.files.read(fileArgs(target)),
-      ]);
-      if (saved.sha256 !== null) return;
-      const matches: string[] = [];
-      for (const name of names) {
-        const candidate = api.join(directory, name);
-        const sidecar = await bb.sdk.files.read({
-          ...fileArgs(target),
-          path: candidate,
-        });
-        if (!sidecarMatchesDocument(sidecar.content, file.sha256)) continue;
-        try {
-          await bb.sdk.files.read({
-            ...fileArgs(target),
-            path: api.join(api.dirname(target.path), name.slice(0, -5)),
-          });
-        } catch (error) {
-          if (!isMissing(error)) throw error;
-          matches.push(candidate);
-        }
-      }
-      if (matches.length !== 1) return;
-      await bb.sdk.files.move({
-        ...(target.hostId ? { hostId: target.hostId } : {}),
-        rootPath: target.rootPath,
-        sourcePath: matches[0]!,
-        destinationPath: sidecarPath,
-      });
-      bb.realtime.publish("comments-changed", {
-        vaultId: input.vaultId ?? null,
-        path: input.path,
-        source: input.source ?? null,
-      });
-    });
-  }
   async function mutate(
     input: CommentTarget,
     operation: (data: CommentsFile, content: string, sha256: string) => void,
@@ -313,6 +248,7 @@ export function createCommentsService(
           expectedSha256: saved.sha256,
         });
         if (result.outcome === "conflict") continue;
+        onWritten(input, file.sha256);
         bb.realtime.publish("comments-changed", {
           vaultId: input.vaultId ?? null,
           path: input.path,
@@ -425,12 +361,6 @@ export function createCommentsService(
   }
   return {
     list,
-    async listAdopting(
-      input: CommentTarget & { status?: "open" | "resolved" | "all" },
-    ) {
-      await adoptStranded(input);
-      return list(input);
-    },
     author,
     user,
     async add(
@@ -558,6 +488,9 @@ export function createCommentsService(
           );
           if (
             item &&
+            item.anchor.documentSha256 === sha256 &&
+            updated.anchor.start < item.anchor.end &&
+            updated.anchor.end > item.anchor.start &&
             updated.anchor.documentSha256 === sha256 &&
             doc.text.slice(updated.anchor.start, updated.anchor.end) ===
               updated.anchor.quote

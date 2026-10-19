@@ -764,6 +764,14 @@ export default async function plugin(
       data TEXT NOT NULL,
       PRIMARY KEY (vault_id, path)
     )`,
+    `CREATE TABLE IF NOT EXISTS comment_sidecars (
+      vault_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      document_sha256 TEXT NOT NULL,
+      PRIMARY KEY (vault_id, path)
+    )`,
+    `CREATE INDEX IF NOT EXISTS comment_sidecars_document
+      ON comment_sidecars (vault_id, document_sha256)`,
   ]);
 
   let seededDefaultVault = false;
@@ -1242,18 +1250,7 @@ export default async function plugin(
       });
       if (sidecar) {
         try {
-          await bb.sdk.files.mkdir({
-            ...hostArgs(vault),
-            path: absolutePath(vault, path.posix.dirname(newSidecar)),
-            rootPath: vault.rootPath,
-            recursive: true,
-          });
-          await bb.sdk.files.move({
-            ...hostArgs(vault),
-            sourcePath: absolutePath(vault, oldSidecar),
-            destinationPath: absolutePath(vault, newSidecar),
-            rootPath: vault.rootPath,
-          });
+          await moveSidecar(vault, from, to);
         } catch (error) {
           await bb.sdk.files.move({
             ...hostArgs(vault),
@@ -1264,6 +1261,7 @@ export default async function plugin(
           throw error;
         }
       }
+      moveSidecarRecords(vault.id, from, to);
       db.transaction(() => {
         const rows = db
           .prepare(
@@ -1672,6 +1670,21 @@ export default async function plugin(
           });
           continue;
         }
+        const renamed = written.filter(
+          (entry) =>
+            entry.sha256 === current?.sha256 && /\.md$/i.test(entry.localPath),
+        );
+        if (
+          renamed.length === 1 &&
+          (await readExistingFile(vault, commentSidecar(deletion.path))) &&
+          !(await readExistingFile(
+            vault,
+            commentSidecar(renamed[0]!.localPath),
+          ))
+        ) {
+          await moveSidecar(vault, deletion.path, renamed[0]!.localPath);
+          moveSidecarRecords(vault.id, deletion.path, renamed[0]!.localPath);
+        }
         await removePath(vault.id, deletion.path, false);
         deleted.push(deletion.path);
       } catch (error) {
@@ -1687,6 +1700,13 @@ export default async function plugin(
         right.localeCompare(left),
     )) {
       try {
+        await bb.sdk.files
+          .remove({
+            ...hostArgs(vault),
+            path: absolutePath(vault, `${directory}/.bb-comments`),
+            rootPath: vault.rootPath,
+          })
+          .catch(() => undefined);
         await removePath(vault.id, directory, false);
         deletedDirectories.push(directory);
       } catch (error) {
@@ -1734,7 +1754,90 @@ export default async function plugin(
     },
     (input, work) =>
       input.source ? work() : serializeVault(getVault(input.vaultId).id, work),
+    (input, documentSha256) => {
+      if (!input.source)
+        recordSidecar(
+          getVault(input.vaultId).id,
+          requireVaultPath(input.path),
+          documentSha256,
+        );
+    },
   );
+
+  function recordSidecar(
+    vaultId: string,
+    relativePath: string,
+    documentSha256: string,
+  ) {
+    db.prepare(
+      "INSERT INTO comment_sidecars (vault_id, path, document_sha256) VALUES (?, ?, ?) ON CONFLICT (vault_id, path) DO UPDATE SET document_sha256 = excluded.document_sha256",
+    ).run(vaultId, relativePath, documentSha256);
+  }
+
+  async function moveSidecar(vault: Vault, from: string, to: string) {
+    const destination = commentSidecar(to);
+    await bb.sdk.files.mkdir({
+      ...hostArgs(vault),
+      path: absolutePath(vault, path.posix.dirname(destination)),
+      rootPath: vault.rootPath,
+      recursive: true,
+    });
+    await bb.sdk.files.move({
+      ...hostArgs(vault),
+      sourcePath: absolutePath(vault, commentSidecar(from)),
+      destinationPath: absolutePath(vault, destination),
+      rootPath: vault.rootPath,
+    });
+  }
+
+  function moveSidecarRecords(vaultId: string, from: string, to: string) {
+    db.prepare(
+      "UPDATE OR REPLACE comment_sidecars SET path = ? || substr(path, length(?) + 1) WHERE vault_id = ? AND (path = ? OR substr(path, 1, length(?)) = ?)",
+    ).run(to, from, vaultId, from, `${from}/`, `${from}/`);
+  }
+
+  async function adoptStrandedComments(
+    vault: Vault,
+    relativePath: string,
+    documentSha256: string,
+  ) {
+    const candidates = db
+      .prepare(
+        "SELECT path FROM comment_sidecars WHERE vault_id = ? AND document_sha256 = ? AND path != ?",
+      )
+      .pluck()
+      .all(vault.id, documentSha256, relativePath)
+      .map((value) => z.string().parse(value));
+    if (!candidates.length) return;
+    await serializeVault(vault.id, async () => {
+      if (await readExistingFile(vault, commentSidecar(relativePath))) return;
+      const stranded: string[] = [];
+      for (const candidate of candidates) {
+        if (
+          !(await readExistingFile(vault, candidate)) &&
+          (await readExistingFile(vault, commentSidecar(candidate)))
+        )
+          stranded.push(candidate);
+      }
+      if (stranded.length !== 1) return;
+      await moveSidecar(vault, stranded[0]!, relativePath);
+      moveSidecarRecords(vault.id, stranded[0]!, relativePath);
+    });
+  }
+
+  async function listVaultComments(
+    input: CommentTarget & { status?: "open" | "resolved" | "all" },
+  ) {
+    if (input.source) return comments.list(input);
+    const vault = getVault(input.vaultId);
+    const relativePath = requireVaultPath(input.path, { extension: ".md" });
+    const document = await readFile(vault.id, relativePath);
+    await adoptStrandedComments(vault, relativePath, document.sha256);
+    const result = await comments.list(input, document);
+    if (result.sidecarSha256 !== null)
+      recordSidecar(vault.id, relativePath, document.sha256);
+    return result;
+  }
 
   const handlers: PluginRpcHandlers<typeof docsRpcContract> = {
     async listCommentFolder(input) {
@@ -1762,7 +1865,7 @@ export default async function plugin(
       }
       return { stranded, truncated: listing.truncated };
     },
-    listComments: (input) => comments.listAdopting(input),
+    listComments: (input) => listVaultComments(input),
     addComment: (input) => comments.add(input, comments.user),
     replyComment: (input) => comments.reply(input, comments.user),
     setCommentStatus: (input) => comments.status(input, comments.user),
@@ -3165,7 +3268,7 @@ export default async function plugin(
                 };
               }
               return commentOutput(
-                await comments.listAdopting({
+                await listVaultComments({
                   ...commentTarget(input),
                   status: z
                     .enum(["open", "resolved", "all"])

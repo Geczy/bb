@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import { createCommentsService } from "./comments-service.js";
-import { commentsFileSchema } from "./comments.js";
+import { commentsFileSchema, makeAnchor } from "./comments.js";
+import { visibleMarkdown } from "./comment-text.js";
 
 const disposers: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -204,5 +205,52 @@ describe("comment sidecar mutations", () => {
       anchor: { state: "anchored", quote: "New date" },
     });
     expect(result.threads[0].messages[0].body).toBe("Question");
+  });
+  it("never persists a refreshed anchor onto another sentence after a live external edit", async () => {
+    const { service, files } = setup();
+    const original =
+      "# Plan\n\nIntro.\n\n---\n\nAfter dash rule target sentence.\n\n***\n\nAfter star rule target sentence.\n";
+    files.set("/vault/plan.md", original);
+    await service.add(
+      { ...target, quote: "After dash rule target sentence.", body: "Dash" },
+      service.user,
+    );
+    const star = await service.add(
+      { ...target, quote: "After star rule target sentence.", body: "Star" },
+      service.user,
+    );
+    const starId = star.threads.find(
+      (thread) => thread.messages[0].body === "Star",
+    )!.id;
+    const edited = original
+      .replace("Intro.", "Intro.\n\nInserted externally.")
+      .replace("After star rule target sentence.", "Totally different words.");
+    files.set("/vault/plan.md", edited);
+    const text = visibleMarkdown(edited).text;
+    const dashStart = text.indexOf("After dash rule target sentence.");
+    await service.refresh({
+      ...target,
+      documentSha256: hash(edited),
+      anchors: [
+        {
+          id: starId,
+          anchor: makeAnchor(
+            text,
+            dashStart,
+            dashStart + "After dash rule target sentence.".length,
+            hash(edited),
+          ),
+        },
+      ],
+    });
+    const stored = commentsFileSchema
+      .parse(JSON.parse(files.get(sidecar)!))
+      .threads.find((thread) => thread.id === starId)!;
+    expect(stored.anchor.quote).toBe("After star rule target sentence.");
+    expect(
+      (await service.list(target)).threads.find(
+        (thread) => thread.id === starId,
+      )!.anchor.state,
+    ).toBe("orphaned");
   });
 });

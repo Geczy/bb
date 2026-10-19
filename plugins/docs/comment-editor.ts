@@ -53,6 +53,15 @@ export function threadRanges(
         "",
         makeAnchor(saved, start, end, "saved"),
       ));
+    else if (visible.text.slice(start, end) !== thread.anchor.quote)
+      ({ start, end } = resolveAnchor({ text: visible.text, lines: [] }, "", {
+        quote: thread.anchor.quote,
+        prefix: "",
+        suffix: "",
+        start,
+        end,
+        documentSha256: "",
+      }));
     if (start === null || end === null) continue;
     const from = visible.positions[start];
     const to = visible.positions[end - 1];

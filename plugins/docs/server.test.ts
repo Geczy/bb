@@ -1887,6 +1887,123 @@ describe("Docs proposals", () => {
 });
 
 describe("Docs comment lifecycle", () => {
+  it("keeps comments through pull, local file and folder renames, and push --delete", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/notes/push.md": {
+        content: "# Push\n\nShip tomorrow.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+      "/vault/team/a.md": {
+        content: "# A\n\nAlpha line.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+    });
+    const localRename = (from: string, to: string) => {
+      for (const [entry, file] of [...host.files])
+        if (entry === from || entry.startsWith(`${from}/`)) {
+          host.files.delete(entry);
+          host.setUtf8(to + entry.slice(from.length), file.content);
+        }
+    };
+    try {
+      const added = await host.harness.behavior.callRpc("addComment", {
+        path: "notes/push.md",
+        quote: "tomorrow",
+        body: "Confirm the date",
+      });
+      const commentId = added.threads[0]!.id;
+      await host.harness.behavior.callRpc("replyComment", {
+        path: "notes/push.md",
+        commentId,
+        body: "Confirmed",
+      });
+      await host.harness.behavior.callRpc("addComment", {
+        path: "team/a.md",
+        quote: "Alpha line",
+        body: "Folder comment",
+      });
+      await host.harness.behavior.runCli(["pull", "--all", "--into", "all"], {
+        cwd: "/work",
+      });
+      localRename("/work/all/notes/push.md", "/work/all/notes/pushed.md");
+      localRename("/work/all/team", "/work/all/crew");
+      const pushed = await host.harness.behavior.runCli(
+        ["push", "all", "--delete", "--json"],
+        { cwd: "/work" },
+      );
+      expect(pushed.exitCode).toBe(0);
+      expect(host.files.has("/vault/notes/push.md")).toBe(false);
+      expect(
+        await host.harness.behavior.callRpc("listComments", {
+          path: "notes/pushed.md",
+        }),
+      ).toMatchObject({
+        threads: [
+          {
+            id: commentId,
+            messages: [{ body: "Confirm the date" }, { body: "Confirmed" }],
+          },
+        ],
+      });
+      expect(
+        await host.harness.behavior.callRpc("listComments", {
+          path: "crew/a.md",
+        }),
+      ).toMatchObject({
+        threads: [{ messages: [{ body: "Folder comment" }] }],
+      });
+      expect(host.files.has("/vault/notes/.bb-comments/push.md.json")).toBe(
+        false,
+      );
+      expect(host.files.has("/vault/team/.bb-comments/a.md.json")).toBe(false);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("adopts comments after an external move into another folder", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/notes/externally-renamed.md": {
+        content: "# Move\n\nKeep this discussion.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+    });
+    try {
+      const added = await host.harness.behavior.callRpc("addComment", {
+        path: "notes/externally-renamed.md",
+        quote: "Keep this discussion",
+        body: "Still here?",
+      });
+      const file = host.files.get("/vault/notes/externally-renamed.md")!;
+      host.files.delete("/vault/notes/externally-renamed.md");
+      host.setUtf8("/vault/other/externally-renamed.md", file.content);
+      expect(
+        await host.harness.behavior.callRpc("listComments", {
+          path: "other/externally-renamed.md",
+        }),
+      ).toMatchObject({
+        threads: [
+          {
+            id: added.threads[0]!.id,
+            anchor: { state: "anchored" },
+            messages: [{ body: "Still here?" }],
+          },
+        ],
+      });
+      expect(
+        host.files.has("/vault/notes/.bb-comments/externally-renamed.md.json"),
+      ).toBe(false);
+      expect(
+        host.files.has("/vault/other/.bb-comments/externally-renamed.md.json"),
+      ).toBe(true);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("never attaches stranded comments to a different document", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": {
