@@ -205,7 +205,6 @@ function MemorySettings() {
           </div>
           <Button
             size="sm"
-            title="Opens a new thread with the request filled in"
             onClick={() =>
               navigate.toCompose({
                 focusPrompt: true,
