@@ -1659,7 +1659,7 @@ The canonical release summary.
     await waitFor(() => {
       expect(checkForUpdates).toHaveBeenCalledTimes(1);
     });
-    expect(sdk.system.version).not.toHaveBeenCalled();
+    expect(sdk.system.version).toHaveBeenCalledWith({ force: true });
   });
 
   it("explains an unknown desktop release and retries through the desktop bridge", async () => {
@@ -2265,7 +2265,10 @@ The canonical release summary.
     },
   );
 
-  function useDesktopApp(): { checkForUpdates: ReturnType<typeof vi.fn> } {
+  function useDesktopApp(): {
+    checkForUpdates: ReturnType<typeof vi.fn>;
+    installUpdate: ReturnType<typeof vi.fn>;
+  } {
     const desktopInfo: BbDesktopInfo = {
       downloadState: "idle",
       lastCheckedAt: null,
@@ -2277,15 +2280,16 @@ The canonical release summary.
       version: "0.0.5",
     };
     const checkForUpdates = vi.fn().mockResolvedValue(desktopInfo);
+    const installUpdate = vi.fn();
     useDesktopUpdateInfoMock.mockReturnValue({
       desktopApi: {
         checkForUpdates,
-        installUpdate: vi.fn(),
+        installUpdate,
       } as unknown as BbDesktopApi,
       desktopInfo,
       isDesktop: true,
     });
-    return { checkForUpdates };
+    return { checkForUpdates, installUpdate };
   }
 
   function desktopFleet(): UpdateInventory {
@@ -2382,7 +2386,7 @@ The canonical release summary.
     expect(installUpdate).toHaveBeenCalledOnce();
   });
 
-  it("keeps one desktop row when the desktop runs the server itself", async () => {
+  it("uses the Server label when the desktop runs the server itself", async () => {
     useDesktopApp();
     hostDaemon.localDaemonHostId = "host_primary";
     useUpdateInventoryMock.mockReturnValue(desktopFleet());
@@ -2395,8 +2399,8 @@ The canonical release summary.
     renderSection();
 
     await waitFor(() => expect(sdk.system.appUpdate).toHaveBeenCalled());
-    expect(screen.getByText("Desktop")).toBeDefined();
-    expect(screen.queryByText("Server")).toBeNull();
+    expect(screen.getByText("Server")).toBeDefined();
+    expect(screen.queryByText("Desktop")).toBeNull();
     expect(
       document.querySelectorAll('[data-bb-update-role="app"]'),
     ).toHaveLength(1);
@@ -2406,4 +2410,74 @@ The canonical release summary.
       }),
     ).toBeNull();
   });
+
+  it.each(["host_laptop", null])(
+    "shows a desktop-hosted server's own version when the viewing host is %s",
+    async (localHostId) => {
+      const { checkForUpdates } = useDesktopApp();
+      hostDaemon.localDaemonHostId = localHostId;
+      const inventory = desktopFleet();
+      const serverVersion = {
+        ...inventory.systemVersion!,
+        currentVersion: "0.0.4",
+        installKind: "desktop" as const,
+        updateAvailable: true,
+      };
+      useUpdateInventoryMock.mockReturnValue(
+        makeInventory({ ...inventory, systemVersion: serverVersion }),
+      );
+      vi.mocked(sdk.system.version).mockResolvedValue(serverVersion);
+      vi.mocked(sdk.system.appUpdate).mockResolvedValue(
+        makeAppUpdateStatus({
+          current: { commit: null, version: "0.0.4" },
+          support: { kind: "unsupported", reason: "desktop" },
+        }),
+      );
+
+      renderSection();
+
+      const bbCard = screen.getByRole("region", { name: "bb" });
+      await waitFor(() => expect(checkForUpdates).toHaveBeenCalledOnce());
+      expect(within(bbCard).getByText("Server")).toBeDefined();
+      expect(within(bbCard).getByText("0.0.4")).toBeDefined();
+      expect(within(bbCard).queryByText("Desktop")).toBeNull();
+      expect(
+        within(bbCard).queryByText(/Update bb in the desktop app on/),
+      ).toBeNull();
+      expect(
+        within(bbCard).queryByRole("button", {
+          name: /Copy the upgrade command|Relaunch bb|Download the update/,
+        }),
+      ).toBeNull();
+      expect(sdk.system.version).toHaveBeenCalledWith({ force: true });
+    },
+  );
+  it.each(["host_primary", "host_laptop", null])(
+    "uses the shared server update action for a desktop-hosted server viewed from %s",
+    async (localHostId) => {
+      const { installUpdate } = useDesktopApp();
+      hostDaemon.localDaemonHostId = localHostId;
+      useUpdateInventoryMock.mockReturnValue(desktopFleet());
+      const status = makeAppUpdateStatus({
+        support: { kind: "unsupported", reason: "desktop" },
+        desktopUpdateSupported: true,
+      });
+      vi.mocked(sdk.system.appUpdate).mockResolvedValue(status);
+      vi.mocked(sdk.system.applyAppUpdate).mockResolvedValue(status);
+      renderSection();
+      const update = await screen.findByRole("button", {
+        name: "Update available · Download the update and restart bb",
+      });
+      expect(screen.getByText("Server")).toBeDefined();
+      expect(screen.queryByText("Desktop")).toBeNull();
+      expect(screen.queryByText(/Update bb in the desktop app on/)).toBeNull();
+      fireEvent.click(update);
+      await waitFor(() =>
+        expect(sdk.system.applyAppUpdate).toHaveBeenCalledWith({
+          confirmInterruptingThreads: false,
+        }),
+      );
+      expect(installUpdate).not.toHaveBeenCalled();
+    },
+  );
 });

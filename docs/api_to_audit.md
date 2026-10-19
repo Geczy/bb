@@ -208,7 +208,8 @@ Docs: `providers.md`.
 ## `bb.providers.experimental_contributeEnv`
 
 Registers one resolver per provider per plugin that returns up to 32
-environment entries for each session and turn. Each entry is a literal or a
+environment entries for each session and turn, and for model catalog listing
+with a `null` thread and project. Each entry is a literal or a
 server-relative path the host expands. Conflicts resolve in plugin load
 order, and the values override the shell environment.
 
@@ -1225,39 +1226,158 @@ Docs: `frontend-core-slots.md`, `frontend-components.md`.
 5. Keep core and plugin destinations on the same resolver and verify the
    controller never learns Changes, file, task, or document target shapes.
 
-## `PluginNavPanelRegistration.experimental_sidebarAccessory`
+## `PluginNavPanelRegistration.experimental_useBadge`
 
-**Kept experimental (2026-08-22).** It has one consumer (the tasks plugin), and
-item 1 below would change the API shape.
+**Added 2026-10-15 (SDK 0.6.53), replacing `experimental_sidebarAccessory`.**
+One consumer: the Tasks plugin's open-task count.
 
-A no-props, presentational component for a live value beside a nav panel's
-navigation entry. The SDK accepts it, but no host surface mounts it, because
-the navigation rail is icon-only.
+A nav panel hook returning `ExperimentalBadge`
+(`{ count?, text?, tone?, label }`) or `null`. `count` and `text` are
+exclusive; `text` is at most 8 characters; `tone` is `neutral` (the default),
+`warning`, or `critical`, and bb owns the colors. The sidebar navigation model
+runs the hook once per registered panel in the plugin's slot scope and crash
+boundary and hands the value to every navigation provider as `item.badge`.
+The bundled Navigation plugin's Rail draws a count (capped at `9+`) or a dot
+on the icon, and does not draw `text`; its Top list and More menu draw the count
+(capped at `99+`), the text, or a dot. Both add `label` to the accessible name
+and put a dot on More, in the strongest hidden tone, while a badged panel is
+hidden there.
+
+The fields follow the 30 bb-community plugins that drew
+`experimental_sidebarAccessory` (October 2026): 12 drew one count, 8 several
+numbers or a fraction, 5 a short status word, 3 a percentage, and 18 used
+red, amber, or an accent color for state. A plugin that still passes
+`experimental_sidebarAccessory` keeps loading; the field is dropped with a
+warning. Remove that compatibility once released plugins have migrated.
 
 Docs: `frontend-core-slots.md`.
 
 **Audit before stabilizing.**
 
-1. **Component versus value.** Confirm real consumers need component-owned
-   live state, rather than a narrower string/number/badge value plus a separate
-   host update primitive. Installed plugins are trusted, but a component can
-   still render controls or markup that is inappropriate for row chrome.
-2. **Budget.** Revisit the 4rem by 1.25rem cap against counts, short statuses,
-   localization, browser zoom, and multiple plugin rows. Decide whether the
-   host should expose a fixed badge treatment instead of accepting plugin
-   styling.
-3. **Host surface.** No host surface mounts the component. Decide where a
-   live value belongs beside an icon-only rail destination (a badge, a
-   tooltip, or nowhere) before stabilizing, or remove the field.
-4. **Overflow and portals.** The wrapper clips ordinary descendants but cannot
-   constrain content portalled elsewhere in the document. Confirm the
-   presentational-only contract is sufficient, or enforce a non-component
-   value before stabilization.
-5. **Accessibility.** Accessory text is exposed beside the navigation button
-   without changing that button's stable accessible name. Confirm that reading
-   order and the focus-triggered accessory/options swap work for counts and
-   short statuses, and decide whether a dedicated label prop or host-rendered
-   status semantics are needed.
+1. **Core parity.** Decide whether a core destination needs a badge and, if
+   so, route it through the same `item.badge` path the Navigation plugin
+   draws.
+2. **Tone and text.** Confirm three tones and an 8-character `text` cover
+   migrated plugins, including the six that drew several colored counts and
+   now draw one badge.
+3. **Hook lifetime.** The hook runs for every registered panel while the
+   sidebar is mounted, including hidden ones. Confirm that cost is acceptable for
+   plugins with expensive queries, or add visibility to the hook's inputs.
+4. **More summary.** The More button's accessible name lists every hidden
+   badge. Check that this stays usable with many badged hidden panels.
+
+## `app.slots.experimental_sidebarNavigation` (`@get-bb/plugin-sdk/app`)
+
+**Restored 2026-10-15 (SDK 0.6.53) with `placement`.** It was removed in
+#5229 (0.46.0); the names are unchanged so plugins built before 0.46, such as
+Compact Nav 0.1.x and Sidebar Sections, load again.
+
+**What it does.** Draws the sidebar navigation: New thread, Search threads,
+Plugins, Skills, Automations, plugin panels, and More, plus optional controls
+in the sidebar header. Exclusive.
+`sidebar.navigationProvider` picks the provider by plugin key: the bundled
+Navigation plugin's `navigation/rail` or `navigation/top-list`, another
+plugin's key, or `__automatic__` (the default: the first registered provider
+from another plugin, else `navigation/rail`). Legacy `__builtin__` and
+`navigation/navigation` read as `__automatic__`.
+
+The registration declares `placement`, `rail` or `list` (the default). bb lays
+the sidebar out from the placement before the provider renders, and keeps the
+layout around it: for `rail`, a fixed-width column that stays when the sidebar
+collapses and Settings at the bottom of the column; for `list`, the area
+above the thread list, a Settings footer action,
+Back to app rows on the Settings, Plugins, and Skills lists, and a collapse
+that hides the whole sidebar. Both placements use the same framed macOS
+window chrome on wide viewports, so changing placement does not move the
+window controls, history controls, or the vertical position of Settings search.
+The component receives `isCompactViewport`,
+`placement`, and the deprecated `experimental_Original`, which renders the
+Navigation plugin's provider for the same placement, or nothing when that
+plugin is disabled.
+
+The optional `headerComponent` renders in the sidebar header row while the
+navigation is active. On wide macOS desktop windows, this row sits below the
+window title bar; elsewhere it sits between the sidebar toggle and bb's back
+and forward buttons. It receives `width`, `controlSize`,
+and `isCompactViewport`. The host clips it to the row, keeps the macOS drag
+region for non-interactive space, aligns it with the macOS window controls,
+and on a crash draws the header of the Navigation plugin's provider for the
+same placement, with one toast. It replaces the separate
+`experimental_sidebarHeader` slot and its `sidebar.headerProvider` setting,
+which let users pair a header with a navigation it did not belong to. That
+slot remains as an untyped runtime alias: a plugin's header joins each of its
+navigations that has no `headerComponent`.
+
+Before plugin frontends settle, a pinned provider, or the provider Automatic
+last chose, reserves the placement it last had and draws nothing until it
+registers; Automatic with nothing remembered reserves the rail. Once
+frontends settle, a missing pinned provider falls back like Automatic, and
+with no provider at all the sidebar uses the list placement and says no
+navigation plugin is enabled. A crashing provider is replaced by the
+Navigation plugin's provider for its placement, with one toast.
+
+**Core callers on the same path.** bb's Rail and Top list are the bundled,
+default-enabled Navigation plugin (`plugins/navigation`), which is on the
+forkable list. It registers both through this slot with no host-only API:
+the host owns only the placement layout, Settings, the customize editor, and
+the navigation model. Rail's header is its New thread button, registered as
+`headerComponent`; it does not read the size props.
+
+**Audit before stabilizing.**
+
+1. **Placements.** Confirm two placements cover real providers, or whether a
+   rail provider needs a declared width.
+2. **Boundary.** Verify providers can express useful navigation without the
+   drawer, thread list, footer, resize handle, Settings, or shortcuts.
+3. **Arbitration.** Confirm Automatic preferring the first installed
+   provider from another plugin over the bundled Rail is right, including
+   when several are installed.
+4. **Loading.** Confirm an empty region in the remembered placement, now
+   also for the bundled Navigation plugin at every boot, is acceptable.
+5. **Original.** Remove `experimental_Original` once released plugins stop
+   rendering it.
+6. **Header alias.** Remove the `experimental_sidebarHeader` alias once
+   released plugins pass `headerComponent`.
+
+## `experimental_useSidebarNavigation`, `experimental_useSidebarNavigationSplit`, `experimental_SidebarNavigationIcon` (`@get-bb/plugin-sdk/app`)
+
+**Restored 2026-10-15 (SDK 0.6.53).**
+
+**What it does.** `experimental_useSidebarNavigation()` returns
+`{ items, activeItemId, isHomeActive, isShortcutModifierHeld, actions }` from
+one model mounted above the sidebar. Items arrive in the user's saved order
+with `isVisible`, `isLoading`, `pluginId`, shortcut metadata, and `badge` (the
+panel's `experimental_useBadge` value). Plugins written before 0.46 that drew
+the removed `experimental_Accessory` item field show no counts until they read
+`badge`. Item ids are the keys stored in
+`sidebar.pluginPanelOrder` and `sidebar.visiblePluginPanels`, and items keep
+their identity while unchanged. `actions` covers
+`activate(id, { openInSplit })`, `goHome()`, `setVisible`, `setOrder` (unknown
+ids are dropped and omitted ids keep their relative order at the end),
+`openCustomize()` (bb's editor in a popover beside the navigation, after open
+menus close, returning focus to the opener), `openDetails`, and
+`disablePlugin`. Calls after the caller unmounts do nothing; outside the
+sidebar the hook returns no items and inert actions.
+`experimental_useSidebarNavigationSplit(id, options?)` mirrors
+`experimental_useSidebarThreadSplit` and accepts `activation: "distance"` and
+`onDragStart` for rows in menus. `experimental_SidebarNavigationIcon` renders
+bb's glyphs and panel icons with plugin branding as fallback.
+
+**Core callers on the same path.** The bundled Navigation plugin's Rail, Top
+list, and header New thread button use these hooks; the app's Settings →
+Appearance → Navigation picker reads the same registrations.
+
+**Audit before stabilizing.**
+
+1. **Semantic items.** Confirm the action and icon variants cover current
+   navigation without exposing routes or host elements.
+2. **Home.** Confirm `isHomeActive` and `goHome()` are the right Home contract
+   for rail providers, including after Settings closes the compact drawer.
+3. **Order semantics.** Confirm `setOrder`'s partial-order rule works for
+   drag-and-drop providers.
+4. **Accessibility.** Validate labels, badges in accessible names,
+   `aria-current`, shortcut metadata, and focus return from Customize in
+   third-party markup.
 
 ## `PluginContentScriptContext.experimental_setThreadRowStatus`
 
@@ -2044,8 +2164,9 @@ or one" changes the registration shape.
 
 Exclusive slots that replace bb's source or diff renderer everywhere it draws
 supplied content, including other plugins' calls to the public components.
-Automatic selection uses the first registration in slot order, and the user
-can pin bb's renderer or a provider per client. A crash falls back to bb's
+Automatic selection prefers a registration from a plugin the user installed
+over one bundled with bb (such as Monaco), then the first in slot order, and
+the user can pin bb's renderer or a provider per client. A crash falls back to bb's
 renderer.
 
 Docs: `frontend-renderer-slots.md`.
@@ -2974,3 +3095,49 @@ directories, linked worktrees, and submodules. Core callers: the setup guide
 Stabilize after deciding whether depth, recency window, and limit should be
 caller options, and after exercising slow or network-mounted home directories
 and Windows hosts.
+
+## Shared VCS process admission (`@get-bb/plugin-sdk/host`)
+
+`experimental_runVcsProcess(command, args, operation, options)` admits a `git`
+or `gh` operation to the runtime's shared queue before invoking it. `args` are
+the command's arguments; they classify git network subcommands (`fetch`,
+`pull`, `push`, `clone`, `ls-remote`, `submodule update`, `remote update`).
+Arguments without a network subcommand, including an empty list for pipelines,
+admit to the local pool. The call holds the permit until the returned promise
+settles; callers must await child close and termination cleanup. Calls nested
+inside an admitted operation run under the outer permit without queueing again.
+`ExperimentalVcsProcessOptions` accepts `priority` (`interactive`, `status`,
+`background`), an optional cancellation signal, and `slots` for pipelines
+that start multiple git children. Queue cancellation prevents spawning; callers
+own cancellation of running children. Execution timeouts begin after admission.
+
+The runtime keeps two disjoint pools. The local pool admits
+`clamp(os.availableParallelism() - 2, 4, 6)` local git children, computed once
+per runtime: background work can fill two fewer slots and status work one
+fewer, so eight or more cores give six, five, and four. The
+network pool admits at most four network git or `gh` children, with at most two
+`gh`: background work can fill two slots and status work three. Waiters gain one
+priority level every 15 seconds. FIFO applies within effective priority in each
+pool: when the first waiter that is not held back by the GitHub lane needs more
+slots than its pool has free, later waiters in that pool wait behind it, so
+pipelines are not starved by single-slot work. A blocked GitHub waiter does not
+block eligible network git work, and neither pool blocks the other. The budget
+is shared across module copies in one Node runtime, including bundled plugins.
+Separate host daemons and server processes own separate budgets; arbitrary
+commands run by agents or terminals are outside this queue.
+
+Core buffered git/gh reads, streaming status/diff reads, blob reads, shell
+pipelines, watcher setup, environment provisioning, and the GitHub plugin use
+this path. The CLI and SDK's workspace reads and mutations reach the same host
+handlers. Host commands give explicit user mutations and diff panels interactive
+priority, status reads status priority, and PR polling/watcher setup/provisioning
+background priority.
+
+Before stabilization, audit cancellation and permit release on all supported
+platforms, mixed plugin bundles sharing the singleton, aging under sustained
+load, whether the CPU-scaled local capacity needs a host override and reflects
+container CPU quotas on supported hosts, whether argument
+classification should cover more network commands (for example `git lfs`), and
+whether work that escapes an admitted operation's async context should regain
+admission. Verify that every caller holds permits until its last admitted child
+exits, including pipelines.

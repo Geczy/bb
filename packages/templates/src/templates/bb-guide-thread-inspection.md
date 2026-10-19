@@ -16,6 +16,7 @@ Listing:
     --environment <id>                     Filter by environment
     --machine <id-or-name>                 Filter by the machine the environment is on (alias --host)
     --parent-thread <id>                   Filter by parent thread
+    --thread <id>                          Only this thread; unknown or deleted IDs are left out (repeatable, up to 200)
     --archived                             Show only archived threads
     --section <id>                         Filter by section
     --unsectioned                          Show only threads outside sections
@@ -73,11 +74,15 @@ Inspecting:
   a provider request; `--json` prints `{ usage: ... }` (`null` when unavailable).
   Claude Code includes an estimated breakdown when available; other providers
   report totals. When the provider reports the session's cumulative cost,
-  `usage.cost` is `{ amount, currency }`.
+  `usage.cost` is `{ amount, currency }`. With the `compactExpiredCache`
+  experiment on, `usage.compactionOfferAt` is when the provider's prompt cache
+  for this context expires (Claude Code and Pi report cache lifetimes); after
+  it, `bb thread tell --compact-first` avoids re-reading the context uncached.
 
   `thread commands` lists the slash commands advertised for the current
-  session; ACP agents report these live, so the list is empty until the agent
-  sends one. `thread options --set` takes `true` or `false` for an on/off
+  session; ACP agents and Claude Code report these live, so the list is empty
+  until the agent sends one. `bb project commands` also lists Claude Code's
+  commands before a thread starts. `thread options --set` takes `true` or `false` for an on/off
   option; `bb provider models <provider>` lists the options a model declares.
 
   bb thread log [id]                       Show thread event log

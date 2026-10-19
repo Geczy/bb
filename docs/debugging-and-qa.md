@@ -6,7 +6,7 @@
 - `pnpm start:worktree` builds production artifacts and serves the optimized app bundle from the checkout-specific dev server URL, while keeping the same dev data directory and deterministic server/host-daemon ports. It has no Vite dev server or hot reload.
 - `pnpm start:worktree-remote` is the trusted-network variant of `pnpm start:worktree`; it binds that server to all IPv4 interfaces.
 - `pnpm desktop` packages the Electron app and launches it against the installed data directory, ports and Electron user-data directory, the same targets a released build uses. It shares the single-instance lock with an installed bb: quit that first, or the launch focuses it instead of starting your build.
-- `pnpm desktop:worktree` packages and launches it against this checkout's data directory and deterministic ports, the same instance `pnpm start:worktree` uses, with Electron's user-data directory at `$BB_DATA_DIR/desktop` (override with `BB_DESKTOP_USER_DATA_DIR`). It refuses to start when the server or host-daemon port is busy, so a stale server cannot answer for your build. Set `BB_DESKTOP_OPEN_DEVTOOLS=1` to open DevTools. Both desktop commands always repackage first; machines without a Developer ID identity produce unsigned artifacts.
+- `pnpm desktop:worktree` packages and launches it against this checkout's data directory and deterministic ports, the same instance `pnpm start:worktree` uses, with Electron's user-data directory at `$BB_DATA_DIR/desktop` (override with `BB_DESKTOP_USER_DATA_DIR`). Like `pnpm start:worktree`, it skips first-run setup unless `BB_SKIP_ONBOARDING=0`. It refuses to start when the server or host-daemon port is busy, so a stale server cannot answer for your build. Set `BB_DESKTOP_OPEN_DEVTOOLS=1` to open DevTools. Both desktop commands always repackage first; machines without a Developer ID identity produce unsigned artifacts.
 - The packaged app defaults to server/frontend `:38886`, host daemon `:38887`, data dir `~/.bb/`, and logs under `~/.bb/logs/`.
 - `bb-app` (including `pnpm start`), `bb-server`, and `bb-host-daemon` capture service stdout and stderr in `logs/server-stdio.log` and `logs/host-daemon-stdio.log` under the selected data directory. These append across restarts and are separate from rotating application logs. Use `tail -F` on these files for console output and early startup errors; service output is not forwarded to the launcher's terminal.
 - Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly against the active data dir: `sqlite3 <data>/bb.db "SELECT * FROM threads WHERE id = 'thr_xxx';"`.
@@ -14,6 +14,11 @@
 - Use the CLI to inspect state: `pnpm bb thread show <id>`, `pnpm bb project list`, `pnpm bb status`. From source, use `pnpm bb:dev`.
 
 ## Desktop Browser Tab Recovery
+
+When the desktop app connects to a BB Connect server, it installs and renews
+the Connect desktop session in both the app and embedded browser cookie stores.
+This also authenticates shared-port links under the same Connect domain. The
+browser keeps its separate profile; unrelated site cookies are not copied.
 
 Saved desktop browser tabs keep their URL and owning host/window. Opening one
 in the desktop app attaches the existing view when that window still owns it,
@@ -47,6 +52,21 @@ Inspect the persisted owner with
 with `bb browser instances --host <hostId> --json` or
 `sdk.experimental_desktopBrowsers.listInstances`. Recovery uses the existing
 native snapshot and browser APIs; no daemon wire fields change.
+
+Browser tab favicons retain their candidates across same-origin navigation. The
+native desktop manager caches candidates for the 40 most recently used HTTP(S)
+origins per connected server; returning to an origin or reopening its tab can
+reuse those candidates. Same-origin candidate updates retain earlier candidates as fallbacks, and empty
+updates leave the known icon intact. Crossing to an uncached origin clears the
+previous icon. The cache is in memory and ends with the desktop process.
+
+The preload browser `onState` subscription immediately replays the latest
+validated state for up to 100 recently updated tabs before forwarding live
+updates. This lets remounted tab headers recover without waiting for a new
+favicon event. Renderer image-size measurements are also bounded and reused
+so remounts retain the appropriate Retina candidate. Image bytes still load
+through the renderer's browser cache; authenticated icon fetching through the
+embedded browser session is not implemented by this cache.
 
 ## Log Fields
 
@@ -187,10 +207,14 @@ fsync waits. Page faults do not identify whether the fault was on the SQLite
 mmap, the server heap, or another mapping, and these counters do not measure
 swap-in bytes.
 
-`diagnostics.wal.sizeBytes` is the WAL's physical file size, sampled only when
-emitting a slow log with diagnostics enabled. Missing or inaccessible WAL files
-and in-memory databases report null. WAL size can include space reused by
-earlier generations; it does not measure uncheckpointed backlog or identify
+`diagnostics.wal.sizeBytes` is the most recent asynchronous sample of the WAL's
+physical file size. A slow log with diagnostics enabled requests a refresh at
+most once per second per connection, with at most one refresh in flight.
+`diagnostics.wal.sampledAt` is the sample's UTC completion time; the log uses
+the previous sample, which may be older after an idle period. Both fields are
+null before the first sample and for in-memory databases. Missing or
+inaccessible WAL files report a null size with a sample timestamp. WAL size
+can include space reused by earlier generations; it does not measure uncheckpointed backlog or identify
 checkpoint progress. Resource sampling is also disabled with the live gate.
 
 ## Pending Question Drafts
@@ -666,6 +690,37 @@ response headers are sent returns retryable `409 file_changed`; a change after
 streaming starts aborts the body. Revision routes ignore Range and keep the
 daemon's 25 MB non-image limit.
 
+Working-tree, host, thread-storage, leased-preview, and uploaded-attachment
+responses share `services/files/file-stream-response.ts`. It owns ranges,
+conditional requests, HEAD, bounded streaming, backpressure, and cancellation.
+The local reader opens a file handle only when bytes are needed and closes it
+on completion, cancellation, or failure. The daemon reader uses the existing
+chunk RPC and passes cancellation through to pending calls. Both readers
+validate file consistency; failures before headers return an error and failures
+after streaming begins terminate the body.
+
+Routes explicitly choose content type, cache policy, and security headers.
+Daemon files retain weak revision ETags and their sandbox/nosniff policy;
+HTML remains `no-store`. Attachments retain their immutable private cache policy
+and strong ETags. Weak validators never authorize `If-Range`; attachment ranges
+can use an exact strong ETag or Last-Modified match. Git revision reads remain
+on the separate whole-file path described above.
+
+Uploaded attachments use `GET /api/v1/projects/:id/attachments/content?path=<stored-path>`.
+This route streams single byte ranges from disk, including open-ended and suffix
+ranges, with `206`, `Accept-Ranges: bytes`, and `Content-Range`. Unsatisfiable
+ranges return `416`; malformed or multipart ranges fall back to the full `200`
+response. `If-None-Match` takes precedence over ranges. `If-Range` must match the
+strong ETag or Last-Modified value exactly; otherwise the full file is returned.
+HEAD returns full-file headers without reading the body. To check partial reads,
+use `curl -D - -H 'Range: bytes=0-1023' '<attachment-url>' -o /tmp/attachment-part`.
+
+Skill detail reads and file listings resolve symlinked skill directories on
+their owning host. The server opts into `followRootSymlink` for
+`host.read_file_relative` and `host.list_files`; other callers pass `false`.
+Relative skill reads remain confined to the resolved directory and deny dotfiles,
+and listings skip nested symlinks. Linked skills remain read-only in bb.
+
 ## Prepared Worktree Restarts
 
 `pnpm start` and `pnpm start:worktree` always run Turbo-backed preparation
@@ -757,6 +812,15 @@ PID, and UTC window). Profiles are kept for up to 12 hours and 1 GB total,
 oldest first, so copy the ones you need. They use private permissions and
 contain local paths and function names; inspect before sharing.
 
+A worker connects to the main-thread inspector and processes completed
+profiles, serializes JSON, and writes files. Captures overlap at rotation to
+preserve coverage without restarting V8's sampler. Native V8 sampling and
+profile completion still have some main-thread cost. Retention scans existing
+files once at startup, then tracks this recorder's writes incrementally; use
+one server per data directory. Rotation does not queue more captures while a
+previous capture is being saved. Shutdown awaits the active save and writes
+the final capture.
+
 ### Turn traces
 
 While both gates are on, every message sent through the send API also writes
@@ -814,15 +878,36 @@ applied chunk.
    `stallCauseCandidate`, when a measured synchronous operation is long enough
    (within one 20 ms sample) to explain the maximum delay, and `unattributed`
    otherwise. A candidate is not a confirmed cause: both fall somewhere in the
-   five-second window. Profiler work is measured as `cpu-profile:start`,
-   `cpu-profile:finish`, and `cpu-profile:serialize`.
-2. Load the `.cpuprofile` covering that time and PID in Chrome DevTools'
+   five-second window. Profile processing runs in a worker and no longer emits
+   the historical `cpu-profile:*` synchronous-work labels.
+2. With performance diagnostics enabled, look for `Event loop stall attribution`
+   records for the same PID and UTC window. They are emitted at the next CPU
+   profile rotation (normally within 30 seconds), or on diagnostics shutdown,
+   even if the profile file is discarded for exceeding its size limit. A
+   separate 20 ms timer records individual gaps of at least 100 ms; the
+   five-second histogram's observation time is not the stall's end time.
+   `stacks` ranks the top five sampled leaf stacks in each gap, with up to 12
+   caller frames, including GC, plugin functions, native writes, and database
+   callers. Frame coordinates are one-based; cached Node source maps are used
+   in the profile worker when available, otherwise coordinates refer to the
+   generated code. Profile scanning and stack formatting run in that worker;
+   the main thread only collects and transfers bounded timing windows.
+   `sampledMs` is elapsed sampling coverage, not CPU time; native frames can
+   include waiting. Each sample contributes at most 10 ms so a long sampling
+   gap cannot be blamed on one frame. `unobservedMs` reports missing coverage,
+   including profile boundaries. The window includes up to one timer interval
+   of ordinary work; ranked stacks are evidence, not proof of a single cause.
+   Up to 128 windows are retained per rotation, with overflow reported as
+   `droppedWindows`; gaps of 60 seconds or more are treated as suspension.
+   These records require the existing profiling gates. Without profiling, the
+   immediate stall record can only report explicitly measured candidates.
+3. Load the `.cpuprofile` covering that time and PID in Chrome DevTools'
    JavaScript profiler, select the window, and read the bottom-up view.
    Match function names against the exact source revision of the build.
-3. Compare stacks with `mainThreadCpuMs`, GC totals, and SQL `cpuDurationMs`.
+4. Compare stacks with `mainThreadCpuMs`, GC totals, and SQL `cpuDurationMs`.
    A slow SQL operation with little CPU indicates waiting but does not identify
    the lock owner or prove disk I/O.
-4. Repeat with a small control workload. Expected long polls log slow requests
+5. Repeat with a small control workload. Expected long polls log slow requests
    without blocking the loop; require corroborating loop delay, stage timings,
    or sampled execution before calling them stalls.
 
@@ -839,3 +924,25 @@ read; symlinked skill directories or files and roots escaping the workspace are
 skipped before reading. Command lookup sets `includeAgentInstructions: false`,
 so an invalid `.bb/AGENTS.md` cannot break the command catalog; turn
 preparation sets it to `true` and reports instruction-read errors.
+
+## Interrupted Optimistic Query Refreshes
+
+Optimistic cache owners use `cancelOptimisticQueries` instead of calling
+`queryClient.cancelQueries` directly. During a mutation it records interrupted
+reads and the mutations pending at cancellation. It invalidates those queries
+after those mutations finish, including success, error, and settled callbacks.
+A later optimistic cancellation of the same query extends that wait even if
+the query is already idle. Active queries refresh; inactive queries become
+stale for their next mount. Removed queries are discarded from recovery.
+
+This deliberately waits for every mutation pending at cancellation because a
+cache owner does not have the identity of its calling mutation. Later unrelated
+mutations do not delay recovery. Queries without an interrupted read are not
+refetched. Calling cache-owner helpers outside a mutation retains ordinary
+cancellation behavior. Browser suspension and realtime replacement reads have
+their own recovery paths and continue to use ordinary cancellation.
+
+For a stale drawer or sidebar, check whether an optimistic mutation canceled
+the last realtime refresh, then whether its recovery ran after the mutation
+callbacks. Cover this ordering with real Query and Mutation observers; an
+isolated rollback helper test does not exercise mutation settlement.

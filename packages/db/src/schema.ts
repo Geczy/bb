@@ -15,6 +15,7 @@ import { threadStatusValues } from "@bb/domain/thread-status";
 import { startedOnBehalfOfInitiatorValues } from "@bb/domain/started-on-behalf-of";
 import { threadCreateOriginValues } from "@bb/domain/thread-create-origin";
 import { threadOriginKindValues } from "@bb/domain/thread-origin-kind";
+import { threadParentNotificationsValues } from "@bb/domain/thread-parent-notifications";
 import { threadVisibilityValues } from "@bb/domain/thread-visibility";
 import type {
   EnvironmentProviderSelection,
@@ -634,6 +635,11 @@ export const threads = sqliteTable(
     visibility: text("visibility", { enum: threadVisibilityValues })
       .notNull()
       .default("visible"),
+    parentNotifications: text("parent_notifications", {
+      enum: threadParentNotificationsValues,
+    })
+      .notNull()
+      .default("auto"),
     archivedAt: integer("archived_at"),
     pinnedAt: integer("pinned_at"),
     pinSortKey: text("pin_sort_key"),
@@ -1180,6 +1186,10 @@ export const terminalSessions = sqliteTable(
     index("terminal_sessions_environment_status_idx").on(
       table.environmentId,
       table.status,
+    ),
+    index("terminal_sessions_status_thread_idx").on(
+      table.status,
+      table.threadId,
     ),
     index("terminal_sessions_host_status_idx").on(table.hostId, table.status),
     index("terminal_sessions_daemon_session_idx").on(table.daemonSessionId),
