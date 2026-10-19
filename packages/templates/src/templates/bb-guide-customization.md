@@ -96,7 +96,7 @@ General. Machine-related keys (`machineServerUrl`, `defaultMachineAccess`,
 - `steerActiveThreadOnEnter` (default true for a new install; an earlier
   install with saved settings or work keeps false): when on, Enter steers a
   running thread and Command+Enter queues a follow-up; when off, those are
-  reversed. Shift+Enter inserts a newline.
+  reversed. Shift+Enter inserts a newline and continues a Markdown list.
 - `showGitChanges` (default true; Settings → General → Show Git changes and
   Commit button): false hides the git summary, expanded file list,
   pull-request status and actions above the composer, and Commit action in the

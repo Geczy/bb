@@ -235,7 +235,9 @@ the Codex provider plugin; Claude Code's options are under
 [Claude Code provider](#claude-code-provider).
 
 **Composer keys.** The prompt box uses plain-text editing; Markdown delimiters
-stay visible. Outside an open typeahead menu, Shift+Enter inserts a newline. On
+stay visible. Outside an open typeahead menu, Shift+Enter inserts a newline;
+on a line that starts with a list marker (`- `, `* `, `1.`, `- [ ] `) it starts
+the next item instead, and on an empty item it removes the marker. On
 coarse-pointer touch devices, the software-keyboard Return inserts a newline
 and the submit button sends; iPadOS WebKit keeps the Enter and Command+Enter
 shortcuts for a connected Magic Keyboard.
