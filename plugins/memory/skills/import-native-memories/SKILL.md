@@ -35,9 +35,11 @@ The CLI does not expand `~` on other machines. On the host you run on, the
 home directory is `$HOME`. For every other host, start from its project source
 paths (`sources[].path` with that `hostId`) and walk up their parent
 directories. The home directory is the nearest one where
-`bb file paths <dir>/.claude/projects --host <hostId> --directories --limit 1`
-or the same check for `<dir>/.codex/memories` succeeds. A repository's own
-`.claude` folder has no `projects` directory, so it does not count. If a host
+`bb file paths <dir>/.claude/projects --host <hostId> --limit 1 --json` or the
+same check for `<dir>/.codex/memories` returns at least one path. A missing
+directory also exits successfully, with an empty `paths` list, so check the
+list, not the exit code. A repository's own `.claude` folder has no `projects`
+directory, so it does not count. If a host
 has no project source, or no parent directory matches, ask the person for its
 home directory.
 
@@ -52,12 +54,14 @@ If the person set `CLAUDE_CONFIG_DIR` or `CODEX_HOME`, use that directory
 instead of `~/.claude` or `~/.codex`.
 
 ```bash
-bb file paths <home>/.claude/projects --host <hostId> --files --query memory --limit 5000 --json
+bb file paths <home>/.claude/projects --host <hostId> --files --query "memory/.md" --limit 5000 --json
 bb file paths <home>/.codex --host <hostId> --files --query memor --limit 500 --json
 bb file read <path> --host <hostId> --json
 ```
 
-A missing directory means that provider has no memories on that host. Record
+The `memory/.md` query keeps session transcripts out of the list; a plain
+`memory` query also matches them. An empty list means that provider has no
+memories on that host. Record
 each file's `sha256` from `bb file read --json`; the final report uses it to
 show that sources were unchanged.
 

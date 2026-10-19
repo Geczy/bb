@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 
@@ -114,7 +116,10 @@ describe("memory settings", () => {
 
     const skillName = /^name: (.+)$/m.exec(
       readFileSync(
-        new URL("./skills/import-native-memories/SKILL.md", import.meta.url),
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          "skills/import-native-memories/SKILL.md",
+        ),
         "utf8",
       ),
     )?.[1];
