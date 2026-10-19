@@ -1949,6 +1949,12 @@ export default async function plugin(
       return;
     const sidecarPath = commentSidecar(documentPath);
     if (await readExistingFile(vault, sidecarPath)) return;
+    await bb.sdk.files.mkdir({
+      ...hostArgs(vault),
+      path: absolutePath(vault, path.posix.dirname(sidecarPath)),
+      rootPath: vault.rootPath,
+      recursive: true,
+    });
     await bb.sdk.files.move({
       ...hostArgs(vault),
       sourcePath: absolutePath(vault, orphaned),

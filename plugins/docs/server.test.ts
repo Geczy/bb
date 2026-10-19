@@ -109,6 +109,7 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
   const omitted = new Set<string>();
   let failRemove = false;
   let partialRemove: string | null = null;
+  let failMove: string | null = null;
   let writeHook: ((path: string) => void) | null = null;
   const addParents = (filePath: string) => {
     let current = path.posix.dirname(filePath);
@@ -261,8 +262,16 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
         async move(args) {
           const from = args.sourcePath;
           const to = args.destinationPath;
+          if (failMove && to.includes(failMove)) {
+            failMove = null;
+            throw new Error("EACCES: permission denied");
+          }
           if (!files.has(from) && !directories.has(from))
             throw new Error("ENOENT");
+          if (!directories.has(path.posix.dirname(to)))
+            throw new Error(
+              `ENOENT: no such directory ${path.posix.dirname(to)}`,
+            );
           if (files.has(to) || directories.has(to)) throw new Error("EEXIST");
           for (const [entry, file] of [...files]) {
             if (entry === from || entry.startsWith(`${from}/`)) {
@@ -318,6 +327,9 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
     },
     failNextRecursiveRemoveKeeping(survivor: string) {
       partialRemove = survivor;
+    },
+    failNextMoveTo(fragment: string) {
+      failMove = fragment;
     },
     onNextWrite(hook: (path: string) => void) {
       writeHook = hook;
@@ -1720,7 +1732,8 @@ describe("Docs proposals", () => {
   }
 
   it("moves proposals with files and folders and clears removed paths", async () => {
-    const { harness, setUtf8 } = await setupProposal();
+    const { harness, setUtf8, directories } = await setupProposal();
+    directories.add("/vault/drafts");
     await harness.behavior.callRpc("movePath", {
       from: "letter.md",
       to: "drafts/letter.md",
@@ -2536,6 +2549,47 @@ describe("Docs comment lifecycle", () => {
         "partial-delete/z/gone.md",
       ]);
       expect(await readFile(host, orphans[0]!.sidecarPath)).toContain(goneId);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("restores every survivor when a folder delete fails before removal or while preserving", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/folder/a/note.md": doc("# Note\n\nAlpha line."),
+      "/vault/folder/z/other.md": doc("# Other\n\nZeta line."),
+    });
+    try {
+      const aId = await comment(host, "folder/a/note.md", "Alpha line", "A");
+      const zId = await comment(host, "folder/z/other.md", "Zeta line", "Z");
+      const bytes = () => [
+        host.files.get("/vault/folder/a/.bb-comments/note.md.json")?.content,
+        host.files.get("/vault/folder/z/.bb-comments/other.md.json")?.content,
+      ];
+      const original = bytes();
+      host.failNextRemove();
+      await expect(
+        host.harness.behavior.callRpc("deletePath", {
+          path: "folder",
+          recursive: true,
+        }),
+      ).rejects.toThrow("EBUSY");
+      expect(bytes()).toEqual(original);
+      host.failNextMoveTo("/folder/z/.bb-comments");
+      await expect(
+        host.harness.behavior.callRpc("deletePath", {
+          path: "folder",
+          recursive: true,
+        }),
+      ).rejects.toThrow("EACCES");
+      expect(bytes()).toEqual(original);
+      expect(await listed(host, "folder/a/note.md")).toMatchObject({
+        threads: [{ id: aId }],
+      });
+      expect(await listed(host, "folder/z/other.md")).toMatchObject({
+        threads: [{ id: zId }],
+      });
+      expect(await folder(host)).toEqual([]);
     } finally {
       await host.harness.lifecycle.dispose();
     }
