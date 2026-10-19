@@ -122,6 +122,17 @@ export function commentSidecar(file: string): string {
 function isMissing(error: unknown): boolean {
   return /\bENOENT\b|path does not exist|not found/i.test(String(error));
 }
+function threadState(thread: CommentThread): string {
+  return JSON.stringify([thread.resolvedAt, thread.resolvedBy]);
+}
+function anchorText(thread: CommentThread): string {
+  const { quote, prefix, suffix } = thread.anchor;
+  return JSON.stringify([quote, prefix, suffix]);
+}
+function containsAll(outer: CommentThread, inner: CommentThread): boolean {
+  const records = new Set(outer.messages.map((item) => JSON.stringify(item)));
+  return inner.messages.every((item) => records.has(JSON.stringify(item)));
+}
 function fail(code: string, message: string): never {
   throw new PluginCliError(message, {
     code,
@@ -450,32 +461,23 @@ export function createCommentsService(
     attach: (input: CommentTarget, threads: CommentThread[]) =>
       mutate(input, (data) => {
         for (const item of threads) {
-          const existing = data.threads.find(
+          const index = data.threads.findIndex(
             (candidate) => candidate.id === item.id,
           );
+          const existing = data.threads[index];
           if (!existing) {
             data.threads.push(item);
             continue;
           }
-          const conflict = item.messages.some((message) => {
-            const match = existing.messages.find(
-              (candidate) => candidate.id === message.id,
-            );
-            return match && JSON.stringify(match) !== JSON.stringify(message);
-          });
-          if (conflict) {
-            data.threads.push({ ...item, id: `c_${randomUUID()}` });
+          const sameState =
+            threadState(existing) === threadState(item) &&
+            anchorText(existing) === anchorText(item);
+          if (sameState && containsAll(existing, item)) continue;
+          if (sameState && containsAll(item, existing)) {
+            data.threads[index] = { ...existing, messages: item.messages };
             continue;
           }
-          existing.messages = [
-            ...existing.messages,
-            ...item.messages.filter(
-              (message) =>
-                !existing.messages.some(
-                  (candidate) => candidate.id === message.id,
-                ),
-            ),
-          ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          data.threads.push({ ...item, id: `c_${randomUUID()}` });
         }
       }),
     reattach: (input: z.infer<typeof commentsContract.reattachComment.input>) =>

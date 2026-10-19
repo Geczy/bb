@@ -2136,6 +2136,72 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
+  it("keeps both copies when attached comments differ only in status or anchor", async () => {
+    const content = "# Plan\n\nShip tomorrow with the team.";
+    const host = await loadVirtualSyncVault({
+      "/vault/notes/source.md": doc(content),
+    });
+    try {
+      const added = commentsListSchema.parse(
+        await host.harness.behavior.callRpc("addComment", {
+          path: "notes/source.md",
+          quote: "tomorrow",
+          body: "Confirm the date",
+        }),
+      );
+      const commentId = added.threads[0]!.id;
+      const sidecar = host.files.get(
+        "/vault/notes/.bb-comments/source.md.json",
+      )!.content;
+      for (const copy of ["open", "anchor"]) {
+        host.setUtf8(`/vault/notes/${copy}.md`, content);
+        host.setUtf8(`/vault/notes/.bb-comments/${copy}.md.json`, sidecar);
+      }
+      await host.harness.behavior.callRpc("reattachComment", {
+        path: "notes/anchor.md",
+        commentId,
+        quote: "the team",
+        occurrence: 1,
+      });
+      await host.harness.behavior.callRpc("setCommentStatus", {
+        path: "notes/source.md",
+        commentId,
+        resolved: true,
+      });
+      const resolved = host.files.get(
+        "/vault/notes/.bb-comments/source.md.json",
+      )!.content;
+      host.files.delete("/vault/notes/source.md");
+      for (const copy of ["open", "anchor"]) {
+        host.setUtf8("/vault/notes/.bb-comments/source.md.json", resolved);
+        await host.harness.behavior.callRpc("attachComments", {
+          path: `notes/${copy}.md`,
+          sidecarPath: "notes/.bb-comments/source.md.json",
+        });
+      }
+      expect(
+        (await listed(host, "notes/open.md")).threads.map((thread) => [
+          thread.status,
+          thread.anchor.quote,
+        ]),
+      ).toEqual([
+        ["open", "tomorrow"],
+        ["resolved", "tomorrow"],
+      ]);
+      expect(
+        (await listed(host, "notes/anchor.md")).threads.map((thread) => [
+          thread.status,
+          thread.anchor.quote,
+        ]),
+      ).toEqual([
+        ["open", "the team"],
+        ["resolved", "tomorrow"],
+      ]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("refuses Docs moves onto stranded comments", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
