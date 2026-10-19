@@ -3,15 +3,13 @@ import {
   commentSourceSchema,
   commentSidecar,
   createCommentsService,
-  fullyAttached,
-  threadFingerprint,
   type CommentTarget,
 } from "./comments-service.js";
 import { proposalSchema, type Proposal } from "./proposals.js";
 import {
   commentsFileSchema,
   commentsListSchema,
-  type CommentsList,
+  commentThreadSchema,
 } from "./comments.js";
 import { watch } from "node:fs";
 import os from "node:os";
@@ -285,15 +283,25 @@ export const docsRpcContract = defineRpcContract({
       truncated: z.boolean(),
     }),
   },
-  attachComments: {
-    input: z
-      .object({
-        vaultId: vaultIdSchema,
-        path: vaultPathSchema,
-        sidecarPath: z.string().min(1),
-      })
-      .strict(),
+  keepComments: {
+    input: commentsContract.listComments.input.omit({ status: true }),
     output: commentsListSchema,
+  },
+  leaveComments: {
+    input: z.object({ vaultId: vaultIdSchema, path: vaultPathSchema }).strict(),
+    output: commentsListSchema,
+  },
+  readOrphanedComments: {
+    input: z
+      .object({ vaultId: vaultIdSchema, sidecarPath: z.string().min(1) })
+      .strict(),
+    output: z.object({ threads: z.array(commentThreadSchema) }),
+  },
+  deleteOrphanedComments: {
+    input: z
+      .object({ vaultId: vaultIdSchema, sidecarPath: z.string().min(1) })
+      .strict(),
+    output: z.object({ ok: z.literal(true) }),
   },
   readProposal: {
     input: z.object({ vaultId: vaultIdSchema, path: vaultPathSchema }).strict(),
@@ -1021,6 +1029,14 @@ export default async function plugin(
     const relativePath = requireVaultPath(args.rawPath);
     if (typeof args.content !== "string")
       throw new Error('"content" must be a string');
+    const markdown = /\.md$/i.test(relativePath);
+    const previousSha256 = args.createOnly
+      ? null
+      : typeof args.expectedSha256 === "string"
+        ? args.expectedSha256
+        : markdown
+          ? ((await readExistingFile(vault, relativePath))?.sha256 ?? null)
+          : null;
     const result = await bb.sdk.files.write({
       ...hostArgs(vault),
       path: absolutePath(vault, relativePath),
@@ -1036,6 +1052,12 @@ export default async function plugin(
           : {}),
     });
     if (result.outcome === "written") {
+      if (markdown)
+        await comments.rebind(
+          { vaultId: vault.id, path: relativePath },
+          previousSha256,
+          result.sha256,
+        );
       mentionSummaries.delete(vault.id);
       bb.realtime.publish("vault-changed", {
         vaultId: vault.id,
@@ -1239,9 +1261,7 @@ export default async function plugin(
       const newSidecar = commentSidecar(to);
       const sidecar = await readExistingFile(vault, oldSidecar);
       if (await readExistingFile(vault, newSidecar))
-        throw new Error(
-          "Destination has stranded comments; restore or move that document before replacing it.",
-        );
+        await orphanSidecar(vault, to);
       await bb.sdk.files.move({
         ...hostArgs(vault),
         sourcePath: absolutePath(vault, from),
@@ -1299,19 +1319,28 @@ export default async function plugin(
     const vault = getVault(vaultId);
     const relativePath = requireVaultPath(rawPath);
     return serializeVault(vault.id, async () => {
+      await orphanSidecar(vault, relativePath);
+      if (recursive) {
+        const listing = await bb.sdk.files.listPaths({
+          ...hostArgs(vault),
+          path: absolutePath(vault, relativePath),
+          includeHidden: true,
+          includeFiles: true,
+          includeDirectories: false,
+          limit: MAX_TREE_ENTRIES,
+        });
+        for (const item of listing.paths) {
+          const document = sidecarDocument(`${relativePath}/${item.path}`);
+          if (document && !document.orphaned)
+            await orphanSidecar(vault, document.path);
+        }
+      }
       await bb.sdk.files.remove({
         ...hostArgs(vault),
         path: absolutePath(vault, relativePath),
         rootPath: vault.rootPath,
         recursive,
       });
-      const sidecarPath = commentSidecar(relativePath);
-      if (await readExistingFile(vault, sidecarPath))
-        await bb.sdk.files.remove({
-          ...hostArgs(vault),
-          path: absolutePath(vault, sidecarPath),
-          rootPath: vault.rootPath,
-        });
       deleteProposals(vault.id, relativePath);
       mentionSummaries.delete(vault.id);
       bb.realtime.publish("vault-changed", { vaultId: vault.id });
@@ -1669,7 +1698,6 @@ export default async function plugin(
           });
           continue;
         }
-        await orphanSidecar(vault, deletion.path);
         await removePath(vault.id, deletion.path, false);
         deleted.push(deletion.path);
       } catch (error) {
@@ -1761,53 +1789,18 @@ export default async function plugin(
     };
   }
 
-  async function attachComments(input: {
+  async function documentlessSidecar(input: {
     vaultId?: string;
-    path: string;
     sidecarPath: string;
   }) {
     const vault = getVault(input.vaultId);
-    const target = requireVaultPath(input.path, { extension: ".md" });
     const source = sidecarDocument(input.sidecarPath);
-    if (!source || input.sidecarPath === commentSidecar(target))
-      throw new Error("Choose a stranded or orphaned comments file.");
-    if (!source.orphaned && (await readExistingFile(vault, source.path)))
-      throw new Error("Those comments still belong to an existing document.");
-    let result: CommentsList | null = null;
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const file = await readExistingFile(vault, input.sidecarPath);
-      if (!file) throw new Error("Those comments are no longer there.");
-      const saved = commentsFileSchema.parse(JSON.parse(file.content));
-      result = await comments.attach(
-        { vaultId: vault.id, path: target },
-        saved.threads,
-      );
-      const marked = await bb.sdk.files.write({
-        ...hostArgs(vault),
-        path: absolutePath(vault, input.sidecarPath),
-        rootPath: vault.rootPath,
-        content:
-          JSON.stringify(
-            {
-              ...saved,
-              attached: [
-                ...(saved.attached ?? []),
-                {
-                  path: target,
-                  at: new Date().toISOString(),
-                  threads: saved.threads.map(threadFingerprint),
-                },
-              ],
-            },
-            null,
-            2,
-          ) + "\n",
-        contentEncoding: "utf8",
-        expectedSha256: file.sha256,
-      });
-      if (marked.outcome === "written") break;
-    }
-    return result!;
+    if (
+      !source ||
+      (!source.orphaned && (await readExistingFile(vault, source.path)))
+    )
+      throw new Error("Choose comments that no longer have a document.");
+    return { vault, sidecarPath: input.sidecarPath };
   }
 
   async function orphanSidecar(vault: Vault, documentPath: string) {
@@ -1866,15 +1859,35 @@ export default async function plugin(
       const stranded: { path: string; sidecarPath: string }[] = [];
       for (const relative of files) {
         const document = sidecarDocument(relative);
-        if (!document || (!document.orphaned && files.has(document.path)))
-          continue;
-        const file = await readExistingFile(vault, relative);
-        if (file && !fullyAttached(file.content))
+        if (document && (document.orphaned || !files.has(document.path)))
           stranded.push({ path: document.path, sidecarPath: relative });
       }
       return { stranded, truncated: listing.truncated };
     },
-    attachComments: (input) => attachComments(input),
+    keepComments: (input) => comments.keep(input),
+    async leaveComments(input) {
+      const vault = getVault(input.vaultId);
+      const relativePath = requireVaultPath(input.path, { extension: ".md" });
+      await serializeVault(vault.id, () => orphanSidecar(vault, relativePath));
+      return comments.list({ vaultId: vault.id, path: relativePath });
+    },
+    async readOrphanedComments(input) {
+      const { vault, sidecarPath } = await documentlessSidecar(input);
+      const file = await readExistingFile(vault, sidecarPath);
+      if (!file) throw new Error("Those comments are no longer there.");
+      return {
+        threads: commentsFileSchema.parse(JSON.parse(file.content)).threads,
+      };
+    },
+    async deleteOrphanedComments(input) {
+      const { vault, sidecarPath } = await documentlessSidecar(input);
+      await bb.sdk.files.remove({
+        ...hostArgs(vault),
+        path: absolutePath(vault, sidecarPath),
+        rootPath: vault.rootPath,
+      });
+      return { ok: true as const };
+    },
     listComments: (input) => comments.list(input),
     addComment: (input) => comments.add(input, comments.user),
     replyComment: (input) => comments.reply(input, comments.user),
@@ -2215,6 +2228,8 @@ export default async function plugin(
     },
     async saveOpenedFile(input) {
       const target = await resolveOpenerFile(input.source, input.path);
+      const previousSha256 =
+        typeof input.expectedSha256 === "string" ? input.expectedSha256 : null;
       const result = await bb.sdk.files.write({
         ...hostIdArgs(target.hostId),
         path: target.path,
@@ -2225,7 +2240,15 @@ export default async function plugin(
           ? { expectedSha256: input.expectedSha256 }
           : {}),
       });
-      if (result.outcome === "written") mentionSummaries.clear();
+      if (result.outcome === "written") {
+        if (/\.md$/i.test(input.path))
+          await comments.rebind(
+            { path: input.path, source: input.source },
+            previousSha256,
+            result.sha256,
+          );
+        mentionSummaries.clear();
+      }
       return result;
     },
   };
@@ -3221,6 +3244,9 @@ export default async function plugin(
         ? JSON.stringify(result, null, 2)
         : [
             result.notice,
+            result.outsideChange
+              ? `${result.outsideChange} comments were made on a version changed outside Docs. Run comments keep or comments leave.`
+              : null,
             ...result.threads.map(
               (item) =>
                 `${item.id} · ${item.status} · ${item.anchor.state === "orphaned" ? "Text not found" : `line ${item.anchor.line}`} · “${item.anchor.quote}”\n${item.messages.map((message) => `${message.author.name}: ${message.body}`).join("\n")}`,
@@ -3349,30 +3375,96 @@ export default async function plugin(
               ),
             ),
         }),
-        "comments attach": cliCommand({
+        "comments keep": cliCommand({
           summary:
-            "Attach stranded or orphaned comments (see comments list --folder) to a document",
+            "Keep comments on a document that changed outside Docs and bind them to its current text",
           positionals: proposalPositionals,
-          options: {
-            vault: VAULT_OPTION,
-            json: JSON_OPTION,
-            from: {
-              type: "string",
-              required: true,
-              description: "Comments file path from comments list --folder",
-            },
-          },
+          options: commentOptions,
           run: (input) =>
             attemptCli(async () =>
               commentOutput(
-                await attachComments({
+                await comments.keep(commentTarget(input)),
+                input.options.json === true,
+              ),
+            ),
+        }),
+        "comments leave": cliCommand({
+          summary: "Move a document's comments to Comments without a document",
+          positionals: proposalPositionals,
+          options: { vault: VAULT_OPTION, json: JSON_OPTION },
+          run: (input) =>
+            attemptCli(async () =>
+              commentOutput(
+                await handlers.leaveComments({
                   vaultId: input.options.vault,
                   path: input.positionals.path,
-                  sidecarPath: input.options.from,
                 }),
                 input.options.json === true,
               ),
             ),
+        }),
+        "comments read-file": cliCommand({
+          summary:
+            "Read comments without a document (see comments list --folder)",
+          positionals: [
+            {
+              name: "sidecarPath",
+              required: true,
+              description: "Comments file path from comments list --folder",
+            },
+          ],
+          options: { vault: VAULT_OPTION, json: JSON_OPTION },
+          run: (input) =>
+            attemptCli(async () => {
+              const result = await handlers.readOrphanedComments({
+                vaultId: input.options.vault,
+                sidecarPath: input.positionals.sidecarPath,
+              });
+              return {
+                exitCode: 0,
+                stdout: input.options.json
+                  ? JSON.stringify(result, null, 2)
+                  : result.threads
+                      .map((thread) =>
+                        [
+                          `${thread.id} · “${thread.anchor.quote}”`,
+                          ...thread.messages.map(
+                            (message) =>
+                              `${message.author.name}: ${message.body}`,
+                          ),
+                        ].join("\n"),
+                      )
+                      .join("\n\n"),
+              };
+            }),
+        }),
+        "comments delete-file": cliCommand({
+          summary: "Permanently delete comments without a document",
+          positionals: [
+            {
+              name: "sidecarPath",
+              required: true,
+              description: "Comments file path from comments list --folder",
+            },
+          ],
+          options: {
+            vault: VAULT_OPTION,
+            yes: {
+              type: "boolean",
+              required: true,
+              description: "Confirm permanent deletion",
+            },
+          },
+          run: (input) =>
+            attemptCli(async () => {
+              if (input.options.yes !== true)
+                throw new Error("Pass --yes to delete these comments.");
+              await handlers.deleteOrphanedComments({
+                vaultId: input.options.vault,
+                sidecarPath: input.positionals.sidecarPath,
+              });
+              return { exitCode: 0, stdout: "Deleted." };
+            }),
         }),
         "comments resolve": cliCommand({
           summary: "Resolve or reopen a comment thread",

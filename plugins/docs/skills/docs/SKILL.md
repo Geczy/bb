@@ -146,7 +146,9 @@ bb docs comments add <path> --vault <id> --quote "exact visible text" --body "â€
 bb docs comments reply <path> <comment-id> --vault <id> --body "â€¦" --json
 bb docs comments resolve <path> <comment-id> --vault <id> [--reopen] --json
 bb docs comments list <folder> --vault <id> --folder --json
-bb docs comments attach <path> --vault <id> --from <sidecar-path> --json
+bb docs comments keep <path> --vault <id> --json
+bb docs comments leave <path> --vault <id> --json
+bb docs comments read-file <sidecar-path> --vault <id> [--json]
 ```
 
 The default list status is `open`; use `resolved` or `all` to include resolved
@@ -155,12 +157,19 @@ quote, source line, and visible UTF-16 offsets. A comment re-anchors only when
 its quote and surrounding context appear exactly once; edited or duplicated
 text makes it `orphaned` with null offsets, never a different sentence. Its
 discussion still exists: in the UI, select new text and use **Reattach to
-text**. Docs moves and renames carry comments; external moves, and documents
-deleted by `bb docs push --delete`, leave them stranded or in the vault's
-orphan area. `--folder` lists those comment files (`.` means vault root);
-attach one to the right document with `comments attach --from <sidecar-path>`.
-Attach copies comments forward and leaves the source file in place with an
-`attached` record; later changes to that source list it again.
+text**.
+
+Comments stay bound to a document only while Docs knows its identity: Docs
+records the document hash it last saw. **Edit commented documents with
+`bb docs write`, `bb docs push`, or `bb docs propose`, never by writing the
+file directly**, so their comments stay bound. After an outside change, list
+returns no threads and `outsideChange: N`; ask the user before running
+`comments keep` (bind them to the current text) or `comments leave`. Renames
+and moves through Docs or `bb docs move` carry comments. Deletions through
+Docs or `push --delete` move them to the vault's orphan area, and external
+moves leave them stranded. `--folder` lists these comments without a document
+(`.` means vault root), and `comments read-file` shows one. They are
+read-only; only the user deletes them.
 
 Use visible text, without Markdown syntax or frontmatter, for `--quote`.
 Repeated quotes fail with `ambiguous_quote` and occurrence numbers with source

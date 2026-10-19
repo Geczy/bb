@@ -46,16 +46,9 @@ export const commentsFileSchema = z
   .object({
     version: z.literal(1),
     threads: z.array(commentThreadSchema),
-    attached: z
-      .array(
-        z
-          .object({
-            path: z.string().min(1),
-            at: z.iso.datetime(),
-            threads: z.array(z.string().min(1)),
-          })
-          .strict(),
-      )
+    document: z
+      .object({ sha256: z.string().min(1) })
+      .strict()
       .optional(),
   })
   .strict();
@@ -76,6 +69,7 @@ export const commentsListSchema = z.object({
   sidecarSha256: z.string().nullable(),
   threads: z.array(listedCommentSchema),
   notice: z.string().nullable(),
+  outsideChange: z.number().int().nonnegative(),
 });
 export type CommentAuthor = z.infer<typeof commentAuthorSchema>;
 export type CommentAnchor = z.infer<typeof commentAnchorSchema>;

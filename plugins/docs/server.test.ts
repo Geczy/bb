@@ -10,9 +10,7 @@ import {
 } from "@get-bb/plugin-sdk/testing";
 import { z } from "zod";
 import simpleNotes from "./server";
-import { commentsFileSchema, commentsListSchema } from "./comments.js";
-import { visibleMarkdown } from "./comment-text.js";
-import { fullyAttached } from "./comments-service.js";
+import { commentsListSchema } from "./comments.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -106,7 +104,6 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
   const files = new Map<string, VirtualFile>(Object.entries(initial));
   const directories = new Set<string>(["/vault", "/work"]);
   let concurrentWrite: { path: string; content: string } | null = null;
-  let writeHook: ((path: string) => void) | null = null;
   const addParents = (filePath: string) => {
     let current = path.posix.dirname(filePath);
     while (current !== "/" && !directories.has(current)) {
@@ -175,9 +172,6 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
           };
         },
         async write(args) {
-          const hook = writeHook;
-          writeHook = null;
-          hook?.(args.path);
           const pending = concurrentWrite;
           if (pending && pending.path === args.path) {
             concurrentWrite = null;
@@ -282,9 +276,6 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
     setUtf8,
     conflictNextWrite(path: string, content: string) {
       concurrentWrite = { path, content };
-    },
-    beforeNextWrite(hook: (path: string) => void) {
-      writeHook = hook;
     },
   };
 }
@@ -1928,32 +1919,47 @@ describe("Docs comment lifecycle", () => {
         await host.harness.behavior.callRpc("listCommentFolder", { path: "" }),
       ).stranded;
 
-  it("keeps comments in the orphan area when an ambiguous pull rename is pushed with --delete", async () => {
+  const comment = async (
+    host: Awaited<ReturnType<typeof loadVirtualSyncVault>>,
+    path: string,
+    quote: string,
+    body: string,
+  ) =>
+    commentsListSchema
+      .parse(
+        await host.harness.behavior.callRpc("addComment", {
+          path,
+          quote,
+          body,
+        }),
+      )
+      .threads.find((thread) => thread.messages[0]!.body === body)!.id;
+  const readFile = async (
+    host: Awaited<ReturnType<typeof loadVirtualSyncVault>>,
+    sidecarPath: string,
+  ) =>
+    (await host.harness.behavior.runCli(["comments", "read-file", sidecarPath]))
+      .stdout;
+
+  it("keeps comments in the orphan area when a pull rename is pushed with --delete", async () => {
     const host = await loadVirtualSyncVault({
-      "/vault/notes/ambiguous-source.md": doc("# Source\n\nShip tomorrow."),
+      "/vault/notes/source.md": doc("# Source\n\nShip tomorrow."),
       "/vault/team/a.md": doc("# A\n\nAlpha line."),
     });
     try {
-      const added = commentsListSchema.parse(
-        await host.harness.behavior.callRpc("addComment", {
-          path: "notes/ambiguous-source.md",
-          quote: "tomorrow",
-          body: "Confirm the date",
-        }),
+      const commentId = await comment(
+        host,
+        "notes/source.md",
+        "tomorrow",
+        "Confirm the date",
       );
-      const commentId = added.threads[0]!.id;
-      await host.harness.behavior.callRpc("addComment", {
-        path: "team/a.md",
-        quote: "Alpha line",
-        body: "Folder comment",
-      });
+      await comment(host, "team/a.md", "Alpha line", "Folder comment");
       await host.harness.behavior.runCli(["pull", "--all", "--into", "all"], {
         cwd: "/work",
       });
-      const source = host.files.get("/work/all/notes/ambiguous-source.md")!;
-      host.files.delete("/work/all/notes/ambiguous-source.md");
-      host.setUtf8("/work/all/notes/copy-one.md", source.content);
-      host.setUtf8("/work/all/notes/copy-two.md", source.content);
+      const source = host.files.get("/work/all/notes/source.md")!;
+      host.files.delete("/work/all/notes/source.md");
+      host.setUtf8("/work/all/notes/renamed.md", source.content);
       const team = host.files.get("/work/all/team/a.md")!;
       host.files.delete("/work/all/team/a.md");
       host.setUtf8("/work/all/crew/a.md", team.content);
@@ -1965,42 +1971,17 @@ describe("Docs comment lifecycle", () => {
         exitCode: 0,
         stdout: { applied: { outcome: "applied", errors: [] } },
       });
-      expect((await listed(host, "notes/copy-one.md")).threads).toEqual([]);
-      expect((await listed(host, "notes/copy-two.md")).threads).toEqual([]);
-      expect((await listed(host, "crew/a.md")).threads).toEqual([]);
+      expect((await listed(host, "notes/renamed.md")).threads).toEqual([]);
       const orphans = await folder(host);
       expect(orphans.map((item) => item.path).sort()).toEqual([
-        "notes/ambiguous-source.md",
+        "notes/source.md",
         "team/a.md",
       ]);
-      const orphan = orphans.find(
-        (item) => item.path === "notes/ambiguous-source.md",
-      )!;
+      const orphan = orphans.find((item) => item.path === "notes/source.md")!;
       expect(orphan.sidecarPath).toMatch(
-        /^\.bb-comments\/orphaned\/[^/]+\/notes\/ambiguous-source\.md\.json$/,
+        /^\.bb-comments\/orphaned\/[^/]+\/notes\/source\.md\.json$/,
       );
-      const attached = await host.harness.behavior.runCli([
-        "comments",
-        "attach",
-        "notes/copy-one.md",
-        "--from",
-        orphan.sidecarPath,
-        "--json",
-      ]);
-      expect(attached.exitCode).toBe(0);
-      expect(await listed(host, "notes/copy-one.md")).toMatchObject({
-        threads: [
-          {
-            id: commentId,
-            anchor: { state: "anchored" },
-            messages: [{ body: "Confirm the date" }],
-          },
-        ],
-      });
-      expect(host.files.has(`/vault/${orphan.sidecarPath}`)).toBe(true);
-      expect(
-        (await folder(host)).map((item) => item.sidecarPath),
-      ).not.toContain(orphan.sidecarPath);
+      expect(await readFile(host, orphan.sidecarPath)).toContain(commentId);
     } finally {
       await host.harness.lifecycle.dispose();
     }
@@ -2036,458 +2017,194 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
-  it("keeps pre-existing sidecars recoverable after an external cross-folder move", async () => {
+  it("starts a new document at a reused path clean and lists left comments", async () => {
     const host = await loadVirtualSyncVault({
-      "/vault/notes/upgraded.md": doc("# Upgraded\n\nKeep this discussion."),
+      "/vault/notes/plan.md": doc("# Plan\n\nShip tomorrow."),
     });
     try {
-      const added = commentsListSchema.parse(
-        await host.harness.behavior.callRpc("addComment", {
-          path: "notes/upgraded.md",
-          quote: "Keep this discussion",
-          body: "Written by an earlier build",
-        }),
+      const commentId = await comment(
+        host,
+        "notes/plan.md",
+        "tomorrow",
+        "Old discussion",
       );
-      const file = host.files.get("/vault/notes/upgraded.md")!;
-      host.files.delete("/vault/notes/upgraded.md");
-      host.setUtf8("/vault/other/upgraded.md", file.content);
-      expect((await listed(host, "other/upgraded.md")).threads).toEqual([]);
-      await expect(
-        host.harness.behavior.callRpc("attachComments", {
-          path: "other/upgraded.md",
-          sidecarPath: "notes/.bb-comments/upgraded.md.json",
-        }),
-      ).resolves.toMatchObject({
-        threads: [
-          {
-            id: added.threads[0]!.id,
-            anchor: { state: "anchored" },
-            messages: [{ body: "Written by an earlier build" }],
-          },
-        ],
-      });
-    } finally {
-      await host.harness.lifecycle.dispose();
-    }
-  });
-
-  it("merges divergent attached comments without dropping a reply", async () => {
-    const content = "# Plan\n\nShip tomorrow.";
-    const host = await loadVirtualSyncVault({
-      "/vault/notes/original.md": doc(content),
-    });
-    try {
-      const added = commentsListSchema.parse(
-        await host.harness.behavior.callRpc("addComment", {
-          path: "notes/original.md",
-          quote: "tomorrow",
-          body: "Confirm the date",
-        }),
-      );
-      const commentId = added.threads[0]!.id;
-      host.setUtf8("/vault/notes/copy.md", content);
-      host.setUtf8(
-        "/vault/notes/.bb-comments/copy.md.json",
-        host.files.get("/vault/notes/.bb-comments/original.md.json")!.content,
-      );
-      host.setUtf8("/vault/notes/edited.md", content);
-      host.setUtf8(
-        "/vault/notes/.bb-comments/edited.md.json",
-        host.files.get("/vault/notes/.bb-comments/original.md.json")!.content,
-      );
-      await host.harness.behavior.callRpc("replyComment", {
-        path: "notes/original.md",
-        commentId,
-        body: "Reply only on the original",
-      });
-      await host.harness.behavior.callRpc("editCommentMessage", {
-        path: "notes/edited.md",
-        commentId,
-        messageId: commentId,
-        body: "Edited on the copy",
-      });
-      const original = host.files.get(
-        "/vault/notes/.bb-comments/original.md.json",
-      )!.content;
-      host.files.delete("/vault/notes/original.md");
-
-      await host.harness.behavior.runCli([
-        "comments",
-        "attach",
-        "notes/copy.md",
-        "--from",
-        "notes/.bb-comments/original.md.json",
-      ]);
-      expect(await listed(host, "notes/copy.md")).toMatchObject({
-        threads: [
-          {
-            id: commentId,
-            messages: [
-              { body: "Confirm the date" },
-              { body: "Reply only on the original" },
-            ],
-          },
-        ],
-      });
-
-      host.setUtf8("/vault/notes/.bb-comments/original.md.json", original);
-      await host.harness.behavior.callRpc("attachComments", {
-        path: "notes/edited.md",
-        sidecarPath: "notes/.bb-comments/original.md.json",
-      });
-      const threads = (await listed(host, "notes/edited.md")).threads;
-      expect(
-        threads.map((thread) => thread.messages.map((message) => message.body)),
-      ).toEqual([
-        ["Edited on the copy"],
-        ["Confirm the date", "Reply only on the original"],
-      ]);
-      expect(new Set(threads.map((thread) => thread.id)).size).toBe(2);
-    } finally {
-      await host.harness.lifecycle.dispose();
-    }
-  });
-
-  it("keeps both copies when attached comments differ only in status or anchor", async () => {
-    const content = "# Plan\n\nShip tomorrow with the team.";
-    const host = await loadVirtualSyncVault({
-      "/vault/notes/source.md": doc(content),
-    });
-    try {
-      const added = commentsListSchema.parse(
-        await host.harness.behavior.callRpc("addComment", {
-          path: "notes/source.md",
-          quote: "tomorrow",
-          body: "Confirm the date",
-        }),
-      );
-      const commentId = added.threads[0]!.id;
-      const sidecar = host.files.get(
-        "/vault/notes/.bb-comments/source.md.json",
-      )!.content;
-      for (const copy of ["open", "anchor"]) {
-        host.setUtf8(`/vault/notes/${copy}.md`, content);
-        host.setUtf8(`/vault/notes/.bb-comments/${copy}.md.json`, sidecar);
-      }
-      await host.harness.behavior.callRpc("reattachComment", {
-        path: "notes/anchor.md",
-        commentId,
-        quote: "the team",
-        occurrence: 1,
-      });
-      await host.harness.behavior.callRpc("setCommentStatus", {
-        path: "notes/source.md",
-        commentId,
-        resolved: true,
-      });
-      const resolved = host.files.get(
-        "/vault/notes/.bb-comments/source.md.json",
-      )!.content;
-      host.files.delete("/vault/notes/source.md");
-      for (const copy of ["open", "anchor"]) {
-        host.setUtf8("/vault/notes/.bb-comments/source.md.json", resolved);
-        await host.harness.behavior.callRpc("attachComments", {
-          path: `notes/${copy}.md`,
-          sidecarPath: "notes/.bb-comments/source.md.json",
-        });
-      }
-      expect(
-        (await listed(host, "notes/open.md")).threads.map((thread) => [
-          thread.status,
-          thread.anchor.quote,
-        ]),
-      ).toEqual([
-        ["open", "tomorrow"],
-        ["resolved", "tomorrow"],
-      ]);
-      expect(
-        (await listed(host, "notes/anchor.md")).threads.map((thread) => [
-          thread.status,
-          thread.anchor.quote,
-        ]),
-      ).toEqual([
-        ["open", "the team"],
-        ["resolved", "tomorrow"],
-      ]);
-    } finally {
-      await host.harness.lifecycle.dispose();
-    }
-  });
-
-  it("keeps both copies when attached anchors differ only by position", async () => {
-    const filler = "Filler words that give both repeats the same context.";
-    const content = `# Plan\n\n${filler}\n\nRepeat me.\n\n${filler}\n\nRepeat me.\n\n${filler}`;
-    const host = await loadVirtualSyncVault({
-      "/vault/notes/source.md": doc(content),
-    });
-    try {
-      const added = commentsListSchema.parse(
-        await host.harness.behavior.callRpc("addComment", {
-          path: "notes/source.md",
-          quote: "Repeat me.",
-          occurrence: 1,
-          body: "Which repeat?",
-        }),
-      );
-      const commentId = added.threads[0]!.id;
-      host.setUtf8("/vault/notes/copy.md", content);
-      host.setUtf8(
-        "/vault/notes/.bb-comments/copy.md.json",
-        host.files.get("/vault/notes/.bb-comments/source.md.json")!.content,
-      );
-      await host.harness.behavior.callRpc("reattachComment", {
-        path: "notes/source.md",
-        commentId,
-        quote: "Repeat me.",
-        occurrence: 2,
-      });
-      host.files.delete("/vault/notes/source.md");
-      await host.harness.behavior.callRpc("attachComments", {
-        path: "notes/copy.md",
-        sidecarPath: "notes/.bb-comments/source.md.json",
-      });
-      const starts = (await listed(host, "notes/copy.md")).threads.map(
-        (thread) => thread.anchor.start,
-      );
-      const text = visibleMarkdown(content).text;
-      expect(starts).toEqual([
-        text.indexOf("Repeat me."),
-        text.lastIndexOf("Repeat me."),
-      ]);
-    } finally {
-      await host.harness.lifecycle.dispose();
-    }
-  });
-
-  it("keeps a source edit that lands during attach and re-lists later source writes", async () => {
-    const content = "# Plan\n\nShip tomorrow.";
-    const sourcePath = "/vault/notes/.bb-comments/source.md.json";
-    const host = await loadVirtualSyncVault({
-      "/vault/notes/source.md": doc(content),
-      "/vault/notes/copy.md": doc(content),
-    });
-    const editSource = (
-      edit: (data: z.infer<typeof commentsFileSchema>) => void,
-    ) => {
-      const data = commentsFileSchema.parse(
-        JSON.parse(host.files.get(sourcePath)!.content),
-      );
-      edit(data);
-      host.setUtf8(sourcePath, JSON.stringify(data));
-    };
-    try {
-      await host.harness.behavior.callRpc("addComment", {
-        path: "notes/source.md",
-        quote: "tomorrow",
-        body: "ORIGINAL",
-      });
-      host.files.delete("/vault/notes/source.md");
-      host.beforeNextWrite((written) => {
-        if (written === "/vault/notes/.bb-comments/copy.md.json")
-          editSource((data) => {
-            data.threads[0]!.messages[0]!.body = "CHANGED!";
-          });
-      });
-      await host.harness.behavior.runCli([
-        "comments",
-        "attach",
-        "notes/copy.md",
-        "--from",
-        "notes/.bb-comments/source.md.json",
-      ]);
-      const source = commentsFileSchema.parse(
-        JSON.parse(host.files.get(sourcePath)!.content),
-      );
-      expect(source.threads[0]!.messages[0]!.body).toBe("CHANGED!");
-      expect(source.attached).toHaveLength(1);
-      expect(
-        (await listed(host, "notes/copy.md")).threads.map(
-          (thread) => thread.messages[0]!.body,
-        ),
-      ).toEqual(["ORIGINAL", "CHANGED!"]);
-      expect(await folder(host)).toEqual([]);
-
-      editSource((data) => {
-        data.threads[0]!.messages.push({
-          id: "m_late",
-          author: { kind: "user", name: "You" },
-          body: "Written after attach",
-          createdAt: "2026-10-19T03:00:00.000Z",
-          editedAt: null,
-          sentTo: [],
-        });
-      });
+      host.files.delete("/vault/notes/plan.md");
       expect(await folder(host)).toEqual([
         {
-          path: "notes/source.md",
-          sidecarPath: "notes/.bb-comments/source.md.json",
+          path: "notes/plan.md",
+          sidecarPath: "notes/.bb-comments/plan.md.json",
         },
       ]);
-    } finally {
-      await host.harness.lifecycle.dispose();
-    }
-  });
-
-  it("never loses a reply when attaches and source writes interleave", async () => {
-    const content = "# Plan\n\nShip tomorrow.";
-    const sourcePath = "/vault/notes/.bb-comments/source.md.json";
-    for (let round = 0; round < 12; round++) {
-      const host = await loadVirtualSyncVault({
-        "/vault/notes/source.md": doc(content),
-        "/vault/notes/one.md": doc(content),
-        "/vault/notes/two.md": doc(content),
+      host.setUtf8("/vault/notes/plan.md", "# New\n\nA different plan.");
+      expect(await listed(host, "notes/plan.md")).toMatchObject({
+        threads: [],
+        outsideChange: 1,
       });
-      try {
-        await host.harness.behavior.callRpc("addComment", {
-          path: "notes/source.md",
-          quote: "tomorrow",
-          body: "Root",
-        });
-        host.files.delete("/vault/notes/source.md");
-        const written: string[] = [];
-        const writer = (async () => {
-          for (let index = 0; index < 4; index++) {
-            await new Promise((resolve) =>
-              setTimeout(resolve, (round * 7 + index * 3) % 4),
-            );
-            const data = commentsFileSchema.parse(
-              JSON.parse(host.files.get(sourcePath)!.content),
-            );
-            const body = `Reply ${round}-${index}`;
-            data.threads[0]!.messages.push({
-              id: `m_${round}_${index}`,
-              author: { kind: "user", name: "You" },
-              body,
-              createdAt: `2026-10-19T04:00:0${index}.000Z`,
-              editedAt: null,
-              sentTo: [],
-            });
-            host.setUtf8(sourcePath, JSON.stringify(data));
-            written.push(body);
-          }
-        })();
-        const attach = (target: string) =>
-          host.harness.behavior.callRpc("attachComments", {
-            path: target,
-            sidecarPath: "notes/.bb-comments/source.md.json",
-          });
-        await Promise.all([
-          writer,
-          attach("notes/one.md"),
-          attach("notes/two.md"),
-        ]);
-        const bodies = new Set(
-          [
-            sourcePath,
-            "/vault/notes/.bb-comments/one.md.json",
-            "/vault/notes/.bb-comments/two.md.json",
-          ].flatMap((file) =>
-            commentsFileSchema
-              .parse(JSON.parse(host.files.get(file)!.content))
-              .threads.flatMap((thread) =>
-                thread.messages.map((message) => message.body),
-              ),
-          ),
-        );
-        for (const body of ["Root", ...written]) expect(bodies).toContain(body);
-        const source = host.files.get(sourcePath)!.content;
-        expect((await folder(host)).length).toBe(fullyAttached(source) ? 0 : 1);
-      } finally {
-        await host.harness.lifecycle.dispose();
-      }
-    }
-  });
-
-  it("starts a new document at a reused path clean while late source writes stay visible", async () => {
-    const content = "# Plan\n\nShip tomorrow.";
-    const sourcePath = "/vault/notes/.bb-comments/source.md.json";
-    const host = await loadVirtualSyncVault({
-      "/vault/notes/source.md": doc(content),
-      "/vault/notes/copy.md": doc(content),
-    });
-    try {
-      const added = commentsListSchema.parse(
-        await host.harness.behavior.callRpc("addComment", {
-          path: "notes/source.md",
-          quote: "tomorrow",
-          body: "Old discussion",
+      await expect(
+        host.harness.behavior.callRpc("addComment", {
+          path: "notes/plan.md",
+          quote: "different plan",
+          body: "New discussion",
         }),
-      );
-      const oldId = added.threads[0]!.id;
-      host.files.delete("/vault/notes/source.md");
-      await host.harness.behavior.callRpc("attachComments", {
-        path: "notes/copy.md",
-        sidecarPath: "notes/.bb-comments/source.md.json",
+      ).rejects.toThrow("outside Docs");
+      await host.harness.behavior.runCli([
+        "comments",
+        "leave",
+        "notes/plan.md",
+      ]);
+      expect(await listed(host, "notes/plan.md")).toMatchObject({
+        threads: [],
+        outsideChange: 0,
       });
-
-      host.setUtf8("/vault/notes/source.md", "# New\n\nA different plan.");
-      expect((await listed(host, "notes/source.md")).threads).toEqual([]);
-      await host.harness.behavior.callRpc("addComment", {
-        path: "notes/source.md",
-        quote: "different plan",
-        body: "New discussion",
-      });
+      await comment(host, "notes/plan.md", "different plan", "New discussion");
       expect(
-        (await listed(host, "notes/source.md")).threads.map(
+        (await listed(host, "notes/plan.md")).threads.map(
           (thread) => thread.messages[0]!.body,
         ),
       ).toEqual(["New discussion"]);
+      const [orphan] = await folder(host);
+      expect(orphan!.path).toBe("notes/plan.md");
+      expect(await readFile(host, orphan!.sidecarPath)).toContain(commentId);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
 
-      const data = commentsFileSchema.parse(
-        JSON.parse(host.files.get(sourcePath)!.content),
+  it("keeps comments when a document or folder is deleted through Docs", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+      "/vault/team/a.md": doc("# A\n\nAlpha line."),
+    });
+    try {
+      const planId = await comment(host, "plan.md", "tomorrow", "Plan note");
+      const teamId = await comment(
+        host,
+        "team/a.md",
+        "Alpha line",
+        "Team note",
       );
-      data.threads
-        .find((thread) => thread.id === oldId)!
-        .messages.push({
-          id: "m_late",
-          author: { kind: "user", name: "You" },
-          body: "Late reply after the tombstone",
-          createdAt: "2026-10-19T05:00:00.000Z",
-          editedAt: null,
-          sentTo: [],
-        });
-      host.setUtf8(sourcePath, JSON.stringify(data));
-      expect(await listed(host, "notes/source.md")).toMatchObject({
-        threads: [
-          {
-            id: oldId,
-            anchor: { state: "orphaned" },
-            messages: [
-              { body: "Old discussion" },
-              { body: "Late reply after the tombstone" },
-            ],
-          },
-          { messages: [{ body: "New discussion" }] },
-        ],
+      await host.harness.behavior.runCli(["remove", "plan.md"]);
+      await host.harness.behavior.callRpc("deletePath", {
+        path: "team",
+        recursive: true,
       });
-      expect(await listed(host, "notes/copy.md")).toMatchObject({
-        threads: [{ id: oldId, messages: [{ body: "Old discussion" }] }],
+      expect(host.files.has("/vault/plan.md")).toBe(false);
+      expect(host.files.has("/vault/team/a.md")).toBe(false);
+      const orphans = await folder(host);
+      expect(orphans.map((item) => item.path).sort()).toEqual([
+        "plan.md",
+        "team/a.md",
+      ]);
+      const text = (
+        await Promise.all(
+          orphans.map((item) => readFile(host, item.sidecarPath)),
+        )
+      ).join("\n");
+      expect(text).toContain(planId);
+      expect(text).toContain(teamId);
+      const plan = orphans.find((item) => item.path === "plan.md")!;
+      const refused = await host.harness.behavior.runCli([
+        "comments",
+        "delete-file",
+        plan.sidecarPath,
+      ]);
+      expect(refused.exitCode).not.toBe(0);
+      expect(host.files.has(`/vault/${plan.sidecarPath}`)).toBe(true);
+      await host.harness.behavior.runCli([
+        "comments",
+        "delete-file",
+        plan.sidecarPath,
+        "--yes",
+      ]);
+      expect(host.files.has(`/vault/${plan.sidecarPath}`)).toBe(false);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("asks before keeping comments on a document edited outside Docs", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nIntro.\n\nShip tomorrow."),
+    });
+    try {
+      await comment(host, "plan.md", "tomorrow", "Confirm the date");
+      host.setUtf8(
+        "/vault/plan.md",
+        "# Plan\n\nIntro changed.\n\nShip tomorrow.",
+      );
+      expect(await listed(host, "plan.md")).toMatchObject({
+        threads: [],
+        outsideChange: 1,
+      });
+      await host.harness.behavior.callRpc("keepComments", { path: "plan.md" });
+      expect(await listed(host, "plan.md")).toMatchObject({
+        outsideChange: 0,
+        threads: [{ messages: [{ body: "Confirm the date" }] }],
       });
     } finally {
       await host.harness.lifecycle.dispose();
     }
   });
 
-  it("refuses Docs moves onto stranded comments", async () => {
+  it("keeps comments bound through bb docs write and push", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
-      "/vault/other.md": doc("# Plan\n\nShip tomorrow."),
     });
     try {
-      await host.harness.behavior.callRpc("addComment", {
-        path: "plan.md",
-        quote: "tomorrow",
-        body: "Confirm the date",
+      await comment(host, "plan.md", "tomorrow", "Confirm the date");
+      const written = await host.harness.behavior.runCli([
+        "write",
+        "plan.md",
+        "--content",
+        "# Plan\n\nShip tomorrow.\n\nAdded by an agent.",
+      ]);
+      expect(written.exitCode).toBe(0);
+      expect(await listed(host, "plan.md")).toMatchObject({
+        outsideChange: 0,
+        threads: [{ anchor: { state: "moved" } }],
       });
+      await host.harness.behavior.runCli(
+        ["pull", "plan.md", "--into", "sync"],
+        {
+          cwd: "/work",
+        },
+      );
+      host.setUtf8(
+        "/work/sync/plan.md",
+        "# Plan\n\nShip tomorrow.\n\nAdded by an agent.\n\nPushed later.",
+      );
+      const pushed = await host.harness.behavior.runCli(["push", "sync"], {
+        cwd: "/work",
+      });
+      expect(pushed.exitCode).toBe(0);
+      expect(await listed(host, "plan.md")).toMatchObject({
+        outsideChange: 0,
+        threads: [{ messages: [{ body: "Confirm the date" }] }],
+      });
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("moves stranded comments aside when a Docs move reuses their path", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
+      "/vault/other.md": doc("# Other\n\nShip later."),
+    });
+    try {
+      const commentId = await comment(host, "plan.md", "tomorrow", "Old note");
       host.files.delete("/vault/plan.md");
-      await expect(
-        host.harness.behavior.callRpc("movePath", {
-          from: "other.md",
-          to: "plan.md",
-        }),
-      ).rejects.toThrow("stranded comments");
-      expect(host.files.has("/vault/other.md")).toBe(true);
-      expect(host.files.has("/vault/.bb-comments/plan.md.json")).toBe(true);
+      await host.harness.behavior.callRpc("movePath", {
+        from: "other.md",
+        to: "plan.md",
+      });
+      expect(await listed(host, "plan.md")).toMatchObject({
+        threads: [],
+        outsideChange: 0,
+      });
+      const [orphan] = await folder(host);
+      expect(orphan!.sidecarPath).toMatch(/^\.bb-comments\/orphaned\//);
+      expect(await readFile(host, orphan!.sidecarPath)).toContain(commentId);
     } finally {
       await host.harness.lifecycle.dispose();
     }

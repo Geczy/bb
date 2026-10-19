@@ -183,7 +183,11 @@ describe("comment sidecar mutations", () => {
     );
     const commentId = added.threads[0].id;
     files.set("/vault/plan.md", "# Replacement\n\nNew date.\n");
-    expect((await service.list(target)).threads[0].anchor.state).toBe(
+    expect(await service.list(target)).toMatchObject({
+      threads: [],
+      outsideChange: 1,
+    });
+    expect((await service.keep(target)).threads[0].anchor.state).toBe(
       "orphaned",
     );
     await service.status(
@@ -231,7 +235,7 @@ describe("comment sidecar mutations", () => {
     files.set("/vault/plan.md", edited);
     const text = visibleMarkdown(edited).text;
     const rewrittenStart = text.indexOf("After star rule rewritten sentence.");
-    await service.refresh({
+    const refreshed = {
       ...target,
       documentSha256: hash(edited),
       anchors: [
@@ -245,7 +249,10 @@ describe("comment sidecar mutations", () => {
           ),
         },
       ],
-    });
+    };
+    await expect(service.refresh(refreshed)).rejects.toThrow("outside Docs");
+    await service.keep(target);
+    await service.refresh(refreshed);
     await service.reply(
       { ...target, commentId: starId, body: "Later reply" },
       service.user,
@@ -259,115 +266,5 @@ describe("comment sidecar mutations", () => {
         (thread) => thread.id === starId,
       )!.anchor.state,
     ).toBe("orphaned");
-  });
-  it("attach never reduces the set of replies, edits, states or anchors", async () => {
-    const filler = "Filler words that give both repeats the same context.";
-    const content = `# Plan\n\nShip on November 12.\n\n${filler}\n\nRepeat me.\n\n${filler}\n\nRepeat me.\n\n${filler}\n`;
-    const text = visibleMarkdown(content).text;
-    const span = (start: number, quote: string) =>
-      makeAnchor(text, start, start + quote.length, hash(content));
-    const spans = [
-      span(text.indexOf("November 12"), "November 12"),
-      span(text.indexOf("Ship"), "Ship"),
-      span(text.indexOf("Repeat me."), "Repeat me."),
-      span(text.lastIndexOf("Repeat me."), "Repeat me."),
-    ];
-    let seed = 7;
-    const random = (limit: number) => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed % limit;
-    };
-    type Message = {
-      id: string;
-      author: { kind: "user"; name: string };
-      body: string;
-      createdAt: string;
-      editedAt: string | null;
-      sentTo: { id: string; name: string }[];
-    };
-    type Thread = {
-      id: string;
-      anchor: (typeof spans)[number];
-      resolvedAt: string | null;
-      resolvedBy: { kind: "user"; name: string } | null;
-      messages: Message[];
-    };
-    const message = (id: string, body: string, minute: number): Message => ({
-      id,
-      author: { kind: "user", name: "You" },
-      body,
-      createdAt: `2026-10-19T00:${String(minute).padStart(2, "0")}:00.000Z`,
-      editedAt: null,
-      sentTo: [],
-    });
-    const base: Thread = {
-      id: "c_base",
-      anchor: spans[0]!,
-      resolvedAt: null,
-      resolvedBy: null,
-      messages: [message("c_base", "Root", 0)],
-    };
-    const mutateThread = (thread: Thread, side: string): Thread => {
-      const next: Thread = structuredClone(thread);
-      for (let step = 0; step < 1 + random(3); step++) {
-        const operation = random(5);
-        if (operation === 0)
-          next.messages.push(
-            message(`m_${side}${step}`, `Reply ${side}${step}`, 10 + step),
-          );
-        if (operation === 1 && next.messages.length) {
-          const target = next.messages[random(next.messages.length)]!;
-          target.body = `Edited ${side}${step}`;
-          target.editedAt = "2026-10-19T01:00:00.000Z";
-        }
-        if (operation === 2 && next.messages.length > 1)
-          next.messages.splice(1 + random(next.messages.length - 1), 1);
-        if (operation === 3) {
-          next.resolvedAt = next.resolvedAt ? null : "2026-10-19T02:00:00.000Z";
-          next.resolvedBy = next.resolvedAt
-            ? { kind: "user", name: "You" }
-            : null;
-        }
-        if (operation === 4) next.anchor = spans[random(spans.length)]!;
-      }
-      return next;
-    };
-    const records = (
-      threads: {
-        messages: unknown[];
-        resolvedAt: string | null;
-        resolvedBy: unknown;
-        anchor: unknown;
-      }[],
-    ) => ({
-      messages: new Set(
-        threads.flatMap((thread) =>
-          thread.messages.map((item) => JSON.stringify(item)),
-        ),
-      ),
-      states: new Set(
-        threads.map((thread) =>
-          JSON.stringify([thread.resolvedAt, thread.resolvedBy]),
-        ),
-      ),
-      anchors: new Set(threads.map((thread) => JSON.stringify(thread.anchor))),
-    });
-    for (let round = 0; round < 60; round++) {
-      const { service, files } = setup();
-      files.set("/vault/plan.md", content);
-      const destination = mutateThread(base, "d");
-      const source = mutateThread(base, "s");
-      files.set(
-        sidecar,
-        JSON.stringify({ version: 1, threads: [destination] }),
-      );
-      await service.attach(target, [source]);
-      const after = records(
-        commentsFileSchema.parse(JSON.parse(files.get(sidecar)!)).threads,
-      );
-      const before = records([destination, source]);
-      for (const key of ["messages", "states", "anchors"] as const)
-        for (const value of before[key]) expect(after[key]).toContain(value);
-    }
   });
 });

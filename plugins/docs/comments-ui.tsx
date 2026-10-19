@@ -8,7 +8,12 @@ import {
   type ReactNode,
 } from "react";
 import type { Editor } from "@tiptap/core";
-import { useRpc, useRealtime, useBbNavigate } from "@get-bb/plugin-sdk/app";
+import {
+  experimental_copyToClipboard,
+  useRpc,
+  useRealtime,
+  useBbNavigate,
+} from "@get-bb/plugin-sdk/app";
 import type { docsRpcContract } from "./server.js";
 import type { CommentTarget } from "./comments-service.js";
 import {
@@ -19,6 +24,7 @@ import {
   type CommentMessage as Message,
   type ListedComment as CommentThread,
   type CommentsList,
+  type CommentThread as SavedThread,
 } from "./comments.js";
 import {
   commentHighlightKey,
@@ -629,7 +635,136 @@ type Selection = {
   top: number;
   left: number;
 };
-const EMPTY: CommentsList = { sidecarSha256: null, threads: [], notice: null };
+const EMPTY: CommentsList = {
+  sidecarSha256: null,
+  threads: [],
+  notice: null,
+  outsideChange: 0,
+};
+type DocumentlessItem = { path: string; sidecarPath: string };
+function savedText(threads: SavedThread[]): string {
+  return threads
+    .map((thread) =>
+      [
+        `“${thread.anchor.quote}”`,
+        ...thread.messages.map(
+          (message) => `${message.author.name}: ${message.body}`,
+        ),
+      ].join("\n"),
+    )
+    .join("\n\n");
+}
+function DocumentlessComments({
+  vaultId,
+  items,
+  onDeleted,
+}: {
+  vaultId: string | undefined;
+  items: DocumentlessItem[];
+  onDeleted(sidecarPath: string): void;
+}) {
+  const rpc = useRpc<typeof docsRpcContract>();
+  const [viewing, setViewing] = useState<{
+    sidecarPath: string;
+    text: string;
+  } | null>(null);
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const read = async (sidecarPath: string) =>
+    savedText(
+      (await rpc.call("readOrphanedComments", { vaultId, sidecarPath }))
+        .threads,
+    );
+  const run = (work: Promise<void>) =>
+    void work.catch((cause) => setError(String(cause)));
+  return (
+    <div className="flex flex-col gap-1 border-b border-border px-3 py-2 text-xs">
+      <span className="text-muted-foreground">
+        Comments whose document was moved, replaced or deleted outside Docs.
+        They are read-only.
+      </span>
+      {error && <span className="text-destructive">{error}</span>}
+      {items.map((item) => (
+        <div key={item.sidecarPath} className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <span className="min-w-0 flex-1 truncate">{item.path}</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                viewing?.sidecarPath === item.sidecarPath
+                  ? setViewing(null)
+                  : run(
+                      read(item.sidecarPath).then((text) =>
+                        setViewing({ sidecarPath: item.sidecarPath, text }),
+                      ),
+                    )
+              }
+            >
+              {viewing?.sidecarPath === item.sidecarPath ? "Hide" : "View"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                run(
+                  read(item.sidecarPath).then(async (text) => {
+                    await experimental_copyToClipboard({ text });
+                  }),
+                )
+              }
+            >
+              Copy text
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setConfirming(item.sidecarPath)}
+            >
+              Delete
+            </Button>
+          </div>
+          {confirming === item.sidecarPath && (
+            <div className="flex items-center gap-1">
+              <span className="flex-1">Delete these comments permanently?</span>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() =>
+                  run(
+                    rpc
+                      .call("deleteOrphanedComments", {
+                        vaultId,
+                        sidecarPath: item.sidecarPath,
+                      })
+                      .then(() => {
+                        setConfirming(null);
+                        onDeleted(item.sidecarPath);
+                      }),
+                  )
+                }
+              >
+                Delete
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setConfirming(null)}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
+          {viewing?.sidecarPath === item.sidecarPath && (
+            <pre className="whitespace-pre-wrap rounded bg-muted p-2 font-sans">
+              {viewing.text}
+            </pre>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 const MIN_MARGIN_PANE_WIDTH = 720;
 export function CommentsSurface({
   target,
@@ -661,10 +796,8 @@ export function CommentsSurface({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [revision, setRevision] = useState(0);
   const [reloads, setReloads] = useState(0);
-  const [moved, setMoved] = useState<{ path: string; sidecarPath: string }[]>(
-    [],
-  );
-  const [movedOpen, setMovedOpen] = useState(false);
+  const [documentless, setDocumentless] = useState<DocumentlessItem[]>([]);
+  const [documentlessOpen, setDocumentlessOpen] = useState(false);
   const compactViewport = useIsCompactViewport();
   const [narrowPane, setNarrowPane] = useState(false);
   const compact = compactViewport || narrowPane;
@@ -716,25 +849,24 @@ export function CommentsSurface({
     setData(EMPTY);
     setActive(null);
     setDraft(null);
-    setMoved([]);
-    setMovedOpen(false);
+    setDocumentless([]);
+    setDocumentlessOpen(false);
     void refresh();
     return invalidateRequests;
   }, [targetKey, refresh, invalidateRequests]);
-  const commentless = data !== EMPTY && data.threads.length === 0;
   useEffect(() => {
-    if (!commentless || targetRef.current.source) return;
+    if (targetRef.current.source) return;
     let current = true;
     void rpc
       .call("listCommentFolder", { vaultId: targetRef.current.vaultId })
       .then((result) => {
-        if (current) setMoved(result.stranded);
+        if (current) setDocumentless(result.stranded);
       })
       .catch(() => undefined);
     return () => {
       current = false;
     };
-  }, [commentless, targetKey, rpc]);
+  }, [targetKey, rpc]);
   const changed = useCallback(
     (payload: unknown) => {
       if (typeof payload !== "object" || payload === null) return;
@@ -1087,13 +1219,13 @@ export function CommentsSurface({
       .docs-comment-highlight[data-active="true"] { background:color-mix(in oklab,var(--warning) 34%,transparent); border-bottom-color:var(--warning); }
     `}</style>
         <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
-          {commentless && moved.length > 0 && (
+          {documentless.length > 0 && (
             <button
-              aria-expanded={movedOpen}
+              aria-expanded={documentlessOpen}
               className="rounded px-2 py-1 hover:bg-state-hover"
-              onClick={() => setMovedOpen(!movedOpen)}
+              onClick={() => setDocumentlessOpen(!documentlessOpen)}
             >
-              Document moved?
+              {documentless.length} without a document
             </button>
           )}
           {data.threads.some((thread) => thread.resolvedAt) && (
@@ -1124,37 +1256,56 @@ export function CommentsSurface({
             {data.threads.filter((thread) => !thread.resolvedAt).length}
           </button>
         </div>
-        {commentless && movedOpen && moved.length > 0 && (
-          <div className="flex flex-col gap-1 border-b border-border px-3 py-2 text-xs">
-            <span className="text-muted-foreground">
-              Comments whose document is missing. Attach them here, then
-              reattach any “Text not found” threads.
+        {documentlessOpen && documentless.length > 0 && (
+          <DocumentlessComments
+            vaultId={target.vaultId}
+            items={documentless}
+            onDeleted={(sidecarPath) =>
+              setDocumentless((items) =>
+                items.filter((item) => item.sidecarPath !== sidecarPath),
+              )
+            }
+          />
+        )}
+        {data.outsideChange > 0 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-xs">
+            <span className="min-w-0 flex-1">
+              {data.outsideChange === 1
+                ? "1 comment was"
+                : `${data.outsideChange} comments were`}{" "}
+              made on a version changed outside Docs.
             </span>
-            {moved.map((item) => (
-              <div key={item.sidecarPath} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate">{item.path}</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    act(
-                      apply(
-                        rpc.call("attachComments", {
-                          vaultId: target.vaultId,
-                          path: target.path,
-                          sidecarPath: item.sidecarPath,
-                        }),
-                      ).then(() => {
-                        setMoved([]);
-                        setMovedOpen(false);
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                act(apply(rpc.call("keepComments", { ...target })))
+              }
+            >
+              Keep on this document
+            </Button>
+            {!target.source && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  act(
+                    apply(
+                      rpc.call("leaveComments", {
+                        vaultId: target.vaultId,
+                        path: target.path,
                       }),
-                    )
-                  }
-                >
-                  Attach here
-                </Button>
-              </div>
-            ))}
+                    ).then(() =>
+                      rpc
+                        .call("listCommentFolder", { vaultId: target.vaultId })
+                        .then((result) => setDocumentless(result.stranded)),
+                    ),
+                  )
+                }
+              >
+                Leave
+              </Button>
+            )}
           </div>
         )}
         {(error || data.notice) && (

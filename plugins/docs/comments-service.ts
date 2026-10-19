@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { PluginCliError, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
@@ -122,37 +122,8 @@ export function commentSidecar(file: string): string {
 function isMissing(error: unknown): boolean {
   return /\bENOENT\b|path does not exist|not found/i.test(String(error));
 }
-export function threadFingerprint(thread: CommentThread): string {
-  return createHash("sha256").update(JSON.stringify(thread)).digest("hex");
-}
-function tombstoned(data: CommentsFile, thread: CommentThread): boolean {
-  const fingerprint = threadFingerprint(thread);
-  return (data.attached ?? []).some((entry) =>
-    entry.threads.includes(fingerprint),
-  );
-}
-export function fullyAttached(content: string): boolean {
-  try {
-    const saved = commentsFileSchema.parse(JSON.parse(content));
-    const attached = new Set(
-      (saved.attached ?? []).flatMap((entry) => entry.threads),
-    );
-    return saved.threads.every((thread) =>
-      attached.has(threadFingerprint(thread)),
-    );
-  } catch {
-    return false;
-  }
-}
-function threadState(thread: CommentThread): string {
-  return JSON.stringify([thread.resolvedAt, thread.resolvedBy]);
-}
-function anchorText(thread: CommentThread): string {
-  return JSON.stringify(thread.anchor);
-}
-function containsAll(outer: CommentThread, inner: CommentThread): boolean {
-  const records = new Set(outer.messages.map((item) => JSON.stringify(item)));
-  return inner.messages.every((item) => records.has(JSON.stringify(item)));
+function bound(data: CommentsFile, documentSha256: string): boolean {
+  return !data.threads.length || data.document?.sha256 === documentSha256;
 }
 function fail(code: string, message: string): never {
   throw new PluginCliError(message, {
@@ -215,11 +186,18 @@ export function createCommentsService(
       document ?? bb.sdk.files.read(fileArgs(target)),
     ]);
     const doc = visibleMarkdown(file.content);
+    if (!bound(saved.data, file.sha256))
+      return {
+        sidecarSha256: saved.sha256,
+        notice: saved.notice,
+        threads: [],
+        outsideChange: saved.data.threads.length,
+      };
     return {
       sidecarSha256: saved.sha256,
       notice: saved.notice,
+      outsideChange: 0,
       threads: saved.data.threads
-        .filter((thread) => !tombstoned(saved.data, thread))
         .map((thread) => ({
           ...thread,
           status: thread.resolvedAt ? ("resolved" as const) : ("open" as const),
@@ -236,6 +214,7 @@ export function createCommentsService(
   async function mutate(
     input: CommentTarget,
     operation: (data: CommentsFile, content: string, sha256: string) => void,
+    keep = false,
   ) {
     return serialize(input, async () => {
       const target = await resolve(input);
@@ -245,9 +224,13 @@ export function createCommentsService(
           bb.sdk.files.read(fileArgs(target)),
         ]);
         if (saved.notice) fail("invalid_sidecar", saved.notice);
+        if (!keep && !bound(saved.data, file.sha256))
+          fail(
+            "outside_change",
+            "This document changed outside Docs. Keep or leave its comments first.",
+          );
         const doc = visibleMarkdown(file.content);
         for (const thread of saved.data.threads) {
-          if (tombstoned(saved.data, thread)) continue;
           const located = resolveAnchor(doc, file.sha256, thread.anchor);
           if (located.start !== null && located.end !== null)
             thread.anchor = makeAnchor(
@@ -258,6 +241,7 @@ export function createCommentsService(
             );
         }
         operation(saved.data, file.content, file.sha256);
+        saved.data.document = { sha256: file.sha256 };
         const result = await bb.sdk.files.write({
           ...fileArgs(target),
           path: commentSidecar(target.path),
@@ -279,6 +263,32 @@ export function createCommentsService(
         "Comments changed concurrently. Try the operation again.",
       );
     });
+  }
+  async function rebind(
+    input: CommentTarget,
+    previousSha256: string | null,
+    documentSha256: string,
+  ) {
+    if (previousSha256 === null || previousSha256 === documentSha256) return;
+    const target = await resolve(input);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const saved = await read(target);
+      if (
+        saved.sha256 === null ||
+        saved.notice ||
+        saved.data.document?.sha256 !== previousSha256
+      )
+        return;
+      saved.data.document = { sha256: documentSha256 };
+      const result = await bb.sdk.files.write({
+        ...fileArgs(target),
+        path: commentSidecar(target.path),
+        content: JSON.stringify(saved.data, null, 2) + "\n",
+        contentEncoding: "utf8",
+        expectedSha256: saved.sha256,
+      });
+      if (result.outcome === "written") return;
+    }
   }
   function thread(data: CommentsFile, id: string): CommentThread {
     return (
@@ -379,6 +389,8 @@ export function createCommentsService(
   }
   return {
     list,
+    rebind,
+    keep: (input: CommentTarget) => mutate(input, () => {}, true),
     author,
     user,
     async add(
@@ -480,28 +492,6 @@ export function createCommentsService(
           item.messages = item.messages.filter(
             (candidate) => candidate.id !== message.id,
           );
-      }),
-    attach: (input: CommentTarget, threads: CommentThread[]) =>
-      mutate(input, (data) => {
-        for (const item of threads) {
-          const index = data.threads.findIndex(
-            (candidate) => candidate.id === item.id,
-          );
-          const existing = data.threads[index];
-          if (!existing) {
-            data.threads.push(item);
-            continue;
-          }
-          const sameState =
-            threadState(existing) === threadState(item) &&
-            anchorText(existing) === anchorText(item);
-          if (sameState && containsAll(existing, item)) continue;
-          if (sameState && containsAll(item, existing)) {
-            data.threads[index] = { ...existing, messages: item.messages };
-            continue;
-          }
-          data.threads.push({ ...item, id: `c_${randomUUID()}` });
-        }
       }),
     reattach: (input: z.infer<typeof commentsContract.reattachComment.input>) =>
       mutate(input, (data, content, sha256) => {
