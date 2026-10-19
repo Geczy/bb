@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   commentHighlightKey,
   createCommentHighlights,
+  highlightRanges,
   threadRanges,
   visibleEditor,
 } from "./comment-editor.js";
@@ -166,5 +167,90 @@ describe("visible comment text", () => {
         .setMeta("preventUpdate", true),
     );
     expect(commentHighlightKey.getState(editor.state)?.find()).toEqual([]);
+  });
+  it("keeps a repeated-quote highlight on its own occurrence when a reply arrives during local edits", () => {
+    const saved = "# Race\n\nFirst target.\n\nSecond target.";
+    editor = new Editor({
+      extensions: [
+        StarterKit,
+        Markdown.configure({ html: true }),
+        createCommentHighlights(),
+      ],
+      content: saved,
+    });
+    const savedText = visibleMarkdown(saved).text;
+    const start = savedText.lastIndexOf("target");
+    const thread = {
+      id: "c_1",
+      status: "open" as const,
+      resolvedAt: null,
+      resolvedBy: null,
+      messages: [
+        {
+          id: "c_1",
+          author: { kind: "user" as const, name: "You" },
+          body: "Second one",
+          createdAt: "2026-10-19T00:00:00.000Z",
+          editedAt: null,
+          sentTo: [],
+        },
+      ],
+      anchor: {
+        state: "anchored" as const,
+        quote: "target",
+        start,
+        end: start + 6,
+        line: 5,
+      },
+    };
+    const place = (authoritative: boolean) =>
+      editor!.view.dispatch(
+        editor!.state.tr.setMeta(commentHighlightKey, {
+          ranges: highlightRanges(
+            editor!.state.doc,
+            commentHighlightKey.getState(editor!.state),
+            [thread],
+            null,
+            authoritative,
+          ),
+          active: null,
+        }),
+      );
+    place(true);
+    const first = visibleEditor(editor.state.doc);
+    editor.view.dispatch(
+      editor.state.tr.insertText(
+        "Added contents. ",
+        first.positions[first.text.indexOf("First")]!,
+      ),
+    );
+    const reply = {
+      ...thread,
+      messages: [
+        ...thread.messages,
+        { ...thread.messages[0]!, id: "m_1", body: "Incoming reply" },
+      ],
+    };
+    editor.view.dispatch(
+      editor.state.tr.setMeta(commentHighlightKey, {
+        ranges: highlightRanges(
+          editor.state.doc,
+          commentHighlightKey.getState(editor.state),
+          [reply],
+          null,
+          false,
+        ),
+        active: null,
+      }),
+    );
+    const ranges = commentHighlightKey.getState(editor.state)!.find();
+    const edited = visibleEditor(editor.state.doc);
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0]!.from).toBe(
+      edited.positions[edited.text.lastIndexOf("target")],
+    );
+    expect(
+      highlightRanges(editor.state.doc, undefined, [reply], null, false),
+    ).toEqual([]);
   });
 });

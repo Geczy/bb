@@ -1116,6 +1116,7 @@ function InlineDocument({
                   sha256={state.sha256}
                   flush={session.flush}
                   proposalBase={pending ? state.content : null}
+                  dirty={state.dirty}
                 >
                   <TiptapEditor
                     onEditor={setEditor}
@@ -1340,12 +1341,6 @@ function SavedDocumentEditor({
 }) {
   const { state, session } = useSavedDocument(io);
   const [editor, setEditor] = useState<Editor | null>(null);
-  useRealtime(
-    "vault-changed",
-    useCallback(() => {
-      void session.refresh();
-    }, [session]),
-  );
   if (!state.loaded)
     return state.error ? (
       <div className="min-w-0 flex-1 p-6 text-sm text-destructive">
@@ -1387,6 +1382,7 @@ function SavedDocumentEditor({
         sha256={state.sha256}
         flush={session.flush}
         proposalBase={null}
+        dirty={state.dirty}
       >
         <TiptapEditor
           onEditor={setEditor}

@@ -723,6 +723,66 @@ describe("Docs nav panel", () => {
     expect(slot.queryByText("Remote Mac")).toBeNull();
   });
 
+  it("keeps the same editor and undo history through autosave and vault events", async () => {
+    let leases = 0;
+    const saveNote = vi.fn((_input: unknown) => ({
+      outcome: "written",
+      sha256: "next-sha",
+    }));
+    const slot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "personal/status.md" },
+      {
+        rpc: {
+          listNotes: () =>
+            listNotesResult([
+              {
+                path: "status.md",
+                title: "Status",
+                preview: "Ready",
+                modifiedAtMs: 1,
+              },
+            ]),
+          readNote: () => ({ content: "# Status\n\nReady.", sha256: "sha" }),
+          preparePreview: () => ({
+            ...preview,
+            baseUrl: `/api/v1/file-previews/lease-${++leases}`,
+          }),
+          renameToTitle: () => ({ path: "status.md" }),
+          listComments: () => ({
+            sidecarSha256: null,
+            threads: [],
+            notice: null,
+            outsideChange: 0,
+            documentSha256: "sha",
+          }),
+          listCommentFolder: () => ({ stranded: [], truncated: false }),
+          saveNote,
+        },
+      },
+    );
+
+    await slot.findByText("Ready.");
+    const editor = slot.container.querySelector('[contenteditable="true"]');
+    const paragraph = editor?.querySelector("p");
+    expect(paragraph).toBeTruthy();
+    paragraph!.textContent = "Ready now.";
+    fireEvent.input(paragraph!);
+    await waitFor(() => expect(saveNote).toHaveBeenCalled(), {
+      timeout: 2_000,
+    });
+    await slot.emitRealtime("vault-changed", {
+      vaultId: "personal",
+      path: "status.md",
+    });
+    await slot.emitRealtime("vault-changed", { vaultId: "personal" });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(slot.container.querySelector('[contenteditable="true"]')).toBe(
+      editor,
+    );
+    expect(editor?.textContent).toContain("Ready now.");
+  });
+
   it("renders and autosaves editable Markdown tables", async () => {
     const saveNote = vi.fn((_input: unknown) => ({
       outcome: "written",

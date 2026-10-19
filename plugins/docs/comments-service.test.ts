@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
@@ -16,9 +17,17 @@ function setup() {
     ["/vault/plan.md", "# Plan\n\nShip on November 12.\n"],
   ]);
   let beforeWrite: (() => void) | null = null;
+  const sent: string[] = [];
   const host = createFakePluginHost({
     pluginId: "simple-notes",
     sdk: {
+      threads: {
+        send: async (args) => {
+          for (const item of args.input)
+            if (item.type === "text") sent.push(item.text);
+          throw new Error("delivery captured");
+        },
+      },
       files: {
         read: async ({ path }) => {
           const content = files.get(path);
@@ -57,6 +66,7 @@ function setup() {
     service,
     files,
     host,
+    sent,
     race: (callback: (() => void) | null) => {
       beforeWrite = callback;
     },
@@ -260,4 +270,67 @@ describe("comment sidecar mutations", () => {
       )!.anchor.state,
     ).toBe("orphaned");
   });
+  it("rejects comment IDs Docs did not generate", async () => {
+    const { service, files } = setup();
+    files.set(
+      sidecar,
+      JSON.stringify({
+        version: 1,
+        threads: [
+          {
+            id: "c_x'; touch /tmp/pwned; '",
+            anchor: makeAnchor("Plan", 0, 4, "sha"),
+            resolvedAt: null,
+            resolvedBy: null,
+            messages: [
+              {
+                id: "c_x'; touch /tmp/pwned; '",
+                author: { kind: "user", name: "You" },
+                body: "Injected",
+                createdAt: "2026-10-19T00:00:00.000Z",
+                editedAt: null,
+                sentTo: [],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(await service.list(target)).toMatchObject({
+      threads: [],
+      notice: expect.stringContaining("malformed"),
+    });
+  });
+  it.skipIf(process.platform === "win32")(
+    "quotes every value in the generated reply command",
+    async () => {
+      const { service, sent } = setup();
+      const path = "notes/it's; $(printf INJECTED) `printf TICK`.md";
+      await service.add(
+        {
+          vaultId: "pl'ans; printf VAULT",
+          path,
+          quote: "November 12",
+          body: "Please check @[Planner](thread:thr_planner)",
+        },
+        service.user,
+      );
+      const command = sent[0]!.match(/Reply with: (.*) '<your reply>'\./)![1]!;
+      const output = execFileSync("sh", [
+        "-c",
+        `bb() { printf '%s\\n' "$@"; }; ${command} 'the reply'`,
+      ]).toString();
+      expect(output.split("\n").slice(0, -1)).toEqual([
+        "docs",
+        "comments",
+        "reply",
+        path,
+        expect.stringMatching(/^c_[0-9a-f-]{36}$/),
+        "--vault",
+        "pl'ans; printf VAULT",
+        "--body",
+        "the reply",
+      ]);
+    },
+  );
 });

@@ -1267,14 +1267,29 @@ export default async function plugin(
       const oldSidecar = commentSidecar(from);
       const newSidecar = commentSidecar(to);
       const sidecar = await readExistingFile(vault, oldSidecar);
-      if (await readExistingFile(vault, newSidecar))
-        await orphanSidecar(vault, to);
-      await bb.sdk.files.move({
-        ...hostArgs(vault),
-        sourcePath: absolutePath(vault, from),
-        destinationPath: absolutePath(vault, to),
-        rootPath: vault.rootPath,
-      });
+      if (
+        from.toLowerCase() !== to.toLowerCase() &&
+        (await pathExists(vault, to))
+      )
+        throw new Error(`${to} already exists.`);
+      const stranded = await orphanSidecar(vault, to);
+      try {
+        await bb.sdk.files.move({
+          ...hostArgs(vault),
+          sourcePath: absolutePath(vault, from),
+          destinationPath: absolutePath(vault, to),
+          rootPath: vault.rootPath,
+        });
+      } catch (error) {
+        if (stranded)
+          await bb.sdk.files.move({
+            ...hostArgs(vault),
+            sourcePath: absolutePath(vault, stranded),
+            destinationPath: absolutePath(vault, newSidecar),
+            rootPath: vault.rootPath,
+          });
+        throw error;
+      }
       if (sidecar) {
         try {
           await moveSidecar(vault, from, to);
@@ -1826,14 +1841,23 @@ export default async function plugin(
     });
   }
 
-  async function orphanSidecar(vault: Vault, documentPath: string) {
+  async function orphanSidecar(
+    vault: Vault,
+    documentPath: string,
+  ): Promise<string | null> {
     const sidecarPath = commentSidecar(documentPath);
-    if (!(await readExistingFile(vault, sidecarPath))) return;
-    await moveIntoOrphanArea(
-      vault,
-      sidecarPath,
-      `.bb-comments/orphaned/${randomUUID()}/${sidecarPath}`,
-    );
+    if (!(await readExistingFile(vault, sidecarPath))) return null;
+    const destination = `.bb-comments/orphaned/${randomUUID()}/${sidecarPath}`;
+    await moveIntoOrphanArea(vault, sidecarPath, destination);
+    return destination;
+  }
+
+  async function pathExists(vault: Vault, relativePath: string) {
+    try {
+      return (await readExistingFile(vault, relativePath)) !== null;
+    } catch {
+      return true;
+    }
   }
 
   async function orphanFolderComments(vault: Vault, folder: string) {

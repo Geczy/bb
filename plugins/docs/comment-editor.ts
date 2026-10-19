@@ -62,6 +62,22 @@ export function threadRanges(
   }
   return ranges;
 }
+export function highlightRanges(
+  doc: Node,
+  current: DecorationSet | undefined,
+  threads: ListedComment[],
+  proposalBase: string | null,
+  authoritative: boolean,
+): CommentRange[] {
+  if (proposalBase !== null || authoritative)
+    return threadRanges(doc, threads, proposalBase);
+  const open = new Set(
+    threads.filter((thread) => !thread.resolvedAt).map((thread) => thread.id),
+  );
+  return current
+    ? commentRanges(doc, current).filter((range) => open.has(range.id))
+    : [];
+}
 export function commentRanges(
   doc: Node,
   decorations: DecorationSet,

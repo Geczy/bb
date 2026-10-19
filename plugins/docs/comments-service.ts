@@ -4,6 +4,7 @@ import { PluginCliError, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
   commentAnchorSchema,
+  commentIdSchema,
   commentMentions,
   commentsFileSchema,
   commentsListSchema,
@@ -34,7 +35,7 @@ export const commentTargetSchema = z
   })
   .strict();
 const threadInput = commentTargetSchema.extend({
-  commentId: z.string().min(1),
+  commentId: commentIdSchema,
 });
 const bodySchema = z.string().trim().min(1).max(50_000);
 export const commentsContract = {
@@ -62,13 +63,13 @@ export const commentsContract = {
   },
   editCommentMessage: {
     input: threadInput.extend({
-      messageId: z.string().min(1),
+      messageId: commentIdSchema,
       body: bodySchema,
     }),
     output: commentsListSchema,
   },
   deleteCommentMessage: {
-    input: threadInput.extend({ messageId: z.string().min(1) }),
+    input: threadInput.extend({ messageId: commentIdSchema }),
     output: commentsListSchema,
   },
   refreshCommentAnchors: {
@@ -111,6 +112,9 @@ export function commentSidecar(file: string): string {
     ".bb-comments",
     `${api.basename(file)}.json`,
   );
+}
+export function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 function isMissing(error: unknown): boolean {
   return /\bENOENT\b|path does not exist|not found/i.test(String(error));
@@ -188,11 +192,13 @@ export function createCommentsService(
         notice: saved.notice,
         threads: [],
         outsideChange: saved.data.threads.length,
+        documentSha256: file.sha256,
       };
     return {
       sidecarSha256: saved.sha256,
       notice: saved.notice,
       outsideChange: 0,
+      documentSha256: file.sha256,
       threads: saved.data.threads
         .map((thread) => ({
           ...thread,
@@ -354,10 +360,21 @@ export function createCommentsService(
     body: string,
     by: CommentAuthor,
   ) {
-    const command = input.source
-      ? `--source '${JSON.stringify(input.source)}'`
-      : `--vault '${input.vaultId ?? "personal"}'`;
-    return `Docs comment by ${by.name}${by.kind === "agent" ? ` (thread:${by.threadId})` : ""}\nDocument: ${input.path}\n${input.source ? `Source: ${JSON.stringify(input.source)}` : `Vault: ${input.vaultId ?? "personal"}`}\nComment ID: ${id}\nQuote: ${quote}\n\n${body}\n\nReply with bb docs comments reply '${input.path.replaceAll("'", "'\\''")}' '${id}' ${command} --body "your reply". Use bb docs propose for document changes; reply and resolve clear requests after proposing. Never edit .bb-comments directly.`;
+    const command = [
+      "bb",
+      "docs",
+      "comments",
+      "reply",
+      input.path,
+      id,
+      ...(input.source
+        ? ["--source", JSON.stringify(input.source)]
+        : ["--vault", input.vaultId ?? "personal"]),
+      "--body",
+    ]
+      .map(shellQuote)
+      .join(" ");
+    return `Docs comment by ${by.name}${by.kind === "agent" ? ` (thread:${by.threadId})` : ""}\nDocument: ${input.path}\n${input.source ? `Source: ${JSON.stringify(input.source)}` : `Vault: ${input.vaultId ?? "personal"}`}\nComment ID: ${id}\nQuote: ${quote}\n\n${body}\n\nReply with: ${command} '<your reply>'. Use bb docs propose for document changes; reply and resolve clear requests after proposing. Never edit .bb-comments directly.`;
   }
   async function deliver(
     input: CommentTarget,

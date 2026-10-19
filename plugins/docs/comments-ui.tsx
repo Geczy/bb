@@ -30,7 +30,7 @@ import {
   commentHighlightKey,
   commentRanges,
   visibleEditor,
-  threadRanges,
+  highlightRanges,
 } from "./comment-editor.js";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
@@ -628,6 +628,7 @@ const EMPTY: CommentsList = {
   threads: [],
   notice: null,
   outsideChange: 0,
+  documentSha256: "",
 };
 type DocumentlessItem = { path: string; sidecarPath: string };
 function savedText(threads: SavedThread[]): string {
@@ -760,6 +761,7 @@ export function CommentsSurface({
   sha256,
   flush,
   proposalBase,
+  dirty,
   children,
 }: {
   target: CommentTarget;
@@ -767,6 +769,7 @@ export function CommentsSurface({
   sha256: string;
   flush(): Promise<void>;
   proposalBase: string | null;
+  dirty: boolean;
   children: ReactNode;
 }) {
   const rpc = useRpc<typeof docsRpcContract>();
@@ -1014,14 +1017,20 @@ export function CommentsSurface({
   }, [editor, activate, startDraft]);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    const ranges = threadRanges(editor.state.doc, data.threads, proposalBase);
+    const ranges = highlightRanges(
+      editor.state.doc,
+      commentHighlightKey.getState(editor.state),
+      data.threads,
+      proposalBase,
+      !dirty && data.documentSha256 === sha256,
+    );
     editor.view.dispatch(
       editor.state.tr.setMeta(commentHighlightKey, {
         ranges,
         active: activeRef.current,
       }),
     );
-  }, [editor, data, proposalBase, reloads]);
+  }, [editor, data, proposalBase, reloads, dirty, sha256]);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const decorations = commentHighlightKey.getState(editor.state);

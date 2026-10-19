@@ -2309,6 +2309,46 @@ describe("Docs comment lifecycle", () => {
     }
   });
 
+  it("leaves bindings and sidecars untouched when an automatic rename is rejected", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/destination.md": doc("# Destination\n\nShip tomorrow."),
+      "/vault/move-source.md": doc("# Destination\n\nAnother body."),
+    });
+    try {
+      const commentId = await comment(
+        host,
+        "destination.md",
+        "tomorrow",
+        "Keep me",
+      );
+      const before = host.files.get(
+        "/vault/.bb-comments/destination.md.json",
+      )!.content;
+      await expect(
+        host.harness.behavior.callRpc("renameToTitle", {
+          path: "move-source.md",
+        }),
+      ).resolves.toEqual({ path: "move-source.md" });
+      await expect(
+        host.harness.behavior.callRpc("movePath", {
+          from: "move-source.md",
+          to: "destination.md",
+        }),
+      ).rejects.toThrow("already exists");
+      expect(
+        host.files.get("/vault/.bb-comments/destination.md.json")?.content,
+      ).toBe(before);
+      expect(await listed(host, "destination.md")).toMatchObject({
+        outsideChange: 0,
+        threads: [{ id: commentId }],
+      });
+      expect(host.files.has("/vault/move-source.md")).toBe(true);
+      expect(await folder(host)).toEqual([]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("moves stranded comments aside when a Docs move reuses their path", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": doc("# Plan\n\nShip tomorrow."),
