@@ -19,10 +19,6 @@ const AGENT_PROMPT = withIntake(
   [
     { label: "Computer", hint: "the computer that will run both instances" },
     {
-      label: "Accounts",
-      hint: "two ChatGPT accounts for Codex; tell me which is work and which is personal, without sharing passwords or tokens",
-    },
-    {
       label: "Projects",
       hint: "the work folders and personal folders to add; leave existing bb data untouched",
     },
@@ -31,10 +27,10 @@ const AGENT_PROMPT = withIntake(
       hint: "use two local browser tabs; remote registration and the signed-in server switcher are outside this setup",
     },
   ],
-  `Set up two bb instances with separate work and personal project lists and threads. Help me configure and verify the intended Codex account in each; do not assume separate bb data means separate credentials.
+  `Set up two bb instances with separate work and personal project lists and threads. This setup organizes project records only. Provider-account separation has not been verified by this guide. Do not sign in to providers, import credentials, or start agent turns in the new instances.
 Guide: https://getbb.app/guides/work-and-personal-projects
 
-This is a two-instance setup, not built-in profiles or a security boundary. Both instances still have the OS user's file and tool access. Limit this setup to Codex with two ChatGPT accounts; do not claim other providers are isolated. Never inspect, print, copy, or import my existing credentials. Stop if company policy requires stronger isolation.
+This is a two-instance setup, not built-in profiles or a security boundary. Both instances still have the OS user's file and tool access. Do not claim provider credentials are isolated. Keep the new Codex homes and account pools empty; account sign-in and routing verification are a separate follow-up. Never inspect, print, copy, or import my existing credentials. Stop if company policy requires stronger isolation.
 
 1. Read the current bb Startup Flags documentation, the account-pool skill's accounts-and-routing.md, and the server-switcher skill. Check the installed launcher help for --data-dir, --server-port, and --host-daemon-port. Inspect occupied ports and existing instance paths without reading credentials. Propose two NEW persistent data directories, two separate Codex homes, and four unused ports. Do not copy an existing data directory or overwrite an existing config.
 Check: the paths and ports are distinct, and neither instance uses my existing bb data or ~/.codex directory.
@@ -46,23 +42,20 @@ Check: both local URLs return the app, each server reports its intended data dir
 3. For every bb command, explicitly target the intended server and clear inherited BB_CLI, BB_THREAD_ID, BB_PROJECT_ID, BB_ENVIRONMENT_ID and host targeting. Verify the target before any mutation. On EACH new server, run bb plugin enable account-pool, bb pool parent isolate, and bb pool routing codex. Read bb pool parent, bb pool config and bb pool status --json.
 Check: parentMode is isolate on both. No parent is serving either pool. If a parent is detected, verify its routing is neutralized before starting an agent. Do not disable or bypass Account Pooler to get around a failure.
 
-4. Give me each instance's Account Pooler settings link. Have me choose Sign in to Codex and authorize the intended ChatGPT account in the browser myself, one instance at a time. A private browser window can avoid reusing the other website login. Do not use bb pool account add --import. If using the CLI-assisted flow, first read bb pool account add --help and bb pool account login-poll --help, then use --provider codex --login and poll the returned session.
-Check: exactly one intended Codex account is enabled in each instance, the accounts differ, and routing is on. Confirm from the pool's account details, never by asking a model which account it is. Stop if either pool is empty, has extra accounts, or cannot authenticate.
+4. Add only the approved folders to each instance. Check bb project create --help before creating anything. Do not move files or change Git/SSH credentials. Keep both account pools and native Codex homes empty. Do not sign in, import accounts or start test threads.
+Check: each project list contains only its intended projects. Record account attribution, unavailable-credential behavior, refresh and signed-in parent routing as unverified; do not mark credential separation complete.
 
-5. Add only the approved folders to each instance. Check bb project create --help before creating anything. Do not move files or change Git/SSH credentials. Create one harmless test thread in each instance and verify which account the pool actually routed. Check the configured native Codex homes remain separate and empty unless I explicitly signed in there. Verify missing or unavailable credentials cannot route to the other context. Do not mark the setup complete on an account list alone.
-Check: the project lists and thread histories differ, and a real test turn uses the intended account in each. If account attribution or the fallback behavior cannot be verified, stop and report that gap.
-
-6. Keep the two local URLs available in separate browser tabs. Open work → personal → work and check the destination and project list each time. Do not register either server for remote access or configure the signed-in Server Switcher as part of this setup.
-Check: each local link reaches the intended instance. State separately whether account routing passed verification; navigating to the right project list does not prove credential separation.
+5. Keep the two local URLs available in separate browser tabs. Open work → personal → work and check the destination and project list each time. Do not register either server for remote access or configure the signed-in Server Switcher as part of this setup.
+Check: each local link reaches the intended instance. State that account routing remains unverified; navigating to the right project list does not prove credential separation.
 
 If any step fails, stop and report the command, redacted error, and next action. Do not push, publish, migrate existing data or send messages. Stop only the PIDs you recorded for this setup, never processes by name.
-Reply with the two clickable local URLs, data and Codex-home paths, terminal IDs and restart instructions, account-routing and switching results, the shared-OS limitations, and any checks still blocked.`,
+Reply with the two clickable local URLs, data and Codex-home paths, terminal IDs and restart instructions, project-list and local-tab results, the shared-OS limitations, and the account checks that remain unverified. State that these instances are for project organization only until a separate account-routing check passes.`,
 );
 
 export const guide: Guide = {
   ...meta,
   description:
-    "Give work and side projects their own project lists and conversations. Ask an agent to set up two bb instances, then open the one you need. Provider accounts need their own setup and verification.",
+    "Give work and side projects their own project lists and conversations. Ask an agent to set up two bb instances, then open the one you need. Provider-account separation is not verified by this guide.",
   heroTop: null,
   concept: (
     <div>
@@ -71,7 +64,7 @@ export const guide: Guide = {
   ),
   agentPrompt: AGENT_PROMPT,
   requirement:
-    "two ChatGPT accounts for Codex, permission to use them for this work, and a computer that can run both instances",
+    "a computer that can run both instances and permission to organize the chosen project folders",
   steps: [
     {
       id: "step-1",
@@ -81,12 +74,12 @@ export const guide: Guide = {
         <>
           <p>
             Choose <strong>Copy for agent</strong> above and paste it into a bb
-            thread. Your agent asks about your computer, accounts, and project
-            folders before creating anything.
+            thread. Your agent asks about your computer and project folders
+            before creating anything.
           </p>
           <PromptBlock
             name="Ask your agent"
-            prompt="Keep my work and personal projects in separate bb instances. Leave my current setup alone. Ask me which accounts and folders belong in each one, and verify the account routing before I start work."
+            prompt="Keep my work and personal project lists in separate bb instances. Leave my current setup alone. Ask which folders belong in each one. Do not sign in or start agent turns in the new instances; account separation needs a separate check."
           />
           <p>
             This creates two bb instances, not built-in profiles. Separate bb
@@ -95,32 +88,25 @@ export const guide: Guide = {
           </p>
         </>
       ),
-      shot: shot(
-        "setup-prompt",
-        "A setup request typed into a new bb thread, asking the agent to keep work and personal projects separate",
-      ),
+      shot: WORK_PROJECTS,
       options: [],
     },
     {
       id: "step-2",
-      title: "Sign in to the right account in each instance",
-      lead: "Configure one intended Codex account per pool, then verify it before using that instance.",
+      title: "Keep account setup separate",
+      lead: "This account setup still needs an end-to-end check. For now, use these instances only to organize projects, not to separate work and personal credentials.",
       body: (
         <>
           <Substeps>
-            <li>Open the work link your agent gives you.</li>
+            <li>Open each local link your agent gives you.</li>
             <li>
               Open <strong>Settings → Account Pooler [Experimental]</strong>
-              and choose <strong>Sign in to Codex</strong>. Check which ChatGPT
-              account the sign-in page is using before authorizing it.
+              and check that no accounts have been added.
             </li>
             <li>
-              Repeat in the personal instance with your personal account. A
-              private browser window can help when the website keeps choosing
-              the first account.
-            </li>
-            <li>
-              Ask your agent to verify both accounts and a test turn in each.
+              Keep provider sign-in and agent turns out of this setup. Account
+              routing needs its own verification before you use either instance
+              for agent work.
             </li>
           </Substeps>
           <p>
@@ -175,8 +161,8 @@ export const guide: Guide = {
     },
     {
       id: "step-4",
-      title: "Check before starting work",
-      lead: "Confirm the project list and account belong to the context you opened.",
+      title: "Check your project lists",
+      lead: "Confirm each local link opens the project list you intended.",
       body: (
         <>
           <Substeps>
@@ -186,10 +172,9 @@ export const guide: Guide = {
               your personal projects.
             </li>
             <li>
-              Check <strong>Account Pooler [Experimental]</strong> for the
-              intended account. Have your agent verify a harmless test turn in
-              each instance, including what happens when its credentials are
-              unavailable.
+              Leave accounts unconfigured. Before starting agent work, a
+              separate check must verify the intended account in each instance
+              and what happens when its credentials are unavailable.
             </li>
             <li>
               Switch back and check again. Keep the local links and restart
@@ -198,9 +183,9 @@ export const guide: Guide = {
           </Substeps>
           <p>
             Both instances still run as the same OS user. They can reach the
-            same files, Git and SSH credentials, and other shared tools. If work
-            policy requires a security boundary, use a separate OS account or
-            machine and follow your company's requirements.
+            same files, Git and SSH credentials, and other shared tools. This
+            setup does not enforce a security boundary. Ask your company which
+            environment it permits for work.
           </p>
         </>
       ),
@@ -229,8 +214,9 @@ export const guide: Guide = {
         <p>
           Yes. Nested bb servers can inherit the parent's Account Pooler
           routing. The setup prompt asks your agent to remove that inheritance
-          and set each new pool to isolate from its parent. Have it verify the
-          result before signing in or starting a thread.
+          and set each new pool to isolate from its parent. The empty-pool setup
+          was checked; signed-in routing has not been verified. Do not treat
+          these settings as proof of account separation.
         </p>
       ),
     },
@@ -242,17 +228,6 @@ export const guide: Guide = {
           account, not every instance running on the computer. Ask your agent to
           check registration and sign-in, or open the instance's local link. In
           the desktop app, check its configured server list.
-        </p>
-      ),
-    },
-    {
-      question: "The sign-in page keeps picking the other ChatGPT account.",
-      answer: (
-        <p>
-          Open the sign-in link in a private browser window and choose the
-          intended account yourself. Confirm the account in that instance's
-          Account Pooler after authorization. Do not import the machine's
-          existing login as a shortcut.
         </p>
       ),
     },
@@ -274,9 +249,9 @@ export const guide: Guide = {
       question: "Is this the same as browser profiles?",
       answer: (
         <p>
-          No. This runs two bb instances with separate bb data and an explicit
-          provider-account setup. It does not create built-in profiles or
-          prevent either instance from accessing files available to the OS user.
+          No. This creates separate bb data directories, not built-in profiles
+          or a security boundary. Provider-account separation is not verified by
+          this guide.
         </p>
       ),
     },
@@ -299,7 +274,8 @@ export const guide: Guide = {
         <p>
           Account Pooler does not provide that project-to-account mapping. It
           chooses an eligible account according to priority and availability.
-          This guide keeps one intended account in each instance instead.
+          The proposed setup uses one account per instance, but its sign-in and
+          routing checks are not yet complete.
         </p>
       ),
     },
@@ -307,10 +283,10 @@ export const guide: Guide = {
       question: "Does this separate every agent provider?",
       answer: (
         <p>
-          This guide covers two ChatGPT accounts used through Codex. Other
-          providers have their own credential stores and environment settings.
-          Ask your agent to verify those separately before using them in either
-          context.
+          No. This guide organizes project records and leaves provider accounts
+          unconfigured. Providers have their own credential stores and
+          environment settings; verify those separately before using agents in
+          either context.
         </p>
       ),
     },
@@ -337,6 +313,6 @@ export const guide: Guide = {
   ],
   closer: {
     title: "Give each part of your day its own place",
-    body: "Ask your agent to set up the two instances, then check the projects and account before you start.",
+    body: "Ask your agent to set up two project lists, then open the local link you need. Account setup is a separate follow-up.",
   },
 };
