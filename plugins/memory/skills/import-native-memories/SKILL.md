@@ -31,10 +31,15 @@ Work on every host with `status: "connected"`. Name every other host in the
 plan and the final report as not checked, so the person can rerun once it is
 online.
 
-The CLI does not expand `~` on other machines. Take each host's home directory
-from its project source paths (`sources[].path` with that `hostId`, for
-example `/Users/<name>/…` or `/home/<name>/…`). If a host has no project
-source, ask the person for its home directory.
+The CLI does not expand `~` on other machines. On the host you run on, the
+home directory is `$HOME`. For every other host, start from its project source
+paths (`sources[].path` with that `hostId`) and walk up their parent
+directories. The home directory is the nearest one where
+`bb file paths <dir>/.claude/projects --host <hostId> --directories --limit 1`
+or the same check for `<dir>/.codex/memories` succeeds. A repository's own
+`.claude` folder has no `projects` directory, so it does not count. If a host
+has no project source, or no parent directory matches, ask the person for its
+home directory.
 
 ## 2. Find the sources
 
