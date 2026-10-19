@@ -775,6 +775,17 @@ function ThreadRowComponent({
             </span>
           )}
         </span>
+        {parentOptions && hasChildren ? (
+          <SidebarChildToggleChevron
+            disabled={isEditing}
+            className={isEditing ? "hidden" : "z-[11]"}
+            isCollapsed={isParentCollapsed}
+            expandLabel={`Expand ${labelTitle} threads`}
+            collapseLabel={`Collapse ${labelTitle} threads`}
+            onToggle={() => parentOptions.onToggleCollapsed(thread.id)}
+            revealOnHover={!isParentCollapsed}
+          />
+        ) : null}
         {crossProjectLabel !== null ? (
           <span
             data-sidebar-thread-cross-project=""
@@ -792,17 +803,6 @@ function ThreadRowComponent({
           >
             {crossProjectName || "Another project"}
           </span>
-        ) : null}
-        {parentOptions && hasChildren ? (
-          <SidebarChildToggleChevron
-            disabled={isEditing}
-            className={isEditing ? "hidden" : "z-[11]"}
-            isCollapsed={isParentCollapsed}
-            expandLabel={`Expand ${labelTitle} threads`}
-            collapseLabel={`Collapse ${labelTitle} threads`}
-            onToggle={() => parentOptions.onToggleCollapsed(thread.id)}
-            revealOnHover={!isParentCollapsed}
-          />
         ) : null}
       </span>
       {rowDragBindings && !rowDragBindings.disabled && !isActionsOpen ? (
