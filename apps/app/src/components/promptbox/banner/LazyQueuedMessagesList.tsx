@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from "react";
 import type { ThreadQueuedMessage } from "@bb/domain";
 import { cn } from "@bb/shared-ui/lib/utils";
+import { formatQueuedMessagePreview } from "@bb/client-core";
+import { queuedMessageFallbackTitle } from "@/lib/queued-message-wait";
 import {
   PROMPT_STACK_CARD_HEADER_BUTTON_CLASS,
   PromptStackCard,
@@ -49,16 +51,20 @@ export interface QueuedMessagesListProps {
   onSetGroupBoundary: (request: QueuedMessageGroupBoundaryRequest) => void;
   onEdit: (request: QueuedMessageEditRequest) => void;
   onDelete: (id: string) => void;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
 }
 
 function QueuedMessagesCardFrame({
   attached,
   children,
+  expanded,
   height,
   queuedMessageCount,
 }: {
   attached: boolean;
   children: ReactNode;
+  expanded: boolean;
   height: number;
   queuedMessageCount: number;
 }) {
@@ -76,19 +82,16 @@ function QueuedMessagesCardFrame({
           className={cn(
             PROMPT_STACK_CARD_HEADER_BUTTON_CLASS,
             "cursor-default hover:bg-transparent",
+            expanded && "border-b border-border/35",
           )}
         >
           <span className="font-normal">Queue</span>
-          <QueuedMessagesCountPill count={queuedMessageCount} />
+          <QueuedMessagesCountPill arrivals={0} count={queuedMessageCount} />
         </div>
       </header>
       {children}
     </PromptStackCard>
   );
-}
-
-function QueuedMessagesLoadingStatus() {
-  return <span role="status" aria-label="Loading queued messages" />;
 }
 
 function isAttachedToComposer({
@@ -102,10 +105,30 @@ function QueuedMessagesListLoading(props: QueuedMessagesListProps) {
   return (
     <QueuedMessagesCardFrame
       attached={isAttachedToComposer(props)}
-      height={QUEUED_MESSAGES_COLLAPSED_HEIGHT}
+      expanded={props.expanded}
+      height={
+        props.expanded
+          ? getQueuedMessagesDrawerHeight(props)
+          : QUEUED_MESSAGES_COLLAPSED_HEIGHT
+      }
       queuedMessageCount={props.queuedMessages.length}
     >
-      <QueuedMessagesLoadingStatus />
+      {props.expanded ? (
+        <div className="min-h-0 flex-1 overflow-hidden py-1" aria-busy="true">
+          {props.queuedMessages.map((message) => (
+            <div
+              key={message.id}
+              className="flex h-[33px] items-center px-3.5 text-xs"
+            >
+              <span className="truncate">
+                {message.payload.kind === "retry"
+                  ? queuedMessageFallbackTitle({ ...message, now: Date.now() })
+                  : formatQueuedMessagePreview(message.content)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </QueuedMessagesCardFrame>
   );
 }
@@ -117,12 +140,11 @@ function QueuedMessagesListFailure({
   return (
     <QueuedMessagesCardFrame
       attached={isAttachedToComposer(props)}
+      expanded
       height={getQueuedMessagesDrawerHeight(props)}
       queuedMessageCount={props.queuedMessages.length}
     >
-      <div className="min-h-0 flex-1 border-t border-border/35">
-        <SplitLoadFailure retry={retry} />
-      </div>
+      <SplitLoadFailure retry={retry} />
     </QueuedMessagesCardFrame>
   );
 }
@@ -149,10 +171,11 @@ export function QueuedMessagesPendingCard({
   return (
     <QueuedMessagesCardFrame
       attached
+      expanded={false}
       height={QUEUED_MESSAGES_COLLAPSED_HEIGHT}
       queuedMessageCount={queuedMessageCount}
     >
-      <QueuedMessagesLoadingStatus />
+      <span role="status" aria-label="Loading queued messages" />
     </QueuedMessagesCardFrame>
   );
 }

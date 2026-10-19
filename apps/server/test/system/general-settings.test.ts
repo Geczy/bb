@@ -35,6 +35,7 @@ describe("general settings", () => {
       const body = systemConfigResponseSchema.parse(await readJson(response));
       expect(body.generalSettings).toEqual({
         ...defaultAppSettings,
+        machineGitCredentialsEnabled: false,
         showUnhandledProviderEvents: false,
       });
       expect(body.primaryHostId).toBeNull();
@@ -160,6 +161,35 @@ it("accepts old SDK payloads and round-trips edits through either setting name",
   });
 });
 
+it("persists terminal copy-on-select and preserves opt-out for older clients", async () => {
+  await withTestHarness(async (harness) => {
+    const put = (settings: object) =>
+      harness.app.request("/api/v1/settings/general", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+    expect(
+      (await put({ ...defaultAppSettings, terminalCopyOnSelect: false }))
+        .status,
+    ).toBe(200);
+    const { terminalCopyOnSelect, ...legacy } = defaultAppSettings;
+    expect(terminalCopyOnSelect).toBe(true);
+    expect((await put({ ...legacy, showKeyboardHints: false })).status).toBe(
+      200,
+    );
+    const config = systemConfigResponseSchema.parse(
+      await readJson(await harness.app.request("/api/v1/system/config")),
+    );
+    expect(config.generalSettings.terminalCopyOnSelect).toBe(false);
+    expect(getAppSettings(harness.db).terminalCopyOnSelect).toBe(false);
+    expect(
+      (await put({ ...defaultAppSettings, terminalCopyOnSelect: "false" }))
+        .status,
+    ).toBe(400);
+  });
+});
+
 it("preserves telemetry opt-out when older clients update other settings", async () => {
   await withTestHarness(async (harness) => {
     const put = (settings: object) =>
@@ -185,7 +215,11 @@ it("preserves telemetry opt-out when older clients update other settings", async
   });
 });
 
-it.each(["confirmThreadArchive", "showGitChanges"] as const)(
+it.each([
+  "confirmThreadArchive",
+  "showGitChanges",
+  "summarizeShellCommands",
+] as const)(
   "persists %s opt-out and preserves it for older clients",
   async (key) => {
     await withTestHarness(async (harness) => {

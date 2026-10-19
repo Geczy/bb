@@ -1,6 +1,8 @@
+import { ExpandableText } from "@bb/shared-ui/expandable-text";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
+  experimental_copyToClipboard,
   UrlLink as UrlLink,
   useRealtime,
   useRealtimeConnectionState,
@@ -334,17 +336,16 @@ function UrlHero({ url, showOpen }: { url: string; showOpen: boolean }) {
   }, []);
 
   const copy = useCallback(() => {
-    navigator.clipboard.writeText(url).then(
-      () => {
-        setCopyState("copied");
-        if (timerRef.current !== null) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setCopyState("idle"), 1500);
-      },
-      () => {
+    void experimental_copyToClipboard({ text: url }).then((copied) => {
+      if (!copied) {
         selectUrl();
         setCopyState("manual");
-      },
-    );
+        return;
+      }
+      setCopyState("copied");
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopyState("idle"), 1500);
+    });
   }, [url, selectUrl]);
 
   return (
@@ -395,14 +396,12 @@ function QuietCopyButton({ text, label }: { text: string; label: string }) {
     [],
   );
   const copy = useCallback(() => {
-    navigator.clipboard.writeText(text).then(
-      () => {
-        setCopied(true);
-        if (timerRef.current !== null) clearTimeout(timerRef.current);
-        timerRef.current = setTimeout(() => setCopied(false), 1500);
-      },
-      () => {},
-    );
+    void experimental_copyToClipboard({ text }).then((written) => {
+      if (!written) return;
+      setCopied(true);
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 1500);
+    });
   }, [text]);
   return (
     <Button
@@ -1431,9 +1430,12 @@ function ReconnectingContent({
         <span className="shrink-0 text-sm font-semibold text-warning-text">
           Reconnecting…
         </span>
-        <span className="min-w-0 truncate text-xs text-warning-text/80">
+        <ExpandableText
+          expandLabel="Show details"
+          className="min-w-0 text-xs text-warning-text/80"
+        >
           {why}
-        </span>
+        </ExpandableText>
       </div>
 
       <div className="space-y-2 pointer-events-none opacity-60 saturate-[0.85]">

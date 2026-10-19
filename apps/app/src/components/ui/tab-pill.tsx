@@ -3,7 +3,7 @@ import { COARSE_POINTER_TEXT_SM_CLASS } from "@bb/shared-ui/coarse-pointer-sizin
 import { cn } from "@bb/shared-ui/lib/utils";
 import { LIST_HOVER_TRANSITION } from "@bb/shared-ui/motion";
 import type { ReactNode } from "react";
-import { CONTEXT_SELECTION_SURFACE_CLASS } from "./context-selection";
+import { CONTEXT_SELECTION_SURFACE_CLASS } from "@bb/shared-ui/context-selection";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 
 const TAB_PILL_DEFAULT_LABEL_MAX_WIDTH_CLASS = "max-w-[180px]";
@@ -55,6 +55,7 @@ export function TabPill({
 }: TabPillProps) {
   return (
     <div
+      data-tab-pill=""
       onAuxClick={(event) => {
         if (event.button !== 1 || closeAction === null) {
           return;
@@ -160,6 +161,7 @@ function TabPillCloseButton({
   const button = (
     <button
       type="button"
+      onPointerDown={(event) => event.stopPropagation()}
       onMouseDown={(event) => event.stopPropagation()}
       onTouchStart={(event) => event.stopPropagation()}
       onClick={closeAction.onClose}

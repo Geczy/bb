@@ -58,6 +58,7 @@ export {
 export {
   getThreadPluginMetadata,
   insertThreadPluginMetadata,
+  listPluginThreadMetadata,
   listThreadPluginMetadataRows,
   patchThreadPluginMetadata,
 } from "./thread-plugin-metadata.js";
@@ -103,6 +104,8 @@ export {
   applyThreadLifecycleEvent,
   applyThreadLifecycleEventInTransaction,
   requireThreadLifecycleEventApplied,
+  listThreadAncestors,
+  listThreadDescendants,
   searchThreadsWithPendingInteractionState,
   THREAD_SEARCH_LIMIT_PER_GROUP_DEFAULT,
   THREAD_SEARCH_LIMIT_PER_GROUP_MAX,
@@ -293,8 +296,10 @@ export {
   getHighWaterMarks,
   findStoredEventRow,
   getActiveStoredTurnId,
+  isStoredTurnMainRunIdle,
   hasRootStoredTurnStarted,
   hasStoredSpawnAgentToolCall,
+  hasStoredTerminalClientTurnRequestEvent,
   hasStoredTurnStarted,
   classifyStoredProviderThreadClaim,
   wouldRemoveSharedProviderSessionClaim,
@@ -310,6 +315,7 @@ export {
   insertEvents,
   listActiveBackgroundTaskCountsByThreadIds,
   listContextWindowUsageRows,
+  getLatestTokenUsageRow,
   listEvents,
   listStoredConversationOutlineEventRows,
   listStoredRootConversationOutlineEventRows,
@@ -329,6 +335,7 @@ export {
   listStoredEventRows,
   listItemEventSpansByItems,
   listStoredBufferedTextDeltaRowsByItems,
+  getStoredItemLifecycleSequenceRange,
   listStoredItemLifecycleRowsByItems,
   scopedItemRefKey,
   listStoredTimelineWindowEventRows,
@@ -352,6 +359,7 @@ export {
   listOpenTurnInputAcceptedRowsByThreadIds,
   listOpenBackgroundTaskItemRowsForHost,
   listOpenBackgroundTaskItemRowsForThread,
+  listThreadEventSuffixBackgroundSettlementRows,
   listThreadIdsStoppedSinceLastTurnStart,
   listThreadIdsWithLatestHostDaemonRestartInterruption,
   listThreadTurnInterruptionEventStates,
@@ -389,6 +397,7 @@ export type {
 } from "./events.js";
 
 export {
+  countTerminalSessions,
   createTerminalSession,
   getTerminalSession,
   listTerminalSessions,
@@ -403,6 +412,7 @@ export type {
 export {
   createPendingInteraction,
   getActivePendingInteractionForThread,
+  hasTurnBoundActivePendingInteractionForThread,
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
   interruptPendingInteractionsForThreadIds,
@@ -436,6 +446,7 @@ export {
   deleteClaimedQueuedThreadMessageBatchInTransaction,
   deleteQueuedThreadMessage,
   getQueuedThreadMessage,
+  getQueuedThreadStartMessage,
   hasQueuedRetryOfTurnRequest,
   hasClaimedQueuedThreadMessages,
   holdQueuedThreadMessageForEdit,
