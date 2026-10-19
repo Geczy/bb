@@ -203,12 +203,6 @@ describe("comment sidecar mutations", () => {
       anchor: { state: "orphaned", quote: "November 12" },
     });
   });
-    expect(result.threads[0]).toMatchObject({
-      status: "open",
-      anchor: { state: "anchored", quote: "New date" },
-    });
-    expect(result.threads[0].messages[0].body).toBe("Question");
-  });
   it("never persists a refreshed anchor onto another sentence after a live external edit", async () => {
     const { service, files } = setup();
     const original =
