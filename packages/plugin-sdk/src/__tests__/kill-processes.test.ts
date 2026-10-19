@@ -23,14 +23,10 @@ posixOnly("experimental_killProcessesWithCwdUnder", () => {
   it("still kills processes for plugins that pass the pre-0.6.27 { directory } input", async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "bb-sdk-cwd-sweep-")));
     cleanupDirs.push(dir);
-    const child = spawn(
-      process.execPath,
-      ["-e", "setInterval(() => {}, 1000)"],
-      {
-        cwd: dir,
-        stdio: "ignore",
-      },
-    );
+    const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      cwd: dir,
+      stdio: "ignore",
+    });
     cleanupPids.push(child.pid ?? 0);
     const exited = new Promise((resolve) => child.once("exit", resolve));
 

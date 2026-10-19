@@ -261,6 +261,20 @@ function sameLines(
   return left?.from === right?.from && left?.to === right?.to;
 }
 
+function firstSegmentEndingAfter(
+  segments: readonly PromptEditorOffsetSegment[],
+  offset: number,
+): number {
+  let low = 0;
+  let high = segments.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (segments[middle]!.textTo > offset) high = middle;
+    else low = middle + 1;
+  }
+  return low;
+}
+
 function paintDecorations(
   doc: ProseMirrorNode,
   matched: PromptDecorationMatches,
@@ -289,7 +303,13 @@ function paintDecorations(
         from: range.from,
         to: Math.min(range.to, serialization.text.length),
       };
-      for (const segment of serialization.offsetMapping) {
+      const segments = serialization.offsetMapping;
+      for (
+        let index = firstSegmentEndingAfter(segments, boundedRange.from);
+        index < segments.length && segments[index]!.textFrom < boundedRange.to;
+        index += 1
+      ) {
+        const segment = segments[index]!;
         const decoration = decorationForIntersection(
           doc,
           segment,
