@@ -1271,7 +1271,7 @@ export default async function plugin(
         from.toLowerCase() !== to.toLowerCase() &&
         (await pathExists(vault, to))
       )
-        throw new Error(`${to} already exists.`);
+        throw new Error(`EEXIST: ${to} already exists.`);
       const stranded = await orphanSidecar(vault, to);
       try {
         await bb.sdk.files.move({
