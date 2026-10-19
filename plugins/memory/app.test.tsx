@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 
@@ -98,5 +99,34 @@ describe("memory settings", () => {
       }),
     );
     await waitFor(() => expect(slot.queryByText("validation")).toBeNull());
+  });
+
+  it("opens a new thread prefilled with the import skill request", async () => {
+    const slot = renderSlot(
+      app.settingsSections[0]!,
+      {},
+      { rpc: { listMemories: () => ({ memories: [] }) } },
+    );
+
+    fireEvent.click(
+      await slot.findByRole("button", { name: "Import memories" }),
+    );
+
+    const skillName = /^name: (.+)$/m.exec(
+      readFileSync(
+        new URL("./skills/import-native-memories/SKILL.md", import.meta.url),
+        "utf8",
+      ),
+    )?.[1];
+    expect(skillName).toBe("import-native-memories");
+    expect(slot.navigateCalls).toEqual([
+      {
+        method: "toCompose",
+        options: {
+          focusPrompt: true,
+          initialPrompt: expect.stringContaining(`${skillName} skill`),
+        },
+      },
+    ]);
   });
 });

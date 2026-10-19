@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   definePluginApp,
+  useBbNavigate,
   useRpc,
   type PluginRpcResult,
 } from "@get-bb/plugin-sdk/app";
@@ -14,6 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 type MemoryRecord = PluginRpcResult<
   (typeof memoryRpcContract)["listMemories"]
 >["memories"][number];
+
+const IMPORT_NATIVE_MEMORIES_PROMPT =
+  "Import my Claude Code and Codex memories into bb Memory with the import-native-memories skill. Show me the plan before saving anything.";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -156,6 +160,7 @@ function MemoryEditor({
 
 function MemorySettings() {
   const rpc = useRpc<typeof memoryRpcContract>();
+  const navigate = useBbNavigate();
   const [memories, setMemories] = useState<MemoryRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -188,6 +193,29 @@ function MemorySettings() {
         This plugin shares memory across providers. To avoid duplicate or
         conflicting memories, turn off Claude Code memory and Codex memory in
         Settings → Plugins → Claude Code provider and Codex provider.
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <div className="min-w-0 flex-1 basis-64">
+            <p className="text-foreground">
+              Bring what Claude Code and Codex learned into bb Memory.
+            </p>
+            <p className="mt-0.5 text-xs">
+              An agent finds them on your machines and shows you what it will
+              save first.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            title="Opens a new thread with the request filled in"
+            onClick={() =>
+              navigate.toCompose({
+                focusPrompt: true,
+                initialPrompt: IMPORT_NATIVE_MEMORIES_PROMPT,
+              })
+            }
+          >
+            Import memories
+          </Button>
+        </div>
       </div>
       {error ? (
         <p className="text-sm text-destructive" role="alert">
