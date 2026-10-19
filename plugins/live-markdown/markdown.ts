@@ -1,4 +1,4 @@
-export interface TextRange {
+interface TextRange {
   from: number;
   to: number;
 }
@@ -14,7 +14,7 @@ export type MarkdownRangeKind =
   | "em"
   | "code";
 
-export type MarkdownRanges = Record<MarkdownRangeKind, TextRange[]>;
+type MarkdownRanges = Record<MarkdownRangeKind, TextRange[]>;
 
 const HEADING = /^(#{1,6})[ \t]+(?=\S)/;
 const BULLET = /^([ \t]*)([-*+])([ \t]+)(?=\S)/;
