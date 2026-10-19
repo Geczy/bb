@@ -55,10 +55,7 @@ function resolveComposerEditor(
   };
 }
 
-const emptyComposerEditor = () => ({
-  effects: [],
-  observers: [],
-});
+const emptyComposerEditor = () => ({ effects: [], observers: [] });
 
 export function useResolvedComposerActions(scopeKind: ComposerScopeKind) {
   return useResolvedComposerSlot(scopeKind, resolveComposerActions, emptyList);
