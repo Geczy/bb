@@ -1,5 +1,12 @@
 import { ExpandableText } from "@bb/shared-ui/expandable-text";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   definePluginApp,
   experimental_copyToClipboard,
@@ -770,27 +777,46 @@ function SharedPortsSection({
     typeof connectRpcContract,
     "expose"
   >({ method: "expose" });
-  const { mutate: unexposeRpc } = experimental_useRpcMutation<
-    typeof connectRpcContract,
-    "unexpose"
-  >({ method: "unexpose" });
-  const { mutate: unexposeAllRpc } = experimental_useRpcMutation<
-    typeof connectRpcContract,
-    "unexposeAll"
-  >({ method: "unexposeAll" });
+  const { mutate: unexposeRpc, pendingInputs: revokingShares } =
+    experimental_useRpcMutation<typeof connectRpcContract, "unexpose">({
+      method: "unexpose",
+      optimistic(input, cache) {
+        if (input.hostId === undefined) return;
+        cache.update("status", null, (current) => ({
+          ...current,
+          shares: current.shares.filter(
+            (share) =>
+              share.port !== input.port ||
+              (input.hostId !== undefined && share.hostId !== input.hostId),
+          ),
+        }));
+      },
+    });
+  const { mutate: unexposeAllRpc, pendingInputs: revokingHosts } =
+    experimental_useRpcMutation<typeof connectRpcContract, "unexposeAll">({
+      method: "unexposeAll",
+      optimistic(input, cache) {
+        cache.update("status", null, (current) => ({
+          ...current,
+          shares: current.shares.filter(
+            (share) => share.hostId !== input.hostId,
+          ),
+        }));
+      },
+    });
   const [portInput, setPortInput] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [exposing, setExposing] = useState(false);
   const [collapsedHosts, setCollapsedHosts] = useState<Set<string>>(
     () => new Set(),
   );
-  const [revokingHost, setRevokingHost] = useState<string | null>(null);
-  const [revokingShare, setRevokingShare] = useState<string | null>(null);
+  const revokingHost = revokingHosts.at(-1)?.hostId ?? null;
+  const revokingShare = revokingShares.at(-1);
   const [error, setError] = useState<string | null>(null);
 
   const expose = useCallback(() => {
     const trimmed = portInput.trim();
-    if (trimmed.length === 0 || exposing || revokingHost !== null) return;
+    if (trimmed.length === 0 || exposing) return;
     const port = Number(trimmed);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       setError("Port must be an integer between 1 and 65535");
@@ -820,33 +846,30 @@ function SharedPortsSection({
 
   const unexpose = useCallback(
     (hostId: string, port: number) => {
-      if (revokingShare !== null || revokingHost !== null) return;
-      const key = `${hostId}:${port}`;
-      setRevokingShare(key);
+      if (
+        revokingShares.some(
+          (input) => input.hostId === hostId && input.port === port,
+        )
+      )
+        return;
       setError(null);
       unexposeRpc({ hostId, port }).then(
-        () => {
-          setRevokingShare(null);
-        },
+        () => undefined,
         (rpcError: unknown) => {
-          setRevokingShare(null);
           setError(errorText(rpcError));
         },
       );
     },
-    [revokingShare, revokingHost, exposeRpc, unexposeRpc, unexposeAllRpc],
+    [revokingShares, unexposeRpc],
   );
 
   const unexposeAll = async (hostId: string) => {
-    if (revokingHost !== null || revokingShare !== null) return;
-    setRevokingHost(hostId);
+    if (revokingHosts.some((input) => input.hostId === hostId)) return;
     setError(null);
     try {
       await unexposeAllRpc({ hostId });
     } catch (rpcError) {
       setError(errorText(rpcError));
-    } finally {
-      setRevokingHost(null);
     }
   };
 
@@ -867,7 +890,7 @@ function SharedPortsSection({
           variant="ghost"
           size="sm"
           className="text-muted-foreground"
-          disabled={revokingHost !== null}
+          disabled={exposing}
           onClick={() => setFormOpen((open) => !open)}
         >
           <Icon name="Plus" className="size-3.5" />
@@ -920,11 +943,7 @@ function SharedPortsSection({
                     size="sm"
                     className={DANGER_QUIET_CLASS}
                     aria-label={`Revoke all (${group.shares.length}) shared ports on ${group.hostName}`}
-                    disabled={
-                      revokingHost !== null ||
-                      revokingShare !== null ||
-                      exposing
-                    }
+                    disabled={exposing}
                     onClick={() => void unexposeAll(group.hostId)}
                   >
                     {revokingHost === group.hostId ? (
@@ -978,12 +997,15 @@ function SharedPortsSection({
                         variant="ghost"
                         size="sm"
                         className={DANGER_QUIET_CLASS}
-                        disabled={
-                          revokingHost !== null || revokingShare !== null
-                        }
+                        aria-busy={revokingShares.some(
+                          (input) =>
+                            input.hostId === share.hostId &&
+                            input.port === share.port,
+                        )}
                         onClick={() => unexpose(share.hostId, share.port)}
                       >
-                        {revokingShare === `${share.hostId}:${share.port}` ? (
+                        {revokingShare?.hostId === share.hostId &&
+                        revokingShare.port === share.port ? (
                           <Icon
                             name="Spinner"
                             className="size-4 animate-spin"
@@ -1312,41 +1334,56 @@ function NotPairedContent({
   );
 }
 
+function useRemoteAccessMutation() {
+  return experimental_useRpcMutation<
+    typeof connectRpcContract,
+    "setRemoteAccess"
+  >({
+    method: "setRemoteAccess",
+    optimistic(input, cache) {
+      cache.update("status", null, (current) => ({
+        ...current,
+        enabled: input.enabled,
+        state: input.enabled ? "reconnecting" : "disconnected",
+        lastError: null,
+        nextRetryAt: null,
+      }));
+    },
+  });
+}
+
+const remoteAccessContext = createContext<ReturnType<
+  typeof useRemoteAccessMutation
+> | null>(null);
+function useRemoteAccessControl() {
+  const mutation = useContext(remoteAccessContext);
+  if (mutation === null)
+    throw new Error("Remote access controls require a settings owner");
+  return mutation;
+}
+
 function TurnOffControls({
   status,
   note,
-  onChanged,
   onTurnedOff,
 }: {
   status: ConnectStatus;
   note: string;
-  onChanged: () => void;
   onTurnedOff: () => void;
 }) {
-  const { mutate: setRemoteAccessRpc } = experimental_useRpcMutation<
-    typeof connectRpcContract,
-    "setRemoteAccess"
-  >({ method: "setRemoteAccess" });
+  const { mutate: setRemoteAccessRpc, isPending: pending } =
+    useRemoteAccessControl();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const turnOff = useCallback(() => {
-    setPending(true);
-    setError(null);
     setRemoteAccessRpc({ enabled: false }).then(
       () => {
-        setPending(false);
         setConfirmOpen(false);
         onTurnedOff();
-        onChanged();
       },
-      (rpcError: unknown) => {
-        setPending(false);
-        setError(errorText(rpcError));
-      },
+      () => undefined,
     );
-  }, [setRemoteAccessRpc, onChanged, onTurnedOff]);
+  }, [setRemoteAccessRpc, onTurnedOff]);
 
   const host = status.url !== null ? hostOf(status.url) : "this bb";
 
@@ -1365,9 +1402,6 @@ function TurnOffControls({
           Turn off
         </Button>
       </div>
-      {error !== null ? (
-        <p className="text-xs text-destructive-text">{error}</p>
-      ) : null}
 
       <TurnOffDialog
         open={confirmOpen}
@@ -1382,11 +1416,9 @@ function TurnOffControls({
 
 function ConnectedContent({
   status,
-  onChanged,
   onTurnedOff,
 }: {
   status: ConnectStatus;
-  onChanged: () => void;
   onTurnedOff: () => void;
 }) {
   return (
@@ -1409,7 +1441,6 @@ function ConnectedContent({
       <TurnOffControls
         status={status}
         note="Turning off keeps this bb signed in to your bb account."
-        onChanged={onChanged}
         onTurnedOff={onTurnedOff}
       />
     </div>
@@ -1418,11 +1449,9 @@ function ConnectedContent({
 
 function ReconnectingContent({
   status,
-  onChanged,
   onTurnedOff,
 }: {
   status: ConnectStatus;
-  onChanged: () => void;
   onTurnedOff: () => void;
 }) {
   const why = [status.lastError, retryHint(status.nextRetryAt)]
@@ -1458,41 +1487,22 @@ function ReconnectingContent({
       <TurnOffControls
         status={status}
         note="Remote devices can't reach this bb right now. Local access is unaffected."
-        onChanged={onChanged}
         onTurnedOff={onTurnedOff}
       />
     </div>
   );
 }
 
-function OffContent({
-  status,
-  onChanged,
-}: {
-  status: ConnectStatus;
-  onChanged: () => void;
-}) {
-  const { mutate: setRemoteAccessRpc } = experimental_useRpcMutation<
-    typeof connectRpcContract,
-    "setRemoteAccess"
-  >({ method: "setRemoteAccess" });
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function OffContent({ status }: { status: ConnectStatus }) {
+  const { mutate: setRemoteAccessRpc, isPending: pending } =
+    useRemoteAccessControl();
 
   const turnOn = useCallback(() => {
-    setPending(true);
-    setError(null);
     setRemoteAccessRpc({ enabled: true }).then(
-      () => {
-        setPending(false);
-        onChanged();
-      },
-      (rpcError: unknown) => {
-        setPending(false);
-        setError(errorText(rpcError));
-      },
+      () => {},
+      () => undefined,
     );
-  }, [setRemoteAccessRpc, onChanged]);
+  }, [setRemoteAccessRpc]);
 
   return (
     <div className="space-y-4">
@@ -1500,7 +1510,7 @@ function OffContent({
         <StatusDot tone="muted" />
         <span className="text-sm font-semibold">Remote access is off</span>
         <span className="flex-1" />
-        <Button type="button" size="sm" disabled={pending} onClick={turnOn}>
+        <Button type="button" size="sm" aria-busy={pending} onClick={turnOn}>
           {pending ? (
             <Icon name="Spinner" className="size-4 animate-spin" />
           ) : null}
@@ -1513,9 +1523,6 @@ function OffContent({
         {status.url !== null ? ` at ${hostOf(status.url)}` : ""}.
       </p>
       <SharedPortsSection shares={status.shares} dimmed />
-      {error !== null ? (
-        <p className="text-xs text-destructive-text">{error}</p>
-      ) : null}
     </div>
   );
 }
@@ -1557,7 +1564,17 @@ function MobilePairingSection() {
 }
 
 function ConnectSettingsSection() {
+  const mutation = useRemoteAccessMutation();
+  return (
+    <remoteAccessContext.Provider value={mutation}>
+      <ConnectSettingsContent />
+    </remoteAccessContext.Provider>
+  );
+}
+
+function ConnectSettingsContent() {
   const { status, loadError, refetch } = useConnectStatus();
+  const remoteAccess = useRemoteAccessControl();
   const [flash, setFlash] = useState<string | null>(null);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showTurnedOff = useCallback(() => {
@@ -1592,8 +1609,13 @@ function ConnectSettingsSection() {
     return error ?? <p className="text-sm text-muted-foreground">Loading...</p>;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" aria-busy={remoteAccess.isPending}>
       {error}
+      {remoteAccess.error && (
+        <p role="alert" className="text-sm text-destructive-text">
+          {remoteAccess.error.message}
+        </p>
+      )}
       {flash !== null && !status.enabled ? (
         <div
           role="status"
@@ -1609,19 +1631,11 @@ function ConnectSettingsSection() {
           onPaired={refetch}
         />
       ) : !status.enabled ? (
-        <OffContent status={status} onChanged={refetch} />
+        <OffContent status={status} />
       ) : status.state === "reconnecting" ? (
-        <ReconnectingContent
-          status={status}
-          onChanged={refetch}
-          onTurnedOff={showTurnedOff}
-        />
+        <ReconnectingContent status={status} onTurnedOff={showTurnedOff} />
       ) : (
-        <ConnectedContent
-          status={status}
-          onChanged={refetch}
-          onTurnedOff={showTurnedOff}
-        />
+        <ConnectedContent status={status} onTurnedOff={showTurnedOff} />
       )}
     </div>
   );
