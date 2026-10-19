@@ -769,24 +769,18 @@ function ThreadRowComponent({
           )}
         </span>
         {crossProjectLabel !== null ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                data-sidebar-thread-cross-project=""
-                role="img"
-                aria-label={crossProjectLabel}
-                className="relative z-[31] flex size-5 shrink-0 items-center justify-center text-muted-foreground"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  rowLinkRef.current?.click();
-                }}
-              >
-                <Icon name="FolderExport" className="size-3.5" aria-hidden />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">{crossProjectLabel}</TooltipContent>
-          </Tooltip>
+          <span
+            data-sidebar-thread-cross-project=""
+            title={crossProjectLabel}
+            className="relative max-w-24 shrink-0 truncate text-2xs font-normal text-muted-foreground"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              rowLinkRef.current?.click();
+            }}
+          >
+            {crossProjectName || "Another project"}
+          </span>
         ) : null}
         {parentOptions && hasChildren ? (
           <SidebarChildToggleChevron
