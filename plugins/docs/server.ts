@@ -1063,11 +1063,11 @@ export default async function plugin(
               : {}),
         });
       } catch (error) {
-        await restoreSidecar(vault, stranded, relativePath);
+        await restoreSidecarQuietly(vault, stranded, relativePath);
         throw error;
       }
       if (result.outcome !== "written") {
-        await restoreSidecar(vault, stranded, relativePath);
+        await restoreSidecarQuietly(vault, stranded, relativePath);
         return result;
       }
       if (markdown)
@@ -1111,6 +1111,15 @@ export default async function plugin(
     work: () => Promise<T>,
   ): Promise<T> {
     return serializeVault(vaultId, () => serializeComments(vaultId, work));
+  }
+
+  function lockedList(
+    input: CommentTarget & { status?: "open" | "resolved" | "all" },
+  ) {
+    return serializeComments(
+      input.source ? sourceCommentKey(input.path) : getVault(input.vaultId).id,
+      () => comments.list(input),
+    );
   }
 
   function sourceCommentKey(filePath: string): string {
@@ -1331,20 +1340,24 @@ export default async function plugin(
           rootPath: vault.rootPath,
         });
       } catch (error) {
-        await restoreSidecar(vault, stranded, to);
+        await restoreSidecarQuietly(vault, stranded, to);
         throw error;
       }
       if (sidecar) {
         try {
           await moveSidecar(vault, from, to);
         } catch (error) {
-          await bb.sdk.files.move({
-            ...hostArgs(vault),
-            sourcePath: absolutePath(vault, to),
-            destinationPath: absolutePath(vault, from),
-            rootPath: vault.rootPath,
-          });
-          await restoreSidecar(vault, stranded, to);
+          await bb.sdk.files
+            .move({
+              ...hostArgs(vault),
+              sourcePath: absolutePath(vault, to),
+              destinationPath: absolutePath(vault, from),
+              rootPath: vault.rootPath,
+            })
+            .then(() => restoreSidecarQuietly(vault, stranded, to))
+            .catch((failure) =>
+              bb.log.warn(`could not roll back move: ${errorMessage(failure)}`),
+            );
           throw error;
         }
       }
@@ -1397,8 +1410,12 @@ export default async function plugin(
           recursive,
         });
       } catch (error) {
-        await restoreFolderComments(vault, moved);
-        await restoreSidecar(vault, stranded, relativePath);
+        const failures = await restoreFolderComments(vault, moved);
+        await restoreSidecar(vault, stranded, relativePath, true).catch(
+          (failure: unknown) => failures.push(failure),
+        );
+        for (const failure of failures)
+          bb.log.warn(`could not restore comments: ${errorMessage(failure)}`);
         throw error;
       }
       deleteProposals(vault.id, relativePath);
@@ -1865,7 +1882,7 @@ export default async function plugin(
     const vault = getVault(input.vaultId);
     const relativePath = requireVaultPath(input.path, { extension: ".md" });
     await serializeDocument(vault.id, () => orphanSidecar(vault, relativePath));
-    return comments.list({ vaultId: vault.id, path: relativePath });
+    return lockedList({ vaultId: vault.id, path: relativePath });
   }
 
   async function documentlessSidecar(input: {
@@ -1908,12 +1925,28 @@ export default async function plugin(
     return destination;
   }
 
-  async function restoreSidecar(
+  async function restoreSidecarQuietly(
     vault: Vault,
     orphaned: string | null,
     documentPath: string,
   ) {
+    await restoreSidecar(vault, orphaned, documentPath).catch((failure) =>
+      bb.log.warn(`could not restore comments: ${errorMessage(failure)}`),
+    );
+  }
+
+  async function restoreSidecar(
+    vault: Vault,
+    orphaned: string | null,
+    documentPath: string,
+    onlyIfDocumentSurvived = false,
+  ) {
     if (!orphaned) return;
+    if (
+      onlyIfDocumentSurvived &&
+      !(await readExistingFile(vault, documentPath))
+    )
+      return;
     const sidecarPath = commentSidecar(documentPath);
     if (await readExistingFile(vault, sidecarPath)) return;
     await bb.sdk.files.move({
@@ -1963,7 +1996,8 @@ export default async function plugin(
         moved.push([directory, destination]);
       }
     } catch (error) {
-      await restoreFolderComments(vault, moved);
+      for (const failure of await restoreFolderComments(vault, moved))
+        bb.log.warn(`could not restore comments: ${errorMessage(failure)}`);
       throw error;
     }
     return moved;
@@ -1972,14 +2006,38 @@ export default async function plugin(
   async function restoreFolderComments(
     vault: Vault,
     moved: [string, string][],
-  ) {
-    for (const [directory, destination] of moved.reverse())
-      await bb.sdk.files.move({
-        ...hostArgs(vault),
-        sourcePath: absolutePath(vault, destination),
-        destinationPath: absolutePath(vault, directory),
-        rootPath: vault.rootPath,
-      });
+  ): Promise<unknown[]> {
+    const failures: unknown[] = [];
+    for (const [directory, destination] of moved) {
+      const folder = path.posix.dirname(directory);
+      try {
+        const listing = await bb.sdk.files.listPaths({
+          ...hostArgs(vault),
+          path: absolutePath(vault, destination),
+          includeHidden: true,
+          includeFiles: true,
+          includeDirectories: false,
+          limit: MAX_TREE_ENTRIES,
+        });
+        for (const item of listing.paths) {
+          const name = /^([^/]+\.md)\.json$/i.exec(item.path)?.[1];
+          if (!name) continue;
+          try {
+            await restoreSidecar(
+              vault,
+              `${destination}/${item.path}`,
+              folder === "." ? name : `${folder}/${name}`,
+              true,
+            );
+          } catch (error) {
+            failures.push(error);
+          }
+        }
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    return failures;
   }
 
   async function orphanMissingDocuments(vault: Vault): Promise<void> {
@@ -2070,7 +2128,7 @@ export default async function plugin(
     },
     async listComments(input) {
       try {
-        return await comments.list(input);
+        return await lockedList(input);
       } catch (error) {
         if (!input.source && isMissingFileError(error))
           await orphanMissingDocuments(getVault(input.vaultId));
@@ -3500,7 +3558,7 @@ export default async function plugin(
                 };
               }
               return commentOutput(
-                await comments.list({
+                await lockedList({
                   ...commentTarget(input),
                   status: z
                     .enum(["open", "resolved", "all"])
@@ -4222,14 +4280,22 @@ export default async function plugin(
       if (separator < 1) throw new Error("Invalid note mention");
       const vaultId = itemId.slice(0, separator);
       const relativePath = itemId.slice(separator + 1);
-      const file = await readFile(vaultId, relativePath);
-      const proposal = readProposal(getVault(vaultId).id, relativePath);
-      const openComments = /\.md$/i.test(relativePath)
-        ? await comments.list(
-            { vaultId, path: relativePath, status: "open" },
+      const { file, openComments } = await serializeComments(
+        getVault(vaultId).id,
+        async () => {
+          const file = await readFile(vaultId, relativePath);
+          return {
             file,
-          )
-        : { threads: [] };
+            openComments: /\.md$/i.test(relativePath)
+              ? await comments.list(
+                  { vaultId, path: relativePath, status: "open" },
+                  file,
+                )
+              : { threads: [] },
+          };
+        },
+      );
+      const proposal = readProposal(getVault(vaultId).id, relativePath);
       return {
         context:
           `Docs document (${vaultId}/${relativePath}):\nSHA-256: ${file.sha256}\n\n${file.content}` +

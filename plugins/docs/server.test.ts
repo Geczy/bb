@@ -108,6 +108,8 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
   let truncated = false;
   const omitted = new Set<string>();
   let failRemove = false;
+  let partialRemove: string | null = null;
+  let writeHook: ((path: string) => void) | null = null;
   const addParents = (filePath: string) => {
     let current = path.posix.dirname(filePath);
     while (current !== "/" && !directories.has(current)) {
@@ -177,6 +179,9 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
           };
         },
         async write(args) {
+          const hook = writeHook;
+          writeHook = null;
+          hook?.(args.path);
           const pending = concurrentWrite;
           if (pending && pending.path === args.path) {
             concurrentWrite = null;
@@ -218,6 +223,22 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
         async remove(args) {
           if (failRemove) {
             failRemove = false;
+            throw new Error("EBUSY: resource busy");
+          }
+          if (partialRemove && args.recursive) {
+            const survivor = partialRemove;
+            partialRemove = null;
+            const prefix = `${args.path}/`;
+            for (const entry of [...files.keys()])
+              if (entry.startsWith(prefix) && !entry.startsWith(survivor))
+                files.delete(entry);
+            for (const entry of [...directories])
+              if (
+                entry.startsWith(prefix) &&
+                !entry.startsWith(survivor) &&
+                !survivor.startsWith(`${entry}/`)
+              )
+                directories.delete(entry);
             throw new Error("EBUSY: resource busy");
           }
           if (files.delete(args.path)) return { ok: true as const };
@@ -294,6 +315,12 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
     },
     failNextRemove() {
       failRemove = true;
+    },
+    failNextRecursiveRemoveKeeping(survivor: string) {
+      partialRemove = survivor;
+    },
+    onNextWrite(hook: (path: string) => void) {
+      writeHook = hook;
     },
   };
 }
@@ -2433,6 +2460,82 @@ describe("Docs comment lifecycle", () => {
         threads: [{ id: teamId }],
       });
       expect(await folder(host)).toEqual([]);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("keeps comments bound when a list lands between a save and its re-bind", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": doc("# Plan\n\nFirst target.\n\nSecond target."),
+    });
+    try {
+      const commentId = await comment(host, "plan.md", "Second target", "Two");
+      const before = z
+        .object({ sha256: z.string() })
+        .parse(
+          await host.harness.behavior.callRpc("readNote", { path: "plan.md" }),
+        );
+      let during: Promise<unknown> | null = null;
+      host.onNextWrite((written) => {
+        if (written === "/vault/plan.md")
+          during = host.harness.behavior.callRpc("listComments", {
+            path: "plan.md",
+          });
+      });
+      await host.harness.behavior.callRpc("saveNote", {
+        path: "plan.md",
+        content: "# Plan\n\nAdded contents. First target.\n\nSecond target.",
+        expectedSha256: before.sha256,
+      });
+      expect(commentsListSchema.parse(await during)).toMatchObject({
+        outsideChange: 0,
+        threads: [{ id: commentId }],
+      });
+      expect(await listed(host, "plan.md")).toMatchObject({
+        outsideChange: 0,
+        threads: [{ id: commentId }],
+      });
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("restores surviving siblings' comments after a partial folder delete", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/partial-delete/a/note.md": doc("# Note\n\nAlpha line."),
+      "/vault/partial-delete/z/gone.md": doc("# Gone\n\nZeta line."),
+    });
+    try {
+      const survivorId = await comment(
+        host,
+        "partial-delete/a/note.md",
+        "Alpha line",
+        "Survivor",
+      );
+      const goneId = await comment(
+        host,
+        "partial-delete/z/gone.md",
+        "Zeta line",
+        "Removed",
+      );
+      host.failNextRecursiveRemoveKeeping("/vault/partial-delete/a");
+      await expect(
+        host.harness.behavior.callRpc("deletePath", {
+          path: "partial-delete",
+          recursive: true,
+        }),
+      ).rejects.toThrow("EBUSY");
+      expect(host.files.has("/vault/partial-delete/a/note.md")).toBe(true);
+      expect(host.files.has("/vault/partial-delete/z/gone.md")).toBe(false);
+      expect(await listed(host, "partial-delete/a/note.md")).toMatchObject({
+        threads: [{ id: survivorId }],
+      });
+      const orphans = await folder(host);
+      expect(orphans.map((item) => item.path)).toEqual([
+        "partial-delete/z/gone.md",
+      ]);
+      expect(await readFile(host, orphans[0]!.sidecarPath)).toContain(goneId);
     } finally {
       await host.harness.lifecycle.dispose();
     }
