@@ -1043,6 +1043,51 @@ describe("Docs nav panel", () => {
     ).toBe("Unsent draft should survive");
   });
 
+  it("refreshes comments without a document when another document is deleted", async () => {
+    let stranded: { path: string; sidecarPath: string }[] = [];
+    const slot = renderSlot(
+      app.navPanels[0]!,
+      { subPath: "personal/live.md" },
+      {
+        rpc: {
+          listNotes: () =>
+            listNotesResult([
+              { path: "live.md", title: "Live", preview: "", modifiedAtMs: 1 },
+            ]),
+          readNote: () => ({ content: "# Live\n\nBody.", sha256: "sha1" }),
+          preparePreview: () => preview,
+          renameToTitle: () => ({ path: "live.md" }),
+          listComments: () => ({
+            sidecarSha256: null,
+            threads: [],
+            notice: null,
+            outsideChange: 0,
+            documentSha256: "sha1",
+          }),
+          listCommentFolder: () => ({ stranded, truncated: false }),
+        },
+      },
+    );
+
+    await slot.findByText("Body.");
+    expect(slot.queryByText("1 without a document")).toBeNull();
+    stranded = [
+      {
+        path: "other.md",
+        sidecarPath: ".bb-comments/orphaned/x/.bb-comments/other.md.json",
+      },
+    ];
+    await slot.emitRealtime("vault-changed", {
+      vaultId: "personal",
+      path: "other.md",
+    });
+    expect(
+      await slot.findByText("1 without a document", undefined, {
+        timeout: 2_000,
+      }),
+    ).toBeTruthy();
+  });
+
   it("renders and autosaves editable Markdown tables", async () => {
     const saveNote = vi.fn((_input: unknown) => ({
       outcome: "written",
