@@ -18,7 +18,6 @@ import {
 import { COMPACT_VIEWPORT_QUERY } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { POINTER_COARSE_QUERY } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import {
-  computeMessageActionRowLayout,
   findMessageActionTooltipCollisionBoundary,
   MessageActionBar,
 } from "./MessageActionBar";
@@ -211,7 +210,7 @@ describe("MessageActionBar", () => {
     });
     expect(screen.getByRole("button", { name: "Copy link" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Translate" })).toBeNull();
-    for (const name of ["Add to chat", "Fork into new thread"]) {
+    for (const name of ["Add to chat", "Fork thread"]) {
       fireEvent.click(
         within(openDesktopMenu()).getByRole("menuitem", { name }),
       );
@@ -226,7 +225,7 @@ describe("MessageActionBar", () => {
         .map((button) => button.getAttribute("aria-label")),
     ).toEqual([
       "Copy message",
-      "Fork into new thread",
+      "Fork thread",
       "Add to chat",
       "Message actions",
     ]);
@@ -309,7 +308,7 @@ describe("MessageActionBar", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual(["Copy link", "Add to chat", "Fork into new thread"]);
+    ).toEqual(["Copy link", "Add to chat", "Fork thread"]);
     expect(menu.getAttribute("data-side")).toBe("bottom");
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Copy link" }));
     expect(onCopyLink).toHaveBeenCalledTimes(1);
@@ -361,7 +360,7 @@ describe("MessageActionBar", () => {
       "Translate",
       "Copy link",
       "Add to chat",
-      "Fork into new thread",
+      "Fork thread",
     ]);
   });
 
@@ -390,7 +389,7 @@ describe("MessageActionBar", () => {
       "Copy message",
       "Edit message",
       "Add to chat",
-      "Fork into new thread",
+      "Fork thread",
     ]);
   });
 
@@ -457,7 +456,7 @@ describe("MessageActionBar", () => {
       "Edit message",
       "Summarize",
       "Add to chat",
-      "Fork into new thread",
+      "Fork thread",
     ]);
     resizeObserver.reportWidth(60);
     expect(screen.queryByRole("button", { name: "Summarize" })).toBeNull();
@@ -470,7 +469,7 @@ describe("MessageActionBar", () => {
       "Edit message",
       "Summarize",
       "Add to chat",
-      "Fork into new thread",
+      "Fork thread",
     ]);
     expect(document.body.querySelector('[data-side="top"]')).toBeNull();
     expect(screen.getByTestId("app-root").hasAttribute("inert")).toBe(false);
@@ -478,7 +477,7 @@ describe("MessageActionBar", () => {
       false,
     );
     fireEvent.click(
-      within(drawer).getByRole("menuitem", { name: "Fork into new thread" }),
+      within(drawer).getByRole("menuitem", { name: "Fork thread" }),
     );
     expect(onFork).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
@@ -518,81 +517,12 @@ describe("MessageActionBar", () => {
       "Edit message",
       "Copy link",
       "Add to chat",
-      "Fork into new thread",
+      "Fork thread",
     ]);
     fireEvent.click(
       within(drawer).getByRole("menuitem", { name: "Copy link" }),
     );
     expect(onCopyLink).toHaveBeenCalledTimes(1);
-  });
-
-  it("passes message text and attachments from Add to chat", () => {
-    const onAddToChat = vi.fn();
-    const attachment = {
-      type: "localFile" as const,
-      path: "uploads/spec.md",
-      name: "spec.md",
-      sizeBytes: 0,
-    };
-    render(
-      <MessageActionBar
-        messageRole="user"
-        timestamp={TIMESTAMP}
-        messageText="Quote this message."
-        alignment="end"
-        mobileActionDisplay="inline"
-        addToChatAttachments={[attachment]}
-        onAddToChat={onAddToChat}
-      />,
-    );
-
-    fireEvent.click(
-      within(openDesktopMenu()).getByRole("menuitem", { name: "Add to chat" }),
-    );
-    expect(onAddToChat).toHaveBeenCalledWith("Quote this message.", [
-      attachment,
-    ]);
-  });
-
-  it("offers Add to chat for attachment-only messages", () => {
-    const onAddToChat = vi.fn();
-    const attachment = {
-      type: "localImage" as const,
-      path: "uploads/screenshot.png",
-      name: "screenshot.png",
-      sizeBytes: 0,
-    };
-    render(
-      <MessageActionBar
-        messageRole="user"
-        timestamp={TIMESTAMP}
-        messageText=""
-        alignment="end"
-        mobileActionDisplay="inline"
-        addToChatAttachments={[attachment]}
-        onAddToChat={onAddToChat}
-      />,
-    );
-
-    fireEvent.click(
-      within(openDesktopMenu()).getByRole("menuitem", { name: "Add to chat" }),
-    );
-    expect(onAddToChat).toHaveBeenCalledWith("", [attachment]);
-  });
-
-  it("offers Copy for an image-only message", () => {
-    render(
-      <MessageActionBar
-        messageRole="user"
-        timestamp={TIMESTAMP}
-        messageText=""
-        copyImageUrl="/attachments/screenshot.png"
-        alignment="end"
-        mobileActionDisplay="inline"
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Copy message" })).toBeTruthy();
   });
 
   it("marks the action row while the menu is open", () => {
@@ -613,73 +543,5 @@ describe("MessageActionBar", () => {
     expect(row?.hasAttribute("data-menu-open")).toBe(true);
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(row?.hasAttribute("data-menu-open")).toBe(false);
-  });
-});
-
-describe("computeMessageActionRowLayout", () => {
-  const metrics = { actionWidth: 20 };
-
-  it("renders every candidate inline before the slot is measured", () => {
-    expect(
-      computeMessageActionRowLayout({
-        actionCount: 5,
-        availableWidth: undefined,
-        ...metrics,
-      }),
-    ).toEqual({ inlineCount: 5, overflowCount: 0 });
-  });
-
-  it("reserves space for the always-present menu trigger", () => {
-    expect(
-      computeMessageActionRowLayout({
-        actionCount: 3,
-        availableWidth: 100,
-        ...metrics,
-      }),
-    ).toEqual({ inlineCount: 3, overflowCount: 0 });
-    expect(
-      computeMessageActionRowLayout({
-        actionCount: 3,
-        availableWidth: 99,
-        ...metrics,
-      }),
-    ).toEqual({ inlineCount: 2, overflowCount: 1 });
-  });
-
-  it("moves candidates into overflow from the end", () => {
-    expect(
-      computeMessageActionRowLayout({
-        actionCount: 3,
-        availableWidth: 72,
-        ...metrics,
-      }),
-    ).toEqual({ inlineCount: 2, overflowCount: 1 });
-    expect(
-      computeMessageActionRowLayout({
-        actionCount: 3,
-        availableWidth: 71,
-        ...metrics,
-      }),
-    ).toEqual({ inlineCount: 1, overflowCount: 2 });
-  });
-
-  it("puts every candidate in the menu when none fit beside the trigger", () => {
-    expect(
-      computeMessageActionRowLayout({
-        actionCount: 3,
-        availableWidth: 30,
-        ...metrics,
-      }),
-    ).toEqual({ inlineCount: 0, overflowCount: 3 });
-  });
-
-  it("returns an empty layout for zero candidates", () => {
-    expect(
-      computeMessageActionRowLayout({
-        actionCount: 0,
-        availableWidth: 400,
-        ...metrics,
-      }),
-    ).toEqual({ inlineCount: 0, overflowCount: 0 });
   });
 });

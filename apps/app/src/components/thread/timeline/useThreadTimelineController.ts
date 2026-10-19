@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   useQueryClient,
   type QueryObserverResult,
@@ -47,6 +47,8 @@ export interface UseThreadTimelineControllerResult {
   contextBoundarySeq: ThreadTimelineResponse["contextBoundarySeq"];
   contextWindowUsage: ThreadTimelineResponse["contextWindowUsage"];
   goal: ThreadTimelineResponse["goal"];
+  providerCommands: ThreadTimelineResponse["providerCommands"];
+  sessionOptions: ThreadTimelineResponse["sessionOptions"];
   modelFallback: ThreadTimelineResponse["modelFallback"];
   hasOlderTimelineRows: boolean;
   isCatchingUpTimeline: boolean;
@@ -56,12 +58,6 @@ export interface UseThreadTimelineControllerResult {
   timelineError: Error | null;
   timelineLoading: boolean;
   timelineRows: TimelineRow[];
-}
-
-interface MountFetchState {
-  hasNewEvents: boolean;
-  key: string | null;
-  settled: boolean;
 }
 
 interface LoadedTimelineTracker {
@@ -87,6 +83,7 @@ function buildEmptyLoadedTimelineState(
   surfaceKey: string,
 ): LoadedTimelineState {
   return buildLoadedTimelineState({
+    historySnapshot: null,
     latestWindowEndSequence: null,
     latestRows: [],
     olderCursor: null,
@@ -118,25 +115,8 @@ export function useThreadTimelineController({
   threadId,
 }: UseThreadTimelineControllerArgs): UseThreadTimelineControllerResult {
   const queryClient = useQueryClient();
-  const mountFetchKey = enabled ? threadId : null;
-  const [mountFetch, setMountFetch] = useState<MountFetchState>({
-    hasNewEvents: false,
-    key: null,
-    settled: false,
-  });
-  const isNewMountFetch = mountFetch.key !== mountFetchKey;
-  const mountFetchHasNewEvents = isNewMountFetch
-    ? mountFetchKey !== null &&
-      hasThreadTimelineUnseenEvents(queryClient, mountFetchKey)
-    : mountFetch.hasNewEvents;
-  const isTrackingMountFetch =
-    mountFetchKey !== null &&
-    mountFetchHasNewEvents &&
-    (isNewMountFetch || !mountFetch.settled);
-  const isTrackingMountFetchRef = useRef(isTrackingMountFetch);
-  isTrackingMountFetchRef.current = isTrackingMountFetch;
   const notifyOnChangeProps = useCallback((): TimelineQueryResultProp[] => {
-    if (isTrackingMountFetchRef.current) {
+    if (hasThreadTimelineUnseenEvents(queryClient, threadId)) {
       return TIMELINE_CONTROLLER_PROPS_WITHOUT_ROWS;
     }
     const cachedTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
@@ -210,6 +190,7 @@ export function useThreadTimelineController({
       const response = await sdk.threads.timeline({
         beforeAnchorId: nextOlderCursor.anchorId,
         beforeAnchorSeq: String(nextOlderCursor.anchorSeq),
+        deferContent: "true",
         threadId,
       });
       const olderRows = [...response.rows];
@@ -276,32 +257,22 @@ export function useThreadTimelineController({
     loadedTimeline.surfaceKey === surfaceKey && loadedTimeline.rows.length > 0
       ? loadedTimeline.rows
       : (latestTimeline?.rows ?? []);
+  const hasResolvedTimeline =
+    latestTimelineQuery.data !== undefined || timelineRows.length > 0;
   const timelineQueryState = useConnectionAwareQueryState({
-    hasResolvedData:
-      latestTimelineQuery.data !== undefined || timelineRows.length > 0,
+    hasResolvedData: hasResolvedTimeline,
     isFetching: latestTimelineQuery.isFetching,
     isLoadingError: latestTimelineQuery.isLoadingError,
     isRecoverableLoadingError: isTransientReadError(latestTimelineQuery.error),
   });
   const timelineLoading =
     latestTimelineQuery.isLoading ||
-    (timelineQueryState.status === "loading" && timelineRows.length === 0) ||
-    (latestTimelineQuery.isFetching && timelineRows.length === 0);
-  const isMountFetchIdle =
-    mountFetchKey !== null && !latestTimelineQuery.isFetching;
-  if (
-    isNewMountFetch ||
-    (mountFetch.hasNewEvents && isMountFetchIdle && !mountFetch.settled)
-  ) {
-    setMountFetch({
-      hasNewEvents: mountFetchHasNewEvents,
-      key: mountFetchKey,
-      settled: isMountFetchIdle,
-    });
-  }
+    (!hasResolvedTimeline &&
+      (timelineQueryState.status === "loading" ||
+        latestTimelineQuery.isFetching));
   const isCatchingUpTimeline =
-    isTrackingMountFetch &&
-    latestTimelineQuery.isFetching &&
+    enabled &&
+    hasThreadTimelineUnseenEvents(queryClient, threadId) &&
     timelineRows.length > 0;
   const timelineError =
     timelineLoading || timelineQueryState.status !== "unavailable"
@@ -316,6 +287,8 @@ export function useThreadTimelineController({
     contextBoundarySeq: latestTimeline?.contextBoundarySeq ?? null,
     contextWindowUsage: latestTimeline?.contextWindowUsage,
     goal: latestTimeline?.goal ?? null,
+    providerCommands: latestTimeline?.providerCommands ?? null,
+    sessionOptions: latestTimeline?.sessionOptions ?? null,
     modelFallback: latestTimeline?.modelFallback ?? null,
     hasOlderTimelineRows,
     isCatchingUpTimeline,

@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setExperiments } from "@bb/db";
+import { createMigratedConnection } from "@bb/db/testing";
+import { startGatedPerformanceDiagnostics } from "../../src/services/system/performance-diagnostics.js";
+import { NotificationHub } from "../../src/ws/hub.js";
 
 interface MockEventLoopDelayHistogram {
   disable: () => void;
@@ -120,6 +127,8 @@ describe("event loop stall monitor", () => {
           p99DelayMs: 450,
           resolutionMs: 20,
           thresholdMs: expectedThreshold,
+          stallAttribution: "unattributed",
+          stallCauseCandidate: null,
           ...EMPTY_WORK_SNAPSHOT,
         },
         "Event loop stalled",
@@ -205,6 +214,8 @@ describe("event loop stall monitor", () => {
         lastCompletedWorkWallMs: null,
         longestSynchronousWork: null,
         longestSynchronousWorkWallMs: null,
+        stallAttribution: "unattributed",
+        stallCauseCandidate: null,
       }),
       "Event loop stalled",
     );
@@ -351,10 +362,82 @@ describe("event loop stall monitor", () => {
         longestSynchronousWork: "sweep:database-maintenance",
         longestSynchronousWorkWallMs: 650,
         longestSynchronousWorkCpuMs: 2,
+        stallAttribution: "candidate",
+        stallCauseCandidate: "sweep:database-maintenance",
       }),
       "Event loop stalled",
     );
 
     monitor.stop();
+  });
+
+  it("leaves a two-second stall unattributed when measured work took one millisecond", () => {
+    installHistogram({ maxDelayMs: 2_000, meanDelayMs: 25, p99DelayMs: 450 });
+    const logger = { info: vi.fn() };
+    const nowSpy = vi.spyOn(nodePerformance, "now");
+    try {
+      nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(1);
+      runEventLoopWorkSync("ws:daemon heartbeat", () => undefined);
+    } finally {
+      nowSpy.mockRestore();
+    }
+    const monitor = startEventLoopStallMonitor({ logger });
+    try {
+      vi.advanceTimersByTime(EVENT_LOOP_STALL_MONITOR_INTERVAL_MS);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          maxDelayMs: 2_000,
+          longestSynchronousWork: "ws:daemon heartbeat",
+          longestSynchronousWorkWallMs: 1,
+          stallAttribution: "unattributed",
+          stallCauseCandidate: null,
+        }),
+        "Event loop stalled",
+      );
+    } finally {
+      monitor.stop();
+    }
+  });
+
+  it("serializes CPU profiles outside the server thread", async () => {
+    installHistogram({ maxDelayMs: 0, meanDelayMs: 0, p99DelayMs: 0 });
+    const db = createMigratedConnection();
+    setExperiments(db, { performanceDiagnostics: true });
+    const dataDir = await mkdtemp(join(tmpdir(), "bb-profile-attribution-"));
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    const stringify = JSON.stringify;
+    const serializedProfiles: unknown[] = [];
+    const stringifySpy = vi
+      .spyOn(JSON, "stringify")
+      .mockImplementation((value, replacer, space) => {
+        if (value && Array.isArray(value.nodes)) serializedProfiles.push(value);
+        return stringify(value, replacer, space);
+      });
+    let recorder:
+      | Awaited<ReturnType<typeof startGatedPerformanceDiagnostics>>
+      | undefined;
+    try {
+      recorder = await startGatedPerformanceDiagnostics({
+        allowed: true,
+        dataDir,
+        db,
+        hub: new NotificationHub(),
+        logger,
+      });
+      await recorder.stop();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: expect.stringMatching(/\.cpuprofile$/),
+        }),
+        "Server CPU profile saved",
+      );
+      expect(serializedProfiles).toEqual([]);
+    } finally {
+      await recorder?.stop();
+      stringifySpy.mockRestore();
+      db.$client.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
   });
 });

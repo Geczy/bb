@@ -86,6 +86,11 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
         "Find in window",
         "Search the text shown in the current bb desktop window.",
       ),
+      command(
+        "window.reload",
+        "Reload window",
+        "Reload the current bb desktop window.",
+      ),
       command("history.back", "Go back", "Go back in this window's history."),
       command(
         "history.forward",
@@ -224,6 +229,11 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
         "plugins.exitSafeMode",
         "Turn off plugin safe mode",
         "Restart the plugins that were enabled before safe mode.",
+      ),
+      command(
+        "plugins.pruneCache",
+        "Clean up plugin cache",
+        "Delete cached plugin versions that no installed plugin uses, such as versions left by earlier bb releases.",
       ),
     ],
   },

@@ -23,7 +23,10 @@ export async function startGatedPerformanceDiagnostics(options: {
     pending = pending
       .then(async () => {
         if (enabled && recorder === null) {
-          recorder = await startPerformanceDiagnostics(options);
+          recorder = await startPerformanceDiagnostics({
+            dataDir: options.dataDir,
+            logger: options.logger,
+          });
         }
         if (!enabled && recorder !== null) {
           await recorder.stop();

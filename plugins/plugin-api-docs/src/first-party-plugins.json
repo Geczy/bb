@@ -125,6 +125,11 @@
     "icon": "SideChat"
   },
   {
+    "id": "bb--storage-retention",
+    "name": "Storage & retention [Experimental]",
+    "icon": null
+  },
+  {
     "id": "tasks",
     "name": "Tasks",
     "icon": "ListTodo"
@@ -142,6 +147,11 @@
   {
     "id": "provider-acp",
     "name": "ACP providers",
+    "icon": null
+  },
+  {
+    "id": "bb--provider-acp-next",
+    "name": "ACP providers [New adapter]",
     "icon": null
   },
   {

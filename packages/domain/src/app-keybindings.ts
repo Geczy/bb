@@ -61,6 +61,7 @@ export const APP_COMMAND_IDS = [
   "pane.close",
   "window.new",
   "window.find",
+  "window.reload",
   "app.back",
   "settings.open",
   "settings.openServers",
@@ -94,6 +95,7 @@ export const APP_COMMAND_IDS = [
   "notifications.open",
   "plugins.enterSafeMode",
   "plugins.exitSafeMode",
+  "plugins.pruneCache",
   ...QUESTION_SELECT_APP_COMMAND_IDS,
 ] as const;
 

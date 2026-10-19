@@ -164,6 +164,7 @@ function renderBrowserDeck({
       canShowNativeBrowserView={canShowNativeBrowserView}
       threadId="thread-1"
       onUpdate={() => {}}
+      onOpenInNewTab={null}
     />,
   );
 }
@@ -260,6 +261,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
       canShowNativeBrowserView
       threadId="thread-1"
       onUpdate={() => {}}
+      onOpenInNewTab={null}
     />
   );
   const savedTab = (saved: Partial<typeof desktopTarget>) => ({
@@ -302,6 +304,40 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
     await screen.findByText("This tab is open in another bb window");
     expect(attachments).toEqual([]);
   });
+
+  it.each(["select another tab", "retry"] as const)(
+    "rechecks a previously live window when users %s after it closes",
+    async (action) => {
+      const { api, attachments } = createRecordingBrowserApi();
+      api.getTarget = async () => desktopTarget;
+      installDesktopBrowser(api);
+      const list = vi.spyOn(sdk.experimental_desktopBrowsers, "listInstances");
+      list.mockResolvedValue({
+        instances: [
+          { ...desktopTarget, label: "Current" },
+          { ...desktopTarget, instanceId: "elsewhere", label: "Other" },
+        ],
+      });
+      const tab = savedTab({ instanceId: "elsewhere" });
+      const view = render(renderTargetDeck(tab));
+      await screen.findByText("This tab is open in another bb window");
+      expect(attachments).toEqual([]);
+      list.mockResolvedValue({
+        instances: [{ ...desktopTarget, label: "Current" }],
+      });
+      const selected =
+        action === "retry" ? tab : { ...tab, id: "another-saved-tab" };
+      if (action === "retry")
+        fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      else view.rerender(renderTargetDeck(selected));
+      await waitFor(() => expect(attachments).toHaveLength(1));
+      expect(attachments[0]).toMatchObject({
+        tabId: selected.id,
+        url: selected.url,
+      });
+      expect(attachments[0]?.existingOnly).toBeUndefined();
+    },
+  );
 
   it("reopens the saved URL when the window that owned the tab is gone", async () => {
     const { api, attachments } = createRecordingBrowserApi();
@@ -490,6 +526,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         canShowNativeBrowserView
         threadId="thread-1"
         onUpdate={() => {}}
+        onOpenInNewTab={null}
       />
     );
     const view = render(deck(null));
@@ -540,6 +577,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         canShowNativeBrowserView={true}
         threadId="thread-1"
         onUpdate={() => {}}
+        onOpenInNewTab={null}
       />,
     );
 
@@ -584,6 +622,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         canShowNativeBrowserView={false}
         threadId="thread-1"
         onUpdate={() => {}}
+        onOpenInNewTab={null}
       />,
     );
     await waitFor(() => {
@@ -608,6 +647,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         canShowNativeBrowserView={true}
         threadId="thread-1"
         onUpdate={() => {}}
+        onOpenInNewTab={null}
       />,
     );
     await waitFor(() => {
@@ -646,6 +686,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         canHandleBrowserCommands={false}
         threadId="thread-1"
         onUpdate={() => {}}
+        onOpenInNewTab={null}
       />,
     );
 
@@ -667,6 +708,7 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         canHandleBrowserCommands={false}
         threadId="thread-1"
         onUpdate={() => {}}
+        onOpenInNewTab={null}
       />,
     );
 
@@ -697,11 +739,49 @@ describe("BrowserTabDeck native browser first-show ordering", () => {
         canShowNativeBrowserView={true}
         threadId="thread-1"
         onUpdate={() => {}}
+        onOpenInNewTab={null}
       />,
     );
 
     expect(screen.getByLabelText("Address and search bar")).toBeTruthy();
     expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it("preserves address focus and typed text when a new tab's ownership is saved", async () => {
+    const { api } = createRecordingBrowserApi();
+    api.getTarget = async () => desktopTarget;
+    installDesktopBrowser(api);
+    const consumed = vi.fn();
+    const tab = makeBrowserTab("tab-new", "");
+    const renderTab = (saved: boolean) => (
+      <BrowserTabDeck
+        browserTabs={[saved ? { ...tab, desktopTarget } : tab]}
+        activeBrowserTabId={tab.id}
+        addressFocusRequest={saved ? null : { requestId: 1, tabId: tab.id }}
+        onAddressFocusRequestConsumed={consumed}
+        environmentId="env-1"
+        canShowNativeBrowserView
+        threadId="thread-1"
+        onUpdate={() => {}}
+        onOpenInNewTab={null}
+      />
+    );
+    const view = render(renderTab(false));
+    await waitFor(() => expect(consumed).toHaveBeenCalled());
+    const address = screen.getByRole("textbox", {
+      name: /Address and search bar/,
+    });
+    expect(document.activeElement).toBe(address);
+    fireEvent.change(address, { target: { value: "google.co" } });
+
+    view.rerender(renderTab(true));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: /Address and search bar/ }),
+      ).toBe(document.activeElement),
+    );
+    expect(screen.getByDisplayValue("google.co")).toBe(document.activeElement);
   });
 
   it("shows a neutral page state and hides the native view after a main-frame load error", async () => {

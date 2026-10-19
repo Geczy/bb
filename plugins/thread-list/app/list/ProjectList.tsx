@@ -19,7 +19,8 @@ import { useAtom, useAtomValue, useSetAtom } from "jotai";
 import { toast } from "sonner";
 import type { SidebarThread } from "../model/sidebar-thread.js";
 import {
-  experimental_useSidebarThreadActions,
+  experimental_useProviders,
+  useBbNavigate,
   useSdk,
 } from "@get-bb/plugin-sdk/app";
 import {
@@ -27,8 +28,9 @@ import {
   useSidebarRename,
   useSidebarRenameState,
 } from "../rows/SidebarInlineRename.js";
-import { AppThreadSectionMoveProvider } from "../rows/ThreadSectionMoveProvider.js";
-import { useDialogState } from "../ui/useDialogState.js";
+import { useDialogState } from "@/components/ui/use-dialog-state";
+import { ThreadRowNavigationProvider } from "../rows/threadRowNavigation.js";
+import { SidebarProvidersContext } from "../rows/ThreadRow.js";
 import {
   buildProjectThreadGroups,
   getProjectThreadItemDescendants,
@@ -46,7 +48,7 @@ import { ThreadSectionCreateDialog } from "./ThreadSectionCreateDialog.js";
 import {
   ConfirmDeleteDialog,
   ConfirmDeleteDialogContent,
-} from "../ui/ConfirmDeleteDialog.js";
+} from "@/components/ui/confirm-delete-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -120,6 +122,7 @@ import { useSidebarModeSectionOrder } from "./useSidebarModeSectionOrder.js";
 import { useReadStatusGrouping } from "./useReadStatusGrouping.js";
 import { haveSameOrder } from "../model/stored-order.js";
 import {
+  SidebarProjectsContext,
   useSidebarData,
   useSidebarMachineHosts,
   type SidebarProject,
@@ -369,24 +372,13 @@ function ProjectListNavigationLoadingRow({
 
 export function ProjectListShell({ children }: ProjectListShellProps) {
   return (
-    <SidebarContentElementProvider>
-      <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
-        <SidebarGroupContent>{children}</SidebarGroupContent>
-      </SidebarStickyStack>
-    </SidebarContentElementProvider>
-  );
-}
-
-function ProjectListSectionMoveScope({
-  children,
-  sections,
-}: ProjectListShellProps & {
-  sections: readonly SidebarSectionDefinition[];
-}) {
-  return (
-    <AppThreadSectionMoveProvider sections={sections}>
-      <ProjectListShell>{children}</ProjectListShell>
-    </AppThreadSectionMoveProvider>
+    <ThreadRowNavigationProvider>
+      <SidebarContentElementProvider>
+        <SidebarStickyStack data-sidebar-sticky-density="compact-actions">
+          <SidebarGroupContent>{children}</SidebarGroupContent>
+        </SidebarStickyStack>
+      </SidebarContentElementProvider>
+    </ThreadRowNavigationProvider>
   );
 }
 
@@ -451,6 +443,7 @@ function buildGroupSectionItem(
 }
 
 function useGroupedModeThreadDnd({
+  containerProjectId,
   collapsedThreadIds,
   compareThreads,
   onToggleThreadCollapsed,
@@ -460,6 +453,7 @@ function useGroupedModeThreadDnd({
   rootItems,
   threads,
 }: {
+  containerProjectId?: string;
   collapsedThreadIds: Set<string>;
   compareThreads: ThreadComparator;
   onToggleThreadCollapsed: ToggleCollapsedId;
@@ -479,6 +473,7 @@ function useGroupedModeThreadDnd({
   );
   const threadDnd = useSectionThreadDnd({
     containerId: CHRONOLOGICAL_CONTAINER_ID,
+    containerProjectId,
     enabled: true,
     rootItems,
     topLevelSectionOrder: order,
@@ -662,6 +657,7 @@ function ProjectModeSections({
     [effectivePinnedThreadIds, threads],
   );
   const threadDnd = useGroupedModeThreadDnd({
+    containerProjectId: personalProjectId ?? undefined,
     collapsedThreadIds,
     compareThreads,
     onToggleThreadCollapsed,
@@ -981,7 +977,7 @@ function MachineSidebarSection({
       {...props}
       disabled={props.disabled || rename.isEditing}
       labelEditor={rename.editor}
-      onRename={rename.startEditing}
+      onRename={rename.startEditingFromDoubleClick}
       actions={renderActions(
         props.id,
         props.label,
@@ -1310,7 +1306,8 @@ function ProjectListComponent({
   onProjectSelect,
 }: ProjectListProps) {
   const sdk = useSdk();
-  const sidebarActions = experimental_useSidebarThreadActions();
+  const navigate = useBbNavigate();
+  const { providers } = experimental_useProviders();
   const { status, sections, projects, personalProject, archived } =
     useSidebarData();
   const personalProjectId = personalProject?.id ?? null;
@@ -1360,14 +1357,14 @@ function ProjectListComponent({
       pinned = false,
     ) => {
       onProjectSelect?.();
-      sidebarActions.openNewThread({
+      navigate.toCompose({
         ...(projectId !== null ? { projectId } : {}),
-        experimental_placement: { sectionId: sectionId ?? null, pinned },
+        placement: { sectionId: sectionId ?? null, pinned },
         ...(hostId ? { hostId } : {}),
         focusPrompt: true,
       });
     },
-    [onProjectSelect, sidebarActions],
+    [navigate, onProjectSelect],
   );
   const handleCreateProjectThread = useCallback(
     (projectId: string) => {
@@ -1463,6 +1460,7 @@ function ProjectListComponent({
       return;
     }
     setIsDeleteThreadSectionPending(true);
+    sectionDeleteDialog.onClose();
     void sdk.threadSections
       .delete({ id: section.id })
       .then(() => sectionDeleteDialog.onClose())
@@ -1696,14 +1694,14 @@ function ProjectListComponent({
     );
   }
 
-  return (
+  const content = (
     <SidebarHeaderActionsProvider
       value={{
         onNewSection: handleOpenCreateSectionDialog,
         isCreatingSection: isCreateThreadSectionPending,
       }}
     >
-      <ProjectListSectionMoveScope sections={sections}>
+      <ProjectListShell>
         <SidebarDraftPresenceSync />
         <ActiveSidebarModeSections
           mode={organizationMode}
@@ -1822,10 +1820,17 @@ function ProjectListComponent({
             )}
           </>
         )}
-      </ProjectListSectionMoveScope>
+      </ProjectListShell>
       {sectionCreateDialog}
       {sectionDeleteDialogContent}
     </SidebarHeaderActionsProvider>
+  );
+  return (
+    <SidebarProjectsContext.Provider value={projects}>
+      <SidebarProvidersContext.Provider value={providers}>
+        {content}
+      </SidebarProvidersContext.Provider>
+    </SidebarProjectsContext.Provider>
   );
 }
 

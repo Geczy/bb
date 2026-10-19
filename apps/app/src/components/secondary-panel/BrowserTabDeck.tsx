@@ -27,6 +27,7 @@ interface BrowserTabDeckProps {
   onNativeFocus?: () => void;
   threadId: string;
   onUpdate: (args: UpdateBrowserTabArgs) => void;
+  onOpenInNewTab: ((url: string) => void) | null;
 }
 
 export function selectActiveBrowserTab(
@@ -67,8 +68,8 @@ function resolveBrowserTabPlacement(
   saved: BbDesktopBrowserTarget | undefined,
   windowTarget: WindowTargetCheck,
 ): BrowserTabPlacement {
-  if (saved === undefined) return "open";
   if (windowTarget.status === "pending") return "pending";
+  if (saved === undefined) return "open";
   const actual = windowTarget.target;
   if (actual === null || actual.hostId !== saved.hostId) return "unavailable";
   return actual.instanceId === saved.instanceId
@@ -87,6 +88,7 @@ export function BrowserTabDeck({
   onNativeFocus,
   threadId,
   onUpdate,
+  onOpenInNewTab,
 }: BrowserTabDeckProps) {
   const desktopBrowser = useMemo(() => getDesktopBrowserApi(), []);
   const visibilityCoordinator = useMemo(
@@ -112,10 +114,9 @@ export function BrowserTabDeck({
   const checkKey =
     target === undefined
       ? null
-      : `${checkRound}:${target.hostId}:${target.instanceId}:${target.generation}`;
+      : `${activeBrowserTab?.id}:${checkRound}:${target.hostId}:${target.instanceId}:${target.generation}`;
   const [stoppedCheckKey, setStoppedCheckKey] = useState<string | null>(null);
   useEffect(() => {
-    if (targetHostId === undefined) return;
     const getTarget = desktopBrowser?.getTarget?.bind(desktopBrowser);
     if (getTarget === undefined) return;
     let current = true;
@@ -154,10 +155,7 @@ export function BrowserTabDeck({
   ]);
 
   const placement = resolveBrowserTabPlacement(target, windowTarget);
-  const savedWindowKey =
-    placement === "check-saved-window" && target !== undefined
-      ? `${target.hostId}:${target.instanceId}`
-      : null;
+  const savedWindowKey = placement === "check-saved-window" ? checkKey : null;
   const [savedWindowCheck, setSavedWindowCheck] =
     useState<SavedWindowCheck | null>(null);
   const savedInstanceId = target?.instanceId;
@@ -225,7 +223,9 @@ export function BrowserTabDeck({
       <BrowserTabElsewhere
         url={activeBrowserTab.url}
         onRetry={
-          checksStopped ? () => setCheckRound((round) => round + 1) : null
+          checksStopped || savedWindowStatus === "live"
+            ? () => setCheckRound((round) => round + 1)
+            : null
         }
         reason={
           desktopBrowser === null
@@ -265,6 +265,7 @@ export function BrowserTabDeck({
         environmentId={environmentId}
         threadId={threadId}
         onUpdate={onUpdate}
+        onOpenInNewTab={onOpenInNewTab}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type KeyboardEvent,
   type RefObject,
   type ReactNode,
 } from "react";
@@ -56,7 +57,11 @@ import {
   useAppCommandHandler,
   useAppCommandShortcut,
 } from "@/components/commands/AppCommandProvider";
-import type { AppShortcutPresentation } from "@/lib/app-keybindings";
+import { isMacKeyboardPlatform } from "@bb/domain";
+import {
+  browserPlatform,
+  type AppShortcutPresentation,
+} from "@/lib/app-keybindings";
 import { isLocalOnlyUrl } from "@/lib/loopback-hostname";
 import { PluginBrowserToolbarActions } from "@/components/plugin/PluginBrowserToolbarActions";
 
@@ -74,6 +79,7 @@ interface BrowserTabContentProps {
   environmentId: string | null;
   threadId: string;
   onUpdate: (args: UpdateBrowserTabArgs) => void;
+  onOpenInNewTab: ((url: string) => void) | null;
 }
 
 export interface BrowserAddressFocusRequest {
@@ -90,6 +96,7 @@ interface BrowserChromeProps {
   onAddressChange: (value: string) => void;
   onAddressFocus: () => void;
   onAddressBlur: () => void;
+  onAddressKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onBack: () => void;
   onForward: () => void;
@@ -189,6 +196,7 @@ function BrowserChrome({
   onAddressChange,
   onAddressFocus,
   onAddressBlur,
+  onAddressKeyDown,
   onSubmit,
   onBack,
   onForward,
@@ -201,6 +209,7 @@ function BrowserChrome({
   const isLoading = state?.isLoading ?? false;
   const security = getBrowserUrlSecurity(currentUrl);
   const addressValue = isEditing ? addressDraft : currentUrl;
+  const selectAddressOnMouseUpRef = useRef(false);
   return (
     <div
       role="region"
@@ -269,8 +278,24 @@ function BrowserChrome({
               type="text"
               value={addressValue}
               onChange={(event) => onAddressChange(event.target.value)}
-              onFocus={onAddressFocus}
+              onMouseDown={(event) => {
+                selectAddressOnMouseUpRef.current =
+                  document.activeElement !== event.currentTarget;
+              }}
+              onMouseUp={(event) => {
+                if (!selectAddressOnMouseUpRef.current) return;
+                selectAddressOnMouseUpRef.current = false;
+                const input = event.currentTarget;
+                if (input.selectionStart !== input.selectionEnd) return;
+                event.preventDefault();
+                input.select();
+              }}
+              onFocus={(event) => {
+                event.currentTarget.select();
+                onAddressFocus();
+              }}
               onBlur={onAddressBlur}
+              onKeyDown={onAddressKeyDown}
               placeholder="Enter a URL"
               aria-label={
                 locationShortcut
@@ -395,6 +420,7 @@ export function BrowserTabContent({
   environmentId,
   threadId,
   onUpdate,
+  onOpenInNewTab,
 }: BrowserTabContentProps) {
   const locationShortcut = useAppCommandShortcut("browser.focusLocation");
   const reloadShortcut = useAppCommandShortcut("browser.reload");
@@ -447,6 +473,7 @@ export function BrowserTabContent({
   const [currentUrl, setCurrentUrl] = useState(initialUrl);
   const [addressDraft, setAddressDraft] = useState(initialUrl);
   const [isEditing, setIsEditing] = useState(false);
+  const [isPageFocusPending, setIsPageFocusPending] = useState(false);
   const [isFindOpen, setIsFindOpen] = useState(false);
   const isFindOpenRef = useRef(false);
   isFindOpenRef.current = isFindOpen;
@@ -675,6 +702,31 @@ export function BrowserTabContent({
     visibilityCoordinator.hide(tabId);
   }, [visibilityCoordinator, tabId, isViewVisible, syncBounds]);
 
+  useLayoutEffect(() => {
+    if (!isPageFocusPending) return;
+    if (
+      !canShowNativeBrowserView ||
+      !canHandleBrowserCommands ||
+      hasPageLoadError ||
+      isBrowserDimmingModalOpen
+    ) {
+      setIsPageFocusPending(false);
+      return;
+    }
+    if (!isViewVisible) return;
+    setIsPageFocusPending(false);
+    desktopBrowser?.focus?.(tabId);
+  }, [
+    isPageFocusPending,
+    canShowNativeBrowserView,
+    canHandleBrowserCommands,
+    hasPageLoadError,
+    isBrowserDimmingModalOpen,
+    isViewVisible,
+    desktopBrowser,
+    tabId,
+  ]);
+
   useEffect(() => {
     if (desktopBrowser?.onFocus === undefined || onNativeFocus === undefined) {
       return;
@@ -720,7 +772,9 @@ export function BrowserTabContent({
       }
       setCurrentUrl(url);
       setIsEditing(false);
+      addressInputRef.current?.blur();
       desktopBrowser?.navigate({ tabId, url });
+      setIsPageFocusPending(true);
     },
     [desktopBrowser, tabId],
   );
@@ -731,6 +785,43 @@ export function BrowserTabContent({
       navigateToInput(addressDraft);
     },
     [addressDraft, navigateToInput],
+  );
+
+  const handleAddressKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.nativeEvent.isComposing) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setAddressDraft(currentUrl);
+        const input = event.currentTarget;
+        window.requestAnimationFrame(() => {
+          if (document.activeElement === input) input.select();
+        });
+        return;
+      }
+      if (
+        onOpenInNewTab === null ||
+        event.key !== "Enter" ||
+        event.shiftKey ||
+        event.ctrlKey
+      ) {
+        return;
+      }
+      const isMac = isMacKeyboardPlatform(browserPlatform());
+      const opensNewTab = isMac
+        ? event.metaKey && !event.altKey
+        : event.altKey && !event.metaKey;
+      if (!opensNewTab) return;
+      event.preventDefault();
+      const url = resolveBrowserAddressInput(addressDraft);
+      if (url === null) return;
+      setAddressDraft(currentUrl);
+      setIsEditing(false);
+      addressInputRef.current?.blur();
+      onOpenInNewTab(url);
+    },
+    [addressDraft, currentUrl, onOpenInNewTab],
   );
 
   const handleAddressFocus = useCallback(() => {
@@ -863,6 +954,7 @@ export function BrowserTabContent({
         onAddressChange={setAddressDraft}
         onAddressFocus={handleAddressFocus}
         onAddressBlur={() => setIsEditing(false)}
+        onAddressKeyDown={handleAddressKeyDown}
         onSubmit={handleAddressSubmit}
         onBack={() => {
           desktopBrowser.goBack(tabId);

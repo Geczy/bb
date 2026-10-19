@@ -32,6 +32,7 @@ const mentionSchema = z.intersection(
       origin: z.enum(["builtin", "project", "user"]),
       argumentHint: z.string().nullable(),
     }),
+    z.object({ kind: z.literal("attachment"), path: z.string() }),
     z.object({
       kind: z.literal("plugin"),
       pluginId: z.string(),
@@ -100,8 +101,18 @@ const snippetSchema = z
   .strict();
 export type PromptSnippet = z.infer<typeof snippetSchema>;
 
+export const promptTitleSchema = z
+  .string()
+  .trim()
+  .max(120)
+  .transform((title) => title || null)
+  .nullable();
+
 const starredPromptSchema = z
   .object({
+    kind: z.literal("starred"),
+    title: z.string().nullable(),
+    titleSnippet: snippetSchema.nullable(),
     id: z.string(),
     prompt: promptSchema,
     snippet: snippetSchema,
@@ -113,6 +124,7 @@ export type StarredPromptRow = z.infer<typeof starredPromptSchema>;
 
 const recentPromptSchema = z
   .object({
+    kind: z.literal("recent"),
     id: z.string(),
     prompt: promptSchema,
     snippet: snippetSchema,
@@ -125,12 +137,21 @@ const recentPromptSchema = z
   .strict();
 export type RecentPromptRow = z.infer<typeof recentPromptSchema>;
 
+const promptRowSchema = z.discriminatedUnion("kind", [
+  starredPromptSchema,
+  recentPromptSchema,
+]);
+export type PromptRow = z.infer<typeof promptRowSchema>;
+
 export const searchPromptsInputSchema = z
   .object({
-    query: z.string().max(256),
+    query: z.string(),
     scope: promptScopeSchema,
     projectId: z.string().min(1).nullable(),
     threadId: z.string().min(1).nullable(),
+    composer: z.enum(["new-thread", "follow-up"]),
+    waitForHistory: z.boolean().optional().default(true),
+    refreshHistory: z.boolean().optional().default(true),
   })
   .strict();
 export type SearchPromptsInput = z.infer<typeof searchPromptsInputSchema>;
@@ -140,14 +161,16 @@ export const promptLibraryRpcContract = defineRpcContract({
     input: searchPromptsInputSchema,
     output: z
       .object({
-        starred: z.array(starredPromptSchema),
-        recent: z.array(recentPromptSchema),
+        prompts: z.array(promptRowSchema),
+        loading: z.boolean(),
+        historyError: z.string().nullable(),
       })
       .strict(),
   },
   star: {
     input: z
       .object({
+        title: promptTitleSchema.optional().default(null),
         prompt: draftSchema.refine(
           validMentionRanges,
           "Mention range must be within prompt text",
@@ -155,6 +178,12 @@ export const promptLibraryRpcContract = defineRpcContract({
       })
       .strict(),
     output: z.object({ id: z.string() }).strict(),
+  },
+  setTitle: {
+    input: z
+      .object({ id: z.string().min(1), title: promptTitleSchema })
+      .strict(),
+    output: z.object({ id: z.string(), title: z.string().nullable() }).strict(),
   },
   unstar: {
     input: z.object({ id: z.string().min(1) }).strict(),

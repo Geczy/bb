@@ -67,19 +67,10 @@ interface AssistantToolUseMessageArgs {
   toolUseId: string;
 }
 
-interface CanUseToolPolicyAllowExpectation {
-  behavior: "allow";
-  updatedInput: Record<string, unknown>;
-}
-
-interface CanUseToolPolicyDenyExpectation {
+interface CanUseToolPolicyExpectation {
   behavior: "deny";
   messageIncludes: string;
 }
-
-type CanUseToolPolicyExpectation =
-  | CanUseToolPolicyAllowExpectation
-  | CanUseToolPolicyDenyExpectation;
 
 interface CanUseToolPolicyCase {
   blockedPath?: string;
@@ -103,6 +94,7 @@ interface ControlledClaudeQuery {
   interrupt: ReturnType<typeof vi.fn>;
   setModel: ReturnType<typeof vi.fn>;
   setPermissionMode: ReturnType<typeof vi.fn>;
+  supportedCommands: ReturnType<typeof vi.fn>;
   [Symbol.asyncIterator](): AsyncIterator<SDKMessage>;
 }
 
@@ -317,6 +309,7 @@ function createControlledClaudeQuery(): ControlledClaudeQuery {
     interrupt: vi.fn().mockResolvedValue(undefined),
     setModel: vi.fn().mockResolvedValue(undefined),
     setPermissionMode: vi.fn().mockResolvedValue(undefined),
+    supportedCommands: vi.fn().mockResolvedValue([]),
     [Symbol.asyncIterator]() {
       return iterator;
     },
@@ -632,6 +625,19 @@ function isApprovalInteraction(message: BridgeJsonRpcOutputMessage): boolean {
   return interactionPayload(message)?.kind === "approval";
 }
 
+async function waitForBridgeRequest(
+  bridge: BridgeJsonRpcTestHarness,
+  matches: (message: BridgeJsonRpcOutputMessage) => boolean,
+): Promise<BridgeJsonRpcOutputMessage> {
+  return vi.waitFor(() => {
+    const request = bridge.messages.find(matches);
+    if (request?.id === undefined) {
+      throw new Error("Expected bridge request");
+    }
+    return request;
+  });
+}
+
 function isUserQuestionInteraction(
   message: BridgeJsonRpcOutputMessage,
 ): boolean {
@@ -649,9 +655,7 @@ async function forwardAskUserQuestion({
     signal: new AbortController().signal,
     toolUseID,
   });
-  await bridge.flushWork();
-
-  const questionRequest = bridge.messages.find((message) =>
+  const questionRequest = await waitForBridgeRequest(bridge, (message) =>
     isUserQuestionInteraction(message),
   );
   if (questionRequest?.id === undefined) {
@@ -917,6 +921,177 @@ describe("bridge", () => {
       }
     },
   );
+
+  it("publishes the session's live slash commands as provider commands", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      query.supportedCommands.mockResolvedValue([
+        { name: "simplify", description: "Simplify code", argumentHint: "" },
+        {
+          name: "code-review",
+          description: "Review the diff",
+          argumentHint: "[low|high]",
+        },
+        { name: "doctor", description: "Health check", argumentHint: "" },
+        { name: "model", description: "Set the model", argumentHint: "" },
+        {
+          name: "__remote-workflow",
+          description: "Internal",
+          argumentHint: "",
+        },
+      ]);
+      queries.push(query);
+      return query;
+    });
+    const threadId = "thread-provider-commands";
+    const providerCommandStates = () =>
+      assembleCapturedThreadEvents(bridge.messages, "claude-code").flatMap(
+        (event) =>
+          event.type === "thread/extensionState/updated" &&
+          event.kind === "bb/provider-commands"
+            ? [event.payload]
+            : [],
+      );
+    const init = {
+      type: "system",
+      subtype: "init",
+      apiKeySource: "none",
+      claude_code_version: "2.1.301",
+      cwd: "/tmp/worktree",
+      tools: [],
+      mcp_servers: [],
+      model: "claude-opus-5-5",
+      permissionMode: "default",
+      slash_commands: [
+        "simplify",
+        "code-review",
+        "doctor",
+        "model",
+        "__remote-workflow",
+      ],
+      terminal_slash_commands: ["doctor"],
+      output_style: "default",
+      skills: ["simplify", "code-review", "doctor"],
+      plugins: [],
+      uuid: "00000000-0000-4000-8000-000000000001",
+      session_id: threadId,
+    } satisfies SDKMessage;
+    try {
+      bridge.sendRequest(1, "thread/start", {
+        threadId,
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        options: {
+          permissionMode: "accept-edits",
+          permissionScope: "workspace",
+          approvalReviewer: "user",
+          permissionEscalation: "ask",
+          instructions: "test",
+          providerOptions: { workflowsEnabled: false },
+        },
+      });
+      await bridge.waitForResponse(1);
+      bridge.sendRequest(
+        2,
+        "turn/start",
+        canonicalTurnParams({
+          threadId,
+          providerThreadId: threadId,
+          input: [{ type: "text", text: "hello" }],
+        }),
+      );
+      await readNextPrompt(getLatestQueryCall());
+      await bridge.waitForResponse(2);
+      queries[0].emit(init);
+      await vi.waitFor(() =>
+        expect(providerCommandStates()).toEqual([
+          {
+            commands: [
+              { name: "simplify", description: "Simplify code" },
+              {
+                name: "code-review",
+                description: "Review the diff",
+                inputHint: "[low|high]",
+              },
+            ],
+          },
+        ]),
+      );
+      queries[0].emit({
+        ...init,
+        uuid: "00000000-0000-4000-8000-000000000002",
+      });
+      await vi.waitFor(() =>
+        expect(queries[0].supportedCommands).toHaveBeenCalledTimes(2),
+      );
+      queries[0].emit({
+        type: "system",
+        subtype: "commands_changed",
+        commands: [
+          { name: "simplify", description: "Simplify code", argumentHint: "" },
+          { name: "model", description: "Set the model", argumentHint: "" },
+          {
+            name: "deploy",
+            description: "Discovered mid-session",
+            argumentHint: "",
+          },
+        ],
+        uuid: "00000000-0000-4000-8000-000000000003",
+        session_id: threadId,
+      });
+      await vi.waitFor(() =>
+        expect(providerCommandStates()).toEqual([
+          expect.anything(),
+          {
+            commands: [
+              { name: "simplify", description: "Simplify code" },
+              { name: "deploy", description: "Discovered mid-session" },
+            ],
+          },
+        ]),
+      );
+    } finally {
+      await stopBridgeThread({ bridge, queries, threadId });
+      bridge.restore();
+    }
+  });
+
+  it("lists a folder's commands from Claude Code without sending a prompt", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const close = vi.fn();
+    queryMock.mockReturnValue({
+      initializationResult: vi.fn().mockResolvedValue({
+        commands: [
+          { name: "simplify", description: "Simplify code", argumentHint: "" },
+          { name: "model", description: "Set the model", argumentHint: "" },
+          {
+            name: "bb-global-skills:bb-cli",
+            description: "Injected by bb",
+            argumentHint: "",
+          },
+        ],
+      }),
+      close,
+    });
+
+    try {
+      bridge.sendRequest(1, "commands/list", { cwd: "/tmp/commands-project" });
+      const response = await bridge.waitForResponse(1);
+
+      expect(response.result).toEqual({
+        commands: [{ name: "simplify", description: "Simplify code" }],
+      });
+      expect(queryMock).toHaveBeenCalledWith({
+        prompt: expect.anything(),
+        options: expect.objectContaining({ cwd: "/tmp/commands-project" }),
+      });
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      bridge.restore();
+    }
+  });
 
   it("answers model/list with the missing-executable code when the Claude CLI is absent", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
@@ -1417,12 +1592,6 @@ describe("bridge", () => {
       approvalReviewer: "automatic",
       permissionEscalation: "deny",
     } satisfies RuntimePermissionPolicy;
-    const FULL_POLICY = {
-      permissionMode: "full",
-      permissionScope: "full",
-      approvalReviewer: null,
-      permissionEscalation: null,
-    } satisfies RuntimePermissionPolicy;
 
     const policyCases = [
       {
@@ -1454,24 +1623,6 @@ describe("bridge", () => {
         expected: {
           behavior: "deny",
           messageIncludes: "bb's workspace sandbox allows work inside",
-        },
-      },
-      {
-        id: "full-bypass-allow",
-        name: "full bypass allows Bash input unchanged",
-        policy: FULL_POLICY,
-        toolName: "Bash",
-        decisionReason: "This command requires approval",
-        input: {
-          command: "git status --short",
-          description: "Permission boundary test",
-        },
-        expected: {
-          behavior: "allow",
-          updatedInput: {
-            command: "git status --short",
-            description: "Permission boundary test",
-          },
         },
       },
     ] satisfies CanUseToolPolicyCase[];
@@ -1516,23 +1667,11 @@ describe("bridge", () => {
           throw new Error(`Expected ${testCase.name} to return a decision`);
         }
 
-        switch (testCase.expected.behavior) {
-          case "allow":
-            expect(result).toMatchObject({
-              behavior: "allow",
-              toolUseID,
-              updatedInput: testCase.expected.updatedInput,
-            });
-            expect("decisionClassification" in result).toBe(false);
-            break;
-          case "deny":
-            if (result.behavior !== "deny") {
-              throw new Error(`Expected ${testCase.name} to deny`);
-            }
-            expect(result.toolUseID).toBe(toolUseID);
-            expect(result.message).toContain(testCase.expected.messageIncludes);
-            break;
+        if (result.behavior !== "deny") {
+          throw new Error(`Expected ${testCase.name} to deny`);
         }
+        expect(result.toolUseID).toBe(toolUseID);
+        expect(result.message).toContain(testCase.expected.messageIncludes);
 
         bridge.sendRequest(stopRequestId, "thread/stop", {
           threadId,
@@ -1588,9 +1727,7 @@ describe("bridge", () => {
           toolUseID,
         },
       );
-      await bridge.flushWork();
-
-      const permissionRequest = bridge.messages.find((message) =>
+      const permissionRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (permissionRequest?.id === undefined) {
@@ -1659,9 +1796,7 @@ describe("bridge", () => {
           toolUseID,
         },
       );
-      await bridge.flushWork();
-
-      const permissionRequest = bridge.messages.find((message) =>
+      const permissionRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (permissionRequest?.id === undefined) {
@@ -1732,8 +1867,7 @@ describe("bridge", () => {
           toolUseID: "tool-npm",
         },
       );
-      await bridge.flushWork();
-      const npmRequest = bridge.messages.find((message) =>
+      const npmRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (npmRequest?.id === undefined) {
@@ -1802,8 +1936,8 @@ describe("bridge", () => {
           toolUseID: "tool-python",
         },
       );
-      await bridge.flushWork();
-      const pythonRequest = bridge.messages.find(
+      const pythonRequest = await waitForBridgeRequest(
+        bridge,
         (message) =>
           isApprovalInteraction(message) && message.id !== npmRequest.id,
       );
@@ -1852,9 +1986,7 @@ describe("bridge", () => {
           toolUseID,
         },
       );
-      await bridge.flushWork();
-
-      const permissionRequest = bridge.messages.find((message) =>
+      const permissionRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (permissionRequest?.id === undefined) {
@@ -1887,6 +2019,141 @@ describe("bridge", () => {
     }
   });
 
+  it("forwards a permissions.ask rule prompt in full access mode", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    const uidSpy =
+      process.platform === "win32"
+        ? null
+        : vi.spyOn(process, "getuid").mockReturnValue(1000);
+    try {
+      const threadId = "thread-full-ask-rule";
+      const toolUseID = "tool-full-ask-rule";
+      bridge.sendRequest(1, "thread/start", {
+        threadId,
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        options: {
+          permissionMode: "full",
+          permissionScope: "full",
+          approvalReviewer: null,
+          permissionEscalation: null,
+          instructions: "test",
+          providerOptions: {
+            workflowsEnabled: false,
+          },
+        },
+      });
+      await bridge.waitForResponse(1);
+
+      const resultPromise = getLastCanUseTool()(
+        "Bash",
+        { command: "git push origin main" },
+        {
+          description: "Push the branch to origin",
+          requestId: "control-request",
+          signal: new AbortController().signal,
+          toolUseID,
+        },
+      );
+      await bridge.flushWork();
+
+      const permissionRequest = bridge.messages.find((message) =>
+        isApprovalInteraction(message),
+      );
+      if (permissionRequest?.id === undefined) {
+        throw new Error("Expected forwarded permission request");
+      }
+      expect(permissionRequest.params).toMatchObject({
+        threadId,
+        payload: {
+          kind: "approval",
+          subject: expect.objectContaining({ itemId: toolUseID }),
+        },
+      });
+
+      handleLine(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: permissionRequest.id,
+          result: { decision: "deny", grantedPermissions: null },
+        }),
+      );
+      await expect(resultPromise).resolves.toMatchObject({
+        behavior: "deny",
+        toolUseID,
+      });
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      uidSpy?.mockRestore();
+      bridge.restore();
+    }
+  });
+
+  it("keeps approving requests itself in full access mode when running as root", async ({
+    skip,
+  }) => {
+    skip(process.platform === "win32", "Windows has no root uid");
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    const uidSpy = vi.spyOn(process, "getuid").mockReturnValue(0);
+    try {
+      const threadId = "thread-full-root";
+      const toolUseID = "tool-full-root";
+      bridge.sendRequest(1, "thread/start", {
+        threadId,
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        options: {
+          permissionMode: "full",
+          permissionScope: "full",
+          approvalReviewer: null,
+          permissionEscalation: null,
+          instructions: "test",
+          providerOptions: {
+            workflowsEnabled: false,
+          },
+        },
+      });
+      await bridge.waitForResponse(1);
+
+      expect(getLatestQueryCall().options.permissionMode).toBe("default");
+      await expect(
+        getLastCanUseTool()(
+          "Bash",
+          { command: "npm --version" },
+          {
+            decisionReason: "This command requires approval",
+            requestId: "control-request",
+            signal: new AbortController().signal,
+            toolUseID,
+          },
+        ),
+      ).resolves.toMatchObject({ behavior: "allow", toolUseID });
+      expect(
+        bridge.messages.filter((message) => isApprovalInteraction(message)),
+      ).toHaveLength(0);
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      uidSpy.mockRestore();
+      bridge.restore();
+    }
+  });
+
   it("keeps folder grants scoped and clears them on live permission changes", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     const queries: ControlledClaudeQuery[] = [];
@@ -1910,8 +2177,7 @@ describe("bridge", () => {
           toolUseID: "tool-path-grant",
         },
       );
-      await bridge.flushWork();
-      const pathRequest = bridge.messages.find((message) =>
+      const pathRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (pathRequest?.id === undefined) {
@@ -1944,8 +2210,8 @@ describe("bridge", () => {
           toolUseID: "tool-escalation",
         },
       );
-      await bridge.flushWork();
-      const escalationRequest = bridge.messages.find(
+      const escalationRequest = await waitForBridgeRequest(
+        bridge,
         (message) =>
           isApprovalInteraction(message) && message.id !== pathRequest.id,
       );
@@ -1996,8 +2262,8 @@ describe("bridge", () => {
         { file_path: "/tmp/outside/notes.txt" },
         cachedRequestOptions,
       );
-      await bridge.flushWork();
-      const renewedRequest = bridge.messages.find(
+      const renewedRequest = await waitForBridgeRequest(
+        bridge,
         (message) =>
           isApprovalInteraction(message) &&
           message.id !== pathRequest.id &&
@@ -2131,9 +2397,7 @@ describe("bridge", () => {
         signal: new AbortController().signal,
         toolUseID,
       });
-      await bridge.flushWork();
-
-      const approvalRequest = bridge.messages.find((message) =>
+      const approvalRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (approvalRequest?.id === undefined) {
@@ -2303,8 +2567,7 @@ describe("bridge", () => {
             toolUseID: "tool-plan",
           },
         );
-        await bridge.flushWork();
-        const approvalRequest = bridge.messages.find((message) =>
+        const approvalRequest = await waitForBridgeRequest(bridge, (message) =>
           isApprovalInteraction(message),
         );
         if (approvalRequest?.id === undefined) {
@@ -2508,8 +2771,7 @@ describe("bridge", () => {
           toolUseID: "tool-plan",
         },
       );
-      await bridge.flushWork();
-      const approvalRequest = bridge.messages.find((message) =>
+      const approvalRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (approvalRequest?.id === undefined) {
@@ -2604,8 +2866,7 @@ describe("bridge", () => {
           toolUseID: "tool-plan",
         },
       );
-      await bridge.flushWork();
-      const approvalRequest = bridge.messages.find((message) =>
+      const approvalRequest = await waitForBridgeRequest(bridge, (message) =>
         isApprovalInteraction(message),
       );
       if (approvalRequest?.id === undefined) {
@@ -3044,12 +3305,20 @@ describe("bridge", () => {
       "sonnet",
     ]);
     expect(queryMock).toHaveBeenCalledWith({
-      prompt: ".",
+      prompt: expect.anything(),
       options: expect.objectContaining({
-        maxTurns: 0,
         pathToClaudeCodeExecutable: executablePath,
         persistSession: false,
       }),
+    });
+    const probePrompt: AsyncIterable<SDKUserMessage> | undefined =
+      queryMock.mock.calls.at(-1)?.[0]?.prompt;
+    if (probePrompt === undefined) {
+      throw new Error("Expected the model probe prompt");
+    }
+    await expect(probePrompt[Symbol.asyncIterator]().next()).resolves.toEqual({
+      done: true,
+      value: undefined,
     });
     const probeOptions = queryMock.mock.calls.at(-1)?.[0]?.options;
     expect(probeOptions).not.toHaveProperty("allowDangerouslySkipPermissions");
@@ -4378,9 +4647,8 @@ describe("bridge", () => {
           toolUseID: askToolUseId,
         },
       );
-      await bridge.flushWork();
-
-      const permissionRequest = bridge.messages.find(
+      const permissionRequest = await waitForBridgeRequest(
+        bridge,
         (message) =>
           isApprovalInteraction(message) &&
           isRecord(interactionPayload(message)?.subject) &&

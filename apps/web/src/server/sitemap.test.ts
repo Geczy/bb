@@ -11,7 +11,7 @@ const post = parsePost(
 
 describe("sitemapXml", () => {
   it("lists public pages, posts, plugins, and unique authors with update dates", () => {
-    const xml = sitemapXml("https://getbb.app", [post], {
+    const xml = sitemapXml("https://getbb.app", [post], ["/compare/a-b"], {
       status: "available",
       manifest: MARKETPLACE_V2_FIXTURE,
       stats: null,
@@ -26,7 +26,11 @@ describe("sitemapXml", () => {
       "/changelog",
       "/plugin-guide",
       "/privacy",
+      "/brand",
+      "/compare/a-b",
       "/marketplace",
+      "/marketplace?category=thread-content",
+      "/marketplace?category=code-and-reviews",
       "/blog/an-agentic-ide",
       "/marketplace/prompt-library",
       "/marketplace/review-companion",
@@ -42,12 +46,13 @@ describe("sitemapXml", () => {
         /<loc>https:\/\/getbb\.app\/marketplace\/author\/get-bb<\/loc>/gu,
       ),
     ).toHaveLength(1);
+    expect(xml).not.toContain("category=future-tools");
     expect(xml).not.toContain("/dashboard");
     expect(xml).not.toContain("/marketplace/v2/");
   });
 
   it("omits unavailable marketplace pages", () => {
-    const xml = sitemapXml("https://getbb.app", [post], {
+    const xml = sitemapXml("https://getbb.app", [post], [], {
       status: "unavailable",
     });
 
