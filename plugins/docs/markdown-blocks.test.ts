@@ -58,12 +58,7 @@ function open(markdown: string) {
     ],
     content: "",
   });
-  const blocks = loadMarkdownBlocks(
-    editor,
-    markdown,
-    (source) => source,
-    false,
-  );
+  const blocks = loadMarkdownBlocks(editor, markdown, (source) => source, false);
   const save = () =>
     saveMarkdownBlocks(editor, blocks, (nodes) =>
       editor.storage.markdown.serializer.serialize(
@@ -140,10 +135,7 @@ describe("markdown blocks", () => {
             ),
           ),
         ),
-      DOCUMENT.replace(
-        "# Release notes\n\n",
-        "# Release notes\n\nInserted.\n\n",
-      ),
+      DOCUMENT.replace("# Release notes\n\n", "# Release notes\n\nInserted.\n\n"),
     ],
   ])("rewrites only %s", (_name, edit, expected) => {
     const { editor, save } = open(DOCUMENT);
