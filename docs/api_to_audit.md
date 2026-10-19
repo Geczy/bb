@@ -39,7 +39,7 @@ Docs: `frontend-hooks-and-ui.md`.
 Core path: every rule, including bb's built-in `ultracode` highlight, runs
 through the same evaluator in `prompt-decoration-extension.ts`, which caches
 match results per draft and repaints on selection, focus, and blur changes.
-The bundled Prompt Markdown plugin is the first consumer.
+The bundled Live Markdown plugin is the first consumer.
 
 Before stabilization, verify caret-line repaint cost on drafts over 100k
 characters and Safari selection and IME behavior with hidden ranges.

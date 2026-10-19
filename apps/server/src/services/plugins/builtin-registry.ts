@@ -190,8 +190,8 @@ export const BUILTIN_PLUGINS = [
     defaultEnabled: false,
   },
   {
-    name: "prompt-markdown",
-    pluginId: "bb--prompt-markdown",
+    name: "live-markdown",
+    pluginId: "bb--live-markdown",
     defaultEnabled: false,
   },
   {

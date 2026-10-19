@@ -16,7 +16,7 @@ const OFF_CARET_LINE_KINDS: readonly MarkdownRangeKind[] = ["marker", "bullet"];
 function effect(kind: MarkdownRangeKind, offCaretLineOnly: boolean) {
   return {
     id: kind,
-    className: `bb-prompt-md-${kind}`,
+    className: `bb-live-md-${kind}`,
     ...(offCaretLineOnly ? { experimental_offCaretLineOnly: true } : {}),
     match: (text: string) => markdownRanges(text)[kind],
   };
