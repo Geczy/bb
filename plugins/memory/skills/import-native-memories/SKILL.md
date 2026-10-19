@@ -105,6 +105,9 @@ Then give every source file exactly one outcome:
   workflows that clearly apply across repositories, even when Claude Code
   stored them under one project.
 - **Shape:** the rule first, then why and how to apply it, in plain words.
+- **Kind:** one of `fact`, `preference`, `decision`, `procedure`, `episode`,
+  or `reference`. Claude Code `user` and `feedback` usually become
+  `preference`, and step-by-step rules `procedure`.
 - **Reruns:** memories tagged `imported` and their reasons show which files an
   earlier import handled. Decide only files that are new or changed since then.
 
@@ -116,8 +119,9 @@ dumps for lasting rules.
 Write `import-plan.md` in this thread's workspace with one line per source
 file: `<host>:<path>` and its outcome (`new → <name>`, `merged into <name>`,
 `update <id>`, or `skipped: <reason>`), then the proposed memories with scope,
-project, name, summary, and details. Post the totals in the thread (new,
-updated, merged, skipped, hosts not checked) and ask the person to approve.
+project, name, kind, summary, and details. Post the totals as a message in the
+thread (new, updated, merged, skipped, hosts not checked), then ask the person
+to approve.
 Use a decision card when the thread supports them. Change the plan when they
 ask, and ask again.
 
@@ -135,7 +139,8 @@ bb memory update <id> --expected-version <version> --details "…" \
 ```
 
 - Tag every imported memory `imported` plus `claude-code` or `codex`, and use
-  importance 40 unless the person asks otherwise.
+  importance 40 unless the person asks otherwise. `bb memory update --tag`
+  replaces the whole tag list, so repeat the memory's existing tags.
 - Keep the reason at most 500 characters; list as many source files as fit.
 - Check each command's JSON result. If a write fails, fix it and retry, or mark
   that file skipped in the plan with the error.
