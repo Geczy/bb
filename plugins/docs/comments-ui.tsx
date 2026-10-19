@@ -24,7 +24,7 @@ import {
   commentHighlightKey,
   commentRanges,
   visibleEditor,
-  type CommentRange,
+  threadRanges,
 } from "./comment-editor.js";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import ArrowUpRight01Icon from "@hugeicons/core-free-icons/ArrowUpRight01Icon";
@@ -636,12 +636,14 @@ export function CommentsSurface({
   editor,
   sha256,
   flush,
+  proposalBase,
   children,
 }: {
   target: CommentTarget;
   editor: Editor | null;
   sha256: string;
   flush(): Promise<void>;
+  proposalBase: string | null;
   children: ReactNode;
 }) {
   const rpc = useRpc<typeof docsRpcContract>();
@@ -687,6 +689,9 @@ export function CommentsSurface({
   activeRef.current = active;
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  const proposalPending = proposalBase !== null;
+  const proposalPendingRef = useRef(proposalPending);
+  proposalPendingRef.current = proposalPending;
   const refresh = useCallback(async () => {
     const version = ++request.current;
     try {
@@ -793,7 +798,7 @@ export function CommentsSurface({
     if (!editor) return;
     const onSelection = () => {
       const { from, to, empty } = editor.state.selection;
-      if (empty || !editor.isFocused) {
+      if (empty || !editor.isFocused || proposalPendingRef.current) {
         setSelection(null);
         return;
       }
@@ -868,27 +873,14 @@ export function CommentsSurface({
   }, [editor, activate, startDraft]);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    const visible = visibleEditor(editor.state.doc);
-    const ranges: CommentRange[] = [];
-    for (const thread of data.threads) {
-      if (
-        thread.resolvedAt ||
-        thread.anchor.start === null ||
-        thread.anchor.end === null
-      )
-        continue;
-      const from = visible.positions[thread.anchor.start];
-      const to = visible.positions[thread.anchor.end - 1];
-      if (from !== undefined && to !== undefined)
-        ranges.push({ id: thread.id, from, to: to + 1 });
-    }
+    const ranges = threadRanges(editor.state.doc, data.threads, proposalBase);
     editor.view.dispatch(
       editor.state.tr.setMeta(commentHighlightKey, {
         ranges,
         active: activeRef.current,
       }),
     );
-  }, [editor, data]);
+  }, [editor, data, proposalBase]);
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
     const decorations = commentHighlightKey.getState(editor.state);
@@ -903,7 +895,7 @@ export function CommentsSurface({
   useEffect(() => {
     if (savedSha.current === sha256) return;
     savedSha.current = sha256;
-    if (!editor || !data.threads.length || !sha256) {
+    if (!editor || !data.threads.length || !sha256 || proposalPending) {
       void refresh();
       return;
     }
@@ -937,7 +929,7 @@ export function CommentsSurface({
         .then(setData)
         .catch(() => refresh());
     else void refresh();
-  }, [sha256, editor, data.threads.length, rpc, refresh]);
+  }, [sha256, editor, data.threads.length, rpc, refresh, proposalPending]);
   const visibleThreads = data.threads
     .filter((thread) => resolved || !thread.resolvedAt)
     .sort((a, b) => (a.anchor.start ?? -1) - (b.anchor.start ?? -1));
@@ -1100,6 +1092,12 @@ export function CommentsSurface({
           <div role="alert" className="px-3 py-2 text-xs text-destructive">
             {error || data.notice}{" "}
             <button onClick={() => void refresh()}>Retry</button>
+          </div>
+        )}
+        {proposalPending && data.threads.length > 0 && (
+          <div className="px-3 py-2 text-xs text-muted-foreground">
+            Comments stay on the saved text. Accept or reject the proposal to
+            add or reattach comments.
           </div>
         )}
         {reattach && (

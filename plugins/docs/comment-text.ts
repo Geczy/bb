@@ -35,7 +35,7 @@ export function visibleMarkdown(content: string): VisibleDocument {
         text: token.content.replace(/\n$/, ""),
         line: line + (token.type === "fence" ? 1 : 0),
       });
-    } else if (token.type === "html_block")
+    } else if (token.type === "html_block" || token.type === "hr")
       blocks.push({ text: "\ufffc", line });
   }
   let text = "";

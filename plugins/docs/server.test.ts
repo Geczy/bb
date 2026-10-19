@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createFakePluginHost,
   makeHostResponse,
+  makeThreadResponse,
 } from "@get-bb/plugin-sdk/testing";
 import simpleNotes from "./server";
 
@@ -249,6 +250,10 @@ async function loadVirtualSyncVault(initial: Record<string, VirtualFile>) {
         },
       },
       hosts: { list: async () => [] },
+      threads: {
+        get: async ({ threadId }) =>
+          makeThreadResponse({ id: threadId, title: "Q4 planner" }),
+      },
     },
   });
   await simpleNotes(host.bb);
@@ -1882,6 +1887,133 @@ describe("Docs proposals", () => {
 });
 
 describe("Docs comment lifecycle", () => {
+  it("never attaches stranded comments to a different document", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": {
+        content: "# Plan\n\nShip tomorrow.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+      "/vault/other.md": {
+        content: "# Other\n\nShip tomorrow too.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+    });
+    const externalRename = (from: string, to: string) => {
+      host.files.set(to, host.files.get(from)!);
+      host.files.delete(from);
+    };
+    try {
+      await host.harness.behavior.callRpc("addComment", {
+        path: "plan.md",
+        quote: "tomorrow",
+        body: "Confirm the date",
+      });
+      externalRename("/vault/plan.md", "/vault/renamed.md");
+      await expect(
+        host.harness.behavior.callRpc("movePath", {
+          from: "other.md",
+          to: "plan.md",
+        }),
+      ).rejects.toThrow("stranded comments");
+      expect(host.files.has("/vault/other.md")).toBe(true);
+      expect(
+        await host.harness.behavior.callRpc("listComments", {
+          path: "other.md",
+        }),
+      ).toMatchObject({ threads: [] });
+
+      await host.harness.behavior.callRpc("movePath", {
+        from: "renamed.md",
+        to: "plan.md",
+      });
+      expect(
+        await host.harness.behavior.callRpc("listComments", {
+          path: "plan.md",
+        }),
+      ).toMatchObject({
+        threads: [{ messages: [{ body: "Confirm the date" }] }],
+      });
+
+      externalRename("/vault/plan.md", "/vault/moved.md");
+      expect(
+        await host.harness.behavior.callRpc("listComments", {
+          path: "moved.md",
+        }),
+      ).toMatchObject({
+        threads: [
+          {
+            anchor: { state: "anchored" },
+            messages: [{ body: "Confirm the date" }],
+          },
+        ],
+      });
+      expect(host.files.has("/vault/.bb-comments/plan.md.json")).toBe(false);
+      expect(host.files.has("/vault/.bb-comments/moved.md.json")).toBe(true);
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
+  it("attributes CLI comments to the invoking thread and exposes no HTTP writes", async () => {
+    const host = await loadVirtualSyncVault({
+      "/vault/plan.md": {
+        content: "# Plan\n\nShip tomorrow.",
+        contentEncoding: "utf8",
+        modifiedAtMs: 1,
+      },
+    });
+    try {
+      const added = await host.harness.behavior.runCli(
+        [
+          "comments",
+          "add",
+          "plan.md",
+          "--quote",
+          "tomorrow",
+          "--body",
+          "Confirm the date",
+          "--json",
+        ],
+        { threadId: "thr_agent" },
+      );
+      expect(added.exitCode).toBe(0);
+      const thread = JSON.parse(added.stdout).threads[0];
+      expect(thread.messages[0].author).toEqual({
+        kind: "agent",
+        threadId: "thr_agent",
+        name: "Q4 planner",
+      });
+      await expect(
+        host.harness.behavior.callRpc("deleteCommentMessage", {
+          path: "plan.md",
+          commentId: thread.id,
+          messageId: thread.messages[0].id,
+        }),
+      ).rejects.toThrow("author");
+      for (const route of [
+        "/comments/add",
+        "/comments/reply",
+        "/comments/resolve",
+        "/comments/edit",
+        "/comments/delete",
+      ]) {
+        await expect(
+          host.harness.behavior.fetchHttp("POST", route, {
+            body: JSON.stringify({ path: "plan.md", body: "Spoofed" }),
+            headers: { "content-type": "application/json" },
+          }),
+        ).rejects.toThrow("no http route");
+      }
+      expect(
+        host.files.get("/vault/.bb-comments/plan.md.json")?.content,
+      ).not.toContain("Spoofed");
+    } finally {
+      await host.harness.lifecycle.dispose();
+    }
+  });
+
   it("moves comments with H1 renames and removes them with their document", async () => {
     const host = await loadVirtualSyncVault({
       "/vault/plan.md": {

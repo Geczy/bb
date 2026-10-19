@@ -2,6 +2,8 @@ import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { Node } from "@tiptap/pm/model";
+import { makeAnchor, resolveAnchor, type ListedComment } from "./comments.js";
+import { visibleMarkdown } from "./comment-text.js";
 
 export type CommentRange = { id: string; from: number; to: number };
 export const commentHighlightKey = new PluginKey<DecorationSet>(
@@ -32,6 +34,32 @@ export function visibleEditor(doc: Node): {
     return true;
   });
   return { text, positions };
+}
+export function threadRanges(
+  doc: Node,
+  threads: ListedComment[],
+  proposalBase: string | null,
+): CommentRange[] {
+  const visible = visibleEditor(doc);
+  const saved =
+    proposalBase === null ? null : visibleMarkdown(proposalBase).text;
+  const ranges: CommentRange[] = [];
+  for (const thread of threads) {
+    let { start, end } = thread.anchor;
+    if (thread.resolvedAt || start === null || end === null) continue;
+    if (saved !== null)
+      ({ start, end } = resolveAnchor(
+        { text: visible.text, lines: [] },
+        "",
+        makeAnchor(saved, start, end, "saved"),
+      ));
+    if (start === null || end === null) continue;
+    const from = visible.positions[start];
+    const to = visible.positions[end - 1];
+    if (from !== undefined && to !== undefined)
+      ranges.push({ id: thread.id, from, to: to + 1 });
+  }
+  return ranges;
 }
 export function commentRanges(
   doc: Node,

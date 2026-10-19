@@ -2,6 +2,7 @@ import {
   commentsContract,
   commentSourceSchema,
   commentSidecar,
+  sidecarMatchesDocument,
   createCommentsService,
   type CommentTarget,
 } from "./comments-service.js";
@@ -1221,7 +1222,15 @@ export default async function plugin(
       const oldSidecar = commentSidecar(from);
       const newSidecar = commentSidecar(to);
       const sidecar = await readExistingFile(vault, oldSidecar);
-      if (sidecar && (await readExistingFile(vault, newSidecar)))
+      const stranded = await readExistingFile(vault, newSidecar);
+      const document =
+        stranded && !sidecar && /\.md$/i.test(from)
+          ? await readExistingFile(vault, from)
+          : null;
+      if (
+        stranded &&
+        !(document && sidecarMatchesDocument(stranded.content, document.sha256))
+      )
         throw new Error(
           "Destination has stranded comments; restore or move that document before replacing it.",
         );
@@ -1753,10 +1762,10 @@ export default async function plugin(
       }
       return { stranded, truncated: listing.truncated };
     },
-    listComments: (input) => comments.list(input),
-    addComment: (input) => comments.add(input),
-    replyComment: (input) => comments.reply(input),
-    setCommentStatus: (input) => comments.status(input),
+    listComments: (input) => comments.listAdopting(input),
+    addComment: (input) => comments.add(input, comments.user),
+    replyComment: (input) => comments.reply(input, comments.user),
+    setCommentStatus: (input) => comments.status(input, comments.user),
     editCommentMessage: (input) => comments.edit(input),
     deleteCommentMessage: (input) => comments.delete(input),
     reattachComment: (input) => comments.reattach(input),
@@ -2178,49 +2187,9 @@ export default async function plugin(
     handlers.listCommentFolder,
   );
   routeRpc(
-    "/comments/start-agent",
-    docsRpcContract.startCommentAgent.input,
-    handlers.startCommentAgent,
-  );
-  routeRpc(
     "/comments/list",
     docsRpcContract.listComments.input,
     handlers.listComments,
-  );
-  routeRpc(
-    "/comments/add",
-    docsRpcContract.addComment.input,
-    handlers.addComment,
-  );
-  routeRpc(
-    "/comments/reply",
-    docsRpcContract.replyComment.input,
-    handlers.replyComment,
-  );
-  routeRpc(
-    "/comments/resolve",
-    docsRpcContract.setCommentStatus.input,
-    handlers.setCommentStatus,
-  );
-  routeRpc(
-    "/comments/edit",
-    docsRpcContract.editCommentMessage.input,
-    handlers.editCommentMessage,
-  );
-  routeRpc(
-    "/comments/delete",
-    docsRpcContract.deleteCommentMessage.input,
-    handlers.deleteCommentMessage,
-  );
-  routeRpc(
-    "/comments/reattach",
-    docsRpcContract.reattachComment.input,
-    handlers.reattachComment,
-  );
-  routeRpc(
-    "/comments/refresh",
-    docsRpcContract.refreshCommentAnchors.input,
-    handlers.refreshCommentAnchors,
   );
 
   routeRpc("/list", docsRpcContract.listNotes.input, handlers.listNotes);
@@ -3196,7 +3165,7 @@ export default async function plugin(
                 };
               }
               return commentOutput(
-                await comments.list({
+                await comments.listAdopting({
                   ...commentTarget(input),
                   status: z
                     .enum(["open", "resolved", "all"])

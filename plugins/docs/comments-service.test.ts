@@ -68,8 +68,14 @@ describe("comment sidecar mutations", () => {
     const { service, files } = setup();
     const original = files.get("/vault/plan.md");
     await Promise.all([
-      service.add({ ...target, quote: "November 12", body: "One" }),
-      service.add({ ...target, quote: "November 12", body: "Two" }),
+      service.add(
+        { ...target, quote: "November 12", body: "One" },
+        service.user,
+      ),
+      service.add(
+        { ...target, quote: "November 12", body: "Two" },
+        service.user,
+      ),
     ]);
     expect(
       (await service.list(target)).threads
@@ -80,21 +86,27 @@ describe("comment sidecar mutations", () => {
   });
   it("does not resurrect a deleted root when a concurrent reply retries", async () => {
     const { service, files, race } = setup();
-    const added = await service.add({
-      ...target,
-      quote: "November 12",
-      body: "Question",
-    });
+    const added = await service.add(
+      {
+        ...target,
+        quote: "November 12",
+        body: "Question",
+      },
+      service.user,
+    );
     race(() => {
       files.set(sidecar, JSON.stringify({ version: 1, threads: [] }));
       race(null);
     });
     await expect(
-      service.reply({
-        ...target,
-        commentId: added.threads[0].id,
-        body: "Late answer",
-      }),
+      service.reply(
+        {
+          ...target,
+          commentId: added.threads[0].id,
+          body: "Late answer",
+        },
+        service.user,
+      ),
     ).rejects.toThrow("deleted");
     expect((await service.list(target)).threads).toHaveLength(0);
   });
@@ -106,7 +118,10 @@ describe("comment sidecar mutations", () => {
       notice: expect.stringContaining("malformed"),
     });
     await expect(
-      service.add({ ...target, quote: "November 12", body: "Question" }),
+      service.add(
+        { ...target, quote: "November 12", body: "Question" },
+        service.user,
+      ),
     ).rejects.toThrow("malformed");
     expect(files.get(sidecar)).toBe("broken JSON");
   });
@@ -121,17 +136,23 @@ describe("comment sidecar mutations", () => {
       );
     });
     await expect(
-      service.add({ ...target, quote: "November 12", body: "Question" }),
+      service.add(
+        { ...target, quote: "November 12", body: "Question" },
+        service.user,
+      ),
     ).rejects.toMatchObject({ code: "conflict", exitCode: 3 });
     expect(writes).toBe(4);
   });
   it("keeps agent attribution and prevents user editing or deleting agent replies", async () => {
     const { service, files } = setup();
-    const added = await service.add({
-      ...target,
-      quote: "November 12",
-      body: "Question",
-    });
+    const added = await service.add(
+      {
+        ...target,
+        quote: "November 12",
+        body: "Question",
+      },
+      service.user,
+    );
     const commentId = added.threads[0].id;
     const replied = await service.reply(
       { ...target, commentId, body: "Answer" },
@@ -151,18 +172,27 @@ describe("comment sidecar mutations", () => {
   });
   it("preserves orphan discussions through resolve, reopen and reattach", async () => {
     const { service, files } = setup();
-    const added = await service.add({
-      ...target,
-      quote: "November 12",
-      body: "Question",
-    });
+    const added = await service.add(
+      {
+        ...target,
+        quote: "November 12",
+        body: "Question",
+      },
+      service.user,
+    );
     const commentId = added.threads[0].id;
     files.set("/vault/plan.md", "# Replacement\n\nNew date.\n");
     expect((await service.list(target)).threads[0].anchor.state).toBe(
       "orphaned",
     );
-    await service.status({ ...target, commentId, resolved: true });
-    await service.status({ ...target, commentId, resolved: false });
+    await service.status(
+      { ...target, commentId, resolved: true },
+      service.user,
+    );
+    await service.status(
+      { ...target, commentId, resolved: false },
+      service.user,
+    );
     const result = await service.reattach({
       ...target,
       commentId,

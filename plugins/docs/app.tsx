@@ -1115,6 +1115,7 @@ function InlineDocument({
                   editor={editor}
                   sha256={state.sha256}
                   flush={session.flush}
+                  proposalBase={pending ? state.content : null}
                 >
                   <TiptapEditor
                     onEditor={setEditor}
@@ -1385,6 +1386,7 @@ function SavedDocumentEditor({
         editor={editor}
         sha256={state.sha256}
         flush={session.flush}
+        proposalBase={null}
       >
         <TiptapEditor
           onEditor={setEditor}

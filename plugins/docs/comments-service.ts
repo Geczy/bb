@@ -106,16 +106,35 @@ export type CommentFileTarget = {
   rootPath: string;
   hostId: string | null;
 };
+function pathApi(file: string): typeof path.posix | typeof path.win32 {
+  return path.win32.isAbsolute(file) && !path.posix.isAbsolute(file)
+    ? path.win32
+    : path.posix;
+}
 export function commentSidecar(file: string): string {
-  const api =
-    path.win32.isAbsolute(file) && !path.posix.isAbsolute(file)
-      ? path.win32
-      : path.posix;
+  const api = pathApi(file);
   return api.join(
     api.dirname(file),
     ".bb-comments",
     `${api.basename(file)}.json`,
   );
+}
+export function sidecarMatchesDocument(
+  sidecar: string,
+  documentSha256: string,
+): boolean {
+  try {
+    return commentsFileSchema
+      .parse(JSON.parse(sidecar))
+      .threads.some(
+        (thread) => thread.anchor.documentSha256 === documentSha256,
+      );
+  } catch {
+    return false;
+  }
+}
+function isMissing(error: unknown): boolean {
+  return /\bENOENT\b|path does not exist|not found/i.test(String(error));
 }
 function fail(code: string, message: string): never {
   throw new PluginCliError(message, {
@@ -145,7 +164,7 @@ export function createCommentsService(
         path: commentSidecar(target.path),
       });
     } catch (error) {
-      if (/\bENOENT\b|path does not exist|not found/i.test(String(error)))
+      if (isMissing(error))
         return {
           data: { version: 1, threads: [] } satisfies CommentsFile,
           sha256: null,
@@ -194,6 +213,72 @@ export function createCommentsService(
             input.status === thread.status,
         ),
     };
+  }
+  async function adoptStranded(input: CommentTarget): Promise<void> {
+    const target = await resolve(input);
+    const api = pathApi(target.path);
+    const sidecarPath = commentSidecar(target.path);
+    const directory = api.dirname(sidecarPath);
+    let names: string[];
+    try {
+      const listing = await bb.sdk.files.listPaths({
+        ...(target.hostId ? { hostId: target.hostId } : {}),
+        path: directory,
+        includeHidden: true,
+        includeFiles: true,
+        includeDirectories: false,
+        limit: 500,
+      });
+      names = listing.paths
+        .map((item) => item.path)
+        .filter(
+          (name) =>
+            /\.md\.json$/i.test(name) &&
+            !/[\\/]/.test(name) &&
+            name !== api.basename(sidecarPath),
+        );
+    } catch (error) {
+      if (isMissing(error)) return;
+      throw error;
+    }
+    if (!names.length) return;
+    await serialize(input, async () => {
+      const [saved, file] = await Promise.all([
+        read(target),
+        bb.sdk.files.read(fileArgs(target)),
+      ]);
+      if (saved.sha256 !== null) return;
+      const matches: string[] = [];
+      for (const name of names) {
+        const candidate = api.join(directory, name);
+        const sidecar = await bb.sdk.files.read({
+          ...fileArgs(target),
+          path: candidate,
+        });
+        if (!sidecarMatchesDocument(sidecar.content, file.sha256)) continue;
+        try {
+          await bb.sdk.files.read({
+            ...fileArgs(target),
+            path: api.join(api.dirname(target.path), name.slice(0, -5)),
+          });
+        } catch (error) {
+          if (!isMissing(error)) throw error;
+          matches.push(candidate);
+        }
+      }
+      if (matches.length !== 1) return;
+      await bb.sdk.files.move({
+        ...(target.hostId ? { hostId: target.hostId } : {}),
+        rootPath: target.rootPath,
+        sourcePath: matches[0]!,
+        destinationPath: sidecarPath,
+      });
+      bb.realtime.publish("comments-changed", {
+        vaultId: input.vaultId ?? null,
+        path: input.path,
+        source: input.source ?? null,
+      });
+    });
   }
   async function mutate(
     input: CommentTarget,
@@ -340,11 +425,17 @@ export function createCommentsService(
   }
   return {
     list,
+    async listAdopting(
+      input: CommentTarget & { status?: "open" | "resolved" | "all" },
+    ) {
+      await adoptStranded(input);
+      return list(input);
+    },
     author,
     user,
     async add(
       input: z.infer<typeof commentsContract.addComment.input>,
-      by: CommentAuthor = user,
+      by: CommentAuthor,
     ) {
       const id = `c_${randomUUID()}`;
       const message = {
@@ -376,7 +467,7 @@ export function createCommentsService(
     },
     async reply(
       input: z.infer<typeof commentsContract.replyComment.input>,
-      by: CommentAuthor = user,
+      by: CommentAuthor,
     ) {
       const message = {
         id: `m_${randomUUID()}`,
@@ -404,7 +495,7 @@ export function createCommentsService(
     },
     status: (
       input: z.infer<typeof commentsContract.setCommentStatus.input>,
-      by: CommentAuthor = user,
+      by: CommentAuthor,
     ) =>
       mutate(input, (data) => {
         const item = thread(data, input.commentId);
