@@ -98,11 +98,12 @@ describe("LazyBrowserTabDeck", () => {
     );
   }
 
-  it("reports a failed download only while a browser tab is showing", async () => {
+  it("reports a failed load only while a browser tab is showing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const view = render(renderDeck(browserTab.id));
 
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "Could not load.",
+      "Something went wrong here.",
     );
 
     view.rerender(renderDeck(null));
