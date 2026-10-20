@@ -4,7 +4,7 @@ description: Ask an agent to install a plugin, then manage it in Settings. Turn 
 section: extend-bb
 order: 20
 status: published
-updated: "2026-10-21"
+updated: "2026-10-20"
 relatedGuides: []
 relatedDocs:
   - plugins

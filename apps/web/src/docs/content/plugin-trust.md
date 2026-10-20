@@ -4,7 +4,7 @@ description: Plugins are full-access code, like npm packages. Here’s how to ch
 section: extend-bb
 order: 30
 status: published
-updated: "2026-10-21"
+updated: "2026-10-20"
 relatedGuides: []
 relatedDocs:
   - install-plugins

@@ -4,7 +4,7 @@ description: Ask an agent for the tool you’re missing, and it builds it as a p
 section: extend-bb
 order: 40
 status: published
-updated: "2026-10-21"
+updated: "2026-10-20"
 relatedGuides: []
 relatedDocs:
   - plugins

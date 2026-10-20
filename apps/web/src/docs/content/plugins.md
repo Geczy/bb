@@ -4,7 +4,7 @@ description: Plugins add panels, tools, looks and agent skills to bb. Most of bb
 section: extend-bb
 order: 10
 status: published
-updated: "2026-10-21"
+updated: "2026-10-20"
 relatedGuides:
   - agent-browser
 relatedDocs:
