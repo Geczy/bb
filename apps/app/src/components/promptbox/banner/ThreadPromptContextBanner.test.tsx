@@ -125,6 +125,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={{ archivedAt: 1_731_456_000_000 }}
         environmentGoneSection={null}
@@ -153,6 +155,8 @@ describe("ThreadPromptContextBanner", () => {
       render(
         <ThreadPromptContextBanner
           gitSection={null}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={{ status }}
@@ -176,6 +180,8 @@ describe("ThreadPromptContextBanner", () => {
     render(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={{ status: "cleanup-failed" }}
@@ -218,6 +224,8 @@ describe("ThreadPromptContextBanner", () => {
         <MemoryRouter>
           <ThreadPromptContextBanner
             gitSection={null}
+            rowHeightCacheKey={null}
+            rowPending={false}
             gitSectionPending={false}
             archivedSection={archivedSection}
             environmentGoneSection={environmentGoneSection}
@@ -245,6 +253,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={{
           archivedAt: 1_731_456_000_000,
@@ -269,6 +279,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={{ status: "destroyed", onRestore: noop }}
@@ -288,6 +300,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={{
@@ -312,6 +326,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
@@ -333,6 +349,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
@@ -366,6 +384,8 @@ describe("ThreadPromptContextBanner", () => {
       const markup = renderToStaticMarkup(
         <ThreadPromptContextBanner
           gitSection={null}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={null}
@@ -416,6 +436,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
@@ -441,6 +463,8 @@ describe("ThreadPromptContextBanner", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={null}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={null}
@@ -470,6 +494,8 @@ describe("ThreadPromptContextBanner", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={null}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={null}
@@ -502,6 +528,8 @@ describe("ThreadPromptContextBanner", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={makeGitSection("uncommitted")}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={null}
@@ -540,6 +568,8 @@ describe("ThreadPromptContextBanner", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={null}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={null}
@@ -593,6 +623,8 @@ describe("ThreadPromptContextBanner", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={gitSection}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={gitSectionPending}
           archivedSection={null}
           environmentGoneSection={null}
@@ -650,6 +682,8 @@ describe("ThreadPromptContextBanner", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={makeGitSection("uncommitted")}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={gitSectionPending}
           archivedSection={archived ? { archivedAt: 1_731_456_000_000 } : null}
           environmentGoneSection={
@@ -701,6 +735,8 @@ describe("ThreadPromptContextBanner", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={makeGitSection("uncommitted")}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={null}
@@ -732,6 +768,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={null}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
@@ -765,6 +803,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={makeGitSection("uncommitted")}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
@@ -787,6 +827,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={makeGitSection("uncommitted")}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
@@ -813,6 +855,8 @@ describe("ThreadPromptContextBanner", () => {
     const markup = renderToStaticMarkup(
       <ThreadPromptContextBanner
         gitSection={makeGitSection("committed")}
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
@@ -860,6 +904,8 @@ describe("ThreadPromptContextBanner", () => {
         <MemoryRouter>
           <ThreadPromptContextBanner
             gitSection={makeGitSection("committed")}
+            rowHeightCacheKey={null}
+            rowPending={false}
             gitSectionPending={false}
             archivedSection={null}
             environmentGoneSection={null}
@@ -890,6 +936,8 @@ describe("ThreadPromptContextBanner git section body", () => {
       <MemoryRouter>
         <ThreadPromptContextBanner
           gitSection={makeGitSection("uncommitted")}
+          rowHeightCacheKey={null}
+          rowPending={false}
           gitSectionPending={false}
           archivedSection={null}
           environmentGoneSection={null}

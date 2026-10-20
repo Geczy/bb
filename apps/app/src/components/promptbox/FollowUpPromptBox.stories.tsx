@@ -439,6 +439,8 @@ const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
       },
       onPromptBannerFileClick: noop,
     }}
+    rowHeightCacheKey={null}
+    rowPending={false}
     gitSectionPending={false}
     parentThreadSection={null}
     childThreadsSection={null}
@@ -453,6 +455,8 @@ const archivedContextBannerElement: ReactNode = (
     archivedSection={{ archivedAt: 1_731_456_000_000 }}
     environmentGoneSection={null}
     gitSection={null}
+    rowHeightCacheKey={null}
+    rowPending={false}
     gitSectionPending={false}
     parentThreadSection={null}
     childThreadsSection={null}
@@ -467,6 +471,8 @@ const environmentGoneContextBannerElement: ReactNode = (
     archivedSection={null}
     environmentGoneSection={{ status: "destroyed" }}
     gitSection={null}
+    rowHeightCacheKey={null}
+    rowPending={false}
     gitSectionPending={false}
     parentThreadSection={null}
     childThreadsSection={null}

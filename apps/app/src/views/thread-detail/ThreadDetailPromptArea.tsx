@@ -222,6 +222,7 @@ interface ThreadDetailPromptAreaProps {
   workspaceChangedFilesSection: WorkspaceChangedFilesSection | null;
   showGitChanges: boolean;
   workspaceStatusPending: boolean;
+  contextRowPending: boolean;
   contextBannerMergeBase: ContextBannerMergeBaseConfig | null;
   pendingTodos: ThreadTimelinePendingTodos | null;
   activePromptMode: ThreadTimelineActivePromptMode | null;
@@ -437,6 +438,7 @@ export function ThreadDetailPromptArea({
   workspaceChangedFilesSection,
   showGitChanges,
   workspaceStatusPending,
+  contextRowPending,
   contextBannerMergeBase,
   pendingTodos,
   activePromptMode,
@@ -2214,6 +2216,8 @@ export function ThreadDetailPromptArea({
         ) : null}
         <ThreadPromptContextBanner
           key={contextBannerKey}
+          rowHeightCacheKey={thread.id}
+          rowPending={contextRowPending}
           archivedSection={
             thread.archivedAt !== null
               ? {
@@ -2342,6 +2346,7 @@ export function ThreadDetailPromptArea({
       workspaceChangedFilesSection,
       showGitChanges,
       workspaceStatusPending,
+      contextRowPending,
     ],
   );
 
@@ -2366,6 +2371,8 @@ export function ThreadDetailPromptArea({
       <>
         <ThreadPromptContextBanner
           key={contextBannerKey}
+          rowHeightCacheKey={null}
+          rowPending={false}
           archivedSection={null}
           environmentGoneSection={null}
           parentThreadSection={null}

@@ -2431,6 +2431,16 @@ function ThreadDetailViewInternal(
       workspaceStatusPending={
         canUseGitUi && (environmentQuery.isLoading || workStatusQuery.isLoading)
       }
+      contextRowPending={
+        (Boolean(thread.environmentId) &&
+          environment === undefined &&
+          !environmentQuery.isError) ||
+        (canUseGitUi &&
+          showGitChanges &&
+          ((workStatusQuery.data === undefined && !workStatusQuery.isError) ||
+            (pullRequestQuery.data === undefined &&
+              !pullRequestQuery.isError)))
+      }
       contextBannerMergeBase={
         canUseGitUi && showMergeBase && promptBannerMergeBaseBranch
           ? {

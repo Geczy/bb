@@ -203,6 +203,7 @@ function buildPromptAreaElement({
         thread={thread}
         workspaceChangedFilesSection={null}
         workspaceStatusPending={false}
+        contextRowPending={false}
       />
     </QueryClientProvider>
   );

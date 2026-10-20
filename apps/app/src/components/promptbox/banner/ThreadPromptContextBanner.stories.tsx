@@ -765,6 +765,8 @@ function ContextBannerPreview({
               }
             : null
         }
+        rowHeightCacheKey={null}
+        rowPending={false}
         gitSectionPending={false}
         archivedSection={archived}
         environmentGoneSection={environmentGone}

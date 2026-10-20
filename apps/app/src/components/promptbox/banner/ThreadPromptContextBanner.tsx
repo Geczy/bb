@@ -56,6 +56,10 @@ import {
 import { cn } from "@bb/shared-ui/lib/utils";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
 import {
+  readPromptContextRowHeight,
+  writePromptContextRowHeight,
+} from "@/lib/prompt-context-row-height-cache";
+import {
   describePullRequestStatus,
   getPullRequestNextStep,
   isPullRequestAutoMergeOn,
@@ -177,6 +181,8 @@ export type ThreadPromptContextBannerExpandedSection =
   | "status";
 
 interface ThreadPromptContextBannerProps {
+  rowHeightCacheKey: string | null;
+  rowPending: boolean;
   gitSection: ThreadPromptGitSection | null;
   gitSectionPending: boolean;
   archivedSection: ThreadPromptArchivedSection | null;
@@ -1300,7 +1306,54 @@ function ReadOnlyContextBanner({
   );
 }
 
+function useRememberedContextRowHeight({
+  cacheKey,
+  settled,
+}: {
+  cacheKey: string | null;
+  settled: boolean;
+}) {
+  const [rememberedHeight] = useState(() =>
+    cacheKey === null ? 0 : readPromptContextRowHeight(cacheKey),
+  );
+  const [rowElement, setRowElement] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (cacheKey === null || !settled) return;
+    if (rowElement === null) {
+      writePromptContextRowHeight(cacheKey, 0);
+      return;
+    }
+    const record = () =>
+      writePromptContextRowHeight(
+        cacheKey,
+        rowElement.getBoundingClientRect().height,
+      );
+    record();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(record);
+    observer.observe(rowElement);
+    return () => observer.disconnect();
+  }, [cacheKey, rowElement, settled]);
+  return { rememberedHeight, rowRef: setRowElement };
+}
+
+function ContextRowPlaceholder({ height }: { height: number }) {
+  return (
+    <PromptStackCard className="overflow-hidden" style={{ height }}>
+      <div
+        aria-hidden="true"
+        data-prompt-context-row-placeholder=""
+        className={cn("flex h-full items-center", PROMPT_STACK_INLAY_INSET_CLASS)}
+      >
+        <div className="ml-2 h-3 w-40 max-w-[60%] animate-pulse rounded bg-surface-selected" />
+      </div>
+    </PromptStackCard>
+  );
+}
+
 export function ThreadPromptContextBanner({
+  rowHeightCacheKey,
+  rowPending,
   gitSection,
   gitSectionPending,
   archivedSection,
@@ -1318,6 +1371,17 @@ export function ThreadPromptContextBanner({
     expandedSection === "parentThread",
     () => onToggleSection("parentThread"),
   );
+  const contextRow = useRememberedContextRowHeight({
+    cacheKey: rowHeightCacheKey,
+    settled:
+      !rowPending &&
+      expandedSection !== "git" &&
+      expandedSection !== "parentThread",
+  });
+  const pendingRow =
+    rowPending && contextRow.rememberedHeight > 0 ? (
+      <ContextRowPlaceholder height={contextRow.rememberedHeight} />
+    ) : null;
   const childThreadItems =
     archivedSection || environmentGoneSection
       ? NO_CHILD_THREAD_ITEMS
@@ -1377,14 +1441,11 @@ export function ThreadPromptContextBanner({
       />
     );
   }
-  if (gitSectionPending) {
-    return withActiveChildThreads(null);
-  }
-  const showGit = gitSection !== null;
+  const showGit = gitSection !== null && !gitSectionPending;
   const showParentThread = parentThreadSection !== null;
   const showPullRequest = pullRequestSection !== null;
   if (!showGit && !showParentThread && !showChildThreads && !showPullRequest) {
-    return null;
+    return pendingRow;
   }
   const visibleSegmentCount =
     Number(showParentThread) + Number(showPullRequest) + Number(showGit);
@@ -1479,7 +1540,13 @@ export function ThreadPromptContextBanner({
       <PromptStackCard
         ariaLabel="Thread context before sending"
         className="overflow-hidden"
-        style={{ minHeight: PROMPT_CONTEXT_BANNER_COLLAPSED_HEIGHT }}
+        rootRef={contextRow.rowRef}
+        style={{
+          minHeight: Math.max(
+            PROMPT_CONTEXT_BANNER_COLLAPSED_HEIGHT,
+            rowPending ? contextRow.rememberedHeight : 0,
+          ),
+        }}
       >
         <div
           className={cn(
@@ -1564,5 +1631,5 @@ export function ThreadPromptContextBanner({
       </PromptStackCard>
     ) : null;
 
-  return withActiveChildThreads(compactContextBanner);
+  return withActiveChildThreads(compactContextBanner ?? pendingRow);
 }

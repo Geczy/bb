@@ -122,6 +122,8 @@ function Harness({
   return (
     <ThreadPromptContextBanner
       gitSection={null}
+      rowHeightCacheKey={null}
+      rowPending={false}
       gitSectionPending={false}
       archivedSection={null}
       environmentGoneSection={null}
