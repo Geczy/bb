@@ -23,6 +23,10 @@ export const promptAreaMocks = {
   createQueuedMessageMutateAsync: vi.fn(),
   createThreadMutateAsync: vi.fn(),
   defaultExecutionOptions: null as ResolvedThreadExecutionOptions | null,
+  defaultExecutionOptionsStatus: "resolved" as
+    | "resolved"
+    | "placeholder"
+    | "pending",
   executionInputSources: {} as ExistingThreadExecutionInputSources,
   deleteQueuedMessageMutateAsync: vi.fn(),
   navigate: vi.fn(),
@@ -127,6 +131,8 @@ vi.mock("@/components/promptbox/FollowUpPromptBox", async () => {
         providerRouting: { environmentId?: string; hostId?: string };
         model: {
           active?: { model: string } | null;
+          selected: string;
+          isLoading: boolean;
         };
         provider: {
           selectedId: string;
@@ -214,6 +220,10 @@ vi.mock("@/components/promptbox/FollowUpPromptBox", async () => {
             .join(",")}
         </div>
         <div data-testid="selected-model">{execution.model.active?.model}</div>
+        <div data-testid="picker-model">
+          {execution.model.isLoading ? "loading" : "ready"}:
+          {execution.model.selected}
+        </div>
         <div data-testid="selected-reasoning">{execution.reasoning.value}</div>
         <div data-testid="selected-service-tier">
           {execution.serviceTier?.value}
@@ -729,9 +739,15 @@ vi.mock("@/hooks/queries/sidebar-navigation-query", () => ({
 vi.mock("@/hooks/queries/thread-default-execution-options-query", () => ({
   useThreadDefaultExecutionOptions: (threadId: string, options: unknown) => {
     promptAreaMocks.useThreadDefaultExecutionOptions(threadId, options);
+    const status = promptAreaMocks.defaultExecutionOptionsStatus;
     return {
-      data: promptAreaMocks.defaultExecutionOptions,
+      data:
+        status === "pending"
+          ? undefined
+          : promptAreaMocks.defaultExecutionOptions,
       isError: false,
+      isPending: status === "pending",
+      isPlaceholderData: status === "placeholder",
     };
   },
 }));

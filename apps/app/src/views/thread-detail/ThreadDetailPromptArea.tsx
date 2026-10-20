@@ -472,6 +472,8 @@ export function ThreadDetailPromptArea({
   const hasConcreteDefaultExecutionOptions =
     verifiedDefaultExecutionOptions !== undefined &&
     verifiedDefaultExecutionOptions !== null;
+  const hasDisplayableDefaultExecutionOptions =
+    defaultExecutionOptions !== undefined && defaultExecutionOptions !== null;
   const defaultExecutionOptionsState = resolveDefaultExecutionOptionsState({
     hasConcreteDefaultExecutionOptions,
     hasResolvedDefaultExecutionOptions,
@@ -781,6 +783,8 @@ export function ThreadDetailPromptArea({
   const effectiveSelectedModel = isFallbackModelActive
     ? modelFallback.fallbackModel
     : (activeModel?.model ?? selectedModel);
+  const isAwaitingThreadModel =
+    defaultExecutionOptionsQuery.isPending && modelFallback === null;
   const handleModelChange = useCallback(
     (model: string) => {
       if (fallbackIdentity !== null) {
@@ -1670,13 +1674,14 @@ export function ThreadDetailPromptArea({
         hasMultiple: hasMultipleProviders,
       },
       model: {
-        active: effectiveSelectedModel
-          ? { model: effectiveSelectedModel }
-          : null,
-        selected: selectedModel,
+        active:
+          !isAwaitingThreadModel && effectiveSelectedModel
+            ? { model: effectiveSelectedModel }
+            : null,
+        selected: isAwaitingThreadModel ? "" : selectedModel,
         options: modelOptions,
         moreOptions: moreModelOptions,
-        isLoading: isLoadingModels,
+        isLoading: isAwaitingThreadModel || isLoadingModels,
         loadFailed: modelLoadFailed,
         loadError: modelLoadError,
         onChange: handleModelChange,
@@ -1717,6 +1722,7 @@ export function ThreadDetailPromptArea({
       hasMultipleProviders,
       handleHandoffSelect,
       beginHandoff,
+      isAwaitingThreadModel,
       isHandoffSelection,
       exitHandoff,
       handleModelChange,
@@ -1774,14 +1780,17 @@ export function ThreadDetailPromptArea({
 
   const bottomPermissionConfig = useMemo(
     () => ({
-      value: hasConcreteDefaultExecutionOptions ? permissionMode : undefined,
-      options: hasConcreteDefaultExecutionOptions ? permissionModeOptions : [],
+      value: hasDisplayableDefaultExecutionOptions ? permissionMode : undefined,
+      options: hasDisplayableDefaultExecutionOptions
+        ? permissionModeOptions
+        : [],
       onChange: setPermissionMode,
       supported:
-        hasConcreteDefaultExecutionOptions && supportsPermissionModeSelection,
+        hasDisplayableDefaultExecutionOptions &&
+        supportsPermissionModeSelection,
     }),
     [
-      hasConcreteDefaultExecutionOptions,
+      hasDisplayableDefaultExecutionOptions,
       permissionMode,
       permissionModeOptions,
       setPermissionMode,

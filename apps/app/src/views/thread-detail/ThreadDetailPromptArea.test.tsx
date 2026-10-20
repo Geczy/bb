@@ -219,6 +219,7 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false } },
   });
   mocks.defaultExecutionOptions = null;
+  mocks.defaultExecutionOptionsStatus = "resolved";
   mocks.executionInputSources = {};
   mocks.pluginComposerHost = null;
   mocks.promptDraft.text = "";
@@ -421,6 +422,46 @@ describe("ThreadDetailPromptArea", () => {
         id: "thr_1",
         pluginSubmission,
       }),
+    );
+  });
+
+  it("keeps the model picker loading instead of guessing until the thread's defaults arrive", () => {
+    mocks.defaultExecutionOptionsStatus = "pending";
+
+    const view = renderPromptArea();
+
+    expect(screen.getByTestId("picker-model").textContent).toBe("loading:");
+    expect(screen.getByTestId("selected-model").textContent).toBe("");
+
+    mocks.defaultExecutionOptionsStatus = "resolved";
+    mocks.defaultExecutionOptions = {
+      model: "gpt-5",
+      permissionMode: "auto",
+      reasoningLevel: "medium",
+      serviceTier: "default",
+      source: "client/turn/requested",
+    };
+    view.rerender(buildPromptAreaElement());
+
+    expect(screen.getByTestId("picker-model").textContent).toBe("ready:gpt-5");
+  });
+
+  it("shows the thread's last-known permission mode while its defaults are verified", () => {
+    mocks.defaultExecutionOptionsStatus = "placeholder";
+    mocks.defaultExecutionOptions = {
+      model: "gpt-5",
+      permissionMode: "full",
+      reasoningLevel: "medium",
+      serviceTier: "default",
+      source: "client/turn/requested",
+    };
+    mocks.promptDraft.text = "Send after verification";
+
+    renderPromptArea();
+
+    expect(screen.getByTestId("selected-permission").textContent).toBe("full");
+    expect(screen.getByTestId("submit-mode").textContent).toBe(
+      "blocked:loading-execution-options",
     );
   });
 

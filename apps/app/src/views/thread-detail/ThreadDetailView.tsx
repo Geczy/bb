@@ -78,6 +78,7 @@ import {
   useProjectThreadSubset,
   useThread,
   useThreadDetailBootstrap,
+  useSidebarThreadEnvironmentHostId,
   useThreadPendingInteractions,
   useThreadStorageLocation,
   type ProjectThreadSubsetFilters,
@@ -525,6 +526,9 @@ function ThreadDetailViewInternal(
     staleTime: 5_000,
   });
   const environment = environmentQuery.data;
+  const sidebarEnvironmentHostId = useSidebarThreadEnvironmentHostId(threadId);
+  const composerEnvironmentHostId =
+    environment?.hostId ?? sidebarEnvironmentHostId ?? undefined;
   const hostLifecycle =
     environment === undefined || environment.hostLifecycle === "active"
       ? null
@@ -2245,9 +2249,21 @@ function ThreadDetailViewInternal(
       : undefined;
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
+  const recordedBranchName =
+    canUseGitUi && workStatusQuery.isPending && environment?.branchName
+      ? environment.branchName
+      : null;
   const threadCheckoutDisplay = workspaceStatus
     ? formatWorkspaceCheckoutDisplay({ checkout: workspaceStatus.checkout })
-    : undefined;
+    : recordedBranchName !== null
+      ? formatWorkspaceCheckoutDisplay({
+          checkout: {
+            kind: "branch",
+            branchName: recordedBranchName,
+            headSha: null,
+          },
+        })
+      : undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
   const threadEnvironmentGoneStatus =
     hostLifecycle ??
@@ -2413,7 +2429,7 @@ function ThreadDetailViewInternal(
       }
       canRestoreEnvironment={thread.canRestoreEnvironment}
       environmentGoneStatus={threadEnvironmentGoneStatus}
-      environmentHostId={environment?.hostId}
+      environmentHostId={composerEnvironmentHostId}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
       onCreateNewThreadInEnvironment={onCreateNewThreadInEnvironment}
       onOpenThreadInfo={openThreadInfo}

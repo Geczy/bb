@@ -553,6 +553,20 @@ export function useChildThreads({
   });
 }
 
+export function useSidebarThreadEnvironmentHostId(
+  threadId: string,
+): string | null {
+  const selectEnvironmentHostId = useCallback(
+    (threads: ThreadListEntry[]) =>
+      threads.find((thread) => thread.id === threadId)?.environmentHostId ??
+      null,
+    [threadId],
+  );
+  return (
+    useSidebarNavigationThreadSelection(selectEnvironmentHostId).data ?? null
+  );
+}
+
 export function useProjectThreadSubset({
   enabled: enabledOption,
   filters,
