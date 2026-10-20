@@ -339,7 +339,7 @@ describe("MessageActionBar", () => {
     expect(labels(0)).toEqual(labels(1));
   });
 
-  it("ranks inline and overflow actions together without growing the visible row", () => {
+  it("ranks inline and overflow actions together without growing the visible row", async () => {
     const resizeObserver = installControlledResizeObserver();
     const onSelect = vi.fn();
     const fixture = (generation: number) => (
@@ -375,7 +375,10 @@ describe("MessageActionBar", () => {
     act(() => translate.focus());
     fireEvent.click(translate);
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Translate" })).toBeTruthy();
+    act(() => trigger.blur());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Translate" })).toBeTruthy(),
+    );
     view.rerender(fixture(2));
     expect(screen.getByRole("button", { name: "Translate" })).toBeTruthy();
     fireEvent.click(
@@ -384,14 +387,18 @@ describe("MessageActionBar", () => {
     act(() => {
       trigger.blur();
     });
-    expect(screen.getByRole("button", { name: "Copy link" })).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Copy link" })).toBeTruthy(),
+    );
     expect(screen.queryByRole("button", { name: "Translate" })).toBeNull();
     for (const name of ["Add to chat", "Fork thread"]) {
       fireEvent.click(
         within(openDesktopMenu()).getByRole("menuitem", { name }),
       );
       act(() => trigger.blur());
-      expect(screen.getByRole("button", { name })).toBeTruthy();
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name })).toBeTruthy(),
+      );
       expect(screen.getAllByRole("button")).toHaveLength(3);
     }
     resizeObserver.reportWidth(300);
