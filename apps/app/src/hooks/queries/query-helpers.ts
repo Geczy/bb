@@ -3,9 +3,9 @@ import { HttpError } from "@/lib/api";
 import { BbHttpError } from "@/lib/sdk";
 
 export const PROMPT_HISTORY_STALE_TIME_MS = 10_000;
-const TRANSIENT_READ_RETRY_COUNT = 3;
+const TRANSIENT_READ_RETRY_COUNT = 4;
 const TRANSIENT_READ_RETRY_BASE_DELAY_MS = 250;
-const TRANSIENT_READ_RETRY_MAX_DELAY_MS = 1_000;
+const TRANSIENT_READ_RETRY_MAX_DELAY_MS = 2_000;
 const GATEWAY_FAILURE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
 
 export interface QueryOptions {
