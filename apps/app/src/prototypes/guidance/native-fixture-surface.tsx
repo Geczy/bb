@@ -77,7 +77,7 @@ export default function NativeGuidanceFixtureSurface({ selection, onDraft }: {
     return <div data-guidance-prototype="plugin-next-step" className="mt-4 flex items-start gap-3 text-sm text-muted-foreground">
       <span className="pt-1.5" aria-hidden>↳</span>
       <div className="min-w-0 flex-1 pt-1.5">
-        <p>{install ? "Post this summary to #eng" : "Send failing CI runs to your team channel"}<span className="text-xs"> · {install ? "Slack (BB Community)" : "Start from Hooks"}</span></p>
+        <p>{install ? "View this notebook’s charts inline" : "Keep a flaky-test panel in bb"}<span className="text-xs"> · {install ? "Notebook Viewer (BB Community, example)" : "Start from Test Results (example)"}</span></p>
         {install && <p className="mt-1 text-xs text-subtle-foreground">By Maya Chen · Reviewed</p>}
         {accepted && <p className="mt-1 text-xs" role="status">Preview only. {install ? "Nothing installed." : "No build started."}</p>}
       </div>
