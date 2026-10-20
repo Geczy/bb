@@ -5,6 +5,7 @@ import {
   isJsonInvocation,
   writeCliErrorEnvelope,
 } from "./cli-error-output.js";
+import { ManagedJobDefaultServerWriteError } from "./managed-job-write-error.js";
 import { CliUsageError } from "./cli-usage-error.js";
 import { getErrorMessage } from "./commands/helpers.js";
 import { resolveBbCliVersion } from "./version.js";
@@ -59,7 +60,12 @@ export function action<TArgs extends CommandActionArgs>(
       const code = actionErrorCode(err);
       console.error(`Error: ${message}`);
       if (hint !== null) console.error(hint);
-      writeCliErrorEnvelope({ code, hint, message }, wantsJson(args));
+      writeCliErrorEnvelope(
+        { code, hint, message },
+        wantsJson(args) ||
+          (err instanceof ManagedJobDefaultServerWriteError &&
+            isJsonInvocation()),
+      );
       await logActionError({ code, command: commandPath(args), exitCode });
       process.exit(exitCode);
     }

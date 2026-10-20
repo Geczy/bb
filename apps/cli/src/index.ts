@@ -258,7 +258,14 @@ Quick start:
   await parseProgram(deps.getUrl);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
+  const { ManagedJobDefaultServerWriteError } =
+    await import("./managed-job-write-error.js");
+  if (err instanceof ManagedJobDefaultServerWriteError) {
+    const { isJsonInvocation, writeCliErrorEnvelope } =
+      await import("./cli-error-output.js");
+    writeCliErrorEnvelope(err, isJsonInvocation());
+  }
   console.error(err.message);
   process.exit(1);
 });

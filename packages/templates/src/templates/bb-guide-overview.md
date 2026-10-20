@@ -28,6 +28,18 @@ Context variables set automatically inside a thread environment:
 Outside a thread the CLI targets http://127.0.0.1:38886; set BB_SERVER_URL (and
 BB_HOST_DAEMON_PORT) only for a deliberate non-default target.
 
+Managed jobs (nonempty HOST_CARE_JOB_ID) refuse HTTP writes to loopback port
+38886 with code `managed_job_default_server_write`, even with an explicit
+production URL. GET, HEAD and OPTIONS still work. Plugin CLI commands use POST,
+including read-like commands. Set BB_SERVER_URL to an isolated server (and
+BB_HOST_DAEMON_PORT for daemon operations), then verify `bb status --json` reports
+its exact dataDir before writing; a successful exit alone is insufficient.
+Run QA setup and verification inside the managed job too. For an intentional
+production invocation only, prefix it with BB_ALLOW_DEFAULT_SERVER_WRITES=1;
+never export that override in shared QA environments. This accidental-routing
+guard does not cover raw HTTP/SDK clients, redirects, remote production hosts,
+other production ports, or commands outside managed jobs.
+
 Run `bb status` to see your current context (resolved project and thread IDs).
 It also warns when an enabled plugin is not running (incompatible after a bb
 upgrade, failed to load, or missing); run `bb plugin list` for the detail.
