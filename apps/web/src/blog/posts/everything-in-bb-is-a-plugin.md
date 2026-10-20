@@ -54,7 +54,7 @@ The starting point for a new plugin is the **New plugin** button in Plugins. It 
 
 The [Plugin Guide](/plugin-guide) gives you a map of what you can build. It has annotated wireframes of the app window, composer, command palette, home page, and plugin pages, alongside a map of backend capabilities. Each numbered surface shows the exact SDK symbols and plugins that already use it.
 
-component:plugin-guide
+component:plugin-guide:app-shell
 
 In bb, you can find it under **Plugins → Browse → Plugin Guide**. **Copy for agent** puts an `@Surface` mention into your prompt, giving the agent the surface, its API, and the authoring skill.
 

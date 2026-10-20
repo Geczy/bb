@@ -7,15 +7,9 @@ describe("getImageSize", () => {
   it("records a size for every post image", () => {
     const sources = POSTS.flatMap((post) => [
       ...(post.cover ? [post.cover.src] : []),
-      ...post.blocks.flatMap((block) => {
-        if (block.kind === "image") {
-          return [block.src];
-        }
-        if (block.kind === "carousel") {
-          return block.items.map((item) => item.src);
-        }
-        return [];
-      }),
+      ...post.blocks
+        .filter((block) => block.kind === "image")
+        .map((block) => block.src),
     ]);
     expect(sources.length).toBeGreaterThan(0);
     const missing = sources.filter((src) => !getImageSize(src));
