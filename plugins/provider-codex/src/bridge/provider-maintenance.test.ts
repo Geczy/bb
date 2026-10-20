@@ -367,3 +367,35 @@ describe("Codex credential health and usage", () => {
     expect(retryHeaders.get("chatgpt-account-id")).toBe("account-123");
   });
 });
+
+describe("Codex install prerequisites", () => {
+  let binDir: string;
+
+  beforeEach(async () => {
+    binDir = await fs.mkdtemp(path.join(os.tmpdir(), "bb-codex-no-npm-"));
+    vi.stubEnv("PATH", binDir);
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await fs.rm(binDir, { force: true, recursive: true });
+  });
+
+  it("asks for Node.js instead of offering an npm install that cannot run", async () => {
+    const status = await getCodexProviderInstallationStatus();
+
+    expect(status.installed).toBe(false);
+    expect(status.installAction).toBeNull();
+    expect(status.missingPrerequisite).toBe("nodejs");
+  });
+
+  it("offers the npm install when npm is available", async () => {
+    await writeFakeCli({ binDir, name: "npm", output: "10.9.0" });
+
+    const status = await getCodexProviderInstallationStatus();
+
+    expect(status.installed).toBe(false);
+    expect(status.installAction?.kind).toBe("install");
+    expect(status.missingPrerequisite).toBeNull();
+  });
+});
