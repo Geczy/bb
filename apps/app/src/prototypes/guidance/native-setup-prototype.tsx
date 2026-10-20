@@ -34,8 +34,10 @@ export default function NativeSetupPrototype() {
         ...current,
         [id]: state.status === "installing"
           ? { status: "signIn", reason: "signedOut", canSignIn: true }
-          : { status: "ready", detail: "Signed in" },
-      })), state.status === "installing" ? 1800 : 4000)];
+          : nativeGuidanceFixture?.agentOutcome === "failed"
+            ? { status: "signIn", reason: "failed", canSignIn: true }
+            : { status: "ready", detail: "Signed in" },
+      })), state.status === "installing" ? 1800 : 15000)];
     });
     return () => timers.forEach(window.clearTimeout);
   }, [agentStates]);
@@ -76,7 +78,7 @@ export default function NativeSetupPrototype() {
         {featured.map(agent => <AgentRow key={agent.id} agent={agent} prominent {...handlers} />)}
       </ul>
       {moreAgents.length > 0 && <div>
-        <button className="rounded-sm text-xs text-muted-foreground hover:text-foreground" aria-expanded={showMore} onClick={() => setShowMore(!showMore)}>More agents ({moreAgents.length})</button>
+        <button className="rounded-sm text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground" aria-expanded={showMore} onClick={() => setShowMore(!showMore)}>More agents ({moreAgents.length})</button>
         {showMore && <div className="mt-3"><AgentStep machineName={host?.name ?? null} agents={moreAgents} {...handlers} onRecheck={() => void providers.refetch()} /></div>}
       </div>}
       {log && <p className="text-xs text-muted-foreground">{log}: no install errors in this fixture.</p>}

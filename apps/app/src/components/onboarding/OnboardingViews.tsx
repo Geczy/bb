@@ -260,7 +260,7 @@ export function AgentRow({
               state.status === "installFailed" && "text-destructive-text",
             )}
           >
-            {agentSubline(state)}
+            {prominent && state.status === "signingIn" ? "Signing in…" : prominent && state.status === "signIn" && state.reason === "failed" ? "Couldn't sign in" : agentSubline(state)}
           </span>
         </div>
         {state.status === "checking" || state.status === "installing" ? (
@@ -278,10 +278,10 @@ export function AgentRow({
         ) : null}
         {state.status === "signIn" && state.canSignIn ? (
           <Button size={prominent ? "default" : "sm"} onClick={() => onSignIn(agent.id)}>
-            Sign in
+            {prominent && state.reason === "failed" ? "Retry" : "Sign in"}
           </Button>
         ) : null}
-        {state.status === "installFailed" ? (
+        {state.status === "installFailed" && !prominent ? (
           <Button
             size="sm"
             variant="ghost"
@@ -647,7 +647,7 @@ export function ProjectsStep({
           Select none
         </button>
       </div>
-      <ul className="divide-y divide-border-hairline rounded-lg border border-border">
+      <ul className={cn("divide-y divide-border-hairline rounded-lg border border-border", folderAction === "button" && "max-h-72 overflow-y-auto")}>
         {repos.map((repo) => (
           <li key={repo.id}>
             <label
@@ -690,7 +690,7 @@ export function ProjectsStep({
           The scan ran out of time, so some repos may be missing.
         </p>
       ) : null}
-      {folderAction === "button" ? <Button variant="outline" className="w-full" onClick={onAddFolder}><Icon name="FolderPlus" />Choose a folder</Button> : <button
+      {folderAction === "button" ? <Button variant="outline" className="w-full" data-guidance-focus="folder" onClick={onAddFolder}><Icon name="FolderPlus" />Choose a folder</Button> : <button
         type="button"
         onClick={onAddFolder}
         className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-state-hover hover:text-foreground"
