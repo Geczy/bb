@@ -14,6 +14,7 @@ import {
 } from "@/test/fixtures/thread-responses";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
+  didThreadOpenHoldEndUnloaded,
   THREAD_OPEN_HOLD_MAX_MS,
   useHoldThreadOpenUntilLoaded,
 } from "./useHoldThreadOpenUntilLoaded";
@@ -91,7 +92,7 @@ afterEach(() => {
 
 describe("useHoldThreadOpenUntilLoaded", () => {
   it("keeps the previous thread on screen until the next thread has loaded", async () => {
-    const { wrapper } = createQueryClientTestHarness();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
     mockLoadedThread("thread-a");
     const switchThread = await renderSwitcher(wrapper);
     expect(await screen.findByText("open thread-a")).toBeTruthy();
@@ -112,10 +113,11 @@ describe("useHoldThreadOpenUntilLoaded", () => {
 
     expect(await screen.findByText("open thread-b")).toBeTruthy();
     expect(screen.queryByText("loading")).toBeNull();
+    expect(didThreadOpenHoldEndUnloaded(queryClient, "thread-b")).toBe(false);
   });
 
   it("stops holding after the cap when the next thread never loads", async () => {
-    const { wrapper } = createQueryClientTestHarness();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
     mockLoadedThread("thread-a");
     const switchThread = await renderSwitcher(wrapper);
     expect(await screen.findByText("open thread-a")).toBeTruthy();
@@ -131,6 +133,7 @@ describe("useHoldThreadOpenUntilLoaded", () => {
     });
 
     expect(screen.getByText("open thread-b")).toBeTruthy();
+    expect(didThreadOpenHoldEndUnloaded(queryClient, "thread-b")).toBe(true);
   });
 
   it("opens a thread whose data is already cached without holding", async () => {

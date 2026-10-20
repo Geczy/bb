@@ -7,6 +7,8 @@ import { ConversationTimeline } from "@/components/ui/conversation.js";
 import { HeightTransition } from "@/components/ui/height-transition.js";
 import { Icon } from "@bb/shared-ui/icon";
 import { isRouteLoadingSkeletonMounted } from "@/components/ui/route-loading-skeleton";
+import { useQueryClient } from "@tanstack/react-query";
+import { didThreadOpenHoldEndUnloaded } from "@/hooks/useHoldThreadOpenUntilLoaded";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 import {
   SHORT_LIVED_STATUS_DELAY_MS,
@@ -223,7 +225,7 @@ export function ThreadTimelineSurface({
           />
         ) : null}
         {isThreadTimelinePending ? (
-          (loadingContent ?? <DelayedThreadLoadingIndicator />)
+          (loadingContent ?? <DelayedThreadLoadingIndicator threadId={threadId} />)
         ) : timelineError ? (
           <TimelineStatusIndicator
             label="Failed to load timeline"
@@ -358,8 +360,13 @@ function DelayedCatchUpIndicator() {
   );
 }
 
-function DelayedThreadLoadingIndicator() {
-  const [visible, setVisible] = useState(isRouteLoadingSkeletonMounted);
+function DelayedThreadLoadingIndicator({ threadId }: { threadId: string }) {
+  const queryClient = useQueryClient();
+  const [visible, setVisible] = useState(
+    () =>
+      isRouteLoadingSkeletonMounted() ||
+      didThreadOpenHoldEndUnloaded(queryClient, threadId),
+  );
   useEffect(() => {
     if (visible) {
       return;

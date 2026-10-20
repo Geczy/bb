@@ -241,7 +241,7 @@ import type {
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "@/hooks/useThreadReadTracking";
-import { useHoldThreadOpenUntilLoaded } from "./useHoldThreadOpenUntilLoaded";
+import { useHoldThreadOpenUntilLoaded } from "@/hooks/useHoldThreadOpenUntilLoaded";
 import { useThreadUnreadDividerState } from "./useThreadUnreadDividerState";
 import {
   buildTerminalSyncedSecondaryFileTabs,

@@ -65,6 +65,13 @@ function threadOpenHold(
   return hold;
 }
 
+export function didThreadOpenHoldEndUnloaded(
+  queryClient: QueryClient,
+  threadId: string,
+): boolean {
+  return holdsFor(queryClient).has(threadId);
+}
+
 export function useHoldThreadOpenUntilLoaded(
   threadId: string,
   enabled: boolean,
