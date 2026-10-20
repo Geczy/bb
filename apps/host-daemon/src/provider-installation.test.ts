@@ -221,7 +221,7 @@ describe("streamProviderInstallation with node-pty", () => {
       const preload = path.join(root, "preload.cjs");
       await fs.writeFile(
         preload,
-        'console.log(["example-cli-exe", ...process.argv.slice(2)].join(" "));\nprocess.exit(0);\n',
+        'console.log(`example-cli-exe ${require("node:path").basename(process.argv[1])}`);\nprocess.exit(0);\n',
       );
 
       const { events, output } = await runPlan(
