@@ -1097,9 +1097,11 @@ function createRemoteSystemConfigSync(serverUrl: string): SystemConfigSync {
 
 const claimDesktopNotification = createNotificationClaims();
 let desktopNotifications: { stop(): void } | null = null;
+let desktopNotificationServerUrl: string | null = null;
 
 function startDesktopNotifications(serverUrl: string): void {
   desktopNotifications?.stop();
+  desktopNotificationServerUrl = serverUrl;
   const delivery = createDesktopNotificationDelivery({
     serverUrl,
     hasOpenWindows: () => desktopWindowFactory?.hasOpenWindows() !== false,
@@ -1149,6 +1151,7 @@ function startDesktopNotifications(serverUrl: string): void {
 function stopSystemConfigSync(): void {
   desktopNotifications?.stop();
   desktopNotifications = null;
+  desktopNotificationServerUrl = null;
   systemConfigSync?.stop();
   systemConfigSync = null;
 }
@@ -2943,7 +2946,11 @@ async function runDesktopApp(): Promise<void> {
       return;
     const url = event.sender.getURL();
     if (!url.startsWith("http://") && !url.startsWith("https://")) return;
-    event.returnValue = claimDesktopNotification(url, id);
+    if (desktopNotificationServerUrl === null) return;
+    event.returnValue = claimDesktopNotification(
+      desktopNotificationServerUrl,
+      id,
+    );
   });
   app.on("activate", () => {
     if (desktopWindowFactory?.hasOpenWindows() === false) {
