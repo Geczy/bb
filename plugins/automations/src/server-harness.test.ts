@@ -205,6 +205,47 @@ describe("automations server plugin harness", () => {
     vi.useRealTimers();
   });
 
+  it("inherits the calling thread execution when creating an agent automation without flags", async () => {
+    const { harness } = await bootAutomationsPlugin();
+    harness.sdk.stub("threads.get", async () => ({ providerId: "claude" }));
+    harness.sdk.stub("threads.defaultExecutionOptions", async () => ({
+      model: "thread-model",
+    }));
+
+    const result = await harness.runCli(
+      [
+        "create",
+        "--project",
+        PROJECT_ID,
+        "--name",
+        "Inherited execution",
+        "--in",
+        "1d",
+        "--prompt",
+        "Summarize the day's work",
+        "--disabled",
+        "--json",
+      ],
+      { threadId: THREAD_ID },
+    );
+    expect(result.exitCode, result.stderr).toBe(0);
+    const created = automationDetailResponseSchema.parse(
+      JSON.parse(result.stdout ?? ""),
+    );
+    const stored = automationDetailResponseSchema.parse(
+      await harness.callRpc("automations_get", {
+        projectId: PROJECT_ID,
+        automationId: created.id,
+      }),
+    );
+    expect(stored).toMatchObject({
+      origin: "agent",
+      createdByThreadId: THREAD_ID,
+      execution: { providerId: "claude", model: "thread-model" },
+    });
+    await harness.dispose();
+  });
+
   it("boots through server.ts and registers rpc, cli, thread events, and sweep service", async () => {
     const { harness } = await bootAutomationsPlugin();
 
