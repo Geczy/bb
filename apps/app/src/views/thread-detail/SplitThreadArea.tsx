@@ -8,6 +8,7 @@ import { useAtom, useAtomValue, useStore } from "jotai";
 import {
   Fragment,
   memo,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -299,9 +300,11 @@ function SplitThreadAreaContent({ routeContent }: SplitThreadAreaProps) {
     if (currentContent === null) {
       return;
     }
-    setLayout((previous) =>
-      reconcileLayoutForContent(previous, currentContent),
-    );
+    startTransition(() => {
+      setLayout((previous) =>
+        reconcileLayoutForContent(previous, currentContent),
+      );
+    });
   }, [currentContent, setLayout]);
 
   const layout: SplitLayout | null =

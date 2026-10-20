@@ -240,6 +240,7 @@ import type {
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "@/hooks/useThreadReadTracking";
+import { ThreadOpenGate } from "./ThreadOpenGate";
 import { useThreadUnreadDividerState } from "./useThreadUnreadDividerState";
 import {
   buildTerminalSyncedSecondaryFileTabs,
@@ -474,11 +475,14 @@ function RoutedThreadDetailView() {
   }
 
   return (
-    <ThreadDetailViewInternal
-      projectId={projectId}
-      threadId={threadId}
-      timelineEnabled
-    />
+    <>
+      <ThreadOpenGate threadId={threadId} enabled />
+      <ThreadDetailViewInternal
+        projectId={projectId}
+        threadId={threadId}
+        timelineEnabled
+      />
+    </>
   );
 }
 
@@ -486,7 +490,15 @@ queueSplitDownload("queued-messages-list");
 
 export function ThreadDetailView(props: ThreadDetailViewProps) {
   if (props.surface === "pane") {
-    return <ThreadDetailViewInternal {...props} />;
+    return (
+      <>
+        <ThreadOpenGate
+          threadId={props.threadId}
+          enabled={props.timelineEnabled}
+        />
+        <ThreadDetailViewInternal {...props} />
+      </>
+    );
   }
   return <RoutedThreadDetailView />;
 }

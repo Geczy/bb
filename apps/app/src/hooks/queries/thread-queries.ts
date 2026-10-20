@@ -1125,12 +1125,6 @@ export function threadTimelineQueryOptions(
       : { staleTime: options.staleTime }),
     retry: shouldRetryTransientReadQuery,
     retryDelay: TRANSIENT_READ_RETRY_DELAY_MS,
-    placeholderData: (previousData, previousQuery) =>
-      resolveThreadTimelinePlaceholder(
-        previousData,
-        previousQuery?.queryKey,
-        id,
-      ),
   });
 }
 
@@ -1159,7 +1153,15 @@ export function useThreadTimeline(
       touchThreadOpenCache(queryClient, id);
     }
   }, [enabled, id, queryClient]);
-  return useQuery(threadTimelineQueryOptions(queryClient, id, options));
+  return useQuery({
+    ...threadTimelineQueryOptions(queryClient, id, options),
+    placeholderData: (previousData, previousQuery) =>
+      resolveThreadTimelinePlaceholder(
+        previousData,
+        previousQuery?.queryKey,
+        id,
+      ),
+  });
 }
 
 export function useThreadConversationOutline(
