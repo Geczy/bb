@@ -1,3 +1,5 @@
+import { nativeGuidanceFixture } from "@/prototypes/guidance/native-fixture-selection";
+import { NativeGuidanceFixtureSlot } from "@/prototypes/guidance/native-fixture-slot";
 import { getPanelTabHistoryKey } from "@/components/secondary-panel/recentlyClosedPanelTabs";
 import { appendQuoteAndAttachmentsToDraft } from "@bb/client-core";
 import type { ComposerAttachment } from "@get-bb/plugin-sdk";
@@ -1478,11 +1480,13 @@ function RootComposeSurface({
 
   const promptBox = renderPromptBox({
     id: "root-compose-prompt",
-    autoFocus: !isProviderCliBlocked,
+    autoFocus: !isProviderCliBlocked && nativeGuidanceFixture?.kind !== "suggestions" && nativeGuidanceFixture?.kind !== "jobs",
     mentionMenuPlacement: isCompactViewport ? "top" : "bottom",
-    banner: promptBanner,
+    banner: nativeGuidanceFixture?.kind === "no-agent" ? undefined : promptBanner,
     blockedReason:
-      blockingProviderCliStatus === null
+      nativeGuidanceFixture?.kind === "no-agent"
+        ? "Sign in to Claude to run this"
+        : blockingProviderCliStatus === null
         ? undefined
         : providerCliBlockedReason(blockingProviderCliStatus),
     resolveMentionLink,
@@ -1556,7 +1560,15 @@ function RootComposeSurface({
                     onPanelFocus: touchFixedPanelTabsState,
                   }}
                 >
-                  {promptBox}
+                  {nativeGuidanceFixture === null ? promptBox : <div className="flex flex-col">
+                    <div className={nativeGuidanceFixture?.kind === "no-agent" ? "order-1" : "order-2"}>
+                      <NativeGuidanceFixtureSlot kind="empty" target="new-thread" onDraft={(text) => {
+                        promptDraft.setDraft({ text, mentions: [], attachments: [] });
+                        focusPromptBox();
+                      }} />
+                    </div>
+                    <div className={nativeGuidanceFixture?.kind === "no-agent" ? "order-2" : "order-1"}>{promptBox}</div>
+                  </div>}
                 </RootComposeSecondaryContent>
               </PluginThreadPanelNavigationProvider>
             </AppNavigationHostProvider>

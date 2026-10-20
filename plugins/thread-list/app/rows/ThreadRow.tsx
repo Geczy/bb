@@ -302,6 +302,7 @@ function ThreadTrailingIndicator({
       className={cn(
         SIDEBAR_ROW_GLYPH_SLOT_CLASS,
         SIDEBAR_STATUS_GLYPH_BOX_CLASS,
+        "has-[[data-guidance-attention]]:w-auto",
       )}
     >
       <ThreadStatusGlyph
@@ -788,6 +789,7 @@ function ThreadRowComponent({
               className={cn(
                 "relative shrink-0",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+                "has-[[data-guidance-attention]]:w-20",
               )}
             >
               <span

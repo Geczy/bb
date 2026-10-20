@@ -1,0 +1,8 @@
+@keyframes guidance-hint-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.guidance-hint { animation: guidance-hint-in 180ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .guidance-hint { animation: none; }
+}

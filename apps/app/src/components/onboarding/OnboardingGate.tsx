@@ -1,3 +1,4 @@
+import { nativeGuidanceFixture } from "@/prototypes/guidance/native-fixture-selection";
 import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@bb/shared-ui/tooltip";
 import { useUpdateGeneralSettings } from "@/hooks/mutations/settings-mutations";
@@ -8,6 +9,10 @@ const OnboardingFlow = lazy(() =>
     default: module.OnboardingFlow,
   })),
 );
+
+const NativeSetupPrototype = import.meta.env.DEV
+  ? lazy(() => import("@/prototypes/guidance/native-setup-prototype"))
+  : null;
 
 const ONBOARDING_SEEN_STORAGE_KEY = "bb.onboarding.seen";
 
@@ -41,6 +46,10 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
 
   if (firstRunClosed && typeof completedAt === "string") {
     setFirstRunClosed(false);
+  }
+
+  if (NativeSetupPrototype !== null && nativeGuidanceFixture?.kind.startsWith("setup-")) {
+    return <TooltipProvider delayDuration={300} disableHoverableContent><Suspense fallback={null}><NativeSetupPrototype /></Suspense></TooltipProvider>;
   }
 
   if (settings === undefined) {

@@ -1,3 +1,4 @@
+import { nativeGuidanceFixture } from "@/prototypes/guidance/native-fixture-selection";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 import {
@@ -149,6 +150,13 @@ export function ThreadStatusGlyph({
     rowStatus,
     archived,
   );
+
+  if (import.meta.env.DEV && nativeGuidanceFixture?.kind === "attention" && kind === "waiting-for-input") {
+    return <span data-guidance-attention className="whitespace-nowrap rounded-full bg-warning/20 px-2 py-0.5 text-xs font-semibold text-foreground">Needs you</span>;
+  }
+  if (import.meta.env.DEV && nativeGuidanceFixture?.kind === "ready" && kind === "unread-success") {
+    return <span data-guidance-attention className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"><span className="size-1.5 rounded-full bg-foreground" />Ready</span>;
+  }
 
   if (rowStatusIsVisible && rowStatus) {
     return <PluginThreadRowStatusIndicator status={rowStatus} size={size} />;

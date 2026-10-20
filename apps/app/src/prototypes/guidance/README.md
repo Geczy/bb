@@ -1,6 +1,8 @@
 # Guidance prototypes
 
-31 clickable states for Next step, Hint, and Attention, using production bb components. Source chips open evidence; accepting a suggestion changes the local story into its resulting work. Reload resets the fixture. The three first-run grounded tasks each have a separate story so only one promotion is visible at a time.
+The v2 walkthrough uses the real app behind a development-only flag. The older 31 Ladle states remain available as the v1 design history, not as v2 After images.
+
+31 clickable v1 states for Next step, Hint, and Attention, using production bb components. Source chips open evidence; accepting a suggestion changes the local story into its resulting work. Reload resets the fixture. The three first-run grounded tasks each have a separate story so only one promotion is visible at a time.
 
 ## Preview ownership
 
@@ -76,7 +78,7 @@ The frame directly imports `SidebarProvider`, `Sidebar`, `SidebarInset`, `Sideba
 - **#4986:** no catalog-card code retained. It is sound for browsing a named catalog entry, but too much UI for a single outcome card; the proposed install uses Next step and inline status.
 - Connect's QR rendering pattern is reduced to one QR image in `plugins/connect/guidance-qr.prototype.tsx`, using Connect's existing `qrcode` dependency.
 
-Only story/prototype code, its Ladle style source, and a Ladle adapter export for the existing thread status glyph are changed. There is no product wiring or PR. Shipping requires brsbl's sign-off.
+The v1 stories do not wire product behavior. The v2 proposal adds development-only slots to the native setup guide, composer, timeline, and sidebar. There is no PR. Shipping requires brsbl's sign-off.
 
 ## Browser verification and screenshots
 
@@ -85,3 +87,22 @@ Chrome for Testing 155.0.8059.39, one isolated instance at a time. Exercised sou
 Every story has a desktop light PNG at 2×. There is also a 390×844 phone capture at 2× and one desktop dark capture per surface. Files live under the gitignored `.tmp/guidance/screenshots/`; `manifest.json` records absolute paths and PNG dimensions. Desktop images are 2880×1800; phone images are 780×1688. Files ending `-v2` are the latest captures for the corresponding state; earlier captures remain intact. No tests, typecheck, or lint ran locally. The QA browser is closed after verification; the persistent preview stays running.
 
 Day 2 verification on October 19 covered source evidence, Schedule it, Undo, dismissal, and the notification opening the result thread. The extracted shared frame also rendered an existing parallel-work story. Desktop light, dark and compact rendering reported no page exceptions. The requested desktop light captures are `day2-offer-desktop-light-20261019-v2.png`, `day2-scheduled-desktop-light-20261019.png`, and `day2-result-desktop-light-20261019.png`; `day2-result-opened-desktop-light-20261019.png` shows the opened result. All four are 2880×1800 and live in the screenshot directory above.
+
+
+## Native v2 fixture mode
+
+On a development build, add `?guidancePrototype=<state>` to the native route. The gate is disabled outside `import.meta.env.DEV`, validates its query input, and does not persist assignment or settings.
+
+- New-thread route: `reading`, `suggestions`, `jobs`, `no-agent`.
+- Setup frame: `setup-agent`, `setup-projects`.
+- Existing thread route: `hint`, `attention`, `next-step`, `day2`, `ready`; include `&guidanceTarget=<thread id>`. Create the actual thread and its timeline with an isolated offline provider before opening these states.
+
+Suggestions precede composer controls in DOM focus order while appearing below the empty composer. Selecting one fills the real editable draft and focuses it; it does not submit. The signed-out proposal retains the draft, suppresses suggestions, and blocks Send. Source panels identify illustrative evidence. The Hint attaches directly to the native editor and requires a targeted existing thread. No Hint is injected into the new-thread page.
+
+Setup uses the production OnboardingLayout, ProjectsStep and AgentStep components. Install/sign-in progression, creating a new project, schedule confirmation, notifications and dismissal are local visual states. They do not install, authenticate, create a project, schedule a job, or request notification permission. The project picker reads the same detected repositories as the native Before.
+
+The needs-you proposal labels the genuine pending-question indicator and retains native row order: no prototype reordering occurs under pointer or keyboard focus. In the walkthrough fixture that thread is already first. The proposed policy is to promote outside active sidebar interaction; that policy is not wired. The Hint's intended dismissal policy is 14 days, then permanent on a second dismissal; persistence is deliberately not implemented. External delivery requires opt-in and an unfocused thread. The closed-window macOS path is an explicitly labelled illustration pending R2, not a delivery implementation.
+
+The final 13-step walkthrough and provenance are in the ignored `.tmp/guidance/walkthrough/manifest.json`. App captures use the native web app, a fresh isolated data directory and the offline Claude protocol fixture. The Windows sign-in view is the same Linux web app with Windows user-agent data. SmartScreen uses Microsoft's published documentation image, not a Windows capture. One outline is added after capture to each changed After; raw images remain alongside them. The retained Ladle server on 61001 also serves the walkthrough gallery through Vite's workspace file route.
+
+Verification is browser-only: draft editing/focus, evidence, fallback starts, setup selection, install/sign-in progress, Hint grant/dismissal, native pending question, and one-time schedule/Undo. No tests, typecheck or lint were run locally.

@@ -43,6 +43,9 @@ interface OnboardingLayoutProps {
   onBack?: () => void;
   onSelectStep: (step: OnboardingStepId) => void;
   onSkipAll: () => void;
+  steps?: typeof ONBOARDING_STEPS;
+  showSkipAll?: boolean;
+  footerContent?: ReactNode;
 }
 
 export function OnboardingLayout({
@@ -62,8 +65,11 @@ export function OnboardingLayout({
   onBack,
   onSelectStep,
   onSkipAll,
+  steps = ONBOARDING_STEPS,
+  showSkipAll = true,
+  footerContent,
 }: OnboardingLayoutProps) {
-  const activeIndex = ONBOARDING_STEPS.findIndex((entry) => entry.id === step);
+  const activeIndex = steps.findIndex((entry) => entry.id === step);
   return (
     <div
       data-testid="onboarding"
@@ -87,7 +93,7 @@ export function OnboardingLayout({
           aria-label="Setup steps"
           className="flex min-w-0 flex-1 items-center justify-center gap-1"
         >
-          {ONBOARDING_STEPS.map((entry, index) => {
+          {steps.map((entry, index) => {
             const done = index < activeIndex;
             const active = index === activeIndex;
             return (
@@ -124,7 +130,7 @@ export function OnboardingLayout({
             );
           })}
         </nav>
-        <Button
+        {showSkipAll && <Button
           variant="ghost"
           size="sm"
           className={cn(
@@ -134,7 +140,7 @@ export function OnboardingLayout({
           onClick={onSkipAll}
         >
           Skip setup
-        </Button>
+        </Button>}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div
@@ -155,6 +161,7 @@ export function OnboardingLayout({
         <div
           className={cn(CONTENT_COLUMN_CLASS, "flex items-center gap-2 py-3")}
         >
+          {footerContent ?? <>
           {onBack ? (
             <Button variant="ghost" size="sm" onClick={onBack}>
               <Icon name="ArrowLeft" aria-hidden />
@@ -180,6 +187,7 @@ export function OnboardingLayout({
             {primaryLabel}
             {primaryBusy ? null : <Icon name="ArrowRight" aria-hidden />}
           </Button>
+          </>}
         </div>
       </footer>
     </div>

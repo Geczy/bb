@@ -1,3 +1,4 @@
+import { NativeGuidanceFixtureSlot } from "@/prototypes/guidance/native-fixture-slot";
 import { flushSync } from "react-dom";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
 import { Button } from "@bb/shared-ui/button";
@@ -706,6 +707,9 @@ function FollowUpPromptBoxWithComposer({
       onFocusCapture={handleComposerFocus}
       onPointerDownCapture={handleComposerPointerDown}
     >
+      {typeof collapseResetKey === "string" && !hasPendingInteraction && (
+        <NativeGuidanceFixtureSlot kind="hint" target={collapseResetKey} />
+      )}
       <PromptBoxWithScrollAnchor
         id={id}
         promptBoxRef={promptBoxRef}

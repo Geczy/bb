@@ -1,3 +1,4 @@
+import { NativeGuidanceFixtureSlot } from "@/prototypes/guidance/native-fixture-slot";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ActiveThinking, ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
@@ -258,6 +259,12 @@ export function ThreadTimelineSurface({
             workspaceRootPath={workspaceRootPath}
           />
         ) : null}
+        {!isThreadTimelinePending &&
+          !timelineError &&
+          !showOngoingIndicator &&
+          timelineRowsWithPendingStop.length > 0 && (
+            <NativeGuidanceFixtureSlot kind="next-step" target={threadId} />
+          )}
         {hostConnectionNotice ? (
           <TimelineStatusIndicator
             label={hostConnectionNotice.label}
