@@ -17,6 +17,7 @@ import { Route as PrivacyRouteImport } from "./routes/privacy";
 import { Route as PluginGuideRouteImport } from "./routes/plugin-guide";
 import { Route as MarketplaceRouteImport } from "./routes/marketplace_";
 import { Route as LinkRouteImport } from "./routes/link";
+import { Route as DocsRouteImport } from "./routes/docs";
 import { Route as DashboardRouteImport } from "./routes/dashboard";
 import { Route as ChangelogRouteImport } from "./routes/changelog";
 import { Route as BrandRouteImport } from "./routes/brand";
@@ -31,6 +32,7 @@ import { Route as GuidesSlugRouteImport } from "./routes/guides.$slug";
 import { Route as DownloadWindowsRouteImport } from "./routes/download.windows";
 import { Route as DownloadMacosRouteImport } from "./routes/download.macos";
 import { Route as DownloadLinuxRouteImport } from "./routes/download.linux";
+import { Route as DocsSlugRouteImport } from "./routes/docs_.$slug";
 import { Route as CompareSlugRouteImport } from "./routes/compare.$slug";
 import { Route as BlogSlugRouteImport } from "./routes/blog_.$slug";
 import { Route as ApiSubscribeRouteImport } from "./routes/api.subscribe";
@@ -92,6 +94,11 @@ const MarketplaceRoute = MarketplaceRouteImport.update({
 const LinkRoute = LinkRouteImport.update({
   id: "/link",
   path: "/link",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DocsRoute = DocsRouteImport.update({
+  id: "/docs",
+  path: "/docs",
   getParentRoute: () => rootRouteImport,
 } as any);
 const DashboardRoute = DashboardRouteImport.update({
@@ -162,6 +169,11 @@ const DownloadMacosRoute = DownloadMacosRouteImport.update({
 const DownloadLinuxRoute = DownloadLinuxRouteImport.update({
   id: "/download/linux",
   path: "/download/linux",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const DocsSlugRoute = DocsSlugRouteImport.update({
+  id: "/docs_/$slug",
+  path: "/docs/$slug",
   getParentRoute: () => rootRouteImport,
 } as any);
 const CompareSlugRoute = CompareSlugRouteImport.update({
@@ -287,6 +299,7 @@ export interface FileRoutesByFullPath {
   "/brand": typeof BrandRoute;
   "/changelog": typeof ChangelogRoute;
   "/dashboard": typeof DashboardRoute;
+  "/docs": typeof DocsRoute;
   "/link": typeof LinkRoute;
   "/marketplace": typeof MarketplaceRouteWithChildren;
   "/plugin-guide": typeof PluginGuideRoute;
@@ -301,6 +314,7 @@ export interface FileRoutesByFullPath {
   "/api/subscribe": typeof ApiSubscribeRoute;
   "/blog/$slug": typeof BlogSlugRoute;
   "/compare/$slug": typeof CompareSlugRoute;
+  "/docs/$slug": typeof DocsSlugRoute;
   "/download/linux": typeof DownloadLinuxRoute;
   "/download/macos": typeof DownloadMacosRoute;
   "/download/windows": typeof DownloadWindowsRoute;
@@ -333,6 +347,7 @@ export interface FileRoutesByTo {
   "/brand": typeof BrandRoute;
   "/changelog": typeof ChangelogRoute;
   "/dashboard": typeof DashboardRoute;
+  "/docs": typeof DocsRoute;
   "/link": typeof LinkRoute;
   "/marketplace": typeof MarketplaceRouteWithChildren;
   "/plugin-guide": typeof PluginGuideRoute;
@@ -347,6 +362,7 @@ export interface FileRoutesByTo {
   "/api/subscribe": typeof ApiSubscribeRoute;
   "/blog/$slug": typeof BlogSlugRoute;
   "/compare/$slug": typeof CompareSlugRoute;
+  "/docs/$slug": typeof DocsSlugRoute;
   "/download/linux": typeof DownloadLinuxRoute;
   "/download/macos": typeof DownloadMacosRoute;
   "/download/windows": typeof DownloadWindowsRoute;
@@ -380,6 +396,7 @@ export interface FileRoutesById {
   "/brand": typeof BrandRoute;
   "/changelog": typeof ChangelogRoute;
   "/dashboard": typeof DashboardRoute;
+  "/docs": typeof DocsRoute;
   "/link": typeof LinkRoute;
   "/marketplace_": typeof MarketplaceRouteWithChildren;
   "/plugin-guide": typeof PluginGuideRoute;
@@ -394,6 +411,7 @@ export interface FileRoutesById {
   "/api/subscribe": typeof ApiSubscribeRoute;
   "/blog_/$slug": typeof BlogSlugRoute;
   "/compare/$slug": typeof CompareSlugRoute;
+  "/docs_/$slug": typeof DocsSlugRoute;
   "/download/linux": typeof DownloadLinuxRoute;
   "/download/macos": typeof DownloadMacosRoute;
   "/download/windows": typeof DownloadWindowsRoute;
@@ -428,6 +446,7 @@ export interface FileRouteTypes {
     | "/brand"
     | "/changelog"
     | "/dashboard"
+    | "/docs"
     | "/link"
     | "/marketplace"
     | "/plugin-guide"
@@ -442,6 +461,7 @@ export interface FileRouteTypes {
     | "/api/subscribe"
     | "/blog/$slug"
     | "/compare/$slug"
+    | "/docs/$slug"
     | "/download/linux"
     | "/download/macos"
     | "/download/windows"
@@ -474,6 +494,7 @@ export interface FileRouteTypes {
     | "/brand"
     | "/changelog"
     | "/dashboard"
+    | "/docs"
     | "/link"
     | "/marketplace"
     | "/plugin-guide"
@@ -488,6 +509,7 @@ export interface FileRouteTypes {
     | "/api/subscribe"
     | "/blog/$slug"
     | "/compare/$slug"
+    | "/docs/$slug"
     | "/download/linux"
     | "/download/macos"
     | "/download/windows"
@@ -520,6 +542,7 @@ export interface FileRouteTypes {
     | "/brand"
     | "/changelog"
     | "/dashboard"
+    | "/docs"
     | "/link"
     | "/marketplace_"
     | "/plugin-guide"
@@ -534,6 +557,7 @@ export interface FileRouteTypes {
     | "/api/subscribe"
     | "/blog_/$slug"
     | "/compare/$slug"
+    | "/docs_/$slug"
     | "/download/linux"
     | "/download/macos"
     | "/download/windows"
@@ -567,6 +591,7 @@ export interface RootRouteChildren {
   BrandRoute: typeof BrandRoute;
   ChangelogRoute: typeof ChangelogRoute;
   DashboardRoute: typeof DashboardRoute;
+  DocsRoute: typeof DocsRoute;
   LinkRoute: typeof LinkRoute;
   MarketplaceRoute: typeof MarketplaceRouteWithChildren;
   PluginGuideRoute: typeof PluginGuideRoute;
@@ -581,6 +606,7 @@ export interface RootRouteChildren {
   ApiSubscribeRoute: typeof ApiSubscribeRoute;
   BlogSlugRoute: typeof BlogSlugRoute;
   CompareSlugRoute: typeof CompareSlugRoute;
+  DocsSlugRoute: typeof DocsSlugRoute;
   DownloadLinuxRoute: typeof DownloadLinuxRoute;
   DownloadMacosRoute: typeof DownloadMacosRoute;
   DownloadWindowsRoute: typeof DownloadWindowsRoute;
@@ -661,6 +687,13 @@ declare module "@tanstack/react-router" {
       path: "/link";
       fullPath: "/link";
       preLoaderRoute: typeof LinkRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/docs": {
+      id: "/docs";
+      path: "/docs";
+      fullPath: "/docs";
+      preLoaderRoute: typeof DocsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/dashboard": {
@@ -759,6 +792,13 @@ declare module "@tanstack/react-router" {
       path: "/download/linux";
       fullPath: "/download/linux";
       preLoaderRoute: typeof DownloadLinuxRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/docs_/$slug": {
+      id: "/docs_/$slug";
+      path: "/docs/$slug";
+      fullPath: "/docs/$slug";
+      preLoaderRoute: typeof DocsSlugRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/compare/$slug": {
@@ -939,6 +979,7 @@ const rootRouteChildren: RootRouteChildren = {
   BrandRoute: BrandRoute,
   ChangelogRoute: ChangelogRoute,
   DashboardRoute: DashboardRoute,
+  DocsRoute: DocsRoute,
   LinkRoute: LinkRoute,
   MarketplaceRoute: MarketplaceRouteWithChildren,
   PluginGuideRoute: PluginGuideRoute,
@@ -955,6 +996,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSubscribeRoute: ApiSubscribeRoute,
   BlogSlugRoute: BlogSlugRoute,
   CompareSlugRoute: CompareSlugRoute,
+  DocsSlugRoute: DocsSlugRoute,
   DownloadLinuxRoute: DownloadLinuxRoute,
   DownloadMacosRoute: DownloadMacosRoute,
   DownloadWindowsRoute: DownloadWindowsRoute,
