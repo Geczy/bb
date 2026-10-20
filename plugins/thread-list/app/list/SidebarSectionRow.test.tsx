@@ -2,7 +2,7 @@
 
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { NO_COLLAPSED_CHILD_ACTIVITY } from "../model/thread-activity.js";
+import { getCollapsedChildActivity, NO_COLLAPSED_CHILD_ACTIVITY } from "../model/thread-activity.js";
 import type {
   PluginSidebarSplitLayout,
   PluginSidebarThreadRowStatus,
@@ -16,7 +16,10 @@ import {
   SIDEBAR_GROUP_TEXT_CLASS,
 } from "@/components/ui/sidebar-row-classes";
 
+import { makeSidebarThread } from "../model/fixtures.js";
+
 installTestPluginRuntime();
+const { SidebarDraftPresenceSync } = await import("./sidebarDraftPresence.js");
 const { SidebarSectionRow } = await import("./SidebarSectionRow.js");
 
 type SectionRowProps = Parameters<typeof SidebarSectionRow>[0];
@@ -24,12 +27,13 @@ type SectionRowProps = Parameters<typeof SidebarSectionRow>[0];
 function renderSectionRow(
   props: Partial<SectionRowProps>,
   options: {
+    draftThreadIds?: string[];
     splitLayout?: PluginSidebarSplitLayout;
     rowStatuses?: Record<string, PluginSidebarThreadRowStatus>;
   } = {},
 ) {
   return renderSlot(
-    { component: SidebarSectionRow },
+    { component: (props: SectionRowProps) => <><SidebarDraftPresenceSync /><SidebarSectionRow {...props} /></> },
     {
       name: "Nested work",
       label: "Nested work",
@@ -40,6 +44,7 @@ function renderSectionRow(
       ...props,
     },
     {
+      sidebarDraftThreadIds: options.draftThreadIds ?? [],
       sidebarSplitLayout: options.splitLayout,
       sidebarRowStatuses: options.rowStatuses ?? {},
     },
@@ -151,6 +156,24 @@ describe("SidebarSectionRow", () => {
         .querySelector("[data-thread-status-glyph]")
         ?.getAttribute("data-row-status"),
     ).toBe("Plugin improving draft");
+  });
+
+  it("keeps a running row's question hidden when another row has a draft", () => {
+    const threads = [
+      makeSidebarThread({ id: "running", runtimeStatus: "active", status: "active" }),
+      makeSidebarThread({ id: "draft", lastReadAt: 1, latestAttentionAt: 1 }),
+    ];
+    renderSectionRow({
+      collapsedThreads: threads,
+      activity: getCollapsedChildActivity(threads),
+      isCollapsed: true,
+    }, {
+      draftThreadIds: ["draft"],
+      rowStatuses: { running: { icon: "CircleQuestion", label: "Waiting on you" } },
+    });
+    const glyph = document.querySelector("[data-thread-status-glyph]");
+    expect(glyph?.getAttribute("data-thread-status-glyph")).toBe("runtime");
+    expect(glyph?.getAttribute("data-row-status")).toBeNull();
   });
 
   it("does not roll a plugin status up while the section is expanded", () => {

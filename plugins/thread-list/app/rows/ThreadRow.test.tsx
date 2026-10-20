@@ -167,6 +167,7 @@ interface RenderThreadRowArgs extends Omit<HarnessProps, "thread"> {
   hiddenDraftThreadIds?: string[];
   shortcutKey?: string;
   pluginStatus?: PluginSidebarThreadRowStatus;
+  childStatuses?: Record<string, PluginSidebarThreadRowStatus>;
   splitLayout?: PluginSidebarSplitLayout;
   projects?: PluginSidebarProject[];
   providers?: PluginProvidersState["providers"];
@@ -180,6 +181,7 @@ function renderThreadRow({
   hiddenDraftThreadIds = [],
   shortcutKey,
   pluginStatus,
+  childStatuses = {},
   splitLayout,
   projects = [],
   providers = [],
@@ -199,7 +201,7 @@ function renderThreadRow({
         ...(hasComposerDraft ? [thread.id] : []),
         ...hiddenDraftThreadIds,
       ],
-      sidebarRowStatuses: pluginStatus ? { [thread.id]: pluginStatus } : {},
+      sidebarRowStatuses: { ...childStatuses, ...(pluginStatus ? { [thread.id]: pluginStatus } : {}) },
       sidebarShortcuts: shortcutKey
         ? {
             [thread.id]: {
@@ -1380,6 +1382,25 @@ describe("ThreadRow", () => {
     });
 
     expect(renderedIndicators()).toEqual(["working-draft"]);
+  });
+
+  it.each([true, false])("rolls a child's question into its parent only while collapsed (%s)", (isCollapsed) => {
+    renderThreadRow({
+      thread: createThread({ lastReadAt: 0, latestAttentionAt: 1 }),
+      childStatuses: {
+        thr_hidden_child: { icon: "CircleQuestion", label: "Waiting on you" },
+      },
+      options: {
+        kind: "parent",
+        depth: 1,
+        isCompact: false,
+        isCollapsed,
+        childCount: 1,
+        childActivity: { ...NO_COLLAPSED_CHILD_ACTIVITY, threadIds: ["thr_hidden_child"] },
+        onToggleCollapsed: vi.fn(),
+      },
+    });
+    expect(statusGlyph().getAttribute("data-row-status")).toBe(isCollapsed ? "Waiting on you" : null);
   });
 
   it("ignores hidden child activity once the parent is expanded", () => {
