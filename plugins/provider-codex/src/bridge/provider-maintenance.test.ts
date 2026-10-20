@@ -6,6 +6,7 @@ import { resetChatGptCloudflareCookiesForTests } from "../ai/chatgpt-fetch.js";
 import { resolveCodexCommand } from "./codex-executable.js";
 import {
   __testing,
+  codexInstallerCommand,
   getCodexProviderHealth,
   getCodexProviderInstallationStatus,
   getCodexProviderUsage,
@@ -422,6 +423,21 @@ describe("Codex native install", () => {
       const status = await getCodexProviderInstallationStatus(undefined, false);
       expect(status.installed).toBe(true);
       expect(status.currentVersion).toBe("0.150.0");
+      const health = await getCodexProviderHealth();
+      expect(health.supported && health.health.status).not.toBe(
+        "not_installed",
+      );
+      expect(health.supported && health.health.localLoginCommand).toBe(
+        `${path.join(nativeBin, "codex")} login`,
+      );
     }
   });
+
+  it.each(["darwin", "linux", "win32"] as const)(
+    "runs OpenAI's installer without its interactive prompts on %s",
+    (platform) => {
+      const { args } = codexInstallerCommand(platform);
+      expect(args.join(" ")).toContain("CODEX_NON_INTERACTIVE");
+    },
+  );
 });
