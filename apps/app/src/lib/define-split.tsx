@@ -118,7 +118,9 @@ export function defineSplit<P extends object>({
 }) {
   let pending: Promise<{ default: ComponentType<P> }> | null = null;
   let loaded: ComponentType<P> | null = null;
+  let downloadFailure: { error: unknown } | null = null;
   const loadModule = () => {
+    if (downloadFailure !== null) return Promise.reject(downloadFailure.error);
     pending ??= prepareSplitImport(id)
       .then(() => load())
       .then((component) => {
@@ -127,6 +129,7 @@ export function defineSplit<P extends object>({
       })
       .catch((error: unknown) => {
         pending = null;
+        if (isChunkDownloadError(error)) downloadFailure = { error };
         throw error;
       });
     return pending;

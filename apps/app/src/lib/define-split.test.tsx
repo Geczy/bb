@@ -247,6 +247,29 @@ it("reports a download failure as one, logs it, and reloads once the server answ
   view.unmount();
 });
 
+it("does not re-import a chunk that failed to download when the split remounts or warms", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  reloadAfterChunkDownloadFailure.mockResolvedValue("not-reloaded");
+  const load = vi
+    .fn<() => Promise<React.ComponentType>>()
+    .mockRejectedValue(
+      new TypeError("Failed to fetch dynamically imported module: /a.js"),
+    );
+  const Split = defineSplit({
+    id: "download-failure-remount",
+    load,
+    loading: () => null,
+    tier: "intent",
+  });
+  const first = render(<Split />);
+  await screen.findByRole("alert");
+  first.unmount();
+  await Split.preload();
+  render(<Split />);
+  await screen.findByRole("alert");
+  expect(load).toHaveBeenCalledOnce();
+});
+
 it("stops waiting for the server when the failed split unmounts", async () => {
   vi.useFakeTimers();
   vi.spyOn(console, "error").mockImplementation(() => {});
