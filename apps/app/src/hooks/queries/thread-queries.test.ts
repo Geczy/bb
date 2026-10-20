@@ -16,7 +16,7 @@ import type {
 import { COMPACT_VIEWPORT_QUERY } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { POINTER_COARSE_QUERY } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import * as api from "@/lib/api";
-import { sdk } from "@/lib/sdk";
+import { BbHttpError, sdk } from "@/lib/sdk";
 import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ARCHIVED_THREADS_PAGE_SIZE } from "./archived-threads-page-size";
@@ -77,7 +77,8 @@ vi.mock("@/lib/api", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/sdk", () => ({
+vi.mock("@/lib/sdk", async () => ({
+  BbHttpError: (await import("@bb/sdk/browser")).BbHttpError,
   sdk: {
     threads: {
       get: vi.fn(),
@@ -1182,5 +1183,64 @@ describe("palette lifecycle queries", () => {
       limit: 20,
       signal: expect.any(AbortSignal),
     });
+  });
+});
+
+describe("thread reads during a bb connect gate failure burst", () => {
+  function connectGateError(): BbHttpError {
+    return new BbHttpError({
+      status: 502,
+      message: "bb connect hit a temporary problem. Try again in a moment.",
+      code: "connect_gate_error",
+      body: {
+        code: "connect_gate_error",
+        message: "bb connect hit a temporary problem. Try again in a moment.",
+      },
+    });
+  }
+
+  it("retries the thread read past the burst instead of settling on an error", async () => {
+    vi.mocked(sdk.threads.get)
+      .mockRejectedValueOnce(connectGateError())
+      .mockRejectedValueOnce(connectGateError())
+      .mockRejectedValueOnce(connectGateError());
+    const { queryClient } = createQueryClientTestHarness();
+    const errorStates: boolean[] = [];
+
+    const observer = observe(
+      queryClient,
+      threadQueryOptions(queryClient, "thread-1"),
+    );
+    unsubscribes.push(
+      observer.subscribe((result) => errorStates.push(result.isError)),
+    );
+
+    await vi.waitFor(
+      () => {
+        expect(observer.getCurrentResult().isSuccess).toBe(true);
+      },
+      { timeout: 5_000 },
+    );
+    expect(sdk.threads.get).toHaveBeenCalledTimes(4);
+    expect(errorStates).not.toContain(true);
+  });
+
+  it("retries the timeline read past the burst instead of settling on an error", async () => {
+    vi.mocked(sdk.threads.timeline)
+      .mockRejectedValueOnce(connectGateError())
+      .mockRejectedValueOnce(connectGateError())
+      .mockRejectedValueOnce(connectGateError());
+    stubMatchMedia([]);
+    const { queryClient } = createQueryClientTestHarness();
+
+    const observer = observeThreadTimeline(queryClient, "thread-1");
+
+    await vi.waitFor(
+      () => {
+        expect(observer.getCurrentResult().isSuccess).toBe(true);
+      },
+      { timeout: 5_000 },
+    );
+    expect(sdk.threads.timeline).toHaveBeenCalledTimes(4);
   });
 });

@@ -65,7 +65,7 @@ import {
   requireEnabledQueryArg,
   requireThreadId,
   shouldRetryTransientReadQuery,
-  TRANSIENT_READ_RETRY_DELAY_MS,
+  transientReadRetryDelay,
 } from "./query-helpers";
 import {
   HEAVY_PAYLOAD_QUERY_POLICY,
@@ -731,7 +731,7 @@ export function threadQueryOptions(
     staleTime: THREAD_DETAIL_STALE_TIME_MS,
     refetchOnMount: options?.refetchOnMount ?? true,
     retry: shouldRetryTransientReadQuery,
-    retryDelay: TRANSIENT_READ_RETRY_DELAY_MS,
+    retryDelay: transientReadRetryDelay,
     placeholderData: (previousData, previousQuery) =>
       resolveThreadPlaceholder(previousData, previousQuery?.queryKey, id) ??
       liftThreadListPlaceholder(
@@ -802,7 +802,7 @@ export function threadDetailBootstrapQueryOptions(
     staleTime: Infinity,
     gcTime: THREAD_OPEN_CACHE_GC_MS,
     retry: shouldRetryTransientReadQuery,
-    retryDelay: TRANSIENT_READ_RETRY_DELAY_MS,
+    retryDelay: transientReadRetryDelay,
   });
 }
 
@@ -1124,7 +1124,7 @@ export function threadTimelineQueryOptions(
       ? {}
       : { staleTime: options.staleTime }),
     retry: shouldRetryTransientReadQuery,
-    retryDelay: TRANSIENT_READ_RETRY_DELAY_MS,
+    retryDelay: transientReadRetryDelay,
     placeholderData: (previousData, previousQuery) =>
       resolveThreadTimelinePlaceholder(
         previousData,

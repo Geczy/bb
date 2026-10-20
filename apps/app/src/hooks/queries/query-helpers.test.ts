@@ -69,7 +69,42 @@ describe("requireEnabledQueryArg", () => {
 });
 
 describe("isTransientReadError", () => {
-  it("matches browser transport failures but not HTTP responses", () => {
+  it.each([502, 503, 504])(
+    "treats a %i gateway response as transient",
+    (status) => {
+      expect(
+        isTransientReadError(
+          new BbHttpError({
+            status,
+            message: "bb connect hit a temporary problem.",
+            body: { code: "connect_gate_error" },
+            code: "connect_gate_error",
+          }),
+        ),
+      ).toBe(true);
+      expect(
+        isTransientReadError(new HttpError({ status, message: "Bad gateway" })),
+      ).toBe(true);
+    },
+  );
+
+  it.each([400, 401, 403, 404, 500])(
+    "treats a %i response as final",
+    (status) => {
+      expect(
+        isTransientReadError(
+          new BbHttpError({
+            status,
+            message: "Failed",
+            body: null,
+            code: null,
+          }),
+        ),
+      ).toBe(false);
+    },
+  );
+
+  it("matches browser transport failures but not other HTTP responses", () => {
     expect(isTransientReadError(new TypeError("Failed to fetch"))).toBe(true);
     expect(isTransientReadError(new TypeError("Load failed"))).toBe(true);
     expect(isTransientReadError({ name: "AbortError" })).toBe(true);

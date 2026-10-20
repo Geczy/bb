@@ -3,8 +3,10 @@ import { HttpError } from "@/lib/api";
 import { BbHttpError } from "@/lib/sdk";
 
 export const PROMPT_HISTORY_STALE_TIME_MS = 10_000;
-const TRANSIENT_READ_RETRY_COUNT = 2;
-export const TRANSIENT_READ_RETRY_DELAY_MS = 250;
+const TRANSIENT_READ_RETRY_COUNT = 5;
+const TRANSIENT_READ_RETRY_BASE_DELAY_MS = 250;
+const TRANSIENT_READ_RETRY_MAX_DELAY_MS = 4_000;
+const GATEWAY_FAILURE_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
 
 export interface QueryOptions {
   enabled?: boolean;
@@ -53,7 +55,7 @@ export function isTransientReadError(error: unknown): boolean {
     return true;
   }
   if (error instanceof HttpError || error instanceof BbHttpError) {
-    return false;
+    return GATEWAY_FAILURE_STATUSES.has(error.status);
   }
 
   const record = toRecord(error);
@@ -78,4 +80,11 @@ export function shouldRetryTransientReadQuery(
   }
 
   return isTransientReadError(error);
+}
+
+export function transientReadRetryDelay(failureCount: number): number {
+  return Math.min(
+    TRANSIENT_READ_RETRY_BASE_DELAY_MS * 2 ** failureCount,
+    TRANSIENT_READ_RETRY_MAX_DELAY_MS,
+  );
 }

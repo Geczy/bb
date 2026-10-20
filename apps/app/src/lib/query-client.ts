@@ -11,7 +11,7 @@ import {
 import { createBrowserLifecycleFetchController } from "@/hooks/cache-owners/browser-lifecycle-cache-owner";
 import {
   shouldRetryTransientReadQuery,
-  TRANSIENT_READ_RETRY_DELAY_MS,
+  transientReadRetryDelay,
 } from "@/hooks/queries/query-helpers";
 
 interface CreateAppQueryClientOptions {
@@ -133,7 +133,7 @@ export function createAppQueryClient(
             ? true
             : () => shouldRefetchOnWindowFocus(),
         retry: shouldRetryTransientReadQuery,
-        retryDelay: TRANSIENT_READ_RETRY_DELAY_MS,
+        retryDelay: transientReadRetryDelay,
         ...defaultOptions?.queries,
       },
     },
