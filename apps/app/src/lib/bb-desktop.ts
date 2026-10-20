@@ -10,7 +10,6 @@ import {
   TITLE_BAR_CONTROL_SIZE_PX,
   TITLE_BAR_SIDEBAR_TOGGLE_GAP_PX,
   TITLE_BAR_TRAILING_CONTROL_CENTER_INSET_PX,
-  MACOS_WINDOW_CORNER_RADIUS_PX,
   WINDOW_CARD_RADIUS_PX,
   WINDOW_FRAME_LIP_PX,
   type BbDesktopApi,
@@ -90,13 +89,12 @@ const PAGE_HEADER_BASE_INSET_PX = 16;
 
 function getWindowCardMask(
   titleBarHeight: number,
-  cardRadius: number,
   squareTopLeft: boolean,
 ): string {
   const corner = squareTopLeft
-    ? `<rect y='${titleBarHeight}' width='${cardRadius}' height='${cardRadius}'/>`
+    ? `<rect y='${titleBarHeight}' width='${WINDOW_CARD_RADIUS_PX}' height='${WINDOW_CARD_RADIUS_PX}'/>`
     : "";
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'><rect width='100%' height='${titleBarHeight}'/><rect y='${titleBarHeight}' width='100%' height='100%' rx='${cardRadius}'/>${corner}</svg>`;
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%'><rect width='100%' height='${titleBarHeight}'/><rect y='${titleBarHeight}' width='100%' height='100%' rx='${WINDOW_CARD_RADIUS_PX}'/>${corner}</svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
@@ -126,9 +124,6 @@ export function applyAppFrameGeometry(
         MACOS_TRAFFIC_LIGHT_TOP_INSET_PX) +
       MACOS_TRAFFIC_LIGHT_SIZE_PX / 2;
     const titleBarHeight = 2 * centerY;
-    const cardRadius =
-      (desktopInfo?.macosWindowCornerRadius ?? MACOS_WINDOW_CORNER_RADIUS_PX) -
-      WINDOW_FRAME_LIP_PX;
     const reserve =
       inset +
       getMacosTrafficLightClusterWidth(
@@ -138,11 +133,9 @@ export function applyAppFrameGeometry(
     Object.assign(properties, {
       "--bb-macos-traffic-light-center-y": `${centerY}px`,
       "--bb-window-title-bar-height": `${titleBarHeight}px`,
-      "--bb-frame-card-radius": `${cardRadius}px`,
-      "--bb-window-card-mask": getWindowCardMask(titleBarHeight, cardRadius, false),
+      "--bb-window-card-mask": getWindowCardMask(titleBarHeight, false),
       "--bb-window-card-mask-square-left": getWindowCardMask(
         titleBarHeight,
-        cardRadius,
         true,
       ),
       "--bb-macos-traffic-light-reserve": `${reserve}px`,

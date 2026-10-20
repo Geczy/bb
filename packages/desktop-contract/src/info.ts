@@ -77,7 +77,6 @@ export interface BbDesktopApi extends BbDesktopInfo {
   macosTrafficLightGap?: number;
   macosTrafficLightInset?: number;
   macosTrafficLightTopInset?: number;
-  macosWindowCornerRadius?: number;
   onChange(listener: BbDesktopInfoChangeHandler): BbDesktopInfoUnsubscribe;
   onWindowStateChange?(
     listener: BbDesktopWindowStateChangeHandler,

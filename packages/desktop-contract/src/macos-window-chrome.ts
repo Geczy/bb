@@ -12,18 +12,11 @@ export const MACOS_TRAFFIC_LIGHT_SIZE_PX = 14;
 export const MACOS_TRAFFIC_LIGHT_GAP_PX = 9;
 const MACOS_TRAFFIC_LIGHT_COUNT = 3;
 const MACOS_PRE_26_TRAFFIC_LIGHT_GAP_PX = 6;
-const MACOS_PRE_26_WINDOW_CORNER_RADIUS_PX = 12;
 
-export function getMacosWindowChromeMetrics(macosMajorVersion: number) {
+export function getMacosTrafficLightGap(macosMajorVersion: number): number {
   return macosMajorVersion >= 26
-    ? {
-        trafficLightGap: MACOS_TRAFFIC_LIGHT_GAP_PX,
-        windowCornerRadius: MACOS_WINDOW_CORNER_RADIUS_PX,
-      }
-    : {
-        trafficLightGap: MACOS_PRE_26_TRAFFIC_LIGHT_GAP_PX,
-        windowCornerRadius: MACOS_PRE_26_WINDOW_CORNER_RADIUS_PX,
-      };
+    ? MACOS_TRAFFIC_LIGHT_GAP_PX
+    : MACOS_PRE_26_TRAFFIC_LIGHT_GAP_PX;
 }
 
 export function getMacosTrafficLightClusterWidth(gap: number): number {

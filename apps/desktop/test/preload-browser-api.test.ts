@@ -170,17 +170,10 @@ afterEach(() => {
   Reflect.deleteProperty(process, "getSystemVersion");
 });
 
-describe("macOS window chrome metrics", () => {
-  it("reports the traffic-light gap and window corner radius for the running macOS", async () => {
-    const tahoe = await loadPreload("26.5.0");
-    expect([tahoe.macosTrafficLightGap, tahoe.macosWindowCornerRadius]).toEqual(
-      [9, 16],
-    );
-    const sequoia = await loadPreload("15.7.9");
-    expect([
-      sequoia.macosTrafficLightGap,
-      sequoia.macosWindowCornerRadius,
-    ]).toEqual([6, 12]);
+describe("macOS traffic-light gap", () => {
+  it("reports the gap AppKit draws on the running macOS", async () => {
+    expect((await loadPreload("26.5.0")).macosTrafficLightGap).toBe(9);
+    expect((await loadPreload("15.7.9")).macosTrafficLightGap).toBe(6);
   });
 });
 
