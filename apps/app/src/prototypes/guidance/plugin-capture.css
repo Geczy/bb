@@ -1,0 +1,13 @@
+:where([data-plugin-capture] [data-testid="app-layout-root"]) {
+  height: 100%;
+  min-height: 0;
+}
+:where([data-plugin-capture] [data-sidebar="panel"]) {
+  top: 2.25rem;
+  height: calc(100dvh - 2.25rem);
+}
+
+:where([data-plugin-capture] [data-testid="app-desktop-sidebar-trigger"]),
+:where([data-plugin-capture] [data-testid="app-sidebar-trigger-overlay"]) {
+  top: 2.25rem;
+}
