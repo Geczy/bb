@@ -45,6 +45,16 @@ export function createPluginReadWatcher<T>(options: {
     options.onStop();
     drained();
   };
+  const retryWhenReady = () => {
+    if (stopped) return;
+    const remaining = blockedUntil - Date.now();
+    if (remaining <= 0) {
+      refresh();
+      return;
+    }
+    retry = setTimeout(retryWhenReady, remaining);
+    retry.unref?.();
+  };
   const failed = (error: unknown, current: number) => {
     if (stopped || current !== revision) return;
     const permanent =
@@ -64,8 +74,7 @@ export function createPluginReadWatcher<T>(options: {
       const delay = Math.min(30_000, 1_000 * 2 ** failures++);
       blockedUntil = Date.now() + delay;
       clearTimeout(retry);
-      retry = setTimeout(refresh, delay);
-      retry.unref?.();
+      retryWhenReady();
     }
   };
   const schedule = () => {

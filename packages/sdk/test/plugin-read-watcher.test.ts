@@ -190,6 +190,7 @@ it.each(["own", "unrelated"])(
 );
 
 it("prepares an unchanged snapshot again only after an error resets synchronization", async () => {
+  vi.useFakeTimers();
   const read = vi.fn().mockResolvedValue(1);
   const prepare = vi.fn();
   const onChange = vi.fn();
@@ -204,17 +205,21 @@ it("prepares an unchanged snapshot again only after an error resets synchronizat
     onStop: vi.fn(),
   });
   watch.refresh();
-  await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(onChange).toHaveBeenCalledTimes(1);
   watch.refresh();
-  await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(2));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(onChange).toHaveBeenCalledTimes(2);
   expect(prepare).toHaveBeenCalledOnce();
   read.mockRejectedValueOnce(new Error("unavailable"));
   watch.refresh();
-  await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+  await vi.advanceTimersByTimeAsync(0);
+  expect(onError).toHaveBeenCalledOnce();
   watch.refresh();
-  await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(2), {
-    timeout: 3000,
-  });
+  await vi.advanceTimersByTimeAsync(0);
+  vi.setSystemTime(Date.now() - 1);
+  await vi.advanceTimersByTimeAsync(1001);
+  expect(prepare).toHaveBeenCalledTimes(2);
   watch();
   await watch.done;
 });
