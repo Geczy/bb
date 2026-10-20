@@ -92,7 +92,7 @@ function openDesktopMenu() {
   return screen.getByRole("menu");
 }
 
-function renderTwoNarrowAssistantRows() {
+function renderTwoAssistantRows({ width }: { width?: number } = {}) {
   const resizeObserver = installControlledResizeObserver();
   const actions = ["Summarize", "Translate"].map((label) => ({
     key: label,
@@ -105,94 +105,48 @@ function renderTwoNarrowAssistantRows() {
     <>
       {[0, 1].map((index) => (
         <section key={index} data-testid={`row-${index}`}>
-          <MessageActionBar
-            messageRole="assistant"
-            timestamp={TIMESTAMP}
-            messageText="Message"
-            alignment="start"
-            mobileActionDisplay="inline"
-            pluginActions={actions}
-          />
+          <div className="group/message" data-testid={`group-${index}`}>
+            <p data-testid={`body-${index}`}>Message</p>
+            <MessageActionBar
+              messageRole="assistant"
+              timestamp={TIMESTAMP}
+              messageText="Message"
+              alignment="start"
+              mobileActionDisplay="inline"
+              pluginActions={actions}
+            />
+          </div>
         </section>
       ))}
     </>,
   );
-  resizeObserver.reportWidth(72);
+  if (width !== undefined) resizeObserver.reportWidth(width);
   const row = (index: number) => screen.getByTestId(`row-${index}`);
   const labels = (index: number) =>
     within(row(index))
       .getAllByRole("button")
       .map((button) => button.getAttribute("aria-label"));
-  const slot = row(0).firstElementChild!;
-  let pointerOverSlot = false;
-  const matches = Element.prototype.matches;
-  vi.spyOn(Element.prototype, "matches").mockImplementation(function (
-    this: Element,
-    selector: string,
-  ) {
-    if (selector === ":hover" && this === slot) return pointerOverSlot;
-    return matches.call(this, selector);
-  });
-  const selectTranslateFromMenu = (pointerStaysOnRow: boolean) => {
-    pointerOverSlot = true;
-    fireEvent.pointerEnter(slot);
-    fireEvent.pointerDown(
-      within(row(0)).getByRole("button", { name: "Message actions" }),
-    );
-    const menu = screen.getByRole("menu");
-    fireEvent.pointerEnter(menu);
-    pointerOverSlot = pointerStaysOnRow;
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Translate" }));
-  };
-  const setPointerOverSlot = (value: boolean) => {
-    pointerOverSlot = value;
-  };
-  return { labels, slot, selectTranslateFromMenu, setPointerOverSlot };
+  const button = (index: number, name: string) =>
+    within(row(index)).getByRole("button", { name });
+  const group = (index: number) => screen.getByTestId(`group-${index}`);
+  const body = (index: number) => screen.getByTestId(`body-${index}`);
+  return { labels, button, group, body };
 }
 
-function renderTwoWideAssistantRows() {
-  const actions = ["Summarize", "Translate"].map((label) => ({
-    key: label,
-    pluginId: null,
-    icon: null,
-    label,
-    onSelect: vi.fn(),
-  }));
-  render(
-    <>
-      {[0, 1].map((index) => (
-        <section key={index} data-testid={`row-${index}`}>
-          <MessageActionBar
-            messageRole="assistant"
-            timestamp={TIMESTAMP}
-            messageText="Message"
-            alignment="start"
-            mobileActionDisplay="inline"
-            pluginActions={actions}
-          />
-        </section>
-      ))}
-    </>,
-  );
-  const row = (index: number) => screen.getByTestId(`row-${index}`);
-  const labels = (index: number) =>
-    within(row(index))
-      .getAllByRole("button")
-      .map((button) => button.getAttribute("aria-label"));
-  const translate = within(row(0)).getByRole("button", { name: "Translate" });
-  const slot = row(0).firstElementChild!;
-  const mockFocusVisible = (focusVisible: boolean) => {
-    const matches = Element.prototype.matches;
-    vi.spyOn(Element.prototype, "matches").mockImplementation(function (
-      this: Element,
-      selector: string,
-    ) {
-      if (selector === ":focus-visible") return focusVisible;
-      return matches.call(this, selector);
-    });
-  };
-  return { labels, translate, slot, mockFocusVisible };
-}
+const WIDE_DEFAULT_ORDER = [
+  "Copy message",
+  "Summarize",
+  "Translate",
+  "Message actions",
+];
+const WIDE_RECENT_ORDER = [
+  "Copy message",
+  "Translate",
+  "Summarize",
+  "Message actions",
+];
+const MOUSE = { pointerType: "mouse" };
+const TOUCH = { pointerType: "touch" };
 
 describe("MessageActionBar", () => {
   it("keeps Copy fixed and shares recent actions only within the same message role", () => {
@@ -266,77 +220,80 @@ describe("MessageActionBar", () => {
     ]);
   });
 
-  it("re-sorts a row after a mouse-selected menu item closes the menu away from the row", async () => {
-    const { labels, selectTranslateFromMenu } = renderTwoNarrowAssistantRows();
+  it("re-sorts a row after a mouse pick from More once the pointer leaves the message", () => {
+    const { labels, button, group } = renderTwoAssistantRows({ width: 72 });
     expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
-    selectTranslateFromMenu(false);
+    fireEvent.pointerEnter(group(0), MOUSE);
+    fireEvent.pointerDown(button(0, "Message actions"), MOUSE);
+    const menu = screen.getByRole("menu");
+    fireEvent.pointerLeave(group(0), MOUSE);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Translate" }));
+    expect(screen.queryByRole("menu")).toBeNull();
     expect(labels(1)).toEqual(["Copy message", "Translate", "Message actions"]);
-    await waitFor(() => expect(labels(0)).toEqual(labels(1)));
-  });
-
-  it("keeps a row frozen after a mouse-selected menu item while the pointer stays on the row", async () => {
-    const { labels, slot, selectTranslateFromMenu, setPointerOverSlot } =
-      renderTwoNarrowAssistantRows();
-    selectTranslateFromMenu(false);
-    expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
-    setPointerOverSlot(true);
-    await act(
-      () =>
-        new Promise((resolve) =>
-          requestAnimationFrame(() => setTimeout(resolve, 50)),
-        ),
-    );
-    expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
-    expect(labels(1)).toEqual(["Copy message", "Translate", "Message actions"]);
-    setPointerOverSlot(false);
-    fireEvent.pointerLeave(slot);
     expect(labels(0)).toEqual(labels(1));
   });
 
-  it("re-sorts a row after a mouse click focuses an inline action and the pointer leaves", () => {
-    const { labels, translate, slot, mockFocusVisible } =
-      renderTwoWideAssistantRows();
-    mockFocusVisible(false);
-    fireEvent.pointerEnter(slot);
-    act(() => translate.focus());
-    fireEvent.click(translate);
-    expect(labels(0)).toEqual([
-      "Copy message",
-      "Summarize",
-      "Translate",
-      "Message actions",
-    ]);
-    fireEvent.pointerLeave(slot);
-    expect(labels(0)).toEqual(labels(1));
-    expect(labels(0)).toEqual([
-      "Copy message",
-      "Translate",
-      "Summarize",
-      "Message actions",
-    ]);
+  it("keeps the order while the pointer moves from the bar into the message body", () => {
+    const { labels, button, group, body } = renderTwoAssistantRows();
+    fireEvent.pointerEnter(group(0), MOUSE);
+    fireEvent.click(button(0, "Translate"));
+    fireEvent.pointerLeave(button(0, "Translate").parentElement!, MOUSE);
+    fireEvent.pointerEnter(body(0), MOUSE);
+    expect(labels(0)).toEqual(WIDE_DEFAULT_ORDER);
+    expect(labels(1)).toEqual(WIDE_RECENT_ORDER);
+    fireEvent.pointerLeave(group(0), MOUSE);
+    expect(labels(0)).toEqual(WIDE_RECENT_ORDER);
   });
 
-  it("keeps a row frozen while keyboard focus stays inside it", () => {
-    const { labels, translate, slot, mockFocusVisible } =
-      renderTwoWideAssistantRows();
-    mockFocusVisible(true);
-    act(() => translate.focus());
-    fireEvent.click(translate);
-    fireEvent.pointerLeave(slot);
-    expect(labels(0)).toEqual([
-      "Copy message",
-      "Summarize",
-      "Translate",
-      "Message actions",
-    ]);
-    expect(labels(1)).toEqual([
-      "Copy message",
-      "Translate",
-      "Summarize",
-      "Message actions",
-    ]);
-    act(() => translate.blur());
-    expect(labels(0)).toEqual(labels(1));
+  it.each(["pointer", "keyboard"])(
+    "keeps the order while %s focus stays inside the message",
+    (input) => {
+      const { labels, button } = renderTwoAssistantRows();
+      if (input === "keyboard") {
+        fireEvent.keyDown(document.body, { key: "Tab" });
+      } else {
+        fireEvent.pointerDown(button(0, "Translate"), MOUSE);
+      }
+      act(() => button(0, "Translate").focus());
+      fireEvent.click(button(0, "Translate"));
+      expect(labels(1)).toEqual(WIDE_RECENT_ORDER);
+      expect(labels(0)).toEqual(WIDE_DEFAULT_ORDER);
+      act(() => button(0, "Summarize").focus());
+      expect(labels(0)).toEqual(WIDE_DEFAULT_ORDER);
+      act(() => button(0, "Summarize").blur());
+      expect(labels(0)).toEqual(WIDE_RECENT_ORDER);
+    },
+  );
+
+  it("keeps the order while the menu is open and after it closes under the pointer", () => {
+    const { labels, button, group } = renderTwoAssistantRows();
+    fireEvent.pointerEnter(group(0), MOUSE);
+    fireEvent.pointerDown(button(0, "Message actions"), MOUSE);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    fireEvent.pointerLeave(group(0), MOUSE);
+    fireEvent.click(button(1, "Translate"));
+    expect(labels(1)).toEqual(WIDE_RECENT_ORDER);
+    expect(labels(0)).toEqual(WIDE_DEFAULT_ORDER);
+    fireEvent.pointerEnter(group(0), MOUSE);
+    fireEvent.pointerDown(button(0, "Message actions"), MOUSE);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(labels(0)).toEqual(WIDE_DEFAULT_ORDER);
+    fireEvent.pointerLeave(group(0), MOUSE);
+    expect(labels(0)).toEqual(WIDE_RECENT_ORDER);
+  });
+
+  it("holds the order after a touch tap until the next touch outside the message", () => {
+    mockMobileCoarsePointer();
+    const { labels, button, group, body } = renderTwoAssistantRows();
+    fireEvent.pointerDown(button(0, "Translate"), TOUCH);
+    fireEvent.pointerLeave(group(0), TOUCH);
+    fireEvent.click(button(0, "Translate"));
+    expect(labels(1)).toEqual(WIDE_RECENT_ORDER);
+    expect(labels(0)).toEqual(WIDE_DEFAULT_ORDER);
+    fireEvent.pointerDown(body(0), TOUCH);
+    expect(labels(0)).toEqual(WIDE_DEFAULT_ORDER);
+    fireEvent.pointerDown(document.body, TOUCH);
+    expect(labels(0)).toEqual(WIDE_RECENT_ORDER);
   });
 
   it("ranks inline and overflow actions together without growing the visible row", async () => {

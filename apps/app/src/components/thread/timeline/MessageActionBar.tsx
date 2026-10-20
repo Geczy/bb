@@ -314,6 +314,84 @@ function MessageTimestampFooter({ timestamp }: { timestamp: number }) {
   );
 }
 
+const MESSAGE_GROUP_SELECTOR = ".group\\/message";
+
+function isTouchPointer(event: PointerEvent) {
+  return event.pointerType === "touch" || event.pointerType === "pen";
+}
+
+function useMessageGroupInteraction(isMenuOpen: boolean) {
+  const [messageGroup, setMessageGroup] = useState<HTMLElement | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocusWithin, setIsFocusWithin] = useState(false);
+  const [isTouchHeld, setIsTouchHeld] = useState(false);
+  const menuContentRef = useRef<HTMLDivElement | null>(null);
+  const slotRef = useCallback((node: HTMLElement | null) => {
+    const group = node?.closest<HTMLElement>(MESSAGE_GROUP_SELECTOR) ?? node;
+    setMessageGroup(group ?? null);
+    if (group) {
+      setIsHovered(group.matches(":hover"));
+      setIsFocusWithin(group.contains(document.activeElement));
+    }
+  }, []);
+  useEffect(() => {
+    if (!messageGroup) return;
+    const handlePointerEnter = (event: PointerEvent) => {
+      if (!isTouchPointer(event)) setIsHovered(true);
+    };
+    const handlePointerLeave = (event: PointerEvent) => {
+      if (!isTouchPointer(event)) setIsHovered(false);
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      if (isTouchPointer(event)) setIsTouchHeld(true);
+    };
+    const handleFocusIn = () => setIsFocusWithin(true);
+    const handleFocusOut = (event: FocusEvent) => {
+      if (
+        !(event.relatedTarget instanceof Node) ||
+        !messageGroup.contains(event.relatedTarget)
+      ) {
+        setIsFocusWithin(false);
+      }
+    };
+    messageGroup.addEventListener("pointerenter", handlePointerEnter);
+    messageGroup.addEventListener("pointerleave", handlePointerLeave);
+    messageGroup.addEventListener("pointerdown", handlePointerDown);
+    messageGroup.addEventListener("focusin", handleFocusIn);
+    messageGroup.addEventListener("focusout", handleFocusOut);
+    return () => {
+      messageGroup.removeEventListener("pointerenter", handlePointerEnter);
+      messageGroup.removeEventListener("pointerleave", handlePointerLeave);
+      messageGroup.removeEventListener("pointerdown", handlePointerDown);
+      messageGroup.removeEventListener("focusin", handleFocusIn);
+      messageGroup.removeEventListener("focusout", handleFocusOut);
+    };
+  }, [messageGroup]);
+  useEffect(() => {
+    if (!messageGroup || !isTouchHeld) return;
+    const releaseOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        (messageGroup.contains(target) ||
+          menuContentRef.current?.contains(target))
+      ) {
+        return;
+      }
+      setIsTouchHeld(false);
+    };
+    document.addEventListener("pointerdown", releaseOutside, true);
+    return () => {
+      document.removeEventListener("pointerdown", releaseOutside, true);
+    };
+  }, [messageGroup, isTouchHeld]);
+  return {
+    isRevealed: isMenuOpen || isHovered || isFocusWithin || isTouchHeld,
+    menuContentRef,
+    slotRef,
+  };
+}
+
 export function MessageActionBar({
   messageRole,
   timestamp,
@@ -342,57 +420,23 @@ export function MessageActionBar({
     enabled: !(isCompactTouch && mobileActionDisplay === "overflow"),
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
-  const [isHoverCheckPending, setIsHoverCheckPending] = useState(false);
+  const {
+    isRevealed,
+    menuContentRef,
+    slotRef: interactionRef,
+  } = useMessageGroupInteraction(isMenuOpen);
   const { recents, recordAction } = useMessageActionRecents(messageRole);
   const [visibleRecents, setVisibleRecents] = useState(recents);
-  if (
-    !isHovered &&
-    !isKeyboardFocused &&
-    !isMenuOpen &&
-    !isHoverCheckPending &&
-    visibleRecents !== recents
-  ) {
+  if (!isRevealed && visibleRecents !== recents) {
     setVisibleRecents(recents);
   }
-  const slotNodeRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const slot = slotNodeRef.current;
-    if (!slot || isMenuOpen || (!isHovered && !isHoverCheckPending)) return;
-    let frame = 0;
-    const recheckHover = () => {
-      const hovered = slot.matches(":hover");
-      if (!hovered && getComputedStyle(slot).pointerEvents === "none") return;
-      setIsHovered(hovered);
-      setIsHoverCheckPending(false);
-    };
-    const pollUntilPointerEventsReturn = () => {
-      frame = requestAnimationFrame(() => {
-        if (getComputedStyle(slot).pointerEvents === "none") {
-          pollUntilPointerEventsReturn();
-          return;
-        }
-        frame = requestAnimationFrame(recheckHover);
-      });
-    };
-    if (isHoverCheckPending) pollUntilPointerEventsReturn();
-    const pointerEventType = isHoverCheckPending
-      ? "pointerover"
-      : "pointermove";
-    document.addEventListener(pointerEventType, recheckHover);
-    return () => {
-      cancelAnimationFrame(frame);
-      document.removeEventListener(pointerEventType, recheckHover);
-    };
-  }, [isHovered, isHoverCheckPending, isMenuOpen]);
   const slotRef = useCallback(
     (node: HTMLDivElement | null) => {
-      slotNodeRef.current = node;
+      interactionRef(node);
       measureRef(node);
       setCollisionBoundary(findMessageActionTooltipCollisionBoundary(node));
     },
-    [measureRef],
+    [interactionRef, measureRef],
   );
   const mobileDirectActionClass =
     mobileActionDisplay === "inline"
@@ -527,30 +571,6 @@ export function MessageActionBar({
       <div
         ref={slotRef}
         className={cn(slotClass, "h-5 max-md:pointer-coarse:h-7")}
-        onPointerEnter={(event) => {
-          if (
-            event.target instanceof Node &&
-            event.currentTarget.contains(event.target)
-          ) {
-            setIsHovered(true);
-            setIsHoverCheckPending(false);
-          }
-        }}
-        onPointerLeave={() => {
-          setIsHovered(false);
-          setIsHoverCheckPending(false);
-        }}
-        onFocusCapture={(event) => {
-          setIsKeyboardFocused(
-            event.currentTarget.contains(event.target) &&
-              event.target.matches(":focus-visible"),
-          );
-        }}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) {
-            setIsKeyboardFocused(false);
-          }
-        }}
       >
         <div className={rowClass} data-menu-open={isMenuOpen ? "" : undefined}>
           {isCompactTouch ? (
@@ -565,12 +585,7 @@ export function MessageActionBar({
               />
             ))
           )}
-          <DropdownMenu
-            onOpenChange={(open) => {
-              setIsMenuOpen(open);
-              setIsHoverCheckPending(!open);
-            }}
-          >
+          <DropdownMenu modal={false} onOpenChange={setIsMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
@@ -588,6 +603,7 @@ export function MessageActionBar({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
+              ref={menuContentRef}
               align={alignment === "end" ? "end" : "start"}
               mobileTitle="Message actions"
               className={MENU_CONTENT_WIDTH_CLASS}
