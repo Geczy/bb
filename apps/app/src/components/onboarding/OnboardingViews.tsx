@@ -45,7 +45,6 @@ interface OnboardingLayoutProps {
   onSkipAll: () => void;
   steps?: typeof ONBOARDING_STEPS;
   showSkipAll?: boolean;
-  footerContent?: ReactNode;
 }
 
 export function OnboardingLayout({
@@ -67,7 +66,6 @@ export function OnboardingLayout({
   onSkipAll,
   steps = ONBOARDING_STEPS,
   showSkipAll = true,
-  footerContent,
 }: OnboardingLayoutProps) {
   const activeIndex = steps.findIndex((entry) => entry.id === step);
   return (
@@ -161,7 +159,6 @@ export function OnboardingLayout({
         <div
           className={cn(CONTENT_COLUMN_CLASS, "flex items-center gap-2 py-3")}
         >
-          {footerContent ?? <>
           {onBack ? (
             <Button variant="ghost" size="sm" onClick={onBack}>
               <Icon name="ArrowLeft" aria-hidden />
@@ -187,7 +184,6 @@ export function OnboardingLayout({
             {primaryLabel}
             {primaryBusy ? null : <Icon name="ArrowRight" aria-hidden />}
           </Button>
-          </>}
         </div>
       </footer>
     </div>
@@ -236,27 +232,28 @@ interface AgentRowHandlers {
   onCancelSignIn: (id: string) => void;
 }
 
-function AgentRow({
+export function AgentRow({
   agent,
   onSignIn,
   onInstall,
   onViewInstallLog,
   onCancelSignIn,
-}: AgentRowHandlers & { agent: OnboardingAgent }) {
+  prominent = false,
+}: AgentRowHandlers & { agent: OnboardingAgent; prominent?: boolean }) {
   const { state } = agent;
   return (
-    <li className="px-3 py-3" data-agent-id={agent.id}>
+    <li className={prominent ? "rounded-lg border border-border px-5 py-5" : "px-3 py-3"} data-agent-id={agent.id}>
       <div className="flex items-center gap-3">
         <ProviderIcon
           providerKind="agent"
           provider={agent.provider}
           className={cn(
-            "size-6",
+            prominent ? "size-9" : "size-6",
             state.status === "install" && "text-muted-foreground",
           )}
         />
         <div className="flex min-w-0 flex-1 flex-col">
-          <span className="text-sm font-medium">{agent.name}</span>
+          <span className={prominent ? "text-lg font-semibold" : "text-sm font-medium"}>{agent.name}</span>
           <span
             className={cn(
               "truncate text-xs text-muted-foreground",
@@ -280,7 +277,7 @@ function AgentRow({
           </span>
         ) : null}
         {state.status === "signIn" && state.canSignIn ? (
-          <Button size="sm" onClick={() => onSignIn(agent.id)}>
+          <Button size={prominent ? "default" : "sm"} onClick={() => onSignIn(agent.id)}>
             Sign in
           </Button>
         ) : null}
@@ -298,7 +295,7 @@ function AgentRow({
           state.status === "installFailed") &&
         state.canInstall ? (
           <Button
-            size="sm"
+            size={prominent ? "default" : "sm"}
             variant="outline"
             onClick={() => onInstall(agent.id)}
           >
@@ -566,6 +563,7 @@ interface ProjectsStepProps {
   onSelectNone: () => void;
   onAddFolder: () => void;
   onRetry: () => void;
+  folderAction?: "link" | "button";
 }
 
 export function ProjectsStep({
@@ -577,6 +575,7 @@ export function ProjectsStep({
   onSelectNone,
   onAddFolder,
   onRetry,
+  folderAction = "link",
 }: ProjectsStepProps) {
   if (status.kind === "scanning") {
     return (
@@ -691,14 +690,14 @@ export function ProjectsStep({
           The scan ran out of time, so some repos may be missing.
         </p>
       ) : null}
-      <button
+      {folderAction === "button" ? <Button variant="outline" className="w-full" onClick={onAddFolder}><Icon name="FolderPlus" />Choose a folder</Button> : <button
         type="button"
         onClick={onAddFolder}
         className="flex items-center gap-2 self-start rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-state-hover hover:text-foreground"
       >
         <Icon name="FolderPlus" aria-hidden className="size-3.5" />
         Add a folder that isn't listed
-      </button>
+      </button>}
     </div>
   );
 }

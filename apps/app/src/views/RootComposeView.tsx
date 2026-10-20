@@ -1485,7 +1485,7 @@ function RootComposeSurface({
     banner: nativeGuidanceFixture?.kind === "no-agent" ? undefined : promptBanner,
     blockedReason:
       nativeGuidanceFixture?.kind === "no-agent"
-        ? "Sign in to Claude to run this"
+        ? "Sign in to an agent to run this"
         : blockingProviderCliStatus === null
         ? undefined
         : providerCliBlockedReason(blockingProviderCliStatus),
