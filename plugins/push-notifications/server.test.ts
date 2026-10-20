@@ -118,11 +118,13 @@ async function setup(options: SetupOptions = {}) {
       }),
     }),
   );
+  const recordTelemetry = vi.fn().mockResolvedValue({ ok: true });
   const fake = createFakePluginHost({
     pluginId: "push-notifications",
     ...(options.appUrl === undefined ? {} : { appUrl: options.appUrl }),
     settings: { expoPushUrl: EXPO_URL },
     sdk: {
+      system: { experimental_recordTelemetryEvent: recordTelemetry },
       threads: {
         get: async ({ threadId }) => {
           const thread = threads.get(threadId);
@@ -262,6 +264,7 @@ async function setup(options: SetupOptions = {}) {
     addSubscription,
     cleanup,
     clientSignals: () => signals(CLIENT_NOTIFICATION_CHANNEL),
+    recordTelemetry,
     levelUpdates: () =>
       signals(THREAD_NOTIFICATIONS_CHANNEL).map((signal) => signal.payload),
     expo,
@@ -742,6 +745,7 @@ describe("web and desktop delivery", () => {
           payload: expect.objectContaining({
             title: thread.title,
             body: "Done",
+            kind: "finished",
             threadId: thread.id,
             channels: ["web", "desktop"],
           }),
@@ -1317,7 +1321,11 @@ describe("thread notification levels", () => {
       });
       await waitForCoalesce();
       expect(host.clientSignals().map((signal) => signal.payload)).toEqual([
-        expect.objectContaining({ threadId: quiet.id, body: "Deploy now?" }),
+        expect.objectContaining({
+          threadId: quiet.id,
+          body: "Deploy now?",
+          kind: "needs_input",
+        }),
       ]);
 
       const failing = host.setThread({ id: "failing", status: "error" });
@@ -1344,6 +1352,7 @@ describe("thread notification levels", () => {
         expect.objectContaining({
           threadId: failing.id,
           body: "Provider crashed",
+          kind: "failed",
         }),
         expect.objectContaining({
           threadId: inheritedQuiet.id,
@@ -1411,4 +1420,23 @@ describe("thread notification levels", () => {
       await host.cleanup();
     }
   });
+});
+
+it("records relay-accepted phone sends with only the anonymous kind and channel", async () => {
+  const host = await setup();
+  try {
+    await host.addSubscription();
+    const thread = host.setThread();
+    await host.harness.behavior.emitThreadEvent("thread.idle", {
+      thread,
+      lastAssistantText: "Private result",
+    });
+    await waitForCoalesce();
+    expect(host.recordTelemetry).toHaveBeenCalledExactlyOnceWith({
+      name: "notification_sent",
+      properties: { kind: "finished", channel: "phone" },
+    });
+  } finally {
+    await host.cleanup();
+  }
 });

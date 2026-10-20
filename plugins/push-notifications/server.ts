@@ -243,6 +243,7 @@ export function createPushNotificationsPlugin(
         title: "bb notifications are working",
         body: "You’ll be notified when a thread needs your attention.",
         threadId: null,
+        kind: null,
         channels: [channel],
       } satisfies ClientNotification);
       return { ok: true as const };
@@ -272,7 +273,7 @@ export function createPushNotificationsPlugin(
         name: "push-notifications",
         summary: "Manage mobile, web, and desktop notifications",
         description:
-          "Mobile devices receive Expo push messages; web and desktop clients receive system notifications while they are open.",
+          "Mobile devices receive Expo push messages; web clients need an open tab; desktop notifications continue while the app runs with its windows closed.",
         commands: {
           test: cliCommand({
             summary:

@@ -2,7 +2,7 @@ Get a notification when an agent asks a question, finishes a turn, or stops on a
 
 ## Delivery
 
-Mobile devices receive push messages through Expo, including when the app is closed. Web browsers and the desktop app receive system notifications over bb's live connection while a tab or window stays open; web delivery needs HTTPS (or localhost) and notification permission. Mobile WebViews use mobile push only.
+Mobile devices receive push messages through Expo, including when the app is closed. Web browsers receive system notifications while a tab stays open; web delivery needs HTTPS (or localhost) and notification permission. The desktop app also delivers notifications with its windows closed, while bb is running. On Windows, closing the last window keeps bb running when scheduled messages or automations are pending. Reopen bb to use Quit when you want to stop it. Mobile WebViews use mobile push only.
 
 Each thread has a level: `all` (questions, approvals, errors, finished turns), `input-only` (no finished turns), or `muted`. A thread uses its own level, else `childLevel` if it has a parent, else `defaultLevel`; every ancestor's own level caps it. Muting a parent mutes its whole subtree, but a parent never makes workers louder. The level applies on top of the suppressions below.
 
