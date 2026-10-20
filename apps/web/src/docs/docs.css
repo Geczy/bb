@@ -275,6 +275,11 @@
   text-align: left;
 }
 
+.docs-body th:first-child,
+.docs-body td:first-child {
+  min-width: 7rem;
+}
+
 .docs-body th {
   color: var(--heading-sub);
   background: var(--surface);
