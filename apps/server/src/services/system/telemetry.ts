@@ -40,6 +40,14 @@ export type TelemetryEvent =
         source_kind: "builtin" | "git" | "npm" | "path";
       };
     }
+  | {
+      name: "agent_install";
+      properties: {
+        agent: "claude-code" | "codex" | "pi";
+        method: "native" | "bundled-npm" | "npm";
+        outcome: "started" | "succeeded" | "failed";
+      };
+    }
   | RecordTelemetryEventRequest;
 
 export interface TelemetryService {

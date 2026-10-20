@@ -19,6 +19,7 @@ import {
   serializeProviderInstallation,
 } from "../services/system/provider-installations.js";
 import { resolveBridgeLaunchForProviderId } from "../services/system/provider-bridge-launch.js";
+import { captureAgentInstallTelemetry } from "../services/system/agent-install-telemetry.js";
 import type { PluginService } from "../services/plugins/plugin-service.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
@@ -471,6 +472,13 @@ export function registerHostRoutes(
         },
       }),
     );
+    captureAgentInstallTelemetry({
+      telemetry: deps.telemetry,
+      featureFlags: deps.config.featureFlags,
+      providerId: payload.provider,
+      actionKind: payload.actionKind,
+      events: result.events,
+    });
     if (
       result.events.some((event) => event.type === "completed" && event.success)
     ) {

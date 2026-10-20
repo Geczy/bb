@@ -310,6 +310,13 @@ export const BB_FF_PLACEHOLDER_ENV = defineEnvVar<boolean>({
   parse: parseBooleanEnvValue,
 });
 
+export const BB_FF_AGENT_INSTALL_TELEMETRY_ENV = defineEnvVar<boolean>({
+  description:
+    "Send the anonymous agent_install telemetry event (agent, method, outcome) when Setup installs Claude Code, Codex, or Pi. Off by default.",
+  name: "BB_FF_AGENT_INSTALL_TELEMETRY",
+  parse: parseBooleanEnvValue,
+});
+
 export const BB_FF_TIMELINE_WINDOW_EVENT_BUDGET_ENV = defineEnvVar<number>({
   description:
     "Max events one thread-timeline window may span. Raise far above the default to restore unbounded windows.",
@@ -414,5 +421,7 @@ export const DEFAULT_BB_DEV_APP_HOST = "";
 export const DEFAULT_BB_MARKETPLACE_URL =
   "https://getbb.app/marketplace/v2/marketplace.json";
 export const DEFAULT_BB_FF_PLACEHOLDER = defaultFeatureFlags.placeholder;
+export const DEFAULT_BB_FF_AGENT_INSTALL_TELEMETRY =
+  defaultFeatureFlags.agentInstallTelemetry;
 export const DEFAULT_BB_FF_TIMELINE_WINDOW_EVENT_BUDGET =
   defaultFeatureFlags.timelineWindowEventBudget;
