@@ -735,14 +735,14 @@ describe("FollowUpPromptBox", () => {
     expect(promptBox.dataset.pluginCustomizationsSuppressed).toBe("false");
   });
 
-  it("scrolls to the bottom after submitting a ready follow-up", () => {
+  it("leaves a scrolled-up timeline in place after submitting a follow-up", () => {
     const props = createFollowUpPromptBoxProps({ kind: "ready" });
     render(<FollowUpPromptBox {...props} />);
 
     fireEvent.click(screen.getByText("Submit"));
 
     expect(props.composer?.onSubmit).toHaveBeenCalledOnce();
-    expect(mocks.scrollToBottom).toHaveBeenCalledOnce();
+    expect(mocks.scrollToBottom).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(
@@ -831,13 +831,10 @@ describe("FollowUpPromptBox", () => {
           : props.composer.onModifierSubmit;
       expect(expectedPrimary).toHaveBeenCalledOnce();
       expect(expectedModifier).not.toHaveBeenCalled();
-      expect(mocks.scrollToBottom).toHaveBeenCalledTimes(
-        primaryAction === "steer" ? 1 : 0,
-      );
 
       fireEvent.click(screen.getByText("Modifier submit"));
       expect(expectedModifier).toHaveBeenCalledOnce();
-      expect(mocks.scrollToBottom).toHaveBeenCalledOnce();
+      expect(mocks.scrollToBottom).not.toHaveBeenCalled();
       expect(
         screen
           .getByText("Modifier submit")

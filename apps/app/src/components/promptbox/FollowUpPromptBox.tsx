@@ -55,7 +55,6 @@ import {
   type ExecutionControlsProps,
   type ExecutionPermissionConfig,
 } from "@/components/promptbox/ExecutionControls";
-import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-body.js";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
 import { ThreadTimelineScrollToBottomButton } from "@/views/thread-detail/ThreadTimelineScrollToBottomButton";
@@ -69,50 +68,6 @@ import {
   PROMPT_CONTEXT_BANNER_COLLAPSED_HEIGHT,
   PROMPT_STACK_TRACK_CLASS,
 } from "@/components/promptbox/banner/PromptStackCard";
-
-type PromptBoxWithScrollAnchorProps = ComponentProps<
-  typeof PromptBoxInternal
-> & {
-  scrollToBottomOnSubmit?: boolean;
-};
-
-function PromptBoxWithScrollAnchor({
-  onSubmit,
-  scrollToBottomOnSubmit = true,
-  submission,
-  ...promptBoxProps
-}: PromptBoxWithScrollAnchorProps) {
-  const bottomAnchor = useBottomAnchoredScroll();
-  const handleSubmit = () => {
-    onSubmit();
-    if (scrollToBottomOnSubmit) {
-      bottomAnchor?.scrollToBottom();
-    }
-  };
-  const handleModifierSubmit =
-    submission?.onModifierSubmit === undefined
-      ? undefined
-      : () => {
-          submission.onModifierSubmit?.();
-          bottomAnchor?.scrollToBottom();
-        };
-  const anchoredSubmission =
-    submission === undefined
-      ? undefined
-      : {
-          ...submission,
-          ...(handleModifierSubmit
-            ? { onModifierSubmit: handleModifierSubmit }
-            : {}),
-        };
-  return (
-    <PromptBoxInternal
-      {...promptBoxProps}
-      onSubmit={handleSubmit}
-      submission={anchoredSubmission}
-    />
-  );
-}
 
 const FOLLOW_UP_PROMPT_BOX_DEFAULT_MIN_HEIGHT = 68;
 const FOLLOW_UP_PROMPT_BOX_ELASTIC_TARGET_HEIGHT =
@@ -715,7 +670,7 @@ function FollowUpPromptBoxWithComposer({
       onFocusCapture={handleComposerFocus}
       onPointerDownCapture={handleComposerPointerDown}
     >
-      <PromptBoxWithScrollAnchor
+      <PromptBoxInternal
         id={id}
         promptBoxRef={promptBoxRef}
         onFocusCommand={extensionController.focus}
@@ -729,7 +684,6 @@ function FollowUpPromptBoxWithComposer({
         blurOnPointerSubmit={isCompactViewport && isPointerCoarse}
         textEffects={textEffects}
         onComposerLayoutChange={setComposerLayout}
-        scrollToBottomOnSubmit={submitMode.kind !== "queue"}
         history={composer.history}
         focusEndKey={focusEndKey}
         placeholder={composer.promptPlaceholder}
