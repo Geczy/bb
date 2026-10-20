@@ -301,7 +301,8 @@ export function docsContent(): Plugin {
       if (!id.endsWith("?docs-body")) return;
       const { docs } = await getCorpus();
       const doc = docs.find(
-        (entry) => entry.file === id.slice(0, -"?docs-body".length),
+        (entry) =>
+          entry.file === path.normalize(id.slice(0, -"?docs-body".length)),
       );
       if (!doc) throw new Error(`${id}: Only published docs can be imported`);
       return { code: `export default ${JSON.stringify(doc.body)};`, map: null };
