@@ -1943,7 +1943,10 @@ export interface RenderedSlotBehaviorDrivers {
    * Push a realtime event to `useRealtime(channel, …)` subscribers, wrapped
    * in act. The payload is JSON-round-tripped like `bb.realtime.publish`.
    */
-  experimental_invalidateRpc(tags: readonly string[] | null): Promise<void>;
+  experimental_invalidateRpc(
+    tags: readonly string[] | null,
+    pluginId?: string,
+  ): Promise<void>;
   emitRealtime(channel: string, payload: unknown): Promise<void>;
   /** Drive the lifecycle of the same connection used by realtime events. */
   setRealtimeConnectionState(
@@ -2081,7 +2084,9 @@ export function renderSlot<
       });
     return parsed.value;
   };
-  const queryClient = new QueryClient();
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   const callRpc = async (method: string, input?: unknown) => {
     const normalizedInput =
       input === undefined
@@ -2746,7 +2751,15 @@ export function renderSlot<
   const setRealtimeConnectionState = async (
     state: PluginRealtimeConnectionState,
   ): Promise<void> => {
-    await act(async () => realtimeConnection.setState(state));
+    await act(async () => {
+      realtimeConnection.setState(state);
+      if (state === "connected")
+        await invalidateTags(
+          queryClient,
+          pluginTagScope(options.pluginId ?? "test-plugin"),
+          null,
+        );
+    });
   };
   const setComposerText = async (text: string): Promise<void> => {
     await act(async () => commitComposerText(text));
@@ -2759,13 +2772,12 @@ export function renderSlot<
       notifyComposerListeners();
     });
   };
-  const experimental_invalidateRpc = async (tags: readonly string[] | null) => {
+  const experimental_invalidateRpc = async (
+    tags: readonly string[] | null,
+    pluginId = rpcQueryHost.pluginId,
+  ) => {
     await act(async () => {
-      await invalidateTags(
-        queryClient,
-        pluginTagScope(rpcQueryHost.pluginId),
-        tags,
-      );
+      await invalidateTags(queryClient, pluginTagScope(pluginId), tags);
     });
   };
   const unmountSlot = (): void => {

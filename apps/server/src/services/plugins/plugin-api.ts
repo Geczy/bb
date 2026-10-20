@@ -194,6 +194,7 @@ export interface PluginWebSocketRouteRecord {
 }
 
 export interface PluginRpcHandler {
+  whileWatched?: boolean;
   declarations: ContractTagDeclarations<unknown, unknown>;
   publication: ReturnType<typeof publishRpcMethod>;
   inputSchema: StandardSchemaV1;
@@ -359,6 +360,9 @@ function wrapSdkForPlugin(
       callRpc(args) {
         return rpcCallerSdk.plugins.callRpc(args);
       },
+      experimental_watchRpc(args) {
+        return rpcCallerSdk.plugins.experimental_watchRpc(args);
+      },
     },
     threads: {
       ...sdk.threads,
@@ -501,6 +505,10 @@ export function createPluginApi(options: {
    */
   rpcCaller: PluginRpcCallerCredential;
   invalidateRpc: (tags: readonly string[] | null) => void;
+  whileRpcWatched?: (
+    method: string,
+    handler: Parameters<PluginRpc["experimental_whileWatched"]>[1],
+  ) => () => void;
   publishSignal: (channel: string, payload: unknown) => void;
   settingsChanged: () => void;
   reportNeedsConfiguration: (message: string) => void;
@@ -853,6 +861,17 @@ export function createPluginApi(options: {
   };
 
   const rpc: PluginRpc = {
+    experimental_whileWatched(method, handler) {
+      assertLive();
+      const record = rpcHandlers.get(method);
+      if (!record) throw new Error(`Unknown RPC method: ${method}`);
+      if (record.whileWatched)
+        throw new Error(`RPC producer already registered: ${method}`);
+      if (!options.whileRpcWatched)
+        throw new Error("RPC watching is unavailable");
+      record.whileWatched = true;
+      disposeHooks.push(options.whileRpcWatched(method, handler));
+    },
     experimental_invalidate(tags) {
       assertLive();
       optionsInvalidate(rpcInvalidationTags.parse(tags));

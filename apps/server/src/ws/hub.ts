@@ -999,7 +999,7 @@ export class NotificationHub implements DbNotifier {
     thread: { projectId: string; threadId: string },
     request: { split: ThreadOpenSplit; file: ThreadOpenFile | null },
   ): number {
-    return this.broadcastToAllClients(
+    return this.sendClientControlSignal(
       JSON.stringify(
         threadOpenSignalSchema.parse({
           type: "thread-open",
@@ -1016,7 +1016,7 @@ export class NotificationHub implements DbNotifier {
     thread: { projectId: string; threadId: string },
     action: ThreadPaneAction,
   ): number {
-    return this.broadcastToAllClients(
+    return this.sendClientControlSignal(
       JSON.stringify(
         threadPaneActionSignalSchema.parse({
           type: "thread-pane-action",
@@ -1033,19 +1033,23 @@ export class NotificationHub implements DbNotifier {
     channel: string,
     payload: unknown,
   ): number {
-    return this.broadcastToAllClients(
-      JSON.stringify(
-        pluginSignalSchema.parse({
-          type: "plugin-signal",
-          pluginId,
-          channel,
-          payload,
-        }),
-      ),
+    const sockets = this.clientSocketsByKey.get(
+      subscriptionKey({ kind: "plugin", pluginId }),
     );
+    if (!sockets) return 0;
+    const encoded = JSON.stringify(
+      pluginSignalSchema.parse({
+        type: "plugin-signal",
+        pluginId,
+        channel,
+        payload,
+      }),
+    );
+    this.notifyClientsByKeySet(sockets, encoded);
+    return sockets.size;
   }
 
-  private broadcastToAllClients(payload: string): number {
+  private sendClientControlSignal(payload: string): number {
     let delivered = 0;
     for (const socket of this.clientKeysBySocket.keys()) {
       socket.send(payload);

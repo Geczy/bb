@@ -725,7 +725,9 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     });
   });
 
-  it("bb.realtime.publish broadcasts a plugin-signal WS frame to connected clients", async () => {
+  it("bb.realtime.publish delivers a plugin-signal only to subscribers of that plugin", async () => {
+    const pluginSocket = createMockHubSocket();
+    harness.hub.subscribe(pluginSocket, { kind: "plugin", pluginId: "wire" });
     const systemSocket = createMockHubSocket();
     const threadSocket = createMockHubSocket();
     harness.hub.subscribe(systemSocket, { kind: "system" });
@@ -744,15 +746,15 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
       result: "published",
     });
 
-    for (const socket of [systemSocket, threadSocket]) {
-      expect(socket.messages).toHaveLength(1);
-      expect(JSON.parse(socket.messages[0])).toEqual({
-        type: "plugin-signal",
-        pluginId: "wire",
-        channel: "issues-updated",
-        payload: { count: 42 },
-      });
-    }
+    for (const socket of [systemSocket, threadSocket])
+      expect(socket.messages).toEqual([]);
+    expect(pluginSocket.messages).toHaveLength(1);
+    expect(JSON.parse(pluginSocket.messages[0])).toEqual({
+      type: "plugin-signal",
+      pluginId: "wire",
+      channel: "issues-updated",
+      payload: { count: 42 },
+    });
   });
 
   it("bb.realtime.publish rejects payloads that do not survive JSON", async () => {
