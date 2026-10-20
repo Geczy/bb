@@ -120,35 +120,35 @@ function ThreadRowHarness({
   const content = (
     <SidebarProjectsContext.Provider value={projects}>
       <SidebarProvidersContext.Provider value={providers}>
-      <TooltipProvider>
-      <SidebarDraftPresenceSync />
-      <ThreadRowNavigationProvider>
-        <SidebarRenameProvider>
-          <CustomizeRowActionsContext.Provider
-            value={onCustomizeRowActions ?? null}
-          >
-            <ThreadRowActionsCustomizingContext.Provider
-              value={
-                onFinishCustomizingRowActions
-                  ? {
-                      threadId: thread.id,
-                      onDone: onFinishCustomizingRowActions,
-                    }
-                  : null
-              }
-            >
-              <div
-                onPointerDown={onRowEvent}
-                onKeyDown={onRowEvent}
-                onClick={onRowEvent}
+        <TooltipProvider>
+          <SidebarDraftPresenceSync />
+          <ThreadRowNavigationProvider>
+            <SidebarRenameProvider>
+              <CustomizeRowActionsContext.Provider
+                value={onCustomizeRowActions ?? null}
               >
-                {row}
-              </div>
-            </ThreadRowActionsCustomizingContext.Provider>
-          </CustomizeRowActionsContext.Provider>
-        </SidebarRenameProvider>
-      </ThreadRowNavigationProvider>
-      </TooltipProvider>
+                <ThreadRowActionsCustomizingContext.Provider
+                  value={
+                    onFinishCustomizingRowActions
+                      ? {
+                          threadId: thread.id,
+                          onDone: onFinishCustomizingRowActions,
+                        }
+                      : null
+                  }
+                >
+                  <div
+                    onPointerDown={onRowEvent}
+                    onKeyDown={onRowEvent}
+                    onClick={onRowEvent}
+                  >
+                    {row}
+                  </div>
+                </ThreadRowActionsCustomizingContext.Provider>
+              </CustomizeRowActionsContext.Provider>
+            </SidebarRenameProvider>
+          </ThreadRowNavigationProvider>
+        </TooltipProvider>
       </SidebarProvidersContext.Provider>
     </SidebarProjectsContext.Provider>
   );
@@ -201,7 +201,10 @@ function renderThreadRow({
         ...(hasComposerDraft ? [thread.id] : []),
         ...hiddenDraftThreadIds,
       ],
-      sidebarRowStatuses: { ...childStatuses, ...(pluginStatus ? { [thread.id]: pluginStatus } : {}) },
+      sidebarRowStatuses: {
+        ...childStatuses,
+        ...(pluginStatus ? { [thread.id]: pluginStatus } : {}),
+      },
       sidebarShortcuts: shortcutKey
         ? {
             [thread.id]: {
@@ -1384,24 +1387,32 @@ describe("ThreadRow", () => {
     expect(renderedIndicators()).toEqual(["working-draft"]);
   });
 
-  it.each([true, false])("rolls a child's question into its parent only while collapsed (%s)", (isCollapsed) => {
-    renderThreadRow({
-      thread: createThread({ lastReadAt: 0, latestAttentionAt: 1 }),
-      childStatuses: {
-        thr_hidden_child: { icon: "CircleQuestion", label: "Waiting on you" },
-      },
-      options: {
-        kind: "parent",
-        depth: 1,
-        isCompact: false,
-        isCollapsed,
-        childCount: 1,
-        childActivity: { ...NO_COLLAPSED_CHILD_ACTIVITY, threadIds: ["thr_hidden_child"] },
-        onToggleCollapsed: vi.fn(),
-      },
-    });
-    expect(statusGlyph().getAttribute("data-row-status")).toBe(isCollapsed ? "Waiting on you" : null);
-  });
+  it.each([true, false])(
+    "rolls a child's question into its parent only while collapsed (%s)",
+    (isCollapsed) => {
+      renderThreadRow({
+        thread: createThread({ lastReadAt: 0, latestAttentionAt: 1 }),
+        childStatuses: {
+          thr_hidden_child: { icon: "CircleQuestion", label: "Waiting on you" },
+        },
+        options: {
+          kind: "parent",
+          depth: 1,
+          isCompact: false,
+          isCollapsed,
+          childCount: 1,
+          childActivity: {
+            ...NO_COLLAPSED_CHILD_ACTIVITY,
+            threadIds: ["thr_hidden_child"],
+          },
+          onToggleCollapsed: vi.fn(),
+        },
+      });
+      expect(statusGlyph().getAttribute("data-row-status")).toBe(
+        isCollapsed ? "Waiting on you" : null,
+      );
+    },
+  );
 
   it("ignores hidden child activity once the parent is expanded", () => {
     renderThreadRow({

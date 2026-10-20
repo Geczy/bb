@@ -217,6 +217,7 @@ describe("TopLevelSidebarSection", () => {
         }
         actionsAlwaysVisible
         actionsMobileAlways
+        collapsedThreads={[makeSidebarThread({ runtimeStatus: "active" })]}
         collapsedActivity={{
           ...NO_COLLAPSED_CHILD_ACTIVITY,
           working: true,
@@ -249,7 +250,7 @@ describe("TopLevelSidebarSection", () => {
       <TopLevelSidebarSection
         label="Pinned"
         collapsedActivity={NO_COLLAPSED_CHILD_ACTIVITY}
-        collapsedThreads={[{ id: "thread-one" }]}
+        collapsedThreads={[makeSidebarThread({ id: "thread-one" })]}
         collapseControl={{ isCollapsed: true, onToggleCollapsed: vi.fn() }}
       >
         <div>Pinned thread</div>
@@ -286,7 +287,7 @@ describe("TopLevelSidebarSection", () => {
     const renderSection = (isCollapsed: boolean) => (
       <TopLevelSidebarSection
         label="Building"
-        collapsedThreads={[{ id: "thread-one" }]}
+        collapsedThreads={[makeSidebarThread({ id: "thread-one" })]}
         collapseControl={{ isCollapsed, onToggleCollapsed: vi.fn() }}
       >
         <div>Draft thread</div>

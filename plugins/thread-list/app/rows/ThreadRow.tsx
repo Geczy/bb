@@ -115,6 +115,8 @@ import {
   focusFirstRowActionSlot,
 } from "../list/ThreadRowActionsCustomize.js";
 
+import { usePluginThreadRowStatusForThreadIds } from "../list/groupRollups.js";
+
 const SIDEBAR_TITLE_DOUBLE_CLICK_MS = 400;
 
 export const SidebarProvidersContext = createContext<
@@ -437,7 +439,7 @@ function ThreadRowComponent({
     ? providers.find((candidate) => candidate.id === thread.providerId)
     : undefined;
   const shortcut = useSidebarThreadShortcut(thread.id);
-  const pluginThreadRowStatus = useSidebarThreadRowStatus(thread.id);
+  const ownPluginThreadRowStatus = useSidebarThreadRowStatus(thread.id);
   const { hasUnsubmittedDraft: hasComposerDraft } = useSidebarThreadDraft(
     thread.id,
   );
@@ -536,6 +538,11 @@ function ThreadRowComponent({
     quickActions.length,
   );
   const hasHiddenChildren = isParentRow && isParentCollapsed && hasChildren;
+  const hiddenChildPluginStatus = usePluginThreadRowStatusForThreadIds(
+    hasHiddenChildren ? childActivity.threadIds : NO_THREAD_IDS,
+  );
+  const pluginThreadRowStatus =
+    ownPluginThreadRowStatus ?? hiddenChildPluginStatus;
   const hiddenChildrenHaveDraft = useThreadsHaveDraft(
     hasHiddenChildren ? childActivity.threadIds : NO_THREAD_IDS,
   );

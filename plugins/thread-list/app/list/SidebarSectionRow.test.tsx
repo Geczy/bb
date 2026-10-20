@@ -2,7 +2,10 @@
 
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCollapsedChildActivity, NO_COLLAPSED_CHILD_ACTIVITY } from "../model/thread-activity.js";
+import {
+  getCollapsedChildActivity,
+  NO_COLLAPSED_CHILD_ACTIVITY,
+} from "../model/thread-activity.js";
 import type {
   PluginSidebarSplitLayout,
   PluginSidebarThreadRowStatus,
@@ -33,7 +36,14 @@ function renderSectionRow(
   } = {},
 ) {
   return renderSlot(
-    { component: (props: SectionRowProps) => <><SidebarDraftPresenceSync /><SidebarSectionRow {...props} /></> },
+    {
+      component: (props: SectionRowProps) => (
+        <>
+          <SidebarDraftPresenceSync />
+          <SidebarSectionRow {...props} />
+        </>
+      ),
+    },
     {
       name: "Nested work",
       label: "Nested work",
@@ -87,7 +97,10 @@ describe("SidebarSectionRow", () => {
         name: "Build",
         label: "Work / Build",
         activity: { ...NO_COLLAPSED_CHILD_ACTIVITY, pending: true },
-        collapsedThreads: [{ id: "thread-one" }, { id: "thread-two" }],
+        collapsedThreads: [
+          makeSidebarThread({ id: "thread-one" }),
+          makeSidebarThread({ id: "thread-two" }),
+        ],
         isCollapsed: true,
       },
       {
@@ -137,7 +150,7 @@ describe("SidebarSectionRow", () => {
       {
         name: "Building",
         label: "Work / Building",
-        collapsedThreads: [{ id: "thread-one" }],
+        collapsedThreads: [makeSidebarThread({ id: "thread-one" })],
         isCollapsed: true,
       },
       {
@@ -158,30 +171,90 @@ describe("SidebarSectionRow", () => {
     ).toBe("Plugin improving draft");
   });
 
-  it("keeps a running row's question hidden when another row has a draft", () => {
-    const threads = [
-      makeSidebarThread({ id: "running", runtimeStatus: "active", status: "active" }),
-      makeSidebarThread({ id: "draft", lastReadAt: 1, latestAttentionAt: 1 }),
-    ];
-    renderSectionRow({
-      collapsedThreads: threads,
-      activity: getCollapsedChildActivity(threads),
-      isCollapsed: true,
-    }, {
-      draftThreadIds: ["draft"],
-      rowStatuses: { running: { icon: "CircleQuestion", label: "Waiting on you" } },
-    });
-    const glyph = document.querySelector("[data-thread-status-glyph]");
-    expect(glyph?.getAttribute("data-thread-status-glyph")).toBe("runtime");
-    expect(glyph?.getAttribute("data-row-status")).toBeNull();
-  });
+  it.each([false, true])(
+    "keeps a running row's question hidden when another row has a draft (reversed: %s)",
+    (reversed) => {
+      const threads = [
+        makeSidebarThread({
+          id: "running",
+          runtimeStatus: "active",
+          status: "active",
+        }),
+        makeSidebarThread({ id: "draft", lastReadAt: 1, latestAttentionAt: 1 }),
+      ];
+      if (reversed) threads.reverse();
+      renderSectionRow(
+        {
+          collapsedThreads: threads,
+          activity: getCollapsedChildActivity(threads),
+          isCollapsed: true,
+        },
+        {
+          draftThreadIds: ["draft"],
+          rowStatuses: {
+            running: { icon: "CircleQuestion", label: "Waiting on you" },
+          },
+        },
+      );
+      const glyph = document.querySelector("[data-thread-status-glyph]");
+      expect(glyph?.getAttribute("data-thread-status-glyph")).toBe("runtime");
+      expect(glyph?.getAttribute("data-row-status")).toBeNull();
+    },
+  );
+
+  it.each([
+    { overrides: {}, indicator: "none", waiting: true, archived: false },
+    {
+      overrides: { hasPendingInteraction: true },
+      indicator: "waiting-for-input",
+      waiting: false,
+      archived: false,
+    },
+    {
+      overrides: { status: "error" as const, isUnread: true },
+      indicator: "unread-error",
+      waiting: false,
+      archived: false,
+    },
+    {
+      overrides: { archivedAt: 1 },
+      indicator: "none",
+      waiting: false,
+      archived: true,
+    },
+  ])(
+    "resolves a single waiting thread before rolling it up ($indicator, archived: $archived)",
+    ({ overrides, indicator, waiting, archived }) => {
+      const thread = makeSidebarThread({
+        id: "waiting",
+        lastReadAt: 1,
+        latestAttentionAt: 1,
+        ...overrides,
+      });
+      renderSectionRow(
+        { collapsedThreads: [thread], isCollapsed: true },
+        {
+          rowStatuses: {
+            waiting: { icon: "CircleQuestion", label: "Waiting on you" },
+          },
+        },
+      );
+      const glyph = document.querySelector("[data-thread-status-glyph]");
+      expect(glyph?.getAttribute("data-thread-status-glyph")).toBe(
+        archived ? "archived" : indicator,
+      );
+      expect(glyph?.getAttribute("data-row-status")).toBe(
+        waiting ? "Waiting on you" : null,
+      );
+    },
+  );
 
   it("does not roll a plugin status up while the section is expanded", () => {
     renderSectionRow(
       {
         name: "Building",
         label: "Work / Building",
-        collapsedThreads: [{ id: "thread-one" }],
+        collapsedThreads: [makeSidebarThread({ id: "thread-one" })],
         isCollapsed: false,
       },
       {
