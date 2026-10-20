@@ -107,7 +107,7 @@ The final 13-step walkthrough and provenance are in the ignored `.tmp/guidance/w
 
 Verification is browser-only: draft editing/focus, evidence, fallback starts, setup selection, install/sign-in progress, Hint grant/dismissal, native pending question, and one-time schedule/Undo. No tests, typecheck or lint were run locally.
 
-## Native v3 revision in progress
+## Native v3 walkthrough
 
 Retention released the capture hold after forwarding the T3 Code findings at source revision `fc857759`. Final v3 captures use fresh native-app pairs; the existing v2 gallery and screenshots remain intact. The manager reported that T3 Code has labelled waiting/input/approval states and no starter prompts; retaining our starters is a deliberate difference.
 
@@ -118,3 +118,10 @@ The manager supplied the platform ordering from Growth's six-week desktop-first-
 Reading has one short status line. Grounded starts contain two larger borderless rows, an emphasized first Start affordance, and muted evidence. Fallback starts keep the third job at metadata level. Selecting a start still fills the editable composer rather than sending it. The notification Hint has one filled Turn on action and tertiary Not now; the end-of-day row has one filled Schedule action. The native question remains the needs-you action, with the sidebar label only supporting it. No row reordering or delivery behavior is added.
 
 The More agents disclosure is an underlined, counted link. The two prominent provider rows show inline Installing and Signing in states; `guidanceAgentOutcome=failed` selects a local failed-sign-in fixture with Retry. The primary remains Continue at the native footer’s far right and stays disabled until Ready. Synthetic setup API data gives both Before and After the same three signed-out providers without invoking installed personal CLIs.
+
+
+The completed 13-step v3 carousel is at `.tmp/guidance/walkthrough/v3/index.html`; `manifest.json` holds the captions, source attribution, fixture limitations, exact paths and cleanup record. `paths.md` lists every selected image. All app/live-site pairs are fresh 1440×900 CSS captures at 2× in light theme, from one queued Chrome for Testing instance. Changed Afters have one post-processed outline. SmartScreen is a freshly fetched Microsoft documentation image; the closed-window Mac notification is explicitly labelled an illustration. The illustration’s sole action opens the actual offline result during verification, and its retained review version opens that result’s captured native screen.
+
+Browser verification covered the inline install/sign-in/ready flow, failure and Retry, More agents, disabled Import with no selection, evidence, draft focus/retention, Windows platform ordering, notification grant/dismissal, genuine pending question, schedule/Undo/dismissal and the result action. All 13 carousel steps loaded their 31 displayed images without page exceptions. No local tests, typecheck or lint ran. The native Windows no-agent proposal keeps the offline Claude composer fixture while recommending Codex; switching the selected native provider after sign-in is not wired.
+
+[Open v3 walkthrough](https://brsbl-bbox--61001.getbb.app/@fs/home/bersabel/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_e4bcx727qf-1/bb/.tmp/guidance/walkthrough/v3/index.html). The retained preview uses port 61001 and terminal `term_w2nga4twp4`; the v2 gallery remains available at its original path.
