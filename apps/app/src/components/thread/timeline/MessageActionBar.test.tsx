@@ -6,6 +6,7 @@ import {
   fireEvent,
   render as renderComponent,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import { Provider } from "jotai";
@@ -143,7 +144,54 @@ function renderTwoNarrowAssistantRows() {
     pointerOverSlot = pointerStaysOnRow;
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Translate" }));
   };
-  return { labels, slot, selectTranslateFromMenu };
+  const setPointerOverSlot = (value: boolean) => {
+    pointerOverSlot = value;
+  };
+  return { labels, slot, selectTranslateFromMenu, setPointerOverSlot };
+}
+
+function renderTwoWideAssistantRows() {
+  const actions = ["Summarize", "Translate"].map((label) => ({
+    key: label,
+    pluginId: null,
+    icon: null,
+    label,
+    onSelect: vi.fn(),
+  }));
+  render(
+    <>
+      {[0, 1].map((index) => (
+        <section key={index} data-testid={`row-${index}`}>
+          <MessageActionBar
+            messageRole="assistant"
+            timestamp={TIMESTAMP}
+            messageText="Message"
+            alignment="start"
+            mobileActionDisplay="inline"
+            pluginActions={actions}
+          />
+        </section>
+      ))}
+    </>,
+  );
+  const row = (index: number) => screen.getByTestId(`row-${index}`);
+  const labels = (index: number) =>
+    within(row(index))
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+  const translate = within(row(0)).getByRole("button", { name: "Translate" });
+  const slot = row(0).firstElementChild!;
+  const mockFocusVisible = (focusVisible: boolean) => {
+    const matches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, "matches").mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      if (selector === ":focus-visible") return focusVisible;
+      return matches.call(this, selector);
+    });
+  };
+  return { labels, translate, slot, mockFocusVisible };
 }
 
 describe("MessageActionBar", () => {
@@ -218,21 +266,76 @@ describe("MessageActionBar", () => {
     ]);
   });
 
-  it("re-sorts a row after a mouse-selected menu item closes the menu away from the row", () => {
+  it("re-sorts a row after a mouse-selected menu item closes the menu away from the row", async () => {
     const { labels, selectTranslateFromMenu } = renderTwoNarrowAssistantRows();
     expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
     selectTranslateFromMenu(false);
     expect(labels(1)).toEqual(["Copy message", "Translate", "Message actions"]);
+    await waitFor(() => expect(labels(0)).toEqual(labels(1)));
+  });
+
+  it("keeps a row frozen after a mouse-selected menu item while the pointer stays on the row", async () => {
+    const { labels, slot, selectTranslateFromMenu, setPointerOverSlot } =
+      renderTwoNarrowAssistantRows();
+    selectTranslateFromMenu(false);
+    expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
+    setPointerOverSlot(true);
+    await act(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => setTimeout(resolve, 50)),
+        ),
+    );
+    expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
+    expect(labels(1)).toEqual(["Copy message", "Translate", "Message actions"]);
+    setPointerOverSlot(false);
+    fireEvent.pointerLeave(slot);
     expect(labels(0)).toEqual(labels(1));
   });
 
-  it("keeps a row frozen after a mouse-selected menu item while the pointer stays on the row", () => {
-    const { labels, slot, selectTranslateFromMenu } =
-      renderTwoNarrowAssistantRows();
-    selectTranslateFromMenu(true);
-    expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
-    expect(labels(1)).toEqual(["Copy message", "Translate", "Message actions"]);
+  it("re-sorts a row after a mouse click focuses an inline action and the pointer leaves", () => {
+    const { labels, translate, slot, mockFocusVisible } =
+      renderTwoWideAssistantRows();
+    mockFocusVisible(false);
+    fireEvent.pointerEnter(slot);
+    act(() => translate.focus());
+    fireEvent.click(translate);
+    expect(labels(0)).toEqual([
+      "Copy message",
+      "Summarize",
+      "Translate",
+      "Message actions",
+    ]);
     fireEvent.pointerLeave(slot);
+    expect(labels(0)).toEqual(labels(1));
+    expect(labels(0)).toEqual([
+      "Copy message",
+      "Translate",
+      "Summarize",
+      "Message actions",
+    ]);
+  });
+
+  it("keeps a row frozen while keyboard focus stays inside it", () => {
+    const { labels, translate, slot, mockFocusVisible } =
+      renderTwoWideAssistantRows();
+    mockFocusVisible(true);
+    act(() => translate.focus());
+    fireEvent.click(translate);
+    fireEvent.pointerLeave(slot);
+    expect(labels(0)).toEqual([
+      "Copy message",
+      "Summarize",
+      "Translate",
+      "Message actions",
+    ]);
+    expect(labels(1)).toEqual([
+      "Copy message",
+      "Translate",
+      "Summarize",
+      "Message actions",
+    ]);
+    act(() => translate.blur());
     expect(labels(0)).toEqual(labels(1));
   });
 

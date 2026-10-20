@@ -1,4 +1,4 @@
-import { createContext, useCallback, useRef, useState } from "react";
+import { createContext, useCallback, useEffect, useRef, useState } from "react";
 import { CopyButton } from "../../ui/copy-button.js";
 import { Icon } from "@bb/shared-ui/icon";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
@@ -343,13 +343,49 @@ export function MessageActionBar({
   });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
+  const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
+  const [isHoverCheckPending, setIsHoverCheckPending] = useState(false);
   const { recents, recordAction } = useMessageActionRecents(messageRole);
   const [visibleRecents, setVisibleRecents] = useState(recents);
-  if (!isHovered && !isFocused && !isMenuOpen && visibleRecents !== recents) {
+  if (
+    !isHovered &&
+    !isKeyboardFocused &&
+    !isMenuOpen &&
+    !isHoverCheckPending &&
+    visibleRecents !== recents
+  ) {
     setVisibleRecents(recents);
   }
   const slotNodeRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const slot = slotNodeRef.current;
+    if (!slot || isMenuOpen || (!isHovered && !isHoverCheckPending)) return;
+    let frame = 0;
+    const recheckHover = () => {
+      const hovered = slot.matches(":hover");
+      if (!hovered && getComputedStyle(slot).pointerEvents === "none") return;
+      setIsHovered(hovered);
+      setIsHoverCheckPending(false);
+    };
+    const pollUntilPointerEventsReturn = () => {
+      frame = requestAnimationFrame(() => {
+        if (getComputedStyle(slot).pointerEvents === "none") {
+          pollUntilPointerEventsReturn();
+          return;
+        }
+        frame = requestAnimationFrame(recheckHover);
+      });
+    };
+    if (isHoverCheckPending) pollUntilPointerEventsReturn();
+    const pointerEventType = isHoverCheckPending
+      ? "pointerover"
+      : "pointermove";
+    document.addEventListener(pointerEventType, recheckHover);
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener(pointerEventType, recheckHover);
+    };
+  }, [isHovered, isHoverCheckPending, isMenuOpen]);
   const slotRef = useCallback(
     (node: HTMLDivElement | null) => {
       slotNodeRef.current = node;
@@ -497,15 +533,22 @@ export function MessageActionBar({
             event.currentTarget.contains(event.target)
           ) {
             setIsHovered(true);
+            setIsHoverCheckPending(false);
           }
         }}
-        onPointerLeave={() => setIsHovered(false)}
+        onPointerLeave={() => {
+          setIsHovered(false);
+          setIsHoverCheckPending(false);
+        }}
         onFocusCapture={(event) => {
-          setIsFocused(event.currentTarget.contains(event.target));
+          setIsKeyboardFocused(
+            event.currentTarget.contains(event.target) &&
+              event.target.matches(":focus-visible"),
+          );
         }}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) {
-            setIsFocused(false);
+            setIsKeyboardFocused(false);
           }
         }}
       >
@@ -525,9 +568,7 @@ export function MessageActionBar({
           <DropdownMenu
             onOpenChange={(open) => {
               setIsMenuOpen(open);
-              if (!open) {
-                setIsHovered(slotNodeRef.current?.matches(":hover") ?? false);
-              }
+              setIsHoverCheckPending(!open);
             }}
           >
             <DropdownMenuTrigger asChild>
