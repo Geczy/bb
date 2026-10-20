@@ -1,4 +1,4 @@
-import { use, useEffect } from "react";
+import { use, useEffect, useState } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   threadDetailBootstrapQueryOptions,
@@ -77,13 +77,15 @@ export function useHoldThreadOpenUntilLoaded(
   enabled: boolean,
 ): void {
   const queryClient = useQueryClient();
+  const [mountedThreadId] = useState(threadId);
+  const holding = enabled && threadId !== mountedThreadId;
   useEffect(() => {
-    if (!enabled) return;
+    if (!holding) return;
     return () => {
       holdsFor(queryClient).delete(threadId);
     };
-  }, [enabled, queryClient, threadId]);
-  if (!enabled) return;
+  }, [holding, queryClient, threadId]);
+  if (!holding) return;
   const hold = threadOpenHold(queryClient, threadId);
   if (hold !== null) {
     use(hold);

@@ -75,6 +75,12 @@ async function renderSwitcher(
   };
 }
 
+async function settleQueries() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 function mockLoadedThread(threadId: string) {
   vi.mocked(sdk.threads.get).mockResolvedValueOnce(
     threadWithIncludes(threadId),
@@ -87,15 +93,14 @@ function mockLoadedThread(threadId: string) {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe("useHoldThreadOpenUntilLoaded", () => {
   it("keeps the previous thread on screen until the next thread has loaded", async () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    mockLoadedThread("thread-a");
     const switchThread = await renderSwitcher(wrapper);
-    expect(await screen.findByText("open thread-a")).toBeTruthy();
+    expect(screen.getByText("open thread-a")).toBeTruthy();
 
     const thread = deferred<ThreadWithIncludesResponse>();
     const timeline = deferred<ThreadTimelineResponse>();
@@ -118,9 +123,8 @@ describe("useHoldThreadOpenUntilLoaded", () => {
 
   it("stops holding after the cap when the next thread never loads", async () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    mockLoadedThread("thread-a");
     const switchThread = await renderSwitcher(wrapper);
-    expect(await screen.findByText("open thread-a")).toBeTruthy();
+    expect(screen.getByText("open thread-a")).toBeTruthy();
 
     vi.useFakeTimers();
     vi.mocked(sdk.threads.get).mockReturnValueOnce(new Promise(() => {}));
@@ -136,21 +140,34 @@ describe("useHoldThreadOpenUntilLoaded", () => {
     expect(didThreadOpenHoldEndUnloaded(queryClient, "thread-b")).toBe(true);
   });
 
+  it("renders the first thread a view opens without holding it", async () => {
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    await renderSwitcher(wrapper);
+
+    expect(screen.getByText("open thread-a")).toBeTruthy();
+    expect(screen.queryByText("loading")).toBeNull();
+    expect(sdk.threads.get).not.toHaveBeenCalled();
+    expect(sdk.threads.timeline).not.toHaveBeenCalled();
+    expect(didThreadOpenHoldEndUnloaded(queryClient, "thread-a")).toBe(false);
+  });
+
   it("opens a thread whose data is already cached without holding", async () => {
     const { wrapper } = createQueryClientTestHarness();
-    mockLoadedThread("thread-a");
     const switchThread = await renderSwitcher(wrapper);
-    expect(await screen.findByText("open thread-a")).toBeTruthy();
-
     mockLoadedThread("thread-b");
     await switchThread("thread-b");
-    expect(await screen.findByText("open thread-b")).toBeTruthy();
+    await settleQueries();
+    expect(screen.getByText("open thread-b")).toBeTruthy();
+    mockLoadedThread("thread-c");
+    await switchThread("thread-c");
+    await settleQueries();
+    expect(screen.getByText("open thread-c")).toBeTruthy();
 
     vi.mocked(sdk.threads.get).mockClear();
     vi.mocked(sdk.threads.timeline).mockClear();
-    await switchThread("thread-a");
+    await switchThread("thread-b");
 
-    expect(screen.getByText("open thread-a")).toBeTruthy();
+    expect(screen.getByText("open thread-b")).toBeTruthy();
     expect(sdk.threads.get).not.toHaveBeenCalled();
     expect(sdk.threads.timeline).not.toHaveBeenCalled();
   });
