@@ -8,11 +8,10 @@ import {
   experimental_clampPercent as clampPercent,
   experimental_commandOutput as commandOutput,
   experimental_compareVersions as compareVersions,
+  experimental_downloadedInstallerCommand as downloadedInstallerCommand,
   experimental_formatCommand as formatCommand,
   experimental_installationVerification as installationVerification,
-  experimental_npmGlobalInstallCommand as npmGlobalInstallCommand,
   experimental_npmGlobalInstallSource as npmGlobalInstallSource,
-  experimental_npmCommand as npmCommand,
   experimental_npmLatestVersion as npmLatestVersion,
   experimental_probeNpmGlobalPackage as probeNpmGlobalPackage,
   experimental_readCliVersion as readCliVersion,
@@ -21,12 +20,16 @@ import {
 } from "@get-bb/plugin-sdk/provider-bridge";
 import { z } from "zod";
 import { fetchChatGpt } from "../ai/chatgpt-fetch.js";
+import { resolveCodexCommand } from "./codex-executable.js";
 import {
   readCodexAuthFile,
   type CodexAuthCredentials,
 } from "../ai/codex-auth.js";
 
 const CODEX_MINIMUM_SUPPORTED_VERSION = "0.136.0";
+const CODEX_INSTALL_SCRIPT_URL = "https://chatgpt.com/codex/install.sh";
+const CODEX_POWERSHELL_INSTALL_SCRIPT_URL =
+  "https://chatgpt.com/codex/install.ps1";
 const CODEX_REWIND_MINIMUM_SUPPORTED_VERSION = "0.143.0";
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 const USAGE_FETCH_TIMEOUT_MS = 15_000;
@@ -75,18 +78,19 @@ function codexUpdateCommand(): {
   args: string[];
   displayCommand: string;
 } {
+  const command = resolveCodexCommand();
   const args = ["update"];
   return {
-    command: "codex",
+    command,
     args,
-    displayCommand: formatCommand("codex", args),
+    displayCommand: formatCommand(command, args),
   };
 }
 
-async function missingNpmPrerequisite(): Promise<"nodejs" | null> {
-  return (await commandOutput(npmCommand(), ["--version"])) === null
-    ? "nodejs"
-    : null;
+function codexInstallerCommand() {
+  return downloadedInstallerCommand(CODEX_INSTALL_SCRIPT_URL, {
+    powershellUrl: CODEX_POWERSHELL_INSTALL_SCRIPT_URL,
+  });
 }
 
 export async function getCodexProviderInstallationStatus(
@@ -95,19 +99,17 @@ export async function getCodexProviderInstallationStatus(
 ): Promise<ProviderInstallationStatus> {
   const minimumSupportedVersion =
     minimumSupportedVersionForRequirement(requirement);
+  const command = resolveCodexCommand();
   const [resolvedExecutable, versionOutput, latestVersion, npmGlobal] =
     await Promise.all([
-      resolveExecutablePath("codex"),
-      commandOutput("codex", ["--version"]),
+      resolveExecutablePath(command),
+      commandOutput(command, ["--version"]),
       checkUpdates ? npmLatestVersion(CODEX_NPM_PACKAGE) : null,
       checkUpdates
         ? probeNpmGlobalPackage(CODEX_NPM_PACKAGE)
         : { npmBin: null, npmGlobalPackageVersion: null },
     ]);
   const installed = resolvedExecutable !== null || versionOutput !== null;
-  const missingPrerequisite = installed
-    ? null
-    : await missingNpmPrerequisite();
   const currentVersion = versionFrom(versionOutput);
   const needsUpdate =
     installed &&
@@ -120,9 +122,7 @@ export async function getCodexProviderInstallationStatus(
       ? requirement === "thread_rewind"
       : compareVersions(currentVersion, minimumSupportedVersion) < 0);
   const actionKind = !installed
-    ? missingPrerequisite === null
-      ? "install"
-      : null
+    ? "install"
     : needsUpdate || versionUnsupported
       ? "update"
       : null;
@@ -149,10 +149,9 @@ export async function getCodexProviderInstallationStatus(
             label: actionKind === "install" ? "Install" : "Update",
             command:
               actionKind === "install"
-                ? npmGlobalInstallCommand(CODEX_NPM_PACKAGE).displayCommand
+                ? codexInstallerCommand().displayCommand
                 : codexUpdateCommand().displayCommand,
           },
-    missingPrerequisite,
     needsUpdate,
     versionUnsupported,
   };
@@ -178,9 +177,7 @@ function buildCodexProviderInstallationRun(
   return {
     available: true,
     command:
-      action === "install"
-        ? npmGlobalInstallCommand(CODEX_NPM_PACKAGE)
-        : codexUpdateCommand(),
+      action === "install" ? codexInstallerCommand() : codexUpdateCommand(),
     verification: installationVerification(status, action),
   };
 }

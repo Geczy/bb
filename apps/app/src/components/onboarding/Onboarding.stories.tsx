@@ -800,13 +800,13 @@ export function Step1AgentStates() {
       </Captioned>
       <Captioned
         label="Node.js missing"
-        hint="Codex and Pi install with npm. Without Node.js, the row links to the Node.js download instead of offering an install that can't run."
+        hint="Pi installs with npm. Without Node.js, its row links to the Node.js download instead of offering an install that can't run."
       >
         <StoryWindow>
           <AgentFrame
             states={{
               "claude-code": INSTALL,
-              codex: { status: "needsNodejs" },
+              codex: INSTALL,
               pi: { status: "needsNodejs" },
             }}
           />
