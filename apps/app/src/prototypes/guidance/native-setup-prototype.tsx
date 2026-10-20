@@ -6,6 +6,7 @@ import { useSystemProviders } from "@/hooks/queries/system-queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { nativeGuidanceFixture } from "./native-fixture-selection";
 import { guidanceAgentChoices } from "./native-agent-fixture";
+import { guidanceProjectFixture } from "./native-project-fixture";
 
 const steps = [{ id: "agent", label: "Agent" }, { id: "projects", label: "Projects" }] as const;
 function open(kind: string) { window.location.href = `/?guidancePrototype=${kind}`; }
@@ -21,8 +22,10 @@ export default function NativeSetupPrototype() {
   const [selection, setSelection] = useState<Set<string> | null>(null);
   const [folderEntry, setFolderEntry] = useState(false);
   const [folders, setFolders] = useState<string[]>([]);
-  const repos = reposQuery.data?.repos ?? [];
-  const chosen = selection ?? new Set(defaultSelectedRepoPaths(repos, Date.now()));
+  const discoveredRepos = reposQuery.data?.repos ?? [];
+  const projectFixture = guidanceProjectFixture(discoveredRepos, Date.now());
+  const repos = projectFixture?.repos ?? discoveredRepos;
+  const chosen = selection ?? projectFixture?.selected ?? defaultSelectedRepoPaths(repos, Date.now());
   const choices = guidanceAgentChoices();
   const stateFor = (id: string): AgentSetupState => agentStates[id] ?? { status: "install", canInstall: true };
   const setAgentState = (id: string, state: AgentSetupState) => setAgentStates(current => ({ ...current, [id]: state }));
@@ -61,7 +64,7 @@ export default function NativeSetupPrototype() {
     setSelection(next);
   };
   const repoRows = repos.map(repo => ({
-    id: repo.path, name: repo.name, path: repo.path, remote: shortRemoteName(repo.originUrl),
+    id: repo.path, name: repo.name, path: projectFixture?.displayPath(repo.path) ?? repo.path, remote: shortRemoteName(repo.originUrl),
     lastActive: formatRelativeTime({ timestamp: Date.parse(repo.lastActivityAt), now: Date.now() }),
     added: repo.projectId !== null,
   })).concat(folders.map(path => ({ id: path, name: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path, path, remote: null, lastActive: "Selected folder", added: false })));
