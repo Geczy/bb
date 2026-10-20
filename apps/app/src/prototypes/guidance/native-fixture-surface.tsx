@@ -72,6 +72,20 @@ export default function NativeGuidanceFixtureSurface({ selection, onDraft }: {
     {!accepted && <><Button size="sm" onClick={accept}>Turn on</Button><button className="min-h-8 rounded-sm px-1 text-xs text-muted-foreground hover:text-foreground" onClick={dismiss}>Not now</button></>}
   </div>;
 
+  if (kind === "plugin-install" || kind === "plugin-build") {
+    const install = kind === "plugin-install";
+    return <div data-guidance-prototype="plugin-next-step" className="mt-4 flex items-start gap-3 text-sm text-muted-foreground">
+      <span className="pt-1.5" aria-hidden>↳</span>
+      <div className="min-w-0 flex-1 pt-1.5">
+        <p>{install ? "Post this summary to #eng" : "Send failing CI runs to your team channel"}<span className="text-xs"> · {install ? "Slack (BB Community)" : "Start from Hooks"}</span></p>
+        {install && <p className="mt-1 text-xs text-subtle-foreground">By Maya Chen · Reviewed</p>}
+        {accepted && <p className="mt-1 text-xs" role="status">Preview only. {install ? "Nothing installed." : "No build started."}</p>}
+      </div>
+      <Button size="sm" onClick={accept}>{install ? "Install" : "Build it"}</Button>
+      <button aria-label="Dismiss suggestion" className="flex size-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-hover" onClick={dismiss}><Icon name="X" className="size-3" /></button>
+    </div>;
+  }
+
   const day2 = kind === "day2";
   return <div data-guidance-prototype="next-step" className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
     <span aria-hidden>↳</span>

@@ -13,7 +13,7 @@ export function NativeGuidanceFixtureSlot({ kind, target, onDraft }: {
   const selection = nativeGuidanceFixture;
   const matches = selection !== null && (
     kind === "empty" ? ["reading", "suggestions", "jobs", "no-agent"].includes(selection.kind)
-      : kind === "next-step" ? ["next-step", "day2"].includes(selection.kind)
+      : kind === "next-step" ? ["next-step", "day2", "plugin-install", "plugin-build"].includes(selection.kind)
       : selection.kind === "hint"
   );
   if (Fixture === null || !matches || selection?.target !== target) return null;

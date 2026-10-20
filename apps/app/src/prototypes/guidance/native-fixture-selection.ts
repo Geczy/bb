@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 const selectionSchema = z.object({
-  kind: z.enum(["reading", "suggestions", "jobs", "no-agent", "next-step", "day2", "hint", "attention", "ready", "setup-agent", "setup-projects"]),
+  kind: z.enum(["reading", "suggestions", "jobs", "no-agent", "next-step", "plugin-install", "plugin-build", "day2", "hint", "attention", "ready", "setup-agent", "setup-projects"]),
   agentOutcome: z.enum(["ready", "failed"]),
   target: z.union([z.literal("new-thread"), z.string().regex(/^thr_[a-z0-9]+$/)]),
-}).refine(value => !["attention", "ready", "hint", "next-step", "day2"].includes(value.kind) || value.target !== "new-thread");
+}).refine(value => !["attention", "ready", "hint", "next-step", "plugin-install", "plugin-build", "day2"].includes(value.kind) || value.target !== "new-thread");
 
 function readSelection() {
   if (!import.meta.env.DEV || typeof window === "undefined") return null;
