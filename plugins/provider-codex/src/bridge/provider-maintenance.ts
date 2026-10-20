@@ -12,6 +12,7 @@ import {
   experimental_installationVerification as installationVerification,
   experimental_npmGlobalInstallCommand as npmGlobalInstallCommand,
   experimental_npmGlobalInstallSource as npmGlobalInstallSource,
+  experimental_npmCommand as npmCommand,
   experimental_npmLatestVersion as npmLatestVersion,
   experimental_probeNpmGlobalPackage as probeNpmGlobalPackage,
   experimental_readCliVersion as readCliVersion,
@@ -82,6 +83,12 @@ function codexUpdateCommand(): {
   };
 }
 
+async function missingNpmPrerequisite(): Promise<"nodejs" | null> {
+  return (await commandOutput(npmCommand(), ["--version"])) === null
+    ? "nodejs"
+    : null;
+}
+
 export async function getCodexProviderInstallationStatus(
   requirement?: "thread_rewind",
   checkUpdates = true,
@@ -98,6 +105,9 @@ export async function getCodexProviderInstallationStatus(
         : { npmBin: null, npmGlobalPackageVersion: null },
     ]);
   const installed = resolvedExecutable !== null || versionOutput !== null;
+  const missingPrerequisite = installed
+    ? null
+    : await missingNpmPrerequisite();
   const currentVersion = versionFrom(versionOutput);
   const needsUpdate =
     installed &&
@@ -110,7 +120,9 @@ export async function getCodexProviderInstallationStatus(
       ? requirement === "thread_rewind"
       : compareVersions(currentVersion, minimumSupportedVersion) < 0);
   const actionKind = !installed
-    ? "install"
+    ? missingPrerequisite === null
+      ? "install"
+      : null
     : needsUpdate || versionUnsupported
       ? "update"
       : null;
@@ -140,6 +152,7 @@ export async function getCodexProviderInstallationStatus(
                 ? npmGlobalInstallCommand(CODEX_NPM_PACKAGE).displayCommand
                 : codexUpdateCommand().displayCommand,
           },
+    missingPrerequisite,
     needsUpdate,
     versionUnsupported,
   };
