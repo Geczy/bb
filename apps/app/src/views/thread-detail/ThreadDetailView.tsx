@@ -5,6 +5,7 @@ import { queueSplitDownload } from "@/lib/split-prefetch";
 import { createCoreComposerActions } from "@/lib/plugin-composer-handle";
 import {
   useCallback,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -240,6 +241,7 @@ import type {
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "@/hooks/useThreadReadTracking";
+import { useHoldThreadOpenUntilLoaded } from "./useHoldThreadOpenUntilLoaded";
 import { useThreadUnreadDividerState } from "./useThreadUnreadDividerState";
 import {
   buildTerminalSyncedSecondaryFileTabs,
@@ -473,10 +475,24 @@ function RoutedThreadDetailView() {
   }
 
   return (
-    <ThreadDetailViewInternal
+    <DeferredThreadDetailView
       projectId={projectId}
       threadId={threadId}
       timelineEnabled
+    />
+  );
+}
+
+function DeferredThreadDetailView(
+  props: ThreadRoutePathArgs & { timelineEnabled: boolean },
+) {
+  const projectId = useDeferredValue(props.projectId);
+  const threadId = useDeferredValue(props.threadId);
+  return (
+    <ThreadDetailViewInternal
+      projectId={projectId}
+      threadId={threadId}
+      timelineEnabled={props.timelineEnabled}
     />
   );
 }
@@ -485,7 +501,7 @@ queueSplitDownload("queued-messages-list");
 
 export function ThreadDetailView(props: ThreadDetailViewProps) {
   if (props.surface === "pane") {
-    return <ThreadDetailViewInternal {...props} />;
+    return <DeferredThreadDetailView {...props} />;
   }
   return <RoutedThreadDetailView />;
 }
@@ -494,6 +510,7 @@ function ThreadDetailViewInternal(
   props: ThreadRoutePathArgs & { timelineEnabled: boolean },
 ) {
   const { projectId, threadId, timelineEnabled } = props;
+  useHoldThreadOpenUntilLoaded(threadId, timelineEnabled);
   const {
     isFocused,
     isMaximized: isPaneMaximized,
