@@ -8,7 +8,6 @@ import { useAtom, useAtomValue, useStore } from "jotai";
 import {
   Fragment,
   memo,
-  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -40,6 +39,7 @@ import {
   computePaneRects,
   countPanes,
   findPane,
+  findPaneByContent,
   listPanes,
   movePane,
   removePane,
@@ -300,20 +300,28 @@ function SplitThreadAreaContent({ routeContent }: SplitThreadAreaProps) {
     if (currentContent === null) {
       return;
     }
-    startTransition(() => {
-      setLayout((previous) =>
-        reconcileLayoutForContent(previous, currentContent),
-      );
-    });
+    setLayout((previous) =>
+      reconcileLayoutForContent(previous, currentContent),
+    );
   }, [currentContent, setLayout]);
 
-  const layout: SplitLayout | null =
+  const routeLayout: SplitLayout | null =
     storedLayout ??
     (currentContent?.kind === "thread" && routeThread
       ? createSinglePaneLayout(routeThread)
       : currentContent
         ? reconcileLayoutForContent(null, currentContent)
         : null);
+  const layout: SplitLayout | null =
+    routeLayout !== null &&
+    currentContent !== null &&
+    findPaneByContent(routeLayout.root, currentContent) === null
+      ? replacePaneContent(
+          routeLayout,
+          routeLayout.focusedPaneId,
+          currentContent,
+        )
+      : routeLayout;
   const panes = layout === null ? [] : listPanes(layout.root);
   const isSplitActive = splitWorkspaceActive && panes.length > 1;
   const maximizedPane =
