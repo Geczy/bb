@@ -43,7 +43,7 @@ export type TelemetryEvent =
   | {
       name: "agent_install";
       properties: {
-        agent: "claude-code" | "codex" | "pi";
+        agent: string;
         method: "native" | "bundled-npm" | "npm";
         outcome: "started" | "succeeded" | "failed";
       };

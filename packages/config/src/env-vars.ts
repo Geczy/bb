@@ -312,7 +312,7 @@ export const BB_FF_PLACEHOLDER_ENV = defineEnvVar<boolean>({
 
 export const BB_FF_AGENT_INSTALL_TELEMETRY_ENV = defineEnvVar<boolean>({
   description:
-    "Send the anonymous agent_install telemetry event (agent, method, outcome) when Setup installs Claude Code, Codex, or Pi. Off by default.",
+    "Send the anonymous agent_install telemetry event (agent, method, outcome) when Setup installs a built-in agent. Off by default.",
   name: "BB_FF_AGENT_INSTALL_TELEMETRY",
   parse: parseBooleanEnvValue,
 });

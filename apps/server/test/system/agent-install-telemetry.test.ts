@@ -25,6 +25,7 @@ function installEvents(
 function capture(args: {
   enabled: boolean;
   providerId: string;
+  builtIn?: boolean;
   actionKind?: "install" | "update";
   events: ProviderCliInstallEvent[];
 }) {
@@ -36,6 +37,7 @@ function capture(args: {
       agentInstallTelemetry: args.enabled,
     },
     providerId: args.providerId,
+    isBuiltinProvider: () => args.builtIn ?? true,
     actionKind: args.actionKind ?? "install",
     events: args.events,
   });
@@ -97,7 +99,7 @@ describe("agent_install telemetry", () => {
     });
   });
 
-  it("ignores updates and providers outside the enum", () => {
+  it("ignores updates and providers that are not built in", () => {
     expect(
       capture({
         enabled: true,
@@ -110,6 +112,7 @@ describe("agent_install telemetry", () => {
       capture({
         enabled: true,
         providerId: "custom-acp",
+        builtIn: false,
         events: installEvents("custom-acp", "npm install -g x", true),
       }),
     ).toEqual([]);

@@ -1,6 +1,7 @@
 import { joinHostPathSegments } from "../services/lib/host-path.js";
 import { serverAccess } from "../services/machines/server-access.js";
 import {
+  getInstalledPlugin,
   getLatestSessionForHost,
   getNonDestroyedHost,
   getPublicProjectByLocalPathSource,
@@ -476,6 +477,9 @@ export function registerHostRoutes(
       telemetry: deps.telemetry,
       featureFlags: deps.config.featureFlags,
       providerId: payload.provider,
+      isBuiltinProvider: () =>
+        getInstalledPlugin(deps.db, registration.pluginId)?.provenance ===
+        "builtin",
       actionKind: payload.actionKind,
       events: result.events,
     });

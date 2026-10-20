@@ -2,14 +2,7 @@ import type { FeatureFlags } from "@bb/domain";
 import type { ProviderCliInstallEvent } from "@bb/host-daemon-contract";
 import type { TelemetryService } from "./telemetry.js";
 
-type AgentInstallAgent = "claude-code" | "codex" | "pi";
 type AgentInstallMethod = "native" | "bundled-npm" | "npm";
-
-const AGENT_BY_PROVIDER_ID: Readonly<Record<string, AgentInstallAgent>> = {
-  "claude-code": "claude-code",
-  codex: "codex",
-  pi: "pi",
-};
 
 function installMethod(displayCommand: string): AgentInstallMethod {
   if (/npm-cli\.js/u.test(displayCommand)) return "bundled-npm";
@@ -24,13 +17,12 @@ export function captureAgentInstallTelemetry(args: {
   telemetry: TelemetryService;
   featureFlags: FeatureFlags;
   providerId: string;
+  isBuiltinProvider: () => boolean;
   actionKind: "install" | "update";
   events: readonly ProviderCliInstallEvent[];
 }): void {
   if (!args.featureFlags.agentInstallTelemetry) return;
-  if (args.actionKind !== "install") return;
-  const agent = AGENT_BY_PROVIDER_ID[args.providerId];
-  if (agent === undefined) return;
+  if (args.actionKind !== "install" || !args.isBuiltinProvider()) return;
   const started = args.events.find((event) => event.type === "started");
   if (started === undefined) return;
   const method = installMethod(started.command);
@@ -43,7 +35,7 @@ export function captureAgentInstallTelemetry(args: {
   ] as const) {
     args.telemetry.capture({
       name: "agent_install",
-      properties: { agent, method, outcome },
+      properties: { agent: args.providerId, method, outcome },
     });
   }
 }
