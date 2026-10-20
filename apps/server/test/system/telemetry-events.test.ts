@@ -97,7 +97,6 @@ describe("client telemetry events", () => {
   });
 });
 
-
 describe("Playgrounds telemetry", () => {
   it("forwards only the approved fixed categories", async () => {
     await withTestHarness(async (harness) => {
@@ -110,7 +109,12 @@ describe("Playgrounds telemetry", () => {
       }
       for (const format of ["mp4", "gif"]) {
         for (const size of ["square", "landscape", "portrait"]) {
-          for (const duration_bucket of ["under_15s", "15_30s", "30_60s", "over_60s"]) {
+          for (const duration_bucket of [
+            "under_15s",
+            "15_30s",
+            "30_60s",
+            "over_60s",
+          ]) {
             const event = {
               name: "playground_clip_exported",
               properties: { kind: "anatomy", format, size, duration_bucket },
@@ -128,20 +132,61 @@ describe("Playgrounds telemetry", () => {
     await withTestHarness(async (harness) => {
       const capture = vi.fn<TelemetryService["capture"]>();
       harness.deps.telemetry = { ...harness.deps.telemetry, capture };
-      const published = { name: "playground_published", properties: { kind: "html" } };
+      const published = {
+        name: "playground_published",
+        properties: { kind: "html" },
+      };
       const clip = {
         name: "playground_clip_exported",
-        properties: { kind: "anatomy", format: "mp4", size: "square", duration_bucket: "15_30s" },
+        properties: {
+          kind: "anatomy",
+          format: "mp4",
+          size: "square",
+          duration_bucket: "15_30s",
+        },
       };
       for (const event of [published, clip]) {
-        for (const key of ["prompt", "title", "html", "state", "path", "threadId", "playgroundId", "provider", "seconds"]) {
-          expect((await post(harness, { ...event, properties: { ...event.properties, [key]: "private" } })).status).toBe(400);
-          expect((await post(harness, { ...event, [key]: "private" })).status).toBe(400);
+        for (const key of [
+          "prompt",
+          "title",
+          "html",
+          "state",
+          "path",
+          "threadId",
+          "playgroundId",
+          "provider",
+          "seconds",
+        ]) {
+          expect(
+            (
+              await post(harness, {
+                ...event,
+                properties: { ...event.properties, [key]: "private" },
+              })
+            ).status,
+          ).toBe(400);
+          expect(
+            (await post(harness, { ...event, [key]: "private" })).status,
+          ).toBe(400);
         }
-        expect((await post(harness, { ...event, properties: { ...event.properties, kind: "private" } })).status).toBe(400);
+        expect(
+          (
+            await post(harness, {
+              ...event,
+              properties: { ...event.properties, kind: "private" },
+            })
+          ).status,
+        ).toBe(400);
       }
       for (const field of ["format", "size", "duration_bucket"] as const) {
-        expect((await post(harness, { ...clip, properties: { ...clip.properties, [field]: "private" } })).status).toBe(400);
+        expect(
+          (
+            await post(harness, {
+              ...clip,
+              properties: { ...clip.properties, [field]: "private" },
+            })
+          ).status,
+        ).toBe(400);
         const properties: Record<string, string> = { ...clip.properties };
         delete properties[field];
         expect((await post(harness, { ...clip, properties })).status).toBe(400);

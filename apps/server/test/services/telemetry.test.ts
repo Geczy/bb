@@ -342,7 +342,15 @@ describe("telemetry service", () => {
     });
     const events = [
       { name: "playground_published", properties: { kind: "anatomy" } },
-      { name: "playground_clip_exported", properties: { kind: "html", format: "mp4", size: "square", duration_bucket: "15_30s" } },
+      {
+        name: "playground_clip_exported",
+        properties: {
+          kind: "html",
+          format: "mp4",
+          size: "square",
+          duration_bucket: "15_30s",
+        },
+      },
     ] as const;
     for (const event of events) telemetry.capture(event);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -350,7 +358,9 @@ describe("telemetry service", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     for (const event of events) telemetry.capture(event);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls.map(([, request]) => JSON.parse(request.body).event)).toEqual(events.map(event => event.name));
+    expect(
+      fetchMock.mock.calls.map(([, request]) => JSON.parse(request.body).event),
+    ).toEqual(events.map((event) => event.name));
     telemetry.setEnabled(false);
     for (const event of events) telemetry.capture(event);
     expect(fetchMock).toHaveBeenCalledTimes(2);
