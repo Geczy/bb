@@ -349,8 +349,10 @@ export function MessageActionBar({
   if (!isHovered && !isFocused && !isMenuOpen && visibleRecents !== recents) {
     setVisibleRecents(recents);
   }
+  const slotNodeRef = useRef<HTMLDivElement | null>(null);
   const slotRef = useCallback(
     (node: HTMLDivElement | null) => {
+      slotNodeRef.current = node;
       measureRef(node);
       setCollisionBoundary(findMessageActionTooltipCollisionBoundary(node));
     },
@@ -489,7 +491,14 @@ export function MessageActionBar({
       <div
         ref={slotRef}
         className={cn(slotClass, "h-5 max-md:pointer-coarse:h-7")}
-        onPointerEnter={() => setIsHovered(true)}
+        onPointerEnter={(event) => {
+          if (
+            event.target instanceof Node &&
+            event.currentTarget.contains(event.target)
+          ) {
+            setIsHovered(true);
+          }
+        }}
         onPointerLeave={() => setIsHovered(false)}
         onFocusCapture={(event) => {
           setIsFocused(event.currentTarget.contains(event.target));
@@ -513,7 +522,14 @@ export function MessageActionBar({
               />
             ))
           )}
-          <DropdownMenu onOpenChange={setIsMenuOpen}>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              setIsMenuOpen(open);
+              if (!open) {
+                setIsHovered(slotNodeRef.current?.matches(":hover") ?? false);
+              }
+            }}
+          >
             <DropdownMenuTrigger asChild>
               <button
                 type="button"

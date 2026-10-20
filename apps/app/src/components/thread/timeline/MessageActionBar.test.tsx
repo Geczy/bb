@@ -91,6 +91,61 @@ function openDesktopMenu() {
   return screen.getByRole("menu");
 }
 
+function renderTwoNarrowAssistantRows() {
+  const resizeObserver = installControlledResizeObserver();
+  const actions = ["Summarize", "Translate"].map((label) => ({
+    key: label,
+    pluginId: null,
+    icon: null,
+    label,
+    onSelect: vi.fn(),
+  }));
+  render(
+    <>
+      {[0, 1].map((index) => (
+        <section key={index} data-testid={`row-${index}`}>
+          <MessageActionBar
+            messageRole="assistant"
+            timestamp={TIMESTAMP}
+            messageText="Message"
+            alignment="start"
+            mobileActionDisplay="inline"
+            pluginActions={actions}
+          />
+        </section>
+      ))}
+    </>,
+  );
+  resizeObserver.reportWidth(72);
+  const row = (index: number) => screen.getByTestId(`row-${index}`);
+  const labels = (index: number) =>
+    within(row(index))
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+  const slot = row(0).firstElementChild!;
+  let pointerOverSlot = false;
+  const matches = Element.prototype.matches;
+  vi.spyOn(Element.prototype, "matches").mockImplementation(function (
+    this: Element,
+    selector: string,
+  ) {
+    if (selector === ":hover" && this === slot) return pointerOverSlot;
+    return matches.call(this, selector);
+  });
+  const selectTranslateFromMenu = (pointerStaysOnRow: boolean) => {
+    pointerOverSlot = true;
+    fireEvent.pointerEnter(slot);
+    fireEvent.pointerDown(
+      within(row(0)).getByRole("button", { name: "Message actions" }),
+    );
+    const menu = screen.getByRole("menu");
+    fireEvent.pointerEnter(menu);
+    pointerOverSlot = pointerStaysOnRow;
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Translate" }));
+  };
+  return { labels, slot, selectTranslateFromMenu };
+}
+
 describe("MessageActionBar", () => {
   it("keeps Copy fixed and shares recent actions only within the same message role", () => {
     const actions = ["Summarize", "Translate"].map((label) => ({
@@ -161,6 +216,24 @@ describe("MessageActionBar", () => {
       "Translate",
       "Message actions",
     ]);
+  });
+
+  it("re-sorts a row after a mouse-selected menu item closes the menu away from the row", () => {
+    const { labels, selectTranslateFromMenu } = renderTwoNarrowAssistantRows();
+    expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
+    selectTranslateFromMenu(false);
+    expect(labels(1)).toEqual(["Copy message", "Translate", "Message actions"]);
+    expect(labels(0)).toEqual(labels(1));
+  });
+
+  it("keeps a row frozen after a mouse-selected menu item while the pointer stays on the row", () => {
+    const { labels, slot, selectTranslateFromMenu } =
+      renderTwoNarrowAssistantRows();
+    selectTranslateFromMenu(true);
+    expect(labels(0)).toEqual(["Copy message", "Summarize", "Message actions"]);
+    expect(labels(1)).toEqual(["Copy message", "Translate", "Message actions"]);
+    fireEvent.pointerLeave(slot);
+    expect(labels(0)).toEqual(labels(1));
   });
 
   it("ranks inline and overflow actions together without growing the visible row", () => {
@@ -385,12 +458,7 @@ describe("MessageActionBar", () => {
       within(openDesktopMenu())
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual([
-      "Copy message",
-      "Edit message",
-      "Add to chat",
-      "Fork thread",
-    ]);
+    ).toEqual(["Copy message", "Edit message", "Add to chat", "Fork thread"]);
   });
 
   it("shows a timestamp-only footer in the menu", () => {
