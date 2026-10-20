@@ -1,4 +1,7 @@
-import { isChunkDownloadError } from "./stale-chunk-recovery";
+import {
+  isChunkDownloadError,
+  reloadAfterChunkDownloadFailure,
+} from "./stale-chunk-recovery";
 import {
   prepareSplitImport,
   queueSplitPreload,
@@ -8,19 +11,57 @@ import {
   Component,
   lazy,
   Suspense,
+  useEffect,
   useState,
   type ComponentType,
+  type ErrorInfo,
   type ReactNode,
 } from "react";
 
 export type SplitTier = "preload" | "intent";
 
-type FailureProps = { retry: () => void };
+export type SplitFailureProps = { error: unknown; retry: () => void };
 
-export function SplitLoadFailure({ retry }: FailureProps) {
+const SERVER_RETRY_DELAY_MS = 5000;
+
+function useReloadAfterDownloadFailure(error: unknown): void {
+  useEffect(() => {
+    if (!isChunkDownloadError(error)) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = async () => {
+      const outcome = await reloadAfterChunkDownloadFailure();
+      if (!cancelled && outcome === "server-unreachable") {
+        timer = setTimeout(() => void attempt(), SERVER_RETRY_DELAY_MS);
+      }
+    };
+    void attempt();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [error]);
+}
+
+export function SplitLoadFailure({ error, retry }: SplitFailureProps) {
+  useReloadAfterDownloadFailure(error);
+  if (isChunkDownloadError(error)) {
+    return (
+      <p role="alert" className="p-3 text-sm text-destructive">
+        Couldn't download this part of bb.{" "}
+        <button
+          type="button"
+          className="underline"
+          onClick={() => window.location.reload()}
+        >
+          Reload
+        </button>
+      </p>
+    );
+  }
   return (
     <p role="alert" className="p-3 text-sm text-destructive">
-      Could not load.{" "}
+      Something went wrong here.{" "}
       <button type="button" className="underline" onClick={retry}>
         Try again
       </button>
@@ -28,32 +69,31 @@ export function SplitLoadFailure({ retry }: FailureProps) {
   );
 }
 
-class SplitErrorBoundary extends Component<
-  { children: ReactNode; fallback: ReactNode },
-  { failed: boolean }
-> {
-  override state = { failed: false };
+type SplitErrorBoundaryState = { failure: { error: unknown } | null };
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+class SplitErrorBoundary extends Component<
+  { children: ReactNode; id: string; fallback: (error: unknown) => ReactNode },
+  SplitErrorBoundaryState
+> {
+  override state: SplitErrorBoundaryState = { failure: null };
+
+  static getDerivedStateFromError(error: unknown): SplitErrorBoundaryState {
+    return { failure: { error } };
+  }
+
+  override componentDidCatch(error: unknown, info: ErrorInfo): void {
+    console.error(
+      `[bb] split "${this.props.id}" failed`,
+      error,
+      info.componentStack,
+    );
   }
 
   override render() {
-    return this.state.failed ? this.props.fallback : this.props.children;
-  }
-}
-
-const DOWNLOAD_RETRY_DELAYS = [500, 1500];
-
-async function loadWithDownloadRetries<T>(load: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await load();
-    } catch (error) {
-      const delay = DOWNLOAD_RETRY_DELAYS[attempt];
-      if (delay === undefined || !isChunkDownloadError(error)) throw error;
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
-    }
+    const { failure } = this.state;
+    return failure === null
+      ? this.props.children
+      : this.props.fallback(failure.error);
   }
 }
 
@@ -70,7 +110,7 @@ export function defineSplit<P extends object>({
   id: string;
   load: () => Promise<ComponentType<P>>;
   loading: ComponentType<P>;
-  error?: ComponentType<P & FailureProps>;
+  error?: ComponentType<P & SplitFailureProps>;
   tier: SplitTier;
   mountWhen?: (props: P) => boolean;
   keepMounted?: boolean;
@@ -80,7 +120,7 @@ export function defineSplit<P extends object>({
   let loaded: ComponentType<P> | null = null;
   const loadModule = () => {
     pending ??= prepareSplitImport(id)
-      .then(() => loadWithDownloadRetries(load))
+      .then(() => load())
       .then((component) => {
         loaded = component;
         return { default: component };
@@ -115,7 +155,10 @@ export function defineSplit<P extends object>({
     return (
       <SplitErrorBoundary
         key={attempt.number}
-        fallback={<ErrorView {...props} retry={retry} />}
+        id={id}
+        fallback={(error) => (
+          <ErrorView {...props} error={error} retry={retry} />
+        )}
       >
         <Suspense fallback={<Loading {...props} />}>
           <View {...props} />

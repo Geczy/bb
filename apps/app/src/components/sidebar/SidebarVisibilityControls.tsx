@@ -1,7 +1,11 @@
 import type { ComponentProps } from "react";
 import { Skeleton } from "@bb/shared-ui/skeleton";
 import { COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
-import { defineSplit, SplitLoadFailure } from "@/lib/define-split";
+import {
+  defineSplit,
+  SplitLoadFailure,
+  type SplitFailureProps,
+} from "@/lib/define-split";
 import type { SidebarVisibilityCustomize as SidebarVisibilityCustomizeView } from "./SidebarVisibilityCustomize";
 import { SidebarCustomizePanel } from "@bb/shared-ui/sidebar-customize-panel";
 
@@ -10,12 +14,13 @@ type SidebarVisibilityCustomizeProps = ComponentProps<
 >;
 
 function SidebarVisibilityCustomizePlaceholder({
+  error,
   items,
   onDone,
   retry,
   title,
   variant,
-}: SidebarVisibilityCustomizeProps & { retry?: () => void }) {
+}: SidebarVisibilityCustomizeProps & Partial<SplitFailureProps>) {
   return (
     <SidebarCustomizePanel
       autoFocusDone
@@ -24,7 +29,7 @@ function SidebarVisibilityCustomizePlaceholder({
       variant={variant}
     >
       {retry ? (
-        <SplitLoadFailure retry={retry} />
+        <SplitLoadFailure error={error} retry={retry} />
       ) : (
         <div
           role="status"

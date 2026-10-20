@@ -12,10 +12,10 @@ export const LazyMarkdownHtml = defineSplit<Options>({
       <Skeleton className="h-4 w-32" aria-label="Loading embedded HTML" />
     </>
   ),
-  error: ({ retry, ...props }) => (
+  error: ({ error, retry, ...props }) => (
     <>
       <ReactMarkdown {...props} skipHtml />
-      <SplitLoadFailure retry={retry} />
+      <SplitLoadFailure error={error} retry={retry} />
     </>
   ),
 });

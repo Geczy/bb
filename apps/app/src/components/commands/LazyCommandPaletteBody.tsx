@@ -2,7 +2,11 @@ import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { useId } from "react";
 import { Skeleton } from "@bb/shared-ui/skeleton";
 import { cn } from "@bb/shared-ui/lib/utils";
-import { defineSplit, SplitLoadFailure } from "@/lib/define-split";
+import {
+  defineSplit,
+  SplitLoadFailure,
+  type SplitFailureProps,
+} from "@/lib/define-split";
 import type { CommandPaletteBodyProps } from "./CommandPaletteBody";
 import {
   COMMAND_PALETTE_INPUT,
@@ -26,10 +30,11 @@ const SKELETON_ROW_WIDTHS = [
 ];
 
 function CommandPaletteBodyPlaceholder({
+  error,
   query,
   onQueryChange,
   retry,
-}: CommandPaletteBodyProps & { retry?: () => void }) {
+}: CommandPaletteBodyProps & Partial<SplitFailureProps>) {
   const descriptionId = useId();
   const isCompact = useIsCompactViewport();
   return (
@@ -52,7 +57,7 @@ function CommandPaletteBodyPlaceholder({
       </PaletteInputBand>
       <div className="min-h-0 overflow-hidden rounded-b-[inherit] bg-background">
         {retry ? (
-          <SplitLoadFailure retry={retry} />
+          <SplitLoadFailure error={error} retry={retry} />
         ) : (
           <div
             role="status"

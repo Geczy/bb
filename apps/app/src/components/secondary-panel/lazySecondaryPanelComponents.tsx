@@ -121,14 +121,14 @@ const ThreadSecondaryPanelSplit = defineSplit<LazyThreadSecondaryPanelProps>({
     ),
   error: (props) =>
     props.renderAsDrawer ? (
-      <SplitLoadFailure retry={props.retry} />
+      <SplitLoadFailure error={props.error} retry={props.retry} />
     ) : (
       <ThreadSecondaryPanelInlinePlaceholder
         isOpen={props.isOpen}
         isConversationCollapsed={props.isConversationCollapsed}
         resizablePanelId={props.resizablePanelId}
       >
-        <SplitLoadFailure retry={props.retry} />
+        <SplitLoadFailure error={props.error} retry={props.retry} />
       </ThreadSecondaryPanelInlinePlaceholder>
     ),
   unmounted: (props) =>
@@ -183,7 +183,7 @@ export const LazyBrowserTabDeck = defineSplit({
   loading: () => null,
   error: (props) =>
     props.activeBrowserTabId === null ? null : (
-      <SplitLoadFailure retry={props.retry} />
+      <SplitLoadFailure error={props.error} retry={props.retry} />
     ),
   mountWhen: (props) => props.activeBrowserTabId !== null,
   keepMounted: true,

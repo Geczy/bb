@@ -13,7 +13,11 @@ import {
   QUEUED_MESSAGES_COLLAPSED_HEIGHT,
 } from "@/components/promptbox/banner/queued-messages-layout";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
-import { defineSplit, SplitLoadFailure } from "@/lib/define-split";
+import {
+  defineSplit,
+  SplitLoadFailure,
+  type SplitFailureProps,
+} from "@/lib/define-split";
 import type { QueuedMessageReorderRequest } from "@/lib/queued-message-reorder";
 
 export type QueuedMessageProcessingAction = "send" | "edit" | "delete";
@@ -134,9 +138,10 @@ function QueuedMessagesListLoading(props: QueuedMessagesListProps) {
 }
 
 function QueuedMessagesListFailure({
+  error,
   retry,
   ...props
-}: QueuedMessagesListProps & { retry: () => void }) {
+}: QueuedMessagesListProps & SplitFailureProps) {
   return (
     <QueuedMessagesCardFrame
       attached={isAttachedToComposer(props)}
@@ -144,7 +149,7 @@ function QueuedMessagesListFailure({
       height={getQueuedMessagesDrawerHeight(props)}
       queuedMessageCount={props.queuedMessages.length}
     >
-      <SplitLoadFailure retry={retry} />
+      <SplitLoadFailure error={error} retry={retry} />
     </QueuedMessagesCardFrame>
   );
 }

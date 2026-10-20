@@ -33,25 +33,42 @@ async function readDeployedEntryScript(): Promise<string | null> {
   }
 }
 
+type ReloadOutcome = "reloading" | "server-unreachable" | "not-reloaded";
+
+async function reloadForDeployment({
+  evenIfCurrent,
+}: {
+  evenIfCurrent: boolean;
+}): Promise<ReloadOutcome> {
+  const loadedEntry = readEntryScript(document);
+  if (loadedEntry === null) return "not-reloaded";
+  const deployedEntry = await readDeployedEntryScript();
+  if (deployedEntry === null) return "server-unreachable";
+  if (deployedEntry === loadedEntry && !evenIfCurrent) return "not-reloaded";
+  try {
+    const storage = window.sessionStorage;
+    if (storage.getItem(RELOAD_GUARD_KEY) === deployedEntry)
+      return "not-reloaded";
+    if (!flushPendingPromptDraftPersists()) return "not-reloaded";
+    storage.setItem(RELOAD_GUARD_KEY, deployedEntry);
+  } catch {
+    return "not-reloaded";
+  }
+  window.location.reload();
+  return "reloading";
+}
+
+export function reloadAfterChunkDownloadFailure(): Promise<ReloadOutcome> {
+  return reloadForDeployment({ evenIfCurrent: true });
+}
+
 export function installStaleChunkRecovery(): () => void {
   let checking = false;
-  let reloading = false;
   const recover = async () => {
-    if (checking || reloading) return;
-    const loadedEntry = readEntryScript(document);
-    if (loadedEntry === null) return;
+    if (checking) return;
     checking = true;
     try {
-      const deployedEntry = await readDeployedEntryScript();
-      if (deployedEntry === null || deployedEntry === loadedEntry) return;
-      const storage = window.sessionStorage;
-      if (storage.getItem(RELOAD_GUARD_KEY) === deployedEntry) return;
-      if (!flushPendingPromptDraftPersists()) return;
-      storage.setItem(RELOAD_GUARD_KEY, deployedEntry);
-      reloading = true;
-      window.location.reload();
-    } catch {
-      return;
+      await reloadForDeployment({ evenIfCurrent: false });
     } finally {
       checking = false;
     }

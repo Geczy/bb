@@ -7,15 +7,17 @@ import {
   useMeasureSidebarFooterCapacity,
   useSidebarFooterPreferences,
 } from "./sidebarFooterPreferences";
-import { defineSplit, SplitLoadFailure } from "@/lib/define-split";
+import {
+  defineSplit,
+  SplitLoadFailure,
+  type SplitFailureProps,
+} from "@/lib/define-split";
 
 function FooterCustomizePlaceholder({
+  error,
   onDone,
   retry,
-}: {
-  onDone: () => void;
-  retry?: () => void;
-}) {
+}: { onDone: () => void } & Partial<SplitFailureProps>) {
   const preferences = useSidebarFooterPreferences();
   const footerRowRef = useRef<HTMLDivElement>(null);
   const moreGlyphRef = useRef<HTMLSpanElement>(null);
@@ -32,7 +34,7 @@ function FooterCustomizePlaceholder({
     >
       <SidebarFooterCustomizeHeader onDone={onDone} autoFocus />
       {retry ? (
-        <SplitLoadFailure retry={retry} />
+        <SplitLoadFailure error={error} retry={retry} />
       ) : (
         <div role="status" aria-label="Loading footer customization">
           <div

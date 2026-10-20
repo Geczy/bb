@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { installStaleChunkRecovery } from "./stale-chunk-recovery";
+import {
+  installStaleChunkRecovery,
+  reloadAfterChunkDownloadFailure,
+} from "./stale-chunk-recovery";
 import { getPromptDraftAccessor } from "../hooks/usePromptDraftStorage";
 
 const LOADED_ENTRY = "/assets/index-old.js";
@@ -188,3 +191,36 @@ it.each([
   await settle();
   expect(reload).not.toHaveBeenCalled();
 });
+
+it("reloads the current deployment once for a failed download the user is waiting on, and again for a later deployment", async () => {
+  const draft = getPromptDraftAccessor({ kind: "new-thread" });
+  draft.setTextAndMentions("Typed while the panel failed", []);
+  let persistedAtReload: string | null = null;
+  reload.mockImplementation(() => {
+    persistedAtReload = window.localStorage.getItem(draft.storageKey);
+  });
+  await expect(reloadAfterChunkDownloadFailure()).resolves.toBe("reloading");
+  expect(reload).toHaveBeenCalledOnce();
+  expect(JSON.parse(persistedAtReload ?? "null")).toMatchObject({
+    text: "Typed while the panel failed",
+  });
+  await expect(reloadAfterChunkDownloadFailure()).resolves.toBe("not-reloaded");
+  expect(reload).toHaveBeenCalledOnce();
+  deploy("/assets/index-new.js");
+  await expect(reloadAfterChunkDownloadFailure()).resolves.toBe("reloading");
+  expect(reload).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ["offline", () => fetchIndex.mockRejectedValue(new TypeError("offline"))],
+  ["error response", () => deploy(LOADED_ENTRY, { status: 502 })],
+])(
+  "reports the server as unreachable without reloading when %s",
+  async (_failure, arrange) => {
+    arrange();
+    await expect(reloadAfterChunkDownloadFailure()).resolves.toBe(
+      "server-unreachable",
+    );
+    expect(reload).not.toHaveBeenCalled();
+  },
+);

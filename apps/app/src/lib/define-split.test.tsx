@@ -11,8 +11,19 @@ import { afterEach, expect, it, vi } from "vitest";
 import { downloadSplit } from "./split-prefetch";
 import { defineSplit } from "./define-split";
 
+const { reloadAfterChunkDownloadFailure } = vi.hoisted(() => ({
+  reloadAfterChunkDownloadFailure:
+    vi.fn<() => Promise<"reloading" | "server-unreachable" | "not-reloaded">>(),
+}));
+
+vi.mock("./stale-chunk-recovery", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./stale-chunk-recovery")>()),
+  reloadAfterChunkDownloadFailure,
+}));
+
 afterEach(() => {
   cleanup();
+  reloadAfterChunkDownloadFailure.mockReset();
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -196,94 +207,93 @@ it.each(["preload", "previous mount"])(
   },
 );
 
-it.each([
-  new TypeError(
-    "Failed to fetch dynamically imported module: /assets/editor.js",
-  ),
-  new TypeError("error loading dynamically imported module: /assets/editor.js"),
-  new TypeError("Importing a module script failed."),
-])(
-  "shares bounded automatic download retries across preload and render: %s",
-  async (error) => {
-    vi.useFakeTimers();
-    const load = vi
-      .fn<() => Promise<React.ComponentType>>()
-      .mockRejectedValueOnce(error)
-      .mockRejectedValueOnce(error)
-      .mockResolvedValue(() => <p>Recovered editor</p>);
-    const Split = defineSplit({
-      id: "automatic-retry",
-      load,
-      loading: () => <p>Loading editor</p>,
-      tier: "intent",
-    });
-    const warm = Split.preload();
-    render(<Split />);
-    await act(async () => {});
-    expect(load).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("alert")).toBeNull();
-    await act(async () => vi.advanceTimersByTimeAsync(499));
-    expect(load).toHaveBeenCalledOnce();
-    await act(async () => vi.advanceTimersByTimeAsync(1));
-    expect(load).toHaveBeenCalledTimes(2);
-    expect(screen.getByText("Loading editor")).toBeTruthy();
-    await act(async () => vi.advanceTimersByTimeAsync(1500));
-    await warm;
-    expect(load).toHaveBeenCalledTimes(3);
-    expect(screen.getByText("Recovered editor")).toBeTruthy();
-  },
-);
-
-it("stops automatic retries after three attempts and permits a new manual attempt", async () => {
+it("reports a download failure as one, logs it, and reloads once the server answers", async () => {
   vi.useFakeTimers();
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  const failure = new TypeError(
+    "Failed to fetch dynamically imported module: /assets/editor.js",
+  );
+  reloadAfterChunkDownloadFailure
+    .mockResolvedValueOnce("server-unreachable")
+    .mockResolvedValueOnce("reloading");
   const load = vi
     .fn<() => Promise<React.ComponentType>>()
-    .mockRejectedValue(
-      new TypeError("Failed to fetch dynamically imported module: /editor.js"),
-    );
+    .mockRejectedValue(failure);
   const Split = defineSplit({
-    id: "exhausted-retry",
+    id: "download-failure",
     load,
     loading: () => <p>Loading editor</p>,
     tier: "intent",
   });
-  render(<Split />);
-  await act(async () => vi.runAllTimersAsync());
-  expect(load).toHaveBeenCalledTimes(3);
-  expect(screen.getByRole("alert")).toBeTruthy();
+  const view = render(<Split />);
+  await act(async () => {});
+  expect(load).toHaveBeenCalledOnce();
+  expect(screen.getByRole("alert").textContent).toContain(
+    "Couldn't download this part of bb.",
+  );
+  expect(screen.getByRole("button", { name: "Reload" })).toBeTruthy();
+  expect(logged).toHaveBeenCalledWith(
+    '[bb] split "download-failure" failed',
+    failure,
+    expect.any(String),
+  );
+  expect(reloadAfterChunkDownloadFailure).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTimeAsync(4999));
+  expect(reloadAfterChunkDownloadFailure).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTimeAsync(1));
+  expect(reloadAfterChunkDownloadFailure).toHaveBeenCalledTimes(2);
   await act(async () => vi.advanceTimersByTimeAsync(60000));
-  expect(load).toHaveBeenCalledTimes(3);
-  load.mockResolvedValue(() => <p>Recovered editor</p>);
-  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-  await act(async () => vi.runAllTimersAsync());
-  expect(screen.getByText("Recovered editor")).toBeTruthy();
-  expect(load).toHaveBeenCalledTimes(4);
+  expect(reloadAfterChunkDownloadFailure).toHaveBeenCalledTimes(2);
+  view.unmount();
 });
 
-it.each([
-  new SyntaxError("Unexpected token in feature module"),
-  new Error("Unable to preload CSS for /assets/editor.css"),
-])(
-  "does not automatically retry non-JavaScript-download failures: %s",
-  async (error) => {
-    vi.useFakeTimers();
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const load = vi
-      .fn<() => Promise<React.ComponentType>>()
-      .mockRejectedValue(error);
-    const Split = defineSplit({
-      id: "non-download-failure",
-      load,
-      loading: () => null,
-      tier: "intent",
-    });
-    render(<Split />);
-    await act(async () => vi.runAllTimersAsync());
-    expect(screen.getByRole("alert")).toBeTruthy();
-    expect(load).toHaveBeenCalledOnce();
-  },
-);
+it("stops waiting for the server when the failed split unmounts", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  reloadAfterChunkDownloadFailure.mockResolvedValue("server-unreachable");
+  const Split = defineSplit({
+    id: "download-failure-unmount",
+    load: () =>
+      Promise.reject(new TypeError("Importing a module script failed.")),
+    loading: () => null,
+    tier: "intent",
+  });
+  const view = render(<Split />);
+  await act(async () => {});
+  expect(reloadAfterChunkDownloadFailure).toHaveBeenCalledOnce();
+  view.unmount();
+  await act(async () => vi.advanceTimersByTimeAsync(60000));
+  expect(reloadAfterChunkDownloadFailure).toHaveBeenCalledOnce();
+});
+
+it("reports a crash inside a loaded split as a crash, logs it, and lets Try again remount it", async () => {
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  let crash = true;
+  const crashError = new Error("queued row could not render");
+  function Crashing() {
+    if (crash) throw crashError;
+    return <p>Rows ready</p>;
+  }
+  const Split = defineSplit({
+    id: "render-crash",
+    load: async () => Crashing,
+    loading: () => null,
+    tier: "intent",
+  });
+  render(<Split />);
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Something went wrong here.");
+  expect(alert.textContent).not.toContain("download");
+  expect(logged).toHaveBeenCalledWith(
+    '[bb] split "render-crash" failed',
+    crashError,
+    expect.any(String),
+  );
+  expect(reloadAfterChunkDownloadFailure).not.toHaveBeenCalled();
+  crash = false;
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(await screen.findByText("Rows ready")).toBeTruthy();
+});
 
 it("mounts only when wanted and keeps a retained split mounted after it closes", async () => {
   const Split = defineSplit<{ open: boolean }>({
