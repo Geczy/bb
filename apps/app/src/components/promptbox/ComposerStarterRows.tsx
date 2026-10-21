@@ -10,6 +10,7 @@ import {
   type PromptDraftController,
 } from "@/hooks/usePromptDraftStorage";
 import { createCoreComposerActions } from "@/lib/plugin-composer-handle";
+import { randomUuid } from "@/lib/random-uuid";
 
 export interface ComposerStarter {
   id: "make_bb_yours" | "explain_codebase" | "fix_todo";
@@ -122,7 +123,7 @@ export function ComposerStarterRows({
   const [suggestionIds] = useState(
     () =>
       new Map(
-        COMPOSER_STARTERS.map((starter) => [starter.id, crypto.randomUUID()]),
+        COMPOSER_STARTERS.map((starter) => [starter.id, randomUuid()]),
       ),
   );
   const handleSelect = useCallback(

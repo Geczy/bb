@@ -196,4 +196,29 @@ describe("ComposerStarterRows", () => {
       },
     });
   });
+
+  it("renders and records rows on origins without crypto.randomUUID", () => {
+    vi.stubGlobal("crypto", {
+      getRandomValues: crypto.getRandomValues.bind(crypto),
+      randomUUID: undefined,
+    });
+    try {
+      arrange();
+
+      expect(screen.getByText("Try asking")).toBeTruthy();
+      const ids = vi
+        .mocked(recordTelemetryEvent)
+        .mock.calls.map(([event]) =>
+          event.name === "suggestion_shown"
+            ? event.properties.suggestion_analytics_id
+            : null,
+        );
+      expect(ids).toHaveLength(3);
+      for (const id of ids) {
+        expect(id).toMatch(/^[0-9a-f-]{36}$/u);
+      }
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
