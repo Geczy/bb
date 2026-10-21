@@ -272,8 +272,6 @@ function mapSidebarNavigationProjectThreads(
   };
 }
 
-
-
 export function listSidebarNavigationThreads(
   navigation: SidebarBootstrapResponse,
 ): ThreadListEntry[] {
@@ -315,8 +313,6 @@ export function findSidebarNavigationThreadPlaceholder(
         (thread) => thread.id === threadId,
       );
 }
-
-
 
 export function getEnvironmentRecordInvalidationQueryKeys({
   environmentId,
@@ -421,7 +417,6 @@ export function getCachedThreadListPlaceholder(
 
   return undefined;
 }
-
 
 function threadMatchesListFilters(
   thread: Thread,
@@ -636,7 +631,12 @@ export function updateCachedThreadListStatusState(
   threadId: string,
   statusChange: ThreadStatusChangeMetadata,
 ): void {
-  patchThreadEntity(queryClient, threadId, statusChange, statusChange.updatedAt);
+  patchThreadEntity(
+    queryClient,
+    threadId,
+    statusChange,
+    statusChange.updatedAt,
+  );
 }
 
 export function updateCachedThreadStatusState(

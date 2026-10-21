@@ -738,7 +738,10 @@ function predictStopRequest({
       thread: {
         ...entity.thread,
         status: "stopping",
-        updatedAt: Math.max(entity.thread.updatedAt ?? requestedAt, requestedAt),
+        updatedAt: Math.max(
+          entity.thread.updatedAt ?? requestedAt,
+          requestedAt,
+        ),
         ...(entity.thread.runtime && {
           runtime: { ...entity.thread.runtime, displayStatus: "stopping" },
         }),

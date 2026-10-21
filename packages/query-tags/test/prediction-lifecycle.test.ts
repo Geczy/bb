@@ -84,7 +84,10 @@ it("keeps writes to a cache without a read and settles to the acknowledged value
   disposers.push(() => cache.clear());
   cache.setQueryData<Row>(["row"], { id: "a", pinnedAt: null, status: "idle" });
   const failed = write(cache, [pinRow(["row"], 100)]);
-  cache.setQueryData<Row>(["row"], (row) => row && { ...row, status: "running" });
+  cache.setQueryData<Row>(
+    ["row"],
+    (row) => row && { ...row, status: "running" },
+  );
   await failed.fail();
   expect(cache.getQueryData(["row"])).toEqual({
     id: "a",
@@ -153,8 +156,9 @@ it("lets a write after acknowledgement replace the acknowledged value", async ()
   const pending = write(cache, [pinRow(queryKey, 100)]);
   await pending.accept(250);
 
-  cache.setQueryData<Row>(queryKey, (current) =>
-    current && { ...current, pinnedAt: 260 },
+  cache.setQueryData<Row>(
+    queryKey,
+    (current) => current && { ...current, pinnedAt: 260 },
   );
   expect(row()?.pinnedAt).toBe(260);
 

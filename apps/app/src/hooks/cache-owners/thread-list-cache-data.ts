@@ -43,7 +43,6 @@ export function* iterateThreadListCacheEntries(
   }
 }
 
-
 function isThreadListCacheData(value: unknown): value is ThreadListCacheData {
   return isThreadListEntryArray(value) || isInfiniteThreadListData(value);
 }
@@ -72,6 +71,3 @@ export function getCachedThreadLists(
   }
   return result;
 }
-
-
-

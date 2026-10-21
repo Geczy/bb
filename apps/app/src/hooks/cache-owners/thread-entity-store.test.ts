@@ -104,11 +104,7 @@ describe("thread entity store", () => {
     ).toMatchObject({ pinnedAt: 5, status: "active" });
 
     pin.fail();
-    for (const rows of [
-      s.sidebarRows(),
-      s.listRows(),
-      s.listRows(s.lateKey),
-    ])
+    for (const rows of [s.sidebarRows(), s.listRows(), s.listRows(s.lateKey)])
       expect(s.describeRows(rows)).toEqual(["t1:null:active", "t2:null:idle"]);
     expect(
       s.queryClient.getQueryData<ThreadListEntry>(threadQueryKey("t1")),
@@ -216,7 +212,9 @@ describe("thread entity store", () => {
       queryClient: s.queryClient,
       transaction,
     });
-    expect(s.sidebarRows().map((row) => [row.id, row.status, row.updatedAt])).toEqual([
+    expect(
+      s.sidebarRows().map((row) => [row.id, row.status, row.updatedAt]),
+    ).toEqual([
       ["t1", "idle", 12],
       ["t2", "idle", 10],
     ]);
@@ -225,7 +223,9 @@ describe("thread entity store", () => {
   it("drops an entity once no view holds it", async () => {
     const s = setup([]);
     await s.fetchList(s.listKey, () => [entry("t1")]);
-    expect(s.queryClient.getQueryData(threadEntityQueryKey("t1"))).toBeDefined();
+    expect(
+      s.queryClient.getQueryData(threadEntityQueryKey("t1")),
+    ).toBeDefined();
     s.queryClient.removeQueries({ queryKey: s.listKey });
     expect(
       s.queryClient.getQueryData(threadEntityQueryKey("t1")),

@@ -209,7 +209,9 @@ const DETAIL: ViewFamily = {
   facet: "detail",
   membership: () => "any",
   slots: (data) =>
-    threadRow(data) === undefined ? undefined : [{ key: "detail", items: [data] }],
+    threadRow(data) === undefined
+      ? undefined
+      : [{ key: "detail", items: [data] }],
   rebuild: (data, items) => items.get("detail")?.[0] ?? data,
   ...ROW_ITEMS,
 };
@@ -332,26 +334,29 @@ function ingest(
   const acknowledgedAt = store.acknowledgedAt.get(id) ?? -1;
   const threadFields = pick(source, THREAD_KEYS);
   const facetFields = pick(source, FACET_KEYS[facet]);
-  store.client.setQueryData<ThreadEntity>(threadEntityQueryKey(id), (current) => {
-    if (current === undefined)
-      return {
-        thread: threadFields,
-        list: facet === "list" ? facetFields : null,
-        detail: facet === "detail" ? facetFields : null,
-      };
-    if (
-      isNewer(
-        threadFields.updatedAt,
-        current.thread.updatedAt,
-        readStart,
-        acknowledgedAt,
+  store.client.setQueryData<ThreadEntity>(
+    threadEntityQueryKey(id),
+    (current) => {
+      if (current === undefined)
+        return {
+          thread: threadFields,
+          list: facet === "list" ? facetFields : null,
+          detail: facet === "detail" ? facetFields : null,
+        };
+      if (
+        isNewer(
+          threadFields.updatedAt,
+          current.thread.updatedAt,
+          readStart,
+          acknowledgedAt,
+        )
       )
-    )
-      return mergeEntity(current, threadFields, facet, facetFields);
-    return current[facet] === null
-      ? mergeEntity(current, {}, facet, facetFields)
-      : current;
-  });
+        return mergeEntity(current, threadFields, facet, facetFields);
+      return current[facet] === null
+        ? mergeEntity(current, {}, facet, facetFields)
+        : current;
+    },
+  );
 }
 
 function applyChangedFields(
@@ -371,10 +376,12 @@ function applyChangedFields(
     Object.keys(facetFields).length === 0
   )
     return;
-  store.client.setQueryData<ThreadEntity>(threadEntityQueryKey(id), (current) =>
-    current === undefined
-      ? current
-      : mergeEntity(current, threadFields, facet, facetFields),
+  store.client.setQueryData<ThreadEntity>(
+    threadEntityQueryKey(id),
+    (current) =>
+      current === undefined
+        ? current
+        : mergeEntity(current, threadFields, facet, facetFields),
   );
 }
 
@@ -701,12 +708,14 @@ export function patchThreadEntity(
   ensureThreadEntityStore(client);
   const threadFields = pick(change, THREAD_KEYS);
   const listFields = pick(change, FACET_KEYS.list);
-  client.setQueryData<ThreadEntity>(threadEntityQueryKey(threadId), (current) =>
-    current === undefined ||
-    (updatedAt !== undefined &&
-      (current.thread.updatedAt ?? Number.NEGATIVE_INFINITY) > updatedAt)
-      ? current
-      : mergeEntity(current, threadFields, "list", listFields),
+  client.setQueryData<ThreadEntity>(
+    threadEntityQueryKey(threadId),
+    (current) =>
+      current === undefined ||
+      (updatedAt !== undefined &&
+        (current.thread.updatedAt ?? Number.NEGATIVE_INFINITY) > updatedAt)
+        ? current
+        : mergeEntity(current, threadFields, "list", listFields),
   );
 }
 

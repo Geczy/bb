@@ -43,14 +43,16 @@ import {
   selectThreadMentionCandidates,
   shouldFetchSidebarThreadListFallback,
   threadDetailBootstrapQueryOptions,
-  threadHostFilePreviewQueryOptions,
   threadMentionCandidatesFallbackQueryOptions,
   threadPendingInteractionsQueryOptions,
   threadQueryOptions,
+} from "./thread-queries";
+import {
+  threadHostFilePreviewQueryOptions,
   threadQueuedMessagesQueryOptions,
   threadStorageLocationQueryOptions,
   threadTimelineQueryOptions,
-} from "./thread-queries";
+} from "./thread-panel-queries";
 import {
   COARSE_POINTER_THREAD_OPEN_CACHE_MAX_THREADS,
   THREAD_OPEN_CACHE_GC_MS,
