@@ -3,13 +3,14 @@ import type { DbQueryConnection } from "../connection.js";
 import { appSettingsValues, projects, threads } from "../schema.js";
 
 const APP_OPEN_KEY = "lapsed-resume.last-open";
+const correlatedThreadId = sql`${threads}.${sql.identifier(threads.id.name)}`;
 
 const threadPresenceAt = sql<number>`max(
   ${threads.createdAt},
   coalesce(${threads.lastReadAt}, 0),
   coalesce((
     SELECT requested.created_at FROM events AS requested
-    WHERE requested.thread_id = ${threads.id}
+    WHERE requested.thread_id = ${correlatedThreadId}
       AND requested.type = 'client/turn/requested'
     ORDER BY requested.sequence DESC LIMIT 1
   ), 0)
@@ -25,16 +26,16 @@ export function getLapsedResumeActivity(db: DbQueryConnection) {
         coalesce(${threads.lastReadAt}, 0),
         coalesce((
           SELECT latest.created_at FROM events AS latest
-          WHERE latest.thread_id = ${threads.id}
+          WHERE latest.thread_id = ${correlatedThreadId}
           ORDER BY latest.sequence DESC LIMIT 1
         ), 0),
         coalesce((
           SELECT max(queued.updated_at) FROM queued_thread_messages AS queued
-          WHERE queued.thread_id = ${threads.id}
+          WHERE queued.thread_id = ${correlatedThreadId}
         ), 0),
         coalesce((
           SELECT max(interaction.updated_at) FROM pending_interactions AS interaction
-          WHERE interaction.thread_id = ${threads.id}
+          WHERE interaction.thread_id = ${correlatedThreadId}
         ), 0)
       ))`,
     })
