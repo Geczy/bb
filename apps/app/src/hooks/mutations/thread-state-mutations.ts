@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import {
   mutationOptions,
   type QueryClient,
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useTaggedMutation } from "@bb/query-tags";
 import type {
   ThreadArchiveAllResponse,
   ThreadResponse,
@@ -12,16 +14,13 @@ import type {
 import { sdk } from "@/lib/sdk";
 import type { LifecycleErrorOperation } from "@/lib/lifecycle-errors";
 import {
-  applyThreadPinStateResult,
   applyThreadReadStateResult,
   applyThreadUpdateResult,
   beginArchiveThreadAndChildrenTransaction,
   beginDeleteThreadTransaction,
-  beginPinThreadTransaction,
   beginThreadReadStateTransaction,
   beginThreadMetadataTransaction,
   beginUnarchiveThreadTransaction,
-  beginUnpinThreadTransaction,
   rollbackArchiveThreadsTransaction,
   rollbackDeleteThreadTransaction,
   rollbackThreadListMutationTransaction,
@@ -35,6 +34,7 @@ import {
   type DeleteThreadTransaction,
   type ThreadListMutationTransaction,
 } from "../cache-owners/thread-state-cache-owner";
+import { coreThreadMutations } from "./thread-mutation-batcher";
 
 interface ThreadMutationRequest {
   id: string;
@@ -130,70 +130,39 @@ export function useUpdateThread(options?: UpdateThreadMutationOptions) {
   return useMutation(updateThreadMutationOptions(queryClient, options));
 }
 
-export function usePinThread() {
+function useThreadPinStateMutation(
+  operation: "pin" | "unpin",
+  errorMessage: string,
+) {
   const queryClient = useQueryClient();
-
-  return useMutation({
-    meta: {
-      errorMessage: "Failed to pin thread.",
-    },
-    mutationFn: ({ id }: ThreadMutationRequest) =>
-      sdk.threads.pin({ threadId: id }),
-    onMutate: async ({ id }): Promise<ThreadListMutationTransaction> =>
-      beginPinThreadTransaction({
-        pinnedAt: Date.now(),
-        queryClient,
+  const { mutate } = useTaggedMutation<ThreadMutationRequest, ThreadResponse>({
+    client: queryClient,
+    invalidate: async () => {},
+    meta: { errorMessage },
+    call: async ({ id }) => ({
+      result: await coreThreadMutations(queryClient)[operation]({
         threadId: id,
       }),
-    onError: (_error, variables, context) => {
-      rollbackThreadListMutationTransaction({
-        queryClient,
-        threadId: variables.id,
-        transaction: context,
-      });
-    },
-    onSuccess: (thread) => {
-      applyThreadPinStateResult({ queryClient, thread, pinSortKey: null });
-    },
-    onSettled: (_data, _error, variables, context) => {
-      settleThreadPatchTransaction(context);
-      settleThreadListMembershipMutation({
-        queryClient,
-        threadId: variables.id,
-      });
-    },
+      invalidated: [],
+    }),
   });
+  return useMemo(
+    () => ({
+      mutate: (request: ThreadMutationRequest) => {
+        mutate(request).catch(() => {});
+      },
+      mutateAsync: mutate,
+    }),
+    [mutate],
+  );
+}
+
+export function usePinThread() {
+  return useThreadPinStateMutation("pin", "Failed to pin thread.");
 }
 
 export function useUnpinThread() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    meta: {
-      errorMessage: "Failed to unpin thread.",
-    },
-    mutationFn: ({ id }: ThreadMutationRequest) =>
-      sdk.threads.unpin({ threadId: id }),
-    onMutate: async ({ id }): Promise<ThreadListMutationTransaction> =>
-      beginUnpinThreadTransaction({ queryClient, threadId: id }),
-    onError: (_error, variables, context) => {
-      rollbackThreadListMutationTransaction({
-        queryClient,
-        threadId: variables.id,
-        transaction: context,
-      });
-    },
-    onSuccess: (thread) => {
-      applyThreadPinStateResult({ queryClient, thread, pinSortKey: null });
-    },
-    onSettled: (_data, _error, variables, context) => {
-      settleThreadPatchTransaction(context);
-      settleThreadListMembershipMutation({
-        queryClient,
-        threadId: variables.id,
-      });
-    },
-  });
+  return useThreadPinStateMutation("unpin", "Failed to unpin thread.");
 }
 
 export function useArchiveThreadAndChildren() {

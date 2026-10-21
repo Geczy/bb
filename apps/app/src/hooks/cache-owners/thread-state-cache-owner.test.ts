@@ -16,7 +16,6 @@ import {
 import {
   applyThreadReadStateResult,
   applyThreadUpdateResult,
-  applyThreadPinStateResult,
   applyPinnedThreadOrderResult,
   applyThreadMetadataBatchResult,
   beginThreadMetadataBatchTransaction,
@@ -541,7 +540,7 @@ function seedConcurrentThreadCaches() {
   return { queryClient, listKey, original, seed, read };
 }
 
-it.each(["rename", "pin", "reorder", "batch"])(
+it.each(["rename", "reorder", "batch"])(
   "preserves concurrent state on a delayed %s response",
   (operation) => {
     const { queryClient, original, seed, read } = seedConcurrentThreadCaches();
@@ -566,12 +565,6 @@ it.each(["rename", "pin", "reorder", "batch"])(
         thread: response,
         request: { title: "Renamed" },
       });
-    if (operation === "pin")
-      applyThreadPinStateResult({
-        queryClient,
-        thread: response,
-        pinSortKey: null,
-      });
     if (operation === "reorder")
       applyPinnedThreadOrderResult({ queryClient, orderedRoots: [response] });
     if (operation === "batch")
@@ -593,7 +586,6 @@ it.each(["rename", "pin", "reorder", "batch"])(
           : "Original",
       );
     }
-    if (operation === "pin") expect(read()[0]?.pinnedAt).toBe(20);
     if (operation === "reorder")
       expect(read()[1]).toMatchObject({ pinnedAt: 20, pinSortKey: "a" });
   },

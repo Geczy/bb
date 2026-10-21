@@ -285,6 +285,22 @@ function mapSidebarNavigationProjectThreads(
   };
 }
 
+export function mapSidebarNavigationThreads(
+  navigation: SidebarBootstrapResponse,
+  mapper: SidebarNavigationThreadMapper,
+): SidebarBootstrapResponse {
+  return {
+    sections: navigation.sections,
+    projects: navigation.projects.map((project) =>
+      mapSidebarNavigationProjectThreads(project, mapper),
+    ),
+    personalProject: mapSidebarNavigationProjectThreads(
+      navigation.personalProject,
+      mapper,
+    ),
+  };
+}
+
 export function applyToCachedSidebarNavigationThreads({
   mapper,
   queryClient,
@@ -292,21 +308,9 @@ export function applyToCachedSidebarNavigationThreads({
   patchCachedQueryData<SidebarBootstrapResponse>(
     queryClient,
     sidebarNavigationQueryKey(),
-    (currentNavigation) => {
-      if (!currentNavigation) {
-        return currentNavigation;
-      }
-      return {
-        sections: currentNavigation.sections,
-        projects: currentNavigation.projects.map((project) =>
-          mapSidebarNavigationProjectThreads(project, mapper),
-        ),
-        personalProject: mapSidebarNavigationProjectThreads(
-          currentNavigation.personalProject,
-          mapper,
-        ),
-      };
-    },
+    (currentNavigation) =>
+      currentNavigation &&
+      mapSidebarNavigationThreads(currentNavigation, mapper),
   );
 }
 

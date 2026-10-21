@@ -1,7 +1,13 @@
 import { cancelOptimisticQueries } from "./optimistic-query-cancellation";
 import type { QueryClient } from "@tanstack/react-query";
+import {
+  optimisticQueriesUpdate,
+  optimisticQueryUpdate,
+  type TaggedOptimisticUpdate,
+} from "@bb/query-tags";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type {
+  SidebarBootstrapResponse,
   UpdateThreadRequest,
   ThreadArchiveAllResponse,
 } from "@bb/server-contract";
@@ -23,13 +29,16 @@ import {
   applyToCachedSidebarNavigationThreads,
   listSidebarNavigationThreads,
   getCachedSidebarNavigationThreads,
+  mapSidebarNavigationThreads,
   snapshotCachedSidebarNavigation,
   type CachedSidebarNavigationSnapshot,
 } from "./query-cache";
 import {
   applyToCachedThreadLists,
   getCachedThreadLists,
+  isThreadListCacheData,
   iterateThreadListCacheEntries,
+  mapThreadListCacheData,
   restoreCachedThreadLists,
   restoreRemovedThreadEntries,
   type CachedThreadListSnapshot,
@@ -58,14 +67,6 @@ interface ThreadRuntimeCacheArgs {
   thread: ThreadWithRuntime;
 }
 
-interface ThreadPinSuccessArgs extends ThreadRuntimeCacheArgs {
-  pinSortKey: string | null;
-}
-
-interface BeginThreadPinTransactionArgs extends ThreadIdCacheArgs {
-  pinnedAt: number;
-}
-
 interface BeginThreadReadStateTransactionArgs extends ThreadIdCacheArgs {
   lastReadAt: number | null;
 }
@@ -81,7 +82,6 @@ interface ThreadMetadataUpdate {
   parentThreadId?: string | null;
   sectionId?: string | null;
   title?: string | null;
-  pinnedAt?: number | null;
 }
 
 interface BeginThreadMetadataBatchTransactionArgs {
@@ -172,7 +172,7 @@ function getOptimisticLastReadAt(
 
 function responseMetadataPatch(
   thread: ThreadWithRuntime,
-  request: UpdateThreadRequest & { pinnedAt?: number | null },
+  request: UpdateThreadRequest,
 ): ThreadMetadataPatch {
   return {
     ...(request.title !== undefined ? { title: thread.title } : {}),
@@ -184,9 +184,6 @@ function responseMetadataPatch(
       : {}),
     ...(request.visibility !== undefined
       ? { visibility: thread.visibility }
-      : {}),
-    ...(request.pinnedAt !== undefined
-      ? { pinnedAt: thread.pinnedAt, pinSortKey: null }
       : {}),
   };
 }
@@ -405,27 +402,41 @@ export function settleThreadPatchTransaction(
   transaction?.releasePendingPatches();
 }
 
-export function beginPinThreadTransaction({
+export function predictThreadPinState({
   pinnedAt,
-  queryClient,
   threadId,
-}: BeginThreadPinTransactionArgs): Promise<ThreadListMutationTransaction> {
-  return beginHeldThreadPatchTransaction({
-    patch: { pinnedAt, pinSortKey: null },
-    queryClient,
-    threadId,
-  });
-}
-
-export function beginUnpinThreadTransaction({
-  queryClient,
-  threadId,
-}: ThreadIdCacheArgs): Promise<ThreadListMutationTransaction> {
-  return beginHeldThreadPatchTransaction({
-    patch: { pinnedAt: null, pinSortKey: null },
-    queryClient,
-    threadId,
-  });
+}: {
+  pinnedAt: number | null;
+  threadId: string;
+}): TaggedOptimisticUpdate[] {
+  const pinnedAtFrom = (result: { value: ThreadWithRuntime } | undefined) =>
+    result === undefined ? pinnedAt : result.value.pinnedAt;
+  const patchList =
+    (result: { value: ThreadWithRuntime } | undefined) =>
+    (list: ThreadListEntry[]) =>
+      list.map((thread) =>
+        thread.id === threadId
+          ? { ...thread, pinnedAt: pinnedAtFrom(result), pinSortKey: null }
+          : thread,
+      );
+  return [
+    optimisticQueryUpdate<ThreadWithRuntime, ThreadWithRuntime>(
+      threadQueryKey(threadId),
+      (thread, result) => ({ ...thread, pinnedAt: pinnedAtFrom(result) }),
+    ),
+    optimisticQueriesUpdate<unknown, ThreadWithRuntime>(
+      threadsQueryKey(),
+      (data, result) =>
+        isThreadListCacheData(data)
+          ? mapThreadListCacheData(data, patchList(result))
+          : data,
+    ),
+    optimisticQueryUpdate<SidebarBootstrapResponse, ThreadWithRuntime>(
+      sidebarNavigationQueryKey(),
+      (navigation, result) =>
+        mapSidebarNavigationThreads(navigation, patchList(result)),
+    ),
+  ];
 }
 
 export async function beginThreadReadStateTransaction({
@@ -490,7 +501,6 @@ function findThreadMetadataInCache(
 }
 
 function resolveThreadMetadataPatch({
-  pinnedAt,
   parentThreadId,
   sectionId,
   queryClient,
@@ -514,7 +524,6 @@ function resolveThreadMetadataPatch({
     }
   }
   return {
-    ...(pinnedAt !== undefined ? { pinnedAt, pinSortKey: null } : {}),
     ...(title !== undefined ? { title } : {}),
     ...(sectionId !== undefined ? { sectionId } : {}),
     ...(parentThreadId !== undefined ? { parentThreadId } : {}),
@@ -608,7 +617,7 @@ export function applyThreadMetadataBatchResult({
   queryClient: QueryClient;
   updates: readonly {
     thread: ThreadWithRuntime;
-    request: UpdateThreadRequest & { pinnedAt?: number | null };
+    request: UpdateThreadRequest;
   }[];
 }): void {
   const patches = new Map<string, ThreadMetadataPatch>();
@@ -643,17 +652,6 @@ export function rollbackThreadListMutationTransaction({
   }
 
   transaction.rollbackFields();
-}
-
-export function applyThreadPinStateResult({
-  pinSortKey,
-  queryClient,
-  thread,
-}: ThreadPinSuccessArgs): void {
-  applyThreadPatches(
-    queryClient,
-    new Map([[thread.id, { pinnedAt: thread.pinnedAt, pinSortKey }]]),
-  );
 }
 
 export function applyPinnedThreadOrderResult({

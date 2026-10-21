@@ -60,7 +60,8 @@ function optimisticCache<Contract extends PluginRpcContract>(
   const add = (prediction: TaggedOptimisticUpdate) => {
     updates.push({
       ...prediction,
-      update: (current) => jsonValueSchema.parse(prediction.update(current)),
+      update: (current, result) =>
+        jsonValueSchema.parse(prediction.update(current, result)),
     });
   };
   return {
@@ -275,11 +276,11 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     const mutation = useTaggedMutation<
       StandardSchemaV1InferInput<Contract[Method]["input"]>,
       PluginRpcResult<Contract[Method]>
-    >(
-      host.queryClient,
-      (tags) =>
+    >({
+      client: host.queryClient,
+      invalidate: (tags) =>
         invalidateTags(host.queryClient, pluginTagScope(pluginId), tags),
-      async (input) => {
+      call: async (input) => {
         const response = await callRpcEnvelope(
           host,
           pluginId,
@@ -291,7 +292,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
           result: response.result as PluginRpcResult<Contract[Method]>,
         };
       },
-      (input) => {
+      optimistic: (input) => {
         const updates: TaggedOptimisticUpdate[] = [];
         options.optimistic?.(
           input,
@@ -299,7 +300,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
         );
         return updates;
       },
-    );
+    });
     const { mutate } = mutation;
     return {
       ...mutation,

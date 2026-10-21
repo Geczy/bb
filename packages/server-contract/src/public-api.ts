@@ -444,6 +444,13 @@ type PathThreadInteractionId = {
 };
 
 export const UI_PREFERENCES_TAG = "ui-preferences";
+export const THREAD_LISTS_TAG = "thread-lists";
+export const threadTag = (threadId: string): string => `thread:${threadId}`;
+const pinStateInvalidations = ({
+  params,
+}: {
+  params: Record<string, string>;
+}) => [threadTag(params.id), THREAD_LISTS_TAG];
 
 export function environmentPullRequestTag(environmentId: string): string {
   return `environment-pull-request:${environmentId}`;
@@ -515,6 +522,7 @@ export const publicApiRoutes = {
       method: "get",
       request: noRequest(),
       response: jsonResponse<SidebarBootstrapResponse>(),
+      tags: () => [THREAD_LISTS_TAG],
     }),
     get: defineRoute({
       path: "/projects/:id",
@@ -1362,6 +1370,7 @@ export const publicApiRoutes = {
         threadListQuerySchema,
       ),
       response: jsonResponse<ThreadListResponse>(),
+      tags: () => [THREAD_LISTS_TAG],
     }),
     /**
      * Grouped `SELECT count(*)` over threads. Exists because a plugin gate
@@ -1427,6 +1436,7 @@ export const publicApiRoutes = {
         threadGetQuerySchema,
       ),
       response: jsonResponse<ThreadResponse | ThreadWithIncludesResponse>(),
+      tags: ({ params }) => [threadTag(params.id)],
     }),
     update: defineRoute({
       path: "/threads/:id",
@@ -1692,12 +1702,14 @@ export const publicApiRoutes = {
       method: "post",
       request: noRequest<PathId>(),
       response: jsonResponse<ThreadResponse>(),
+      invalidates: pinStateInvalidations,
     }),
     unpin: defineRoute({
       path: "/threads/:id/unpin",
       method: "post",
       request: noRequest<PathId>(),
       response: jsonResponse<ThreadResponse>(),
+      invalidates: pinStateInvalidations,
     }),
     pinOrder: defineRoute({
       path: "/threads/:id/pin-order",

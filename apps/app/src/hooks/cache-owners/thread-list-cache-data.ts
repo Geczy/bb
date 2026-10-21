@@ -44,7 +44,7 @@ export function* iterateThreadListCacheEntries(
   }
 }
 
-function mapThreadListCacheData<T extends ThreadListCacheData>(
+export function mapThreadListCacheData<T extends ThreadListCacheData>(
   data: T,
   mapper: (list: ThreadListEntry[], pageIndex: number) => ThreadListEntry[],
 ): T {
@@ -54,7 +54,9 @@ function mapThreadListCacheData<T extends ThreadListCacheData>(
   return { ...data, pages: data.pages.map(mapper) } as T;
 }
 
-function isThreadListCacheData(value: unknown): value is ThreadListCacheData {
+export function isThreadListCacheData(
+  value: unknown,
+): value is ThreadListCacheData {
   return isThreadListEntryArray(value) || isInfiniteThreadListData(value);
 }
 

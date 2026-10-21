@@ -24,12 +24,15 @@ import {
   beginOptimisticMutation,
   subscribeOptimisticQuery,
   getTaggedReadData,
+  markTaggedQueryMeta,
   taggedReadReceipt,
   taggedStructuralSharing,
   type TaggedOptimisticUpdate,
 } from "./optimistic.js";
 export {
+  optimisticQueriesUpdate,
   optimisticQueryUpdate,
+  TaggedQueryClient,
   type TaggedOptimisticUpdate,
 } from "./optimistic.js";
 
@@ -77,6 +80,7 @@ export function taggedQueryOptions<Data>(
   registration: TaggedQueryRegistration<Data>,
 ) {
   const meta = {};
+  markTaggedQueryMeta(meta);
   registrations.set(meta, {
     scope: registration.scope,
     tagsOf: (data) => registration.tagsOf(data as Data),
@@ -191,7 +195,7 @@ async function executeTaggedMutation<Result>(
   prediction: ReturnType<typeof beginOptimisticMutation> | undefined,
 ): Promise<Result> {
   const { result, invalidated } = await call();
-  prediction?.accept();
+  prediction?.accept(result);
   const refresh = async () => {
     try {
       if (invalidated.length > 0) await invalidate(invalidated);
@@ -226,12 +230,21 @@ export function restartTaggedRead(query: object): void {
   if (pending) pending.restart = true;
 }
 
-export function useTaggedMutation<Input, Result>(
-  client: QueryClient,
-  invalidate: (tags: readonly string[]) => Promise<void>,
-  call: (input: Input) => Promise<TaggedMutationOutcome<Result>>,
-  optimistic?: (input: Input) => readonly TaggedOptimisticUpdate[],
-) {
+export interface UseTaggedMutationOptions<Input, Result> {
+  client: QueryClient;
+  invalidate(tags: readonly string[]): Promise<void>;
+  call(input: Input): Promise<TaggedMutationOutcome<Result>>;
+  optimistic?(input: Input): readonly TaggedOptimisticUpdate[];
+  meta?: Record<string, unknown>;
+}
+
+export function useTaggedMutation<Input, Result>({
+  client,
+  invalidate,
+  call,
+  optimistic,
+  meta,
+}: UseTaggedMutationOptions<Input, Result>) {
   const [owner] = useState(() => ({}));
   const predict = useRef(optimistic);
   useEffect(() => {
@@ -243,7 +256,7 @@ export function useTaggedMutation<Input, Result>(
   };
   const mutation = useMutation<Result, Error, Variables>(
     {
-      meta: { taggedMutationOwner: owner },
+      meta: { ...meta, taggedMutationOwner: owner },
       mutationFn: ({ input, prediction }) =>
         executeTaggedMutation(invalidate, () => call(input), prediction),
     },
