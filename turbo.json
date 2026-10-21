@@ -861,6 +861,7 @@
         "GITHUB_RUN_ID",
         "RUNNER_OS",
         "RUNNER_TEMP",
+        "OS",
         "SystemRoot",
         "SYSTEMROOT",
         "ComSpec",
