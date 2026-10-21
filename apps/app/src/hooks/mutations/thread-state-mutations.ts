@@ -137,7 +137,6 @@ function useThreadPinStateMutation(
   const queryClient = useQueryClient();
   const { mutate } = useTaggedMutation<ThreadMutationRequest, ThreadResponse>({
     client: queryClient,
-    invalidate: async () => {},
     meta: { errorMessage },
     call: async ({ id }) => ({
       result: await coreThreadMutations(queryClient)[operation]({

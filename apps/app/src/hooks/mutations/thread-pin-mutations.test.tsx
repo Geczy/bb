@@ -30,6 +30,7 @@ import {
   useThread,
   useThreads,
 } from "../queries/thread-queries";
+import { applyPinnedThreadOrderResult } from "../cache-owners/thread-state-cache-owner";
 import { createThreadMutationBatcher } from "./thread-mutation-batcher";
 import { usePinThread, useUnpinThread } from "./thread-state-mutations";
 
@@ -343,4 +344,88 @@ it("reverts an acknowledged unpin when the rest of its move fails", async () => 
     expect(sidebarRow()).toMatchObject({ pinnedAt: 50, sectionId: "old" }),
   );
   expect(server.pinnedAt("t1")).toEqual([50, 50, 50]);
+});
+
+async function acknowledgedPin(server: ReturnType<typeof serve>) {
+  await waitFor(() =>
+    expect(server.pinnedAt("t1")).toEqual([null, null, null]),
+  );
+  const pin = createDeferredPromise<ReturnType<typeof makeThreadResponse>>();
+  vi.mocked(sdk.threads.pin).mockReturnValue(pin.promise);
+  act(() => server.view.result.current.pin.mutate({ id: "t1" }));
+  await waitFor(() => expect(typeof server.pinnedAt("t1")[0]).toBe("number"));
+  const never = new Promise<never>(() => {});
+  vi.mocked(sdk.threads.list).mockReturnValue(never);
+  vi.mocked(sdk.threads.get).mockReturnValue(never);
+  vi.mocked(request).mockReturnValue(never);
+  return (pinnedAt: number) =>
+    act(async () =>
+      pin.resolve(makeThreadResponse({ ...entry("t1", pinnedAt) })),
+    );
+}
+
+it("keeps concurrent thread state when a pin succeeds", async () => {
+  const server = serve([entry("t1", null)]);
+  const acknowledge = await acknowledgedPin(server);
+  act(() => {
+    const statusChange = {
+      status: "active" as const,
+      runtime: { displayStatus: "active" as const },
+      activity: entry("t1", null).activity,
+      latestAttentionAt: 5,
+      updatedAt: 30,
+    };
+    updateCachedThreadListStatusState(server.queryClient, "t1", statusChange);
+    updateCachedThreadStatusState(server.queryClient, "t1", statusChange);
+    applyToCachedThreadListsAndSidebarNavigation(server.queryClient, (list) =>
+      list.map((thread) =>
+        thread.id === "t1"
+          ? { ...thread, sectionId: "new", lastReadAt: 25 }
+          : thread,
+      ),
+    );
+  });
+
+  await acknowledge(777);
+
+  await waitFor(() => expect(server.pinnedAt("t1")).toEqual([777, 777, 777]));
+  const { sidebar, list, thread } = server.view.result.current;
+  expect(thread.data).toMatchObject({
+    status: "active",
+    runtime: { displayStatus: "active" },
+    updatedAt: 30,
+  });
+  for (const row of [
+    list.data?.[0],
+    listSidebarNavigationThreads(sidebar.data!)[0],
+  ])
+    expect(row).toMatchObject({
+      status: "active",
+      runtime: { displayStatus: "active" },
+      updatedAt: 30,
+      sectionId: "new",
+      lastReadAt: 25,
+    });
+});
+
+it("shows the pinned order written after the pin is acknowledged", async () => {
+  const server = serve([entry("t1", null)]);
+  const acknowledge = await acknowledgedPin(server);
+  await acknowledge(777);
+  await waitFor(() => expect(server.pinnedAt("t1")).toEqual([777, 777, 777]));
+
+  act(() =>
+    applyPinnedThreadOrderResult({
+      queryClient: server.queryClient,
+      orderedRoots: [{ ...entry("t1", 777), pinSortKey: "b" }],
+    }),
+  );
+
+  await waitFor(() => {
+    const { sidebar, list } = server.view.result.current;
+    expect(list.data?.[0]?.pinSortKey).toBe("b");
+    expect(listSidebarNavigationThreads(sidebar.data!)[0]?.pinSortKey).toBe(
+      "b",
+    );
+  });
 });

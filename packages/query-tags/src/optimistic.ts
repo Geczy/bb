@@ -55,6 +55,7 @@ type PredictionState = {
   base: unknown;
   visible: unknown;
   layers: Prediction[];
+  guards: Prediction[];
 };
 type Receipt = {
   data: unknown;
@@ -227,17 +228,34 @@ function isTaggedQuery(query: Query): boolean {
   return query.meta !== undefined && taggedMeta.has(query.meta);
 }
 
-function bakeSettledLayers(query: Query, state: PredictionState): void {
-  if (isTaggedQuery(query)) return;
-  while (state.layers[0]?.settled) {
+function applyLayer(data: unknown, layer: Prediction): unknown {
+  const current = valueAt(data, layer.path);
+  return replaceAt(
+    data,
+    layer.path,
+    layer.update(current === undefined ? layer.initial : current.value),
+  );
+}
+
+function confirmLayers(
+  query: Query,
+  state: PredictionState,
+  ready: (layer: Prediction) => boolean,
+): void {
+  const tagged = isTaggedQuery(query);
+  while (state.layers[0] !== undefined && ready(state.layers[0])) {
     const layer = state.layers.shift()!;
-    const current = valueAt(state.base, layer.path);
-    state.base = replaceAt(
-      state.base,
-      layer.path,
-      layer.update(current === undefined ? layer.initial : current.value),
-    );
+    state.base = applyLayer(state.base, layer);
+    if (tagged && !layer.fresh) state.guards.push(layer);
   }
+}
+
+function confirmBeforeWrite(query: Query, state: PredictionState): void {
+  confirmLayers(query, state, (layer) => layer.acceptedAt !== null);
+}
+
+function isIdle(state: PredictionState): boolean {
+  return state.layers.length === 0 && state.guards.length === 0;
 }
 
 function untrack(query: Query, state: PredictionState): void {
@@ -261,10 +279,12 @@ function track(query: Query, state: PredictionState): void {
       const current = predictions.get(event.query);
       if (current === undefined || isTaggedQuery(event.query)) return;
       const data = event.query.state.data;
-      current.base =
-        !event.action.manual || baseWrites.has(event.query)
-          ? data
-          : rebase(current.base, current.visible, data);
+      if (event.action.manual && !baseWrites.has(event.query)) {
+        confirmBeforeWrite(event.query, current);
+        current.base = rebase(current.base, current.visible, data);
+      } else {
+        current.base = data;
+      }
       publish(event.query, current);
     });
     synced = { queries, unsubscribe };
@@ -274,11 +294,12 @@ function track(query: Query, state: PredictionState): void {
 }
 
 function publish(query: Query, state: PredictionState): void {
-  bakeSettledLayers(query, state);
+  if (!isTaggedQuery(query))
+    confirmLayers(query, state, (layer) => layer.settled);
   const data = replaceEqualDeep(query.state.data, projected(state));
   state.visible = data;
   query.setState({ data });
-  if (state.layers.length === 0) untrack(query, state);
+  if (isIdle(state)) untrack(query, state);
   for (const listener of predictionListeners.get(query) ?? []) listener();
 }
 
@@ -368,13 +389,21 @@ export function taggedStructuralSharing(
             olderPending(state, layer),
         );
       }
-      state.base =
-        receipt?.kind === "read" || baseWrites.has(query)
-          ? next
-          : rebase(state.base, previous, next);
+      if (receipt?.kind === "read") {
+        const read = receipt.receipts;
+        state.guards = state.guards.filter(
+          (guard) => !refreshedBy(read, guard),
+        );
+        state.base = state.guards.reduce(applyLayer, next);
+      } else if (baseWrites.has(query)) {
+        state.base = next;
+      } else {
+        confirmBeforeWrite(query, state);
+        state.base = rebase(state.base, previous, next);
+      }
       next = projected(state);
       state.visible = next;
-      if (state.layers.length === 0) untrack(query, state);
+      if (isIdle(state)) untrack(query, state);
     }
   }
   const sharing = client.defaultQueryOptions({ queryKey }).structuralSharing;
@@ -418,6 +447,7 @@ export function beginOptimisticMutation(
       base: query.state.data,
       visible: query.state.data,
       layers: [],
+      guards: [],
     };
     const current = valueAt(projected(state), update.path);
     if (current === undefined) return;
@@ -439,17 +469,21 @@ export function beginOptimisticMutation(
     affected.set(query, state);
     publish(query, state);
   };
-  const unsubscribe = client.getQueryCache().subscribe((event) => {
-    if (event.type !== "updated" || event.action.type !== "success") return;
-    for (const update of updates)
-      if (
-        matchQuery(
-          { queryKey: update.queryKey, exact: update.exact },
-          event.query,
-        )
-      )
-        attach(event.query, update);
-  });
+  const unsubscribe =
+    updates.length === 0
+      ? () => {}
+      : client.getQueryCache().subscribe((event) => {
+          if (event.type !== "updated" || event.action.type !== "success")
+            return;
+          for (const update of updates)
+            if (
+              matchQuery(
+                { queryKey: update.queryKey, exact: update.exact },
+                event.query,
+              )
+            )
+              attach(event.query, update);
+        });
   const finish = () => {
     done = true;
     unsubscribe();
@@ -532,15 +566,17 @@ export class TaggedQueryClient extends QueryClient {
     const query = this.getQueryCache().get(
       this.defaultQueryOptions({ queryKey }).queryHash,
     );
+    const state = query === undefined ? undefined : predictions.get(query);
     if (
       query === undefined ||
-      !predictions.has(query) ||
+      state === undefined ||
       typeof updater !== "function"
     )
       return super.setQueryData(queryKey, updater, options);
     const update = updater as (
       current: NoInfer<TInferredQueryFnData> | undefined,
     ) => NoInfer<TInferredQueryFnData> | undefined;
+    confirmBeforeWrite(query, state);
     const base = update(getTaggedReadData(this, queryKey));
     if (base === undefined) return undefined;
     baseWrites.add(query);

@@ -190,7 +190,7 @@ export interface TaggedMutationOptions {
 }
 
 async function executeTaggedMutation<Result>(
-  invalidate: (tags: readonly string[]) => Promise<void>,
+  invalidate: ((tags: readonly string[]) => Promise<void>) | undefined,
   call: () => Promise<TaggedMutationOutcome<Result>>,
   prediction: ReturnType<typeof beginOptimisticMutation> | undefined,
 ): Promise<Result> {
@@ -198,7 +198,8 @@ async function executeTaggedMutation<Result>(
   prediction?.accept(result);
   const refresh = async () => {
     try {
-      if (invalidated.length > 0) await invalidate(invalidated);
+      if (invalidate !== undefined && invalidated.length > 0)
+        await invalidate(invalidated);
     } finally {
       prediction?.settle();
     }
@@ -232,7 +233,7 @@ export function restartTaggedRead(query: object): void {
 
 export interface UseTaggedMutationOptions<Input, Result> {
   client: QueryClient;
-  invalidate(tags: readonly string[]): Promise<void>;
+  invalidate?(tags: readonly string[]): Promise<void>;
   call(input: Input): Promise<TaggedMutationOutcome<Result>>;
   optimistic?(input: Input): readonly TaggedOptimisticUpdate[];
   meta?: Record<string, unknown>;

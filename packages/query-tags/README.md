@@ -30,7 +30,10 @@ cache handlers such as core's error toast see it.
 key starts with `queryKey`, including matching queries that receive data while
 the write is pending. Updaters receive `{ value }` with the acknowledged result
 after the server accepts the write, so the prediction shows the server's value
-from acknowledgement on.
+from acknowledgement on. A cache write after acknowledgement first folds the
+acknowledged value into the confirmed data, so the later write takes effect;
+reads that started before acknowledgement still get the acknowledged value
+reapplied until a read started after it arrives.
 
 All readers see the prediction through the query cache. Server reads update an
 authoritative value beneath pending predictions. The prediction stays until the

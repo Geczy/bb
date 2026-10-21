@@ -207,3 +207,42 @@ it("leaves predictions alone when an observer selects from the query", async () 
   expect(cache.getQueryData(queryKey)).toEqual(server);
   expect(selected.getCurrentResult().data).toEqual(["a:null"]);
 });
+
+it("lets a write after acknowledgement replace the acknowledged value", async () => {
+  const cache = client();
+  const queryKey = ["rows", "ordered"];
+  let read: Promise<Row[]> = Promise.resolve([
+    { id: "a", pinnedAt: null, status: "idle" },
+  ]);
+  const observer = new QueryObserver<Row[]>(cache, {
+    queryKey,
+    ...taggedQueryOptions(cache, queryKey, {
+      scope: CORE_TAG_SCOPE,
+      tagsOf: () => [],
+    }),
+    queryFn: () => runTaggedRead(cache, queryKey, () => read),
+  });
+  disposers.push(observer.subscribe(() => {}));
+  await observer.refetch();
+  const rows = () => cache.getQueryData<Row[]>(queryKey);
+  let finishStale!: (rows: Row[]) => void;
+  read = new Promise((resolve) => {
+    finishStale = resolve;
+  });
+  const stale = observer.refetch();
+  const pending = write(cache, [pinRows("a", 100)]);
+  await pending.accept(250);
+
+  cache.setQueryData<Row[]>(queryKey, (current) =>
+    current?.map((row) => ({ ...row, pinnedAt: 260 })),
+  );
+  expect(rows()?.[0]?.pinnedAt).toBe(260);
+
+  finishStale([{ id: "a", pinnedAt: null, status: "idle" }]);
+  await stale;
+  expect(rows()?.[0]?.pinnedAt).toBe(250);
+
+  read = Promise.resolve([{ id: "a", pinnedAt: 270, status: "idle" }]);
+  await observer.refetch();
+  expect(rows()?.[0]?.pinnedAt).toBe(270);
+});
