@@ -2279,7 +2279,10 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
     accumulatedTerminalRowIds,
   );
   const initialAutoExpandedRowIds = useStableReadonlySet(
-    props.initialExpanded ?? EMPTY_ROW_ID_SET,
+    new Set([
+      ...(props.initialExpanded ?? EMPTY_ROW_ID_SET),
+      ...computedAutoExpansionRowIds.persistentExpandedRowIds,
+    ]),
   );
   const projectId = props.projectId;
   const senderThreadMetadataById = useSenderThreadMetadataById();

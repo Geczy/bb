@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildThreadTimelineFromEvents, buildTimelineViewRows } from "@bb/thread-view";
+import {
+  buildThreadTimelineFromEvents,
+  buildTimelineViewRows,
+} from "@bb/thread-view";
 import { generatedImageEvents } from "@/test/fixtures/generated-image-turn";
 import {
   ECHO_RECEIPT_PRESENTATION,
@@ -25,12 +28,16 @@ function collectAutoExpandedIds({
   rows,
   scopeActive,
 }: CollectAutoExpandedIdsArgs): Set<string> {
-  const { liveExpandedRowIds, terminalFrontierRowIds } =
+  const { liveExpandedRowIds, terminalFrontierRowIds, persistentExpandedRowIds } =
     collectTimelineAutoExpansionRowIds({
       rows,
       scopeActive,
     });
-  return new Set([...liveExpandedRowIds, ...terminalFrontierRowIds]);
+  return new Set([
+    ...liveExpandedRowIds,
+    ...terminalFrontierRowIds,
+    ...persistentExpandedRowIds,
+  ]);
 }
 
 const extensionPresentation = {
