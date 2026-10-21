@@ -1,6 +1,5 @@
 export type PageExperiment = {
   id: string;
-  recordId: string;
   slot: "holdout" | "hero" | "lower" | "page";
   pages: readonly string[];
   segment: "all";
@@ -10,8 +9,7 @@ export type PageExperiment = {
 
 export const PAGE_EXPERIMENT_REGISTRY: readonly PageExperiment[] = [
   {
-    id: "pg_00",
-    recordId: "PG-00",
+    id: "site_holdout",
     slot: "holdout",
     pages: ["/"],
     segment: "all",
@@ -22,8 +20,7 @@ export const PAGE_EXPERIMENT_REGISTRY: readonly PageExperiment[] = [
     status: "live",
   },
   {
-    id: "pg_aa",
-    recordId: "PG-AA",
+    id: "homepage_aa_check",
     slot: "hero",
     pages: ["/"],
     segment: "all",

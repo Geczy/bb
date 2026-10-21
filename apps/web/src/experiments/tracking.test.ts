@@ -80,8 +80,8 @@ const exclusions: {
     name: "internal cookie",
     headers: { cookie: `bb_xid=${XID}; bb_internal=1` },
   },
-  { name: "forced", search: "?bb_variant=pg_aa:control_copy" },
-  { name: "invalid forced", search: "?bb_variant=pg_aa:nope" },
+  { name: "forced", search: "?bb_variant=homepage_aa_check:control_copy" },
+  { name: "invalid forced", search: "?bb_variant=homepage_aa_check:nope" },
   ...["gclid", "gbraid", "wbraid"].map((key) => ({
     name: key,
     search: `?${key}=ad-click`,
@@ -92,19 +92,20 @@ const exclusions: {
 describe("page experiment privacy and enrollment", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it.each(["/", "/?bb_internal=1", "/?bb_variant=pg_aa:control_copy"])(
-    "does nothing with the setting off: %s",
-    async (path) => {
-      const capture = stubCapture();
-      const { response, original, enrollment } = await render(
-        request(path, { cookie: `bb_xid=${XID}` }),
-        false,
-      );
-      expect(response).toBe(original);
-      expect(enrollment.assignments).toEqual([]);
-      expect(capture).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    "/",
+    "/?bb_internal=1",
+    "/?bb_variant=homepage_aa_check:control_copy",
+  ])("does nothing with the setting off: %s", async (path) => {
+    const capture = stubCapture();
+    const { response, original, enrollment } = await render(
+      request(path, { cookie: `bb_xid=${XID}` }),
+      false,
+    );
+    expect(response).toBe(original);
+    expect(enrollment.assignments).toEqual([]);
+    expect(capture).not.toHaveBeenCalled();
+  });
 
   it("renews the same identifier and assignment without leaking it into HTML or URLs", async () => {
     const capture = stubCapture();
@@ -129,7 +130,7 @@ describe("page experiment privacy and enrollment", () => {
     expect(url).toBe("https://us.i.posthog.com/batch/?ip=0");
     const body = JSON.parse(String(init?.body));
     expect(body.batch[0].properties).toEqual({
-      experiment_id: "pg_00",
+      experiment_id: "site_holdout",
       variant: expect.stringMatching(/^(control|holdout)$/),
       slot: "holdout",
       page_path: "/",
@@ -196,7 +197,9 @@ describe("page experiment privacy and enrollment", () => {
 
   it("forces a registered variant without enrollment and sets staff exclusions only explicitly", async () => {
     const capture = stubCapture();
-    const forced = await render(request("/?bb_variant=pg_aa:control_copy"));
+    const forced = await render(
+      request("/?bb_variant=homepage_aa_check:control_copy"),
+    );
     expect(forced.enrollment.assignments.map((value) => value.variant)).toEqual(
       ["control_copy"],
     );

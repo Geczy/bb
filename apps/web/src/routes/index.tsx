@@ -262,7 +262,7 @@ const HERO_TEST_PAGES: Record<string, typeof LandingPage> = {
 
 function LandingRoute() {
   useInitAnalytics();
-  const variant = useExperimentVariant("pg_aa");
+  const variant = useExperimentVariant("homepage_aa_check");
   const Page = HERO_TEST_PAGES[variant] ?? LandingPage;
   return <Page />;
 }
