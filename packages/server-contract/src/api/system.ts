@@ -248,6 +248,19 @@ export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
     .strict(),
   z
     .object({
+      name: z.literal("composer_starter"),
+      properties: z
+        .object({
+          action: z.enum(["shown", "clicked", "sent"]),
+          starter: z
+            .enum(["make_bb_yours", "explain_codebase", "fix_todo"])
+            .nullable(),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       name: z.literal("new_thread_submit"),
       properties: z
         .object({ outcome: z.enum(["started", "accepted", "failed"]) })

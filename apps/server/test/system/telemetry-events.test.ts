@@ -42,6 +42,10 @@ describe("client telemetry events", () => {
           properties: { entry: "first_run", outcome: "failed" },
         },
         {
+          name: "composer_starter",
+          properties: { action: "clicked", starter: "make_bb_yours" },
+        },
+        {
           name: "new_thread_submit",
           properties: { outcome: "failed" },
         },

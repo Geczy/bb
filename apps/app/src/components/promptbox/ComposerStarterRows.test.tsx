@@ -10,11 +10,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import { makeSidebarBootstrapResponse } from "@/test/fixtures/projects";
 import { getPromptDraftAccessor } from "@/hooks/usePromptDraftStorage";
+import { recordTelemetryEvent } from "@/components/onboarding/onboarding-telemetry";
 import {
   COMPOSER_STARTERS,
   ComposerStarterRows,
   composerStarterAccessibleName,
 } from "./ComposerStarterRows";
+
+vi.mock("@/components/onboarding/onboarding-telemetry", () => ({
+  recordTelemetryEvent: vi.fn(),
+}));
 
 const promptDraft = getPromptDraftAccessor({
   kind: "plugin-new-thread",
@@ -144,5 +149,48 @@ describe("ComposerStarterRows", () => {
     });
 
     expect(screen.queryByText("Try asking")).toBeNull();
+  });
+
+  it("records the rows shown once, a click with its row, and a send after the click", () => {
+    const navigation = navigationWithThreads(0);
+    const props = {
+      promptDraft,
+      focus: vi.fn(),
+      isProjectless: false,
+      sidebarNavigation: navigation,
+    };
+    const { rerender } = render(
+      <ComposerStarterRows {...props} isSubmitting={false} />,
+    );
+    expect(vi.mocked(recordTelemetryEvent).mock.calls).toEqual([
+      [
+        {
+          name: "composer_starter",
+          properties: { action: "shown", starter: null },
+        },
+      ],
+    ]);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Fill the message box: Make bb yours",
+      }),
+    );
+    rerender(<ComposerStarterRows {...props} isSubmitting />);
+
+    expect(vi.mocked(recordTelemetryEvent).mock.calls.slice(1)).toEqual([
+      [
+        {
+          name: "composer_starter",
+          properties: { action: "clicked", starter: "make_bb_yours" },
+        },
+      ],
+      [
+        {
+          name: "composer_starter",
+          properties: { action: "sent", starter: "make_bb_yours" },
+        },
+      ],
+    ]);
   });
 });

@@ -1,8 +1,9 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { CHROME_SECTION_LABEL_CLASS } from "@bb/shared-ui/chrome-style-tokens";
 import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
+import { recordTelemetryEvent } from "@/components/onboarding/onboarding-telemetry";
 import { listSidebarNavigationThreads } from "@/hooks/cache-owners/query-cache";
 import {
   usePromptDraftInputEmpty,
@@ -11,7 +12,7 @@ import {
 import { createCoreComposerActions } from "@/lib/plugin-composer-handle";
 
 export interface ComposerStarter {
-  id: string;
+  id: "make_bb_yours" | "explain_codebase" | "fix_todo";
   label: string;
   prompt: string;
   needsProject: boolean;
@@ -21,21 +22,21 @@ export const COMPOSER_STARTER_ROWS_HEADING = "Try asking";
 
 export const COMPOSER_STARTERS: readonly ComposerStarter[] = [
   {
-    id: "make-bb-yours",
+    id: "make_bb_yours",
     label: "Make bb yours",
     prompt:
       "Help me make bb my own. Ask what I'd like to change, like how it looks or a panel or tool I'm missing, then build it as a theme or plugin and install it.",
     needsProject: false,
   },
   {
-    id: "explain-codebase",
+    id: "explain_codebase",
     label: "Explain this codebase",
     prompt:
       "Give me a short tour of this codebase: what it does, how it's organized, and where to start.",
     needsProject: true,
   },
   {
-    id: "fix-todo",
+    id: "fix_todo",
     label: "Fix a small TODO",
     prompt:
       "Find one TODO or FIXME in this project that's safe to fix, fix it, and explain the change.",
@@ -118,8 +119,14 @@ export function ComposerStarterRows({
     () => createCoreComposerActions({ ...promptDraft, focus }),
     [focus, promptDraft],
   );
+  const selectedStarterRef = useRef<ComposerStarter["id"] | null>(null);
   const handleSelect = useCallback(
     (starter: ComposerStarter) => {
+      selectedStarterRef.current = starter.id;
+      recordTelemetryEvent({
+        name: "composer_starter",
+        properties: { action: "clicked", starter: starter.id },
+      });
       composerActions.replace({ text: starter.prompt, mentions: [] });
       composerActions.focus();
     },
@@ -128,7 +135,26 @@ export function ComposerStarterRows({
   const starters = isProjectless
     ? COMPOSER_STARTERS.filter((starter) => !starter.needsProject)
     : COMPOSER_STARTERS;
-  if (isSubmitting || !inputEmpty || !hasNoThreads) {
+  const visible = !isSubmitting && inputEmpty && hasNoThreads;
+  const shownRecordedRef = useRef(false);
+  useEffect(() => {
+    if (!visible || shownRecordedRef.current) return;
+    shownRecordedRef.current = true;
+    recordTelemetryEvent({
+      name: "composer_starter",
+      properties: { action: "shown", starter: null },
+    });
+  }, [visible]);
+  useEffect(() => {
+    const starter = selectedStarterRef.current;
+    if (!isSubmitting || starter === null) return;
+    selectedStarterRef.current = null;
+    recordTelemetryEvent({
+      name: "composer_starter",
+      properties: { action: "sent", starter },
+    });
+  }, [isSubmitting]);
+  if (!visible) {
     return null;
   }
   return (
