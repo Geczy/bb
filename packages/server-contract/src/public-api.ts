@@ -125,6 +125,11 @@ import type {
   EnvironmentDiffPatchRequest,
   EnvironmentDiffPatchResponse,
   EnvironmentDiffQuery,
+  EnvironmentDiffFilesQuery,
+  EnvironmentDiffViewedClearRequest,
+  EnvironmentDiffViewedQueryRequest,
+  EnvironmentDiffViewedMarkRequest,
+  EnvironmentDiffViewedResponse,
   EnvironmentDiffResponse,
   EnvironmentPathsQuery,
   EnvironmentPullRequestResponse,
@@ -136,6 +141,7 @@ import type {
   HostEnrollmentCommandResponse,
   HostReconnectResponse,
   HostListQuery,
+  HostDeleteQuery,
   HostActionResponse,
   HostCloneDefaultPathQuery,
   HostCloneDefaultPathResponse,
@@ -336,10 +342,15 @@ import {
   environmentDiffFileQuerySchema,
   environmentDiffPatchRequestSchema,
   environmentDiffQuerySchema,
+  environmentDiffFilesQuerySchema,
+  environmentDiffViewedClearRequestSchema,
+  environmentDiffViewedQueryRequestSchema,
+  environmentDiffViewedMarkRequestSchema,
   environmentPathsQuerySchema,
   environmentStatusQuerySchema,
   hostDirectoryQuerySchema,
   hostListQuerySchema,
+  hostDeleteQuerySchema,
   hostCloneDefaultPathQuerySchema,
   hostFileListRequestSchema,
   hostFileReadRequestSchema,
@@ -431,6 +442,8 @@ type PathThreadMessage = { param: { id: string; seq: string } };
 type PathThreadInteractionId = {
   param: { id: string; interactionId: string };
 };
+
+export const UI_PREFERENCES_TAG = "ui-preferences";
 
 export const publicApiRoutes = {
   promptHistory: {
@@ -945,7 +958,9 @@ export const publicApiRoutes = {
     delete: defineRoute({
       path: "/hosts/:id",
       method: "delete",
-      request: noRequest<PathId>(),
+      request: optionalQueryRequest<PathId, HostDeleteQuery>(
+        hostDeleteQuerySchema,
+      ),
       response: jsonResponse<{ ok: true }>(),
     }),
     directory: defineRoute({
@@ -1190,8 +1205,8 @@ export const publicApiRoutes = {
     diffFiles: defineRoute({
       path: "/environments/:id/diff/files",
       method: "get",
-      request: queryRequest<PathId, EnvironmentDiffQuery>(
-        environmentDiffQuerySchema,
+      request: queryRequest<PathId, EnvironmentDiffFilesQuery>(
+        environmentDiffFilesQuerySchema,
       ),
       response: jsonResponse<EnvironmentDiffFilesResponse>(),
     }),
@@ -1202,6 +1217,38 @@ export const publicApiRoutes = {
         environmentDiffPatchRequestSchema,
       ),
       response: jsonResponse<EnvironmentDiffPatchResponse>(),
+    }),
+    diffViewed: defineRoute({
+      path: "/environments/:id/diff/viewed",
+      method: "get",
+      request: queryRequest<PathId, EnvironmentDiffQuery>(
+        environmentDiffQuerySchema,
+      ),
+      response: jsonResponse<EnvironmentDiffViewedResponse>(),
+    }),
+    queryDiffViewed: defineRoute({
+      path: "/environments/:id/diff/viewed",
+      method: "post",
+      request: jsonRequest<PathId, EnvironmentDiffViewedQueryRequest>(
+        environmentDiffViewedQueryRequestSchema,
+      ),
+      response: jsonResponse<EnvironmentDiffViewedResponse>(),
+    }),
+    markDiffViewed: defineRoute({
+      path: "/environments/:id/diff/viewed",
+      method: "put",
+      request: jsonRequest<PathId, EnvironmentDiffViewedMarkRequest>(
+        environmentDiffViewedMarkRequestSchema,
+      ),
+      response: jsonResponse<{ ok: true }>(),
+    }),
+    clearDiffViewed: defineRoute({
+      path: "/environments/:id/diff/viewed",
+      method: "delete",
+      request: jsonRequest<PathId, EnvironmentDiffViewedClearRequest>(
+        environmentDiffViewedClearRequestSchema,
+      ),
+      response: jsonResponse<{ ok: true }>(),
     }),
     diffFile: defineRoute({
       path: "/environments/:id/diff/file",
@@ -1969,6 +2016,7 @@ export const publicApiRoutes = {
       method: "get",
       request: noRequest(),
       response: jsonResponse<UiPreferencesResponse>(),
+      tags: () => [UI_PREFERENCES_TAG],
     }),
     updateUiPreference: defineRoute({
       path: "/preferences/ui/:key",
@@ -1981,6 +2029,7 @@ export const publicApiRoutes = {
         jsonResponse<ApiError>({ status: 404 }),
         jsonResponse<ApiError>({ status: 409 }),
       ],
+      invalidates: () => [UI_PREFERENCES_TAG],
     }),
     resetUiPreference: defineRoute({
       path: "/preferences/ui/:key",
@@ -1990,6 +2039,7 @@ export const publicApiRoutes = {
         jsonResponse<UiPreferenceResponse>(),
         jsonResponse<ApiError>({ status: 404 }),
       ],
+      invalidates: () => [UI_PREFERENCES_TAG],
     }),
     themes: defineRoute({
       path: "/settings/themes",

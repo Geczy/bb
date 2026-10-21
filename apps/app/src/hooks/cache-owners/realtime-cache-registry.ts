@@ -52,6 +52,7 @@ import {
   allThreadQueryKeyPrefix,
   allTerminalsQueryKeyPrefix,
   environmentDiffFilesQueryKeyPrefix,
+  environmentDiffViewedQueryKeyPrefix,
   environmentFilePreviewQueryKeyPrefix,
   environmentPullRequestQueryKey,
   environmentWorkStatusQueryKeyPrefix,
@@ -63,7 +64,6 @@ import {
   sidebarNavigationQueryKey,
   systemAiServicesQueryKey,
   systemConfigQueryKey,
-  uiPreferencesQueryKey,
   allSystemProvidersQueryKeyPrefix,
   threadDefaultExecutionOptionsQueryKey,
   threadQueryKey,
@@ -483,6 +483,9 @@ export const REALTIME_ENVIRONMENT_CHANGE_REGISTRY = {
   "thread-storage-changed": {
     dirty: [dirtyThreadStorageQueriesForEnvironment],
   },
+  "diff-viewed-changed": {
+    dirty: [dirtyEnvironmentDiffViewedQueries],
+  },
 } satisfies EnvironmentChangeRegistry;
 
 export const REALTIME_PROJECT_CHANGE_REGISTRY = {
@@ -563,9 +566,6 @@ export const REALTIME_SYSTEM_CHANGE_REGISTRY = {
   },
   "environment-availability-changed": {
     dirty: [dirtyEnvironmentProviderQueries],
-  },
-  "ui-preferences-changed": {
-    dirty: [dirtyUiPreferencesQueries],
   },
   "server-move-changed": {
     dirty: [dirtyServerMoveStatusQueries],
@@ -1152,6 +1152,12 @@ function dirtyEnvironmentThreadListQueries({
   return queryKeys;
 }
 
+function dirtyEnvironmentDiffViewedQueries({
+  environmentId,
+}: EnvironmentRealtimeDirtyContext): QueryKey[] {
+  return [environmentDiffViewedQueryKeyPrefix(environmentId)];
+}
+
 function dirtyThreadStorageQueriesForEnvironment({
   getCachedThreadIdsForEnvironment,
 }: EnvironmentRealtimeDirtyContext): QueryKey[] {
@@ -1194,15 +1200,6 @@ function dirtyMachineEnvironmentQueries({
   invalidateQueryKeysWithoutCancelingActiveFetches({
     queryClient,
     queryKeys: [allMachineEnvironmentQueryKeyPrefix()],
-  });
-}
-
-function dirtyUiPreferencesQueries({
-  queryClient,
-}: RealtimeDirtyContext): void {
-  invalidateQueryKeysWithoutCancelingActiveFetches({
-    queryClient,
-    queryKeys: [uiPreferencesQueryKey()],
   });
 }
 

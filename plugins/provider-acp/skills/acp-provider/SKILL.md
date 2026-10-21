@@ -79,6 +79,13 @@ values. Native questions have no ACP interaction handler in BB; agents use the
 ask-user-question plugin’s `AskUserQuestion` tool instead. This also applies to
 custom agents with `dialect: "opencode"` and does not change OpenCode config files.
 
+BB also sets `OPENCODE_PERMISSION` from the thread's permission mode, which
+OpenCode merges over the `permission` keys of its own config. In `accept-edits`
+OpenCode edits files without asking and asks before shell commands, web fetches
+and paths outside the workspace; BB shows those requests as approvals. In `full`
+all four are allowed. Changing a thread's permission mode restarts the OpenCode
+session with the new policy; the conversation is restored.
+
 OpenCode and Grok ACP support the core `bb thread compact` command; Cursor ACP
 does not expose compatible compaction. Check the actual agent's capabilities
 before attempting provider-specific recovery.
@@ -91,11 +98,15 @@ on that machine, then refresh its OpenCode tab. Verify with
 BB reports Go's five-hour, weekly, and monthly usage and reset times, not local
 session token totals or other OpenCode providers' subscriptions.
 
-The collector checks `OPENCODE_API_KEY`, then the active official Console account
-and organization in `$XDG_DATA_HOME/opencode/opencode.db`, then active v2
-`credential` table API keys or official Console OAuth credentials
-(`opencode-go` before `opencode`), then
-`OPENCODE_AUTH_CONTENT` or `$XDG_DATA_HOME/opencode/auth.json`.
+The collector checks `OPENCODE_API_KEY` first. For an OpenCode 2 database at
+`$XDG_DATA_HOME/opencode/opencode.db`, it then reads the `credential` table API
+key or official Console OAuth credential that OpenCode selects for each
+integration (`opencode-go` before `opencode`). Otherwise it reads the active
+official Console account and organization in that database, then
+`OPENCODE_AUTH_CONTENT` or `$XDG_DATA_HOME/opencode/auth.json`. OpenCode 2
+imports `auth.json` once when it upgrades an OpenCode 1 database and never reads
+`auth.json`, `OPENCODE_AUTH_CONTENT`, or the OpenCode 1 Console account, so the
+collector reads them only when there is no OpenCode 2 database.
 The default data directory is `~/.local/share/opencode`. Database storage is read
 only; expired Console sessions must be refreshed by OpenCode. V2 OAuth requires
 the device login method and account/organization metadata for the official
