@@ -64,6 +64,7 @@ function select() {
   if (values["first-run-only"]) {
     return {
       ...full,
+      firstRunAgents: true,
       tests: { include: [] },
       "windows-tests": { include: [] },
       foundation: false,
