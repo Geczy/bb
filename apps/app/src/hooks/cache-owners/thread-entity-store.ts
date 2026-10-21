@@ -293,12 +293,7 @@ interface ViewInsertion {
 
 interface EntityLayer {
   ids: ReadonlySet<string>;
-  update(
-    entity: ThreadEntity,
-    threadId: string,
-    result: { value: unknown } | undefined,
-  ): ThreadEntity;
-  result: { value: unknown } | undefined;
+  apply(entity: ThreadEntity, threadId: string): ThreadEntity;
   settled: boolean;
 }
 
@@ -331,7 +326,7 @@ function readEntity(
   let entity = store.base.get(id);
   if (entity === undefined) return undefined;
   for (const layer of store.layers)
-    if (layer.ids.has(id)) entity = layer.update(entity, id, layer.result);
+    if (layer.ids.has(id)) entity = layer.apply(entity, id);
   store.visible.set(id, entity);
   return entity;
 }
@@ -707,8 +702,11 @@ function onViewWritten(
   });
 }
 
-export function ensureThreadEntityStore(client: QueryClient): void {
-  if (stores.has(client)) return;
+export function ensureThreadEntityStore(
+  client: QueryClient,
+): ThreadEntityStore {
+  const existing = stores.get(client);
+  if (existing !== undefined) return existing;
   const store: ThreadEntityStore = {
     client,
     base: new Map(),
@@ -748,6 +746,7 @@ export function ensureThreadEntityStore(client: QueryClient): void {
     if (family !== undefined && query.state.data !== undefined)
       onViewWritten(store, query, family, true);
   }
+  return store;
 }
 
 export function patchThreadEntity(
@@ -756,10 +755,10 @@ export function patchThreadEntity(
   change: Fields,
   updatedAt?: number,
 ): void {
-  ensureThreadEntityStore(client);
+  const store = ensureThreadEntityStore(client);
   const threadFields = pick(change, THREAD_KEYS);
   const listFields = pick(change, FACET_KEYS.list);
-  writeBase(stores.get(client)!, threadId, (current) =>
+  writeBase(store, threadId, (current) =>
     current === undefined ||
     (updatedAt !== undefined &&
       (current.thread.updatedAt ?? Number.NEGATIVE_INFINITY) > updatedAt)
@@ -772,13 +771,11 @@ export function getThreadEntity(
   client: QueryClient,
   threadId: string,
 ): ThreadEntity | undefined {
-  ensureThreadEntityStore(client);
-  return readEntity(stores.get(client)!, threadId);
+  return readEntity(ensureThreadEntityStore(client), threadId);
 }
 
 function getThreadEntities(client: QueryClient): ThreadEntity[] {
-  ensureThreadEntityStore(client);
-  const store = stores.get(client)!;
+  const store = ensureThreadEntityStore(client);
   return [...store.base.keys()].flatMap((id) => {
     const entity = readEntity(store, id);
     return entity === undefined ? [] : [entity];
@@ -820,8 +817,7 @@ export function insertThreadIntoSidebar(
   client: QueryClient,
   threadId: string,
 ): void {
-  ensureThreadEntityStore(client);
-  const store = stores.get(client)!;
+  const store = ensureThreadEntityStore(client);
   const entity = readEntity(store, threadId);
   const query = client
     .getQueryCache()
@@ -872,8 +868,7 @@ function bakeSettledLayers(store: ThreadEntityStore): Set<string> {
     }
     for (const id of layer.ids) {
       const current = store.base.get(id);
-      if (current !== undefined)
-        store.base.set(id, layer.update(current, id, layer.result));
+      if (current !== undefined) store.base.set(id, layer.apply(current, id));
       baked.add(id);
     }
     return false;
@@ -897,13 +892,11 @@ export function beginThreadEntityPrediction<Result = unknown>(
     extra?: readonly TaggedOptimisticUpdate[];
   },
 ): ThreadEntityPrediction<Result> {
-  ensureThreadEntityStore(client);
-  const store = stores.get(client)!;
+  const store = ensureThreadEntityStore(client);
+  let accepted: { value: Result } | undefined;
   const layer: EntityLayer = {
     ids: new Set(threadIds),
-    update: (entity, threadId, result) =>
-      update(entity, threadId, result as { value: Result } | undefined),
-    result: undefined,
+    apply: (entity, threadId) => update(entity, threadId, accepted),
     settled: false,
   };
   store.layers.push(layer);
@@ -915,7 +908,7 @@ export function beginThreadEntityPrediction<Result = unknown>(
     succeed(result) {
       if (layer.settled || !store.layers.includes(layer)) return;
       for (const id of threadIds) store.acknowledgedAt.set(id, ++store.clock);
-      layer.result = { value: result };
+      accepted = result === undefined ? undefined : { value: result };
       layer.settled = true;
       changed(store, [...threadIds, ...bakeSettledLayers(store)]);
       others?.accept(result);
