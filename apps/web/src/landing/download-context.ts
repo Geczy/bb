@@ -1,6 +1,6 @@
 export type DownloadContext = {
   device_class: "desktop" | "phone" | "tablet";
-  visitor_os: "macos" | "windows" | "linux" | "ios" | "android" | "other";
+  platform: "darwin" | "win32" | "linux" | "ios" | "android" | "other";
   browser: "safari" | "chrome" | "edge" | "firefox" | "other";
   mac_chip: "apple" | "intel" | "unknown";
   download_repeat: "first" | "repeat" | "unknown";
@@ -75,19 +75,19 @@ export function downloadRepeatStatus(
 
 export function buildDownloadContext(request: Request): DownloadContext {
   const ua = request.headers.get("user-agent") ?? "";
-  const visitor_os: DownloadContext["visitor_os"] = /iPhone|iPad|iPod/i.test(ua)
+  const platform: DownloadContext["platform"] = /iPhone|iPad|iPod/i.test(ua)
     ? "ios"
     : /Android/i.test(ua)
       ? "android"
       : /Windows/i.test(ua)
-        ? "windows"
+        ? "win32"
         : /Macintosh|Mac OS X/i.test(ua)
-          ? "macos"
+          ? "darwin"
           : /Linux/i.test(ua)
             ? "linux"
             : "other";
   const device_class: DownloadContext["device_class"] =
-    /iPad|Tablet/i.test(ua) || (visitor_os === "android" && !/Mobile/i.test(ua))
+    /iPad|Tablet/i.test(ua) || (platform === "android" && !/Mobile/i.test(ua))
       ? "tablet"
       : /iPhone|iPod|Mobile/i.test(ua)
         ? "phone"
@@ -105,7 +105,7 @@ export function buildDownloadContext(request: Request): DownloadContext {
             : "other";
   const arch = request.headers.get("sec-ch-ua-arch")?.trim().toLowerCase();
   const mac_chip: DownloadContext["mac_chip"] =
-    visitor_os !== "macos"
+    platform !== "darwin"
       ? "unknown"
       : arch === '"arm"'
         ? "apple"
@@ -114,7 +114,7 @@ export function buildDownloadContext(request: Request): DownloadContext {
           : "unknown";
   return {
     device_class,
-    visitor_os,
+    platform,
     browser,
     mac_chip,
     download_repeat: downloadRepeatStatus(request),

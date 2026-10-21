@@ -440,7 +440,7 @@ describe("download click context", () => {
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15",
       "",
       "desktop",
-      "macos",
+      "darwin",
       "safari",
       "unknown",
     ],
@@ -449,7 +449,7 @@ describe("download click context", () => {
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/155.0.0.0 Safari/537.36",
       '"arm"',
       "desktop",
-      "macos",
+      "darwin",
       "chrome",
       "apple",
     ],
@@ -458,7 +458,7 @@ describe("download click context", () => {
       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/155.0.0.0 Safari/537.36",
       '"x86"',
       "desktop",
-      "macos",
+      "darwin",
       "chrome",
       "intel",
     ],
@@ -467,7 +467,7 @@ describe("download click context", () => {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0",
       '"x86"',
       "desktop",
-      "windows",
+      "win32",
       "edge",
       "unknown",
     ],
@@ -519,13 +519,13 @@ describe("download click context", () => {
     ["missing UA", "", "", "desktop", "other", "other", "unknown"],
   ])(
     "sends only coarse context for %s",
-    async (_name, ua, arch, device, os, browser, chip) => {
+    async (_name, ua, arch, device, platform, browser, chip) => {
       const { properties } = await click({
         headers: { "User-Agent": ua, "Sec-CH-UA-Arch": arch },
       });
       expect(properties).toMatchObject({
         device_class: device,
-        visitor_os: os,
+        platform,
         browser,
         mac_chip: chip,
         download_repeat: "first",
@@ -538,9 +538,9 @@ describe("download click context", () => {
         "download_target",
         "mac_chip",
         "placement",
+        "platform",
         "tracking_source",
         "utm_campaign",
-        "visitor_os",
       ]);
       if (ua) expect(JSON.stringify(properties)).not.toContain(ua);
     },
