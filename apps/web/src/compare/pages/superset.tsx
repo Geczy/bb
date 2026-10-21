@@ -255,25 +255,6 @@ export const comparison: Comparison = {
           ),
         },
         {
-          question: "Who builds and maintains bb?",
-          answer: (
-            <>
-              <p>
-                A small, venture-backed team that most recently worked together
-                at Figma, building Figma’s plugin platform. The team also
-                includes alumni of Meta, Quora, and Mapbox.
-              </p>
-              <p>
-                bb is developed in the open: the core team commits to it every
-                day, dozens of community contributors send changes each month,
-                and a new release ships every week. Follow along or reach the
-                team on <a href="https://github.com/get-bb/bb">GitHub</a> and{" "}
-                <a href="https://discord.gg/kvBU6tJhcJ">Discord</a>.
-              </p>
-            </>
-          ),
-        },
-        {
           question: "Is there a free, open-source Superset alternative?",
           answer: (
             <p>

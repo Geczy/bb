@@ -90,7 +90,7 @@ export const PLUGINS_COPY: SectionCopy = {
     <>
       <p>
         bb comes with everything you need: worktrees, diffs, automations, a
-        mobile app and more.
+        mobile app (iOS beta, Android alpha) and more.
       </p>
       <p>
         When you want more—or less—customize in Settings, browse the{" "}

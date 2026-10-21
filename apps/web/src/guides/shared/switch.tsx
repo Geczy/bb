@@ -316,16 +316,38 @@ export function switchGuide(meta: GuideMeta, tool: SwitchTool): Guide {
         question: "Do my setup scripts come along?",
         answer: <p>{tool.setupStep}</p>,
       },
-      {
-        question: "Do my automations come along?",
-        answer: (
-          <p>
-            Not on their own. Recreate each one in{" "}
-            <a href="/guides/run-an-agent-on-a-schedule">bb automations</a>:
-            paste its schedule and prompt, and your agent sets it up.
-          </p>
-        ),
-      },
+      ...(tool.id === "vibe-kanban"
+        ? []
+        : [
+            {
+              question: "Do my automations come along?",
+              answer: (
+                <p>
+                  {tool.id === "claude" || tool.id === "codex-app" ? (
+                    <>
+                      Not on their own. Recreate each one in{" "}
+                      <a href="/guides/run-an-agent-on-a-schedule">
+                        bb automations
+                      </a>
+                      : paste its schedule and prompt, and your agent sets it
+                      up.
+                    </>
+                  ) : (
+                    <>
+                      Not on their own. bb automations run on a schedule or
+                      once, so recreate each scheduled one in{" "}
+                      <a href="/guides/run-an-agent-on-a-schedule">
+                        bb automations
+                      </a>
+                      : paste its schedule and prompt, and your agent sets it
+                      up. Automations that start from GitHub, Slack or webhook
+                      events don’t have a bb equivalent yet.
+                    </>
+                  )}
+                </p>
+              ),
+            },
+          ]),
       COST_FAQ,
       AGENTS_FAQ,
     ],

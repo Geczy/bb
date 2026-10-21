@@ -35,18 +35,7 @@ import {
   pluginsSection,
   type SectionCopy,
 } from "./compare-sections";
-import figmaLogo from "../assets/company-logos/figma.svg";
-import mapboxLogo from "../assets/company-logos/mapbox.svg";
-import metaLogo from "../assets/company-logos/meta.svg";
-import quoraLogo from "../assets/company-logos/quora.svg";
 import compareCss from "./compare.css?url";
-
-const TEAM_COMPANIES = [
-  ["Figma", figmaLogo],
-  ["Meta", metaLogo],
-  ["Quora", quoraLogo],
-  ["Mapbox", mapboxLogo],
-] as const;
 
 function plainText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
@@ -360,17 +349,6 @@ export function Closer({ closer }: { closer: Comparison["closer"] }) {
       <h2 className="sec-title">{brandProse(closer.title)}</h2>
       <p>{brandProse(closer.body)}</p>
       <InstallOptions placement="closer" />
-      <div className="cmp-team">
-        <h3>Built by alumni from</h3>
-        <ul className="company-proof-logos cmp-team-logos">
-          {TEAM_COMPANIES.map(([name, logo]) => (
-            <li key={name} className="company-proof-company">
-              <img src={logo} alt="" width={20} height={20} />
-              {name}
-            </li>
-          ))}
-        </ul>
-      </div>
     </section>
   );
 }

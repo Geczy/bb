@@ -54,7 +54,7 @@ export const BB_ROWS = {
   },
   accountSwitch: {
     feature: "Switch accounts at usage limits",
-    bb: cell("yes"),
+    bb: cell("yes", "With Account Pooler (Experimental; off by default)"),
   },
   marketplace: {
     feature: "Plugin marketplace",
@@ -90,7 +90,8 @@ export const FAQ_GET_STARTED: CompareFaq = {
         Download bb for <a href="/download/macos">macOS</a> (Apple Silicon),{" "}
         <a href={WINDOWS_DOWNLOAD_URL}>Windows (Alpha)</a>, or{" "}
         <a href="/download/linux">Linux (Alpha)</a>. On an Intel Mac, run{" "}
-        <code>npx bb-app@latest</code>, which needs Node.js 22.19 or later.
+        <code>npx bb-app@latest</code>, which needs Node.js 22 (22.19 or later),
+        24, or 26.
       </li>
       <li>
         Install and sign in to a coding agent, like Claude Code, Codex, Cursor,
@@ -106,10 +107,11 @@ export const FAQ_CUSTOMIZE: CompareFaq = {
   answer: (
     <p>
       Yes. bb works out of the box, with worktrees, diff review, automations,
-      and the mobile app ready from your first thread. When you want more,
-      install plugins from the <a href="/marketplace">marketplace</a> or ask an
-      agent to build one. Plugins can add panels, commands, and new agents, and
-      they work in the mobile app too.
+      and the mobile app (iOS beta, Android alpha) ready from your first thread.
+      When you want more, install plugins from the{" "}
+      <a href="/marketplace">marketplace</a> or ask an agent to build one.
+      Plugins can add panels, commands, and new agents, and they work in the
+      mobile app too.
     </p>
   ),
 };
@@ -123,7 +125,8 @@ export function faqScript(contrast: ReactNode): CompareFaq {
         message threads, run terminals, schedule automations, and manage
         machines and plugins, so a script or another agent can drive bb end to
         end. The SDK and plugin API let you add your own commands, tools, and
-        screens.{contrast}
+        screens. The MCP server plugin is Experimental and off by default.
+        {contrast}
       </p>
     ),
   };
@@ -190,8 +193,8 @@ export function faqUsageLimit(contrast: ReactNode): CompareFaq {
         bb picks the work back up. When an agent stops on a usage limit that
         reports when it resets, bb sends the message again a little after the
         reset, so you don’t have to come back and press send. To keep going on
-        another Claude Code or Codex account you own, turn on Account Pooler, a
-        plugin built into bb. {contrast}
+        another Claude Code or Codex account you own, turn on Account Pooler, an
+        experimental plugin built into bb that is off by default. {contrast}
       </p>
     ),
   };
@@ -287,9 +290,9 @@ export const FAQ_LAPTOP: CompareFaq = {
       it to sleep. On a Mac, switch on Keep Awake, a built-in bb plugin that
       stops idle sleep while bb runs. For long runs, add an always-on desktop or
       server to bb, or run threads in the cloud with a{" "}
-      <a href="/marketplace">cloud plugin</a> like Modal Sandbox, which is built
-      in and starts each thread in an on-demand sandbox in your own Modal
-      account.
+      <a href="/marketplace">cloud plugin</a> like Modal Sandbox (Experimental),
+      an official bb plugin you install from the marketplace, which starts each
+      thread in an on-demand sandbox in your own Modal account.
     </p>
   ),
 };
@@ -314,9 +317,13 @@ export const FAQ_PRIVACY: CompareFaq = {
   answer: (
     <p>
       Yes: bb runs on your machines, so your code goes only where your agents
-      send it, the AI providers you chose. Anonymous usage stats exclude code
-      and prompts and can be turned off. The bb Connect relay doesn’t store
-      traffic, but isn’t end-to-end encrypted.
+      send it, the AI providers you chose. If you sign in, bb cloud writes
+      thread titles and commit messages and transcribes voice input by sending
+      that text, a diff excerpt, or the recording through getbb.app to
+      OpenRouter model providers. It stores none of that content; ask an agent
+      to turn bb cloud off if you don’t want to use it. Anonymous usage stats
+      exclude code and prompts and can be turned off. The bb Connect relay
+      doesn’t store traffic, but isn’t end-to-end encrypted.
     </p>
   ),
 };
