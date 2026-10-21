@@ -54,7 +54,7 @@ export const guide: Guide = {
   heroTop: null,
   concept: <SpawnTimeline />,
   agentPrompt: AGENT_PROMPT,
-  requirement: "One agent signed in. A second agent is optional.",
+  requirement: "one agent signed in. A second agent is optional",
   steps: [
     {
       id: "step-1",
