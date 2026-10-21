@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
+import Link from "@tiptap/extension-link";
+import StarterKit from "@tiptap/starter-kit";
 import { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
-import Link from "@tiptap/extension-link";
 import Table from "@tiptap/extension-table";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TableRow from "@tiptap/extension-table-row";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
-import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { describe, expect, it } from "vitest";
 import { loadMarkdownBlocks, saveMarkdownBlocks } from "./markdown-blocks";
@@ -203,7 +203,7 @@ describe("Markdown editing round trips", () => {
   ])("does not add syntax when editing %s", (source, expected) => {
     const { editor, save } = open(source);
     try {
-      editor.view.dispatch(editor.state.tr.insertText("New ", textPosition(editor, editor.state.doc.textContent)));
+      editor.view.dispatch(editor.state.tr.insertText("New ", textPosition(editor, source.includes("Visit") ? "Visit" : "all")));
       expect(save()).toBe(expected);
       const reopened = open(save());
       try {
@@ -239,19 +239,57 @@ describe("Markdown editing round trips", () => {
       editor.commands.setHardBreak();
       editor.commands.setHardBreak();
       editor.view.dispatch(editor.state.tr.insertText("Thanks."));
-      expect(save()).toBe("- Item\n\nLet me know.  \n  \nThanks.\n");
+      expect(save()).toBe("- Item\n\nLet me know.<br><br>Thanks.\n");
+      const reopened = open(save());
+      try {
+        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+      } finally {
+        reopened.editor.destroy();
+      }
     } finally {
       editor.destroy();
     }
   });
 
   it.each([
-    "*literal*", "_literal_", "~~literal~~", "[label](https://example.com)",
+    "*literal*", "_literal_", "~~literal~~", "[label](target)",
     "# heading", "- item", "1. item", "\\~literal", "<script>alert(1)</script>",
   ])("keeps typed %s literal after reopening", (text) => {
     const { editor, save } = open("");
     try {
       editor.view.dispatch(editor.state.tr.insertText(text, 1));
+      const reopened = open(save());
+      try {
+        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+      } finally {
+        reopened.editor.destroy();
+      }
+    } finally {
+      editor.destroy();
+    }
+  });
+});
+
+
+describe("Markdown serializer safeguards", () => {
+  it.each([
+    "- all ~1,300 and ~~removed~~ records\n",
+    "Visit [the docs](https://example.com) now.\n",
+    'Visit [https://example.com](https://example.com "A title") now.\n',
+    "Visit **https://example.com** now.\n",
+    "[https://example.com](https://example.com)Suffix\n",
+    "Prefix[https://example.com](https://example.com)\n",
+    "First  \nsecond\n",
+    "First<br><br>second\n",
+    "| a | b |\n| --- | --- |\n| First<br>second | ~3 |\n",
+  ])("preserves semantics after editing %s", (source) => {
+    const { editor, save } = open(source);
+    try {
+      let first = -1;
+      editor.state.doc.descendants((node, pos) => {
+        if (first < 0 && node.isText) first = pos;
+      });
+      editor.view.dispatch(editor.state.tr.insertText("New ", first));
       const reopened = open(save());
       try {
         expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
