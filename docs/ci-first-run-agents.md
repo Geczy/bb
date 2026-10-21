@@ -28,6 +28,15 @@ Product failures leave the job red while preserving the remaining probes.
 Update probes first install an actual preceding vendor release, then request the
 same bb update action as the UI and require a version increase. This avoids
 calling an unavailable update action against a freshly installed latest release.
+On Windows the update phase adds the actual native install directories to PATH
+and restarts before probing. This represents a new terminal after installation
+and exercises the bare-command/PATHEXT path addressed by PR #5429. Earlier
+first-run phases use the stripped PATH. The report captures the actual command
+sent to the daemon installer and the executable inventory for this phase.
+The Pi phase enables npm's foreground lifecycle output in the disposable home
+and requires evidence that the real protobufjs dependency ran its Node
+postinstall script. Successful installation without that evidence is labeled
+stubbed for the node-shim regression, not a proven pass.
 The summary records unsupported or unexercised paths explicitly as stubbed.
 
 The latest upstream installers are deliberately fetched on every run, so this
