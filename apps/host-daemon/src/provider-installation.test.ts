@@ -193,6 +193,45 @@ describe("streamProviderInstallation with node-pty", () => {
     },
   );
 
+  it.runIf(process.platform !== "win32").each([
+    { position: "leading", before: false, after: true },
+    { position: "middle", before: true, after: true },
+    { position: "trailing", before: true, after: false },
+  ])("honors a $position empty PATH entry", async ({ before, after }) => {
+    const { root, binDir } = await scratchBin();
+    const command = "bb-path-order-fixture";
+    await fs.writeFile(
+      path.join(root, command),
+      '#!/bin/sh\nprintf "local-install:%s\\n" "$1"\n',
+      { mode: 0o755 },
+    );
+    await fs.writeFile(
+      path.join(binDir, command),
+      '#!/bin/sh\nprintf "other-install:%s\\n" "$1"\n',
+      { mode: 0o755 },
+    );
+    const missingDir = path.join(root, "missing");
+    const searchPath = [
+      ...(before ? [missingDir] : []),
+      "",
+      ...(after ? [binDir] : []),
+    ].join(path.delimiter);
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(root);
+      const { events, output } = await runPlan(
+        { ...process.env, PATH: searchPath },
+        command,
+      );
+
+      expect(output).toContain("local-install:update");
+      expect(output).not.toContain("other-install");
+      expect(events.at(-1)).toMatchObject({ type: "completed", success: true });
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it.runIf(process.platform === "win32")(
     "launches a .cmd shim instead of the extensionless npm shim",
     async () => {
@@ -240,10 +279,18 @@ describe("streamProviderInstallation with node-pty", () => {
 
     const { events } = await runPlan(envWithPath(binDir), "missing-cli");
 
-    expect(events.at(-1)).toEqual({
-      type: "error",
-      provider: "example-provider",
-      message: "Command not found: missing-cli",
-    });
+    if (process.platform === "win32") {
+      expect(events.at(-1)).toEqual({
+        type: "error",
+        provider: "example-provider",
+        message: "Command not found: missing-cli",
+      });
+    } else {
+      expect(events.at(-1)).toMatchObject({
+        type: "completed",
+        provider: "example-provider",
+        success: false,
+      });
+    }
   });
 });

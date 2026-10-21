@@ -53,7 +53,10 @@ function createPtyProviderInstallationProcessSpawner(): ProviderInstallationProc
       const stderr = new PassThrough();
       const cwd = process.cwd();
       const env = args.env ?? process.env;
-      const command = resolvePortableCommand(args.command, { cwd, env });
+      const command =
+        process.platform === "win32"
+          ? resolvePortableCommand(args.command, { cwd, env })
+          : args.command;
       if (command === undefined) {
         throw new Error(`Command not found: ${args.command}`);
       }
