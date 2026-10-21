@@ -1,0 +1,37 @@
+# First-run agent CI
+
+Dispatch the existing CI workflow on a branch containing the harness:
+
+```sh
+gh workflow run ci.yml --ref <branch> -f first_run_agents=true
+```
+
+This selects only the first-run jobs and their setup. Normal CI also selects
+these jobs for provider, provider bridge protocol, host installation/runtime
+shell environment, onboarding, and bb-app changes. Full CI includes them.
+
+The Windows and macOS jobs build the packaged bb-app through Turbo, boot its
+server and daemon with a disposable home containing a space, and exercise the
+same installation and health routes as onboarding. They use no account secrets.
+The harness records the runner's original executable inventory and the isolated
+process environment separately. The disposable server's machine-environment
+setting applies its controlled PATH after Windows registry recovery. The harness
+does not modify the runner's registry or shared agent installations. Sign-in launch evidence must be a URL or device
+code from the actual CLI; that output is not published. Credential files and the
+local model server are synthetic. A completed fake-model turn proves transport
+and lifecycle integration, not vendor authentication or hosted inference.
+
+Each OS uploads a sanitized JSON report and Markdown summary under the
+`first-run-<OS>` artifact. The final job combines them into the six-column
+reliability matrix. Missing evidence is a failure, never a passing cell.
+Product failures leave the job red while preserving the remaining probes.
+Update probes first install an actual preceding vendor release, then request the
+same bb update action as the UI and require a version increase. This avoids
+calling an unavailable update action against a freshly installed latest release.
+The summary records unsupported or unexercised paths explicitly as stubbed.
+
+The latest upstream installers are deliberately fetched on every run, so this
+job is not cached. Network/vendor availability and changing CLI behavior can
+cause failures. Build time is separate from the per-OS harness runtime. CI
+retains evidence for 14 days. No raw credential files or sign-in output are
+uploaded.
