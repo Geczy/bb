@@ -19,17 +19,18 @@ export const setupJobTimezoneSchema = z
     { message: "Choose a valid time zone" },
   );
 
-export const setupJobOfferSchema = /* @__PURE__ */ z.object({
-  arm: setupJobArmSchema,
-  suggestionAnalyticsId: z.uuid(),
-  title: z.string(),
-  projectId: z.string(),
-  projectName: z.string(),
-  providerName: z.string(),
-  timezone: setupJobTimezoneSchema,
-  status: z.enum(["offered", "accepted", "dismissed"]),
-  automationId: z.string().nullable(),
-});
+export const setupJobOfferSchema = /* @__PURE__ */ (() =>
+  z.object({
+    arm: setupJobArmSchema,
+    suggestionAnalyticsId: z.uuid(),
+    title: z.string(),
+    projectId: z.string(),
+    projectName: z.string(),
+    providerName: z.string(),
+    timezone: setupJobTimezoneSchema,
+    status: z.enum(["offered", "accepted", "dismissed"]),
+    automationId: z.string().nullable(),
+  }))();
 export type SetupJobOffer = z.infer<typeof setupJobOfferSchema>;
 
 export const setupJobDecisionRequestSchema = z
@@ -51,7 +52,8 @@ export const setupJobShownRequestSchema = z
     suggestionAnalyticsId: z.uuid(),
   })
   .strict();
-export const setupJobResponseSchema = /* @__PURE__ */ z.object({
-  offer: setupJobOfferSchema.nullable(),
-});
+export const setupJobResponseSchema = /* @__PURE__ */ (() =>
+  z.object({
+    offer: setupJobOfferSchema.nullable(),
+  }))();
 export type SetupJobResponse = z.infer<typeof setupJobResponseSchema>;
