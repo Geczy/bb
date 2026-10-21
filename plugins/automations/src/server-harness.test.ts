@@ -1644,7 +1644,7 @@ describe("automations server plugin harness", () => {
             ...execution,
             day2ResultDelivery: { acceptedAt, deliverAt: acceptedAt },
           },
-          "Day-two result delivery must follow acceptance",
+          "rpc input validation failed",
         ],
         [
           {
