@@ -203,7 +203,7 @@ describe("streamProviderInstallation with node-pty", () => {
       );
       await fs.writeFile(
         path.join(binDir, "example-cli.cmd"),
-        "@echo off\r\necho example-cli-cmd %*\r\n",
+        "@echo off\r\necho example-cli-cmd %~1\r\n",
       );
 
       const { events, output } = await runPlan(envWithPath(binDir));
