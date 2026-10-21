@@ -27,6 +27,7 @@
     "detail-view.tsx",
     "metadata.tsx",
     "overview-view.tsx",
+    "result-action.tsx",
     "lib",
     "vitest.config.ts"
   ]

@@ -5,6 +5,10 @@
   "tasks": {
     "//#test:provider-network": {
       "cache": false,
+      "dependsOn": [
+        "bb-plugin-provider-codex#topo",
+        "bb-plugin-provider-claude-code#topo"
+      ],
       "passThroughEnv": ["GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY"],
       "outputs": []
     },
