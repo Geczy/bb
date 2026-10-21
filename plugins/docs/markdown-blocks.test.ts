@@ -255,6 +255,55 @@ describe("Markdown editing round trips", () => {
     }
   });
 
+  it.each(["Text\n", "- Text\n", "> Text\n"])(
+    "preserves Shift+Enter at the start of %s",
+    (source) => {
+      const { editor, save } = open(source);
+      try {
+        editor.commands.setTextSelection(textPosition(editor, "Text"));
+        editor.commands.keyboardShortcut("Shift-Enter");
+        expect(editor.getHTML()).toContain("<br>Text");
+        const reopened = open(save());
+        try {
+          expect(reopened.editor.state.doc.toJSON()).toEqual(
+            editor.state.doc.toJSON(),
+          );
+        } finally {
+          reopened.editor.destroy();
+        }
+      } finally {
+        editor.destroy();
+      }
+    },
+  );
+
+  it.each([
+    "\\~~~deleted~~",
+    "Prefix \\~~~deleted~~",
+    "~~deleted~~\\~",
+    "~~\\~deleted~~",
+    "~~deleted\\~~~",
+  ])("preserves a literal tilde beside strike delimiters in %s", (line) => {
+    const { editor, save } = open(
+      `${line}\n\nKeep this paragraph.\n\n## Keep this heading\n\n- Keep this list item\n`,
+    );
+    try {
+      editor.view.dispatch(
+        editor.state.tr.insertText("x", textPosition(editor, "deleted") + 1),
+      );
+      const reopened = open(save());
+      try {
+        expect(reopened.editor.state.doc.toJSON()).toEqual(
+          editor.state.doc.toJSON(),
+        );
+      } finally {
+        reopened.editor.destroy();
+      }
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it("preserves intentional hard breaks without backslash syntax", () => {
     const { editor, save } = open("- Item\n\nLet me know.\n");
     try {
