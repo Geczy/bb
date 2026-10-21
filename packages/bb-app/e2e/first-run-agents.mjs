@@ -321,6 +321,7 @@ async function updateProvider(provider) {
     before = await installation(provider);
   }
   if (before.currentVersion !== fixture.version) throw new Error(`bb did not detect downgraded version ${fixture.version}`);
+  if (before.installAction?.kind !== "update") throw new Error(`Update fixture precondition unavailable at ${before.currentVersion}; latest ${before.latestVersion}; update executor not exercised`);
   const result = await installAction(provider, "update");
   let after = await installation(provider);
   const updatedDeadline = Date.now() + 45_000;
@@ -360,7 +361,7 @@ try {
   const toolPath = await prepareTooling(report.evidence.imageExecutables);
   const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
   minimalPath = windows ? [join(systemRoot, "System32"), systemRoot, join(systemRoot, "System32", "WindowsPowerShell", "v1.0"), join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "cmd")].join(delimiter) : "/usr/bin:/bin:/usr/sbin:/sbin";
-  env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:SystemRoot|WINDIR|COMSPEC|PATHEXT|ProgramFiles|ProgramFiles\(x86\)|ProgramData|PROCESSOR_ARCHITECTURE|NUMBER_OF_PROCESSORS|TEMP|TMP|TMPDIR|LANG|LC_ALL|TERM)$/iu.test(key)));
+  env = Object.fromEntries(Object.entries(process.env).filter(([key]) => /^(?:OS|SystemRoot|WINDIR|COMSPEC|PATHEXT|ProgramFiles|ProgramFiles\(x86\)|ProgramData|PROCESSOR_ARCHITECTURE|NUMBER_OF_PROCESSORS|TEMP|TMP|TMPDIR|LANG|LC_ALL|TERM)$/iu.test(key)));
   Object.assign(env, { HOME: isolatedHome, USERPROFILE: isolatedHome, APPDATA: join(isolatedHome, "AppData", "Roaming"), LOCALAPPDATA: join(isolatedHome, "AppData", "Local"), CODEX_HOME: join(isolatedHome, ".codex"), PATH: `${toolPath}${delimiter}${minimalPath}`, SHELL: windows ? "powershell.exe" : "/bin/sh", NO_COLOR: "1", CI: "true" });
   if (windows) {
     const bash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bin", "bash.exe");
@@ -415,6 +416,7 @@ try {
     });
     await attempt(provider, "update", () => updateProvider(provider));
   }
+  await api("/settings/machine-environment", { method: "POST", body: JSON.stringify({ name: "PATH", value: minimalPath, note: "CI first-run Pi without system npm" }) });
   await stop(launcher);
   env.PATH = minimalPath;
   cliEnv.PATH = minimalPath;
