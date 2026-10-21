@@ -1,4 +1,5 @@
 import type {
+  InfiniteData,
   QueryClient,
   QueryFunctionContext,
   QueryKey,
@@ -10,6 +11,7 @@ import {
   runTaggedRead,
   runTaggedMutation,
   taggedQueryOptions,
+  type TaggedMutationOutcome,
   type TaggedOptimisticUpdate,
 } from "@bb/query-tags";
 
@@ -30,6 +32,59 @@ export function routeTaggedRead<Input, Output>(
   };
 }
 
+function isInfiniteData<Output>(
+  data: InfiniteData<Output> | Output,
+): data is InfiniteData<Output> {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    "pages" in data &&
+    "pageParams" in data
+  );
+}
+
+export function routeTaggedPages<Input, Output>(
+  client: QueryClient,
+  queryKey: QueryKey,
+  route: ContractTagDeclarations<Input, Output>,
+  input: Input,
+  read: (pageParam: number, signal: AbortSignal) => Promise<Output>,
+) {
+  return {
+    ...taggedQueryOptions<InfiniteData<Output> | Output>(client, queryKey, {
+      scope: CORE_TAG_SCOPE,
+      tagsOf: (data) =>
+        (isInfiniteData<Output>(data) ? data.pages : [data]).flatMap(
+          (page) => route.tags?.(input, page) ?? [],
+        ),
+    }),
+    queryFn: ({
+      client,
+      queryKey,
+      pageParam,
+      signal,
+    }: QueryFunctionContext<QueryKey, number>) =>
+      runTaggedRead(client, queryKey, () => read(pageParam, signal)),
+  };
+}
+
+export function invalidateCoreTags(client: QueryClient) {
+  return (tags: readonly string[]) =>
+    invalidateTags(client, CORE_TAG_SCOPE, tags);
+}
+
+export async function callRoute<Input, Output, Result extends Output>(
+  route: ContractTagDeclarations<Input, Output>,
+  input: Input,
+  call: () => Promise<Result>,
+): Promise<TaggedMutationOutcome<Result>> {
+  const output = await call();
+  return {
+    result: output,
+    invalidated: route.invalidates?.(input, output) ?? [],
+  };
+}
+
 export function runRouteMutation<Input, Output, Result extends Output>(
   client: QueryClient,
   route: ContractTagDeclarations<Input, Output>,
@@ -38,14 +93,8 @@ export function runRouteMutation<Input, Output, Result extends Output>(
   options?: { optimistic: readonly TaggedOptimisticUpdate[] },
 ): Promise<Result> {
   return runTaggedMutation(
-    (tags) => invalidateTags(client, CORE_TAG_SCOPE, tags),
-    async () => {
-      const output = await call();
-      return {
-        result: output,
-        invalidated: route.invalidates?.(input, output) ?? [],
-      };
-    },
+    invalidateCoreTags(client),
+    () => callRoute(route, input, call),
     options && { client, optimistic: options.optimistic },
   );
 }
