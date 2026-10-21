@@ -3255,3 +3255,9 @@ current result as `RenderedSlotInspectionState.experimental_pageTitle`;
 audit test-host lifecycle parity before stabilization.
 Before stabilization, audit focus changes, same-plugin splits, loading,
 back/forward navigation, crash/reload recovery, links and overflow.
+
+## Setup recurring job
+
+`bb.sdk.system.experimental_setupJob`, `experimental_setupJobShown`, and `experimental_decideSetupJob` share the setup screen's server routes. Reads return the eligible offered arm and persisted opt-in state without recording exposure; shown records the anonymous suggestion impression once; decisions require the offer's random ID and create a schedule only for explicit acceptance. `bb setup-job show|accept|dismiss` uses the same routes. The setup screen separately calls the existing holdout exposure API when the row renders.
+
+Stabilization requires verified replay, concurrent acceptance and retry behavior, missing-agent/plugin recovery, telemetry opt-out, and the setup screen and CLI using this same path. No host-daemon fields change.

@@ -416,6 +416,11 @@ export const listAutomationsInputSchema = z
 
 export const createAutomationInputSchema = z
   .object({
+    idempotencyKey: z
+      .string()
+      .min(1)
+      .max(AUTOMATION_IDEMPOTENCY_KEY_MAX_LENGTH)
+      .optional(),
     projectId: z.string().min(1),
     name: z.string().min(1).max(AUTOMATION_NAME_MAX_LENGTH),
     enabled: z.boolean().default(true),

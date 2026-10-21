@@ -1,3 +1,8 @@
+import type {
+  SetupJobDecisionRequest,
+  SetupJobReadQuery,
+  SetupJobResponse,
+} from "@bb/server-contract";
 import type { HoldoutKey } from "@bb/domain";
 import type { SystemHoldoutsResponse } from "@bb/server-contract";
 import { mobileAppDownloads } from "@bb/domain";
@@ -182,6 +187,13 @@ export interface SystemArea {
   installCliSkills(
     args: SystemInstallCliSkillsArgs,
   ): Promise<SystemInstallCliSkillsResult>;
+  experimental_setupJob(input?: SetupJobReadQuery): Promise<SetupJobResponse>;
+  experimental_setupJobShown(
+    suggestionAnalyticsId: string,
+  ): Promise<{ ok: true }>;
+  experimental_decideSetupJob(
+    input: SetupJobDecisionRequest,
+  ): Promise<SetupJobResponse>;
   holdouts(): Promise<SystemHoldoutsResponse>;
   exposeHoldout(key: HoldoutKey): Promise<{ exposed: boolean }>;
   experimental_recordTelemetryEvent(
@@ -351,6 +363,23 @@ export function createSystemArea(args: CreateSdkAreaArgs): SystemArea {
     async installCliSkills(input) {
       return transport.readJson(
         transport.api.v1.system["cli-skills"].install.$post({ json: input }),
+      );
+    },
+    async experimental_setupJob(input = {}) {
+      return transport.readJson(
+        transport.api.v1.system["setup-job"].$get({ query: input }),
+      );
+    },
+    async experimental_setupJobShown(suggestionAnalyticsId) {
+      return transport.readJson(
+        transport.api.v1.system["setup-job"].shown.$post({
+          json: { suggestionAnalyticsId },
+        }),
+      );
+    },
+    async experimental_decideSetupJob(input) {
+      return transport.readJson(
+        transport.api.v1.system["setup-job"].decision.$post({ json: input }),
       );
     },
     async holdouts() {

@@ -819,6 +819,22 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
     ],
     surfaces: [
       {
+        id: "setup-job",
+        title: "Setup recurring job",
+        summary: "Read and choose the same recurring job offered during setup.",
+        bullets: [
+          "Read the offered job and saved opt-in state without recording an impression",
+          "Record a displayed suggestion once, or accept or dismiss its random offer ID",
+          "Create a weeknight schedule only after explicit opt-in, safely across retries",
+        ],
+        apiSymbols: [
+          "bb.sdk.system.experimental_setupJob",
+          "bb.sdk.system.experimental_setupJobShown",
+          "bb.sdk.system.experimental_decideSetupJob",
+        ],
+        experimental: true,
+      },
+      {
         id: "cli",
         tagline: "Your own `bb <name>` command",
         title: "bb CLI commands",

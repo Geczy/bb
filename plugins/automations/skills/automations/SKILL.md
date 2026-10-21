@@ -27,7 +27,7 @@ Use `agent` when the run needs reasoning: summarize a feed, pick interesting ite
 Creating:
 
 ```bash
-bb automation create --project <id> --name "..." [schedule flags] [mode flags]
+bb automation create --project <id> --name "..." [--idempotency-key <key>] [schedule flags] [mode flags]
 ```
 
 For creation flags and mode-specific defaults, read
@@ -56,3 +56,5 @@ read [references/updates.md](references/updates.md). Every command supports `--j
 accepted values, and rules. Unknown commands, unknown options, and stray
 arguments are rejected rather than ignored, and a failure under `--json` also
 prints a `{"ok":false,"error":{"code","message","hint"}}` envelope on stdout.
+
+The `automations_create` RPC accepts an optional `idempotencyKey`. Within a project, retries with the same key return the existing automation without changing it, including after restart. Different projects have separate keys. Use a fresh key for a new job; omit it for the existing always-create behavior. Setup uses this path so repeating an opt-in request never creates a second schedule.

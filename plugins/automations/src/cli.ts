@@ -1097,6 +1097,12 @@ export function registerAutomationCli(args: {
               required: true,
               description: "Display name, at most 200 characters",
             },
+            "idempotency-key": {
+              type: "string",
+              placeholder: "key",
+              description:
+                "Return the same project automation when creation is retried",
+            },
             disabled: {
               type: "boolean",
               description: "Create the automation paused",
@@ -1125,6 +1131,9 @@ export function registerAutomationCli(args: {
                 enabled: !input.options.disabled,
                 trigger: buildTrigger(input.options),
                 execution,
+                ...(input.options["idempotency-key"]
+                  ? { idempotencyKey: input.options["idempotency-key"] }
+                  : {}),
                 origin: ctx.threadId ? "agent" : "human",
                 ...(ctx.threadId ? { createdByThreadId: ctx.threadId } : {}),
               };

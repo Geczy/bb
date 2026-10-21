@@ -124,3 +124,7 @@ and the plugin's skill.
 
   bb holdouts list --json
     {assignments: [{key, variant, assignedAt, exposedAt, appVersion, status}]}    (timestamps are epoch milliseconds; exposedAt can be null)
+
+## Setup job
+
+`bb setup-job show --json`, `accept --offer <id> --json`, and `dismiss --offer <id> --json` return `{offer: {...} | null}`. The offer contains `arm`, `suggestionAnalyticsId`, `title`, `projectId`, `projectName`, `providerName`, `timezone`, `status` (`offered`, `accepted`, or `dismissed`), and nullable `automationId`.
