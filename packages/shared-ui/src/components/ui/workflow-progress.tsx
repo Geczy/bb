@@ -630,7 +630,7 @@ function CollapsiblePhaseSection({
         <PhaseCompletedBadge visible={activityState === "completed"} />
       </button>
       {expanded ? (
-        <div className="ml-3.5 mt-0.5 flex min-w-0 flex-col border-l border-border/60 pl-0.5">
+        <div className="ml-3.5 mt-0.5 flex min-w-0 flex-col border-l border-foreground/20 pl-0.5">
           {agentLines}
         </div>
       ) : null}
