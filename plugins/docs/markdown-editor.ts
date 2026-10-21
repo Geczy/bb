@@ -60,7 +60,10 @@ const textMarkdown: MarkdownNodeSpec = {
         .call(state, text, startOfLine)
         .replace(/(?:\\~)+/g, (run) => (run.length === 2 ? "~" : run));
     try {
-      state.text(node.text!.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+      state.text(
+        node.text!.replace(/</g, "&lt;").replace(/>/g, "&gt;"),
+        !("inAutolink" in state && state.inAutolink),
+      );
     } finally {
       state.esc = escape;
     }
