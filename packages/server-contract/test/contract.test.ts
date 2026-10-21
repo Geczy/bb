@@ -469,7 +469,13 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
     fields: [
       "createQueuedMessageRequestSchema.senderThreadId",
       "sendMessageRequestSchema.senderThreadId",
+      "createThreadRequestSchema.senderThreadId",
     ],
+  },
+  {
+    reason:
+      "Only sends made through the plugin SDK carry the sending plugin's id.",
+    fields: ["sendMessageRequestSchema.originPluginId"],
   },
   {
     reason:

@@ -336,6 +336,10 @@ describe("user message telemetry", () => {
         payload: {
           input: textInput("automation run into an existing thread"),
           mode: "start",
+          model: "gpt-5",
+          permissionMode: "full",
+          reasoningLevel: "medium",
+          serviceTier: "default",
           originPluginId: "automations",
         },
         thread,
