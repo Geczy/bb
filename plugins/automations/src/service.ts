@@ -73,7 +73,9 @@ type ServiceApi = Pick<BbPluginApi, "realtime" | "log"> & {
     system: { config(): Promise<{ primaryHostId: string | null }> };
     projects: Pick<BbPluginApi["sdk"]["projects"], "get" | "list">;
     providers: Pick<BbPluginApi["sdk"]["providers"], "list">;
-    threads: Pick<BbPluginApi["sdk"]["threads"], "get" | "send" | "spawn">;
+    threads: Pick<BbPluginApi["sdk"]["threads"], "get" | "send" | "spawn"> &
+      Partial<Pick<BbPluginApi["sdk"]["threads"], "list" | "events">>;
+    plugins?: Pick<BbPluginApi["sdk"]["plugins"], "list" | "callRpc">;
   };
 };
 
@@ -446,6 +448,9 @@ function applyAgentExecutionUpdate(
 
   const next = {
     ...execution,
+    ...(update.networkAccess !== undefined
+      ? { networkAccess: update.networkAccess }
+      : {}),
     ...(update.prompt !== undefined ? { prompt: update.prompt } : {}),
     ...(update.providerId !== undefined
       ? { providerId: update.providerId }

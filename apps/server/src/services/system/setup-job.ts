@@ -181,7 +181,9 @@ export function createSetupJobService(
           projectId: project.id,
         });
         const ready = states.providers.filter(
-          (provider) => provider.status === "ready",
+          (provider) =>
+            provider.status === "ready" &&
+            ["codex", "claude-code"].includes(provider.providerId),
         );
         const provider =
           ready.find((entry) => entry.providerId === defaults?.providerId) ??

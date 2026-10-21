@@ -3,6 +3,11 @@
   "globalEnv": ["BB_BUILD_TOOLCHAIN"],
   "globalPassThroughEnv": ["npm_config_store_dir", "pnpm_config_store_dir"],
   "tasks": {
+    "//#test:provider-network": {
+      "cache": false,
+      "passThroughEnv": ["GITHUB_ACTIONS", "GITHUB_STEP_SUMMARY"],
+      "outputs": []
+    },
     "@bb/db#db:generate": { "cache": false },
     "@bb/desktop#smoke:browser-broker": {
       "cache": false,

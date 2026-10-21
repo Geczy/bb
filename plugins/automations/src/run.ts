@@ -1,3 +1,4 @@
+import { prepareAutomationRun, type PreparationApi } from "./preparation.js";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
@@ -34,7 +35,10 @@ type AgentThreadsSdk = {
   ): Promise<unknown>;
 };
 export type AgentRunApi = Pick<BbPluginApi, "realtime" | "log"> & {
-  sdk: { threads: AgentThreadsSdk };
+  sdk: { threads: AgentThreadsSdk } & Omit<PreparationApi, "threads"> & {
+      threads: AgentThreadsSdk &
+        Partial<NonNullable<PreparationApi["threads"]>>;
+    };
 };
 export type ScriptRunApi = Pick<BbPluginApi, "realtime" | "log"> & {
   sdk: { projects: ProjectsSdk };
@@ -110,6 +114,39 @@ export async function executeAgentRun(
   args: AgentRunArgs,
 ): Promise<void> {
   try {
+    if (
+      args.execution.networkAccess === false &&
+      args.automation.targetThreadId !== null
+    )
+      throw new Error("Network-disabled jobs must use their own session");
+    if (
+      args.execution.networkAccess === false &&
+      !["codex", "claude-code"].includes(args.execution.providerId)
+    )
+      throw new Error("This agent cannot run with network access disabled");
+    const prepared = await prepareAutomationRun(
+      {
+        ...bb.sdk,
+        threads:
+          bb.sdk.threads.list && bb.sdk.threads.events
+            ? {
+                list: bb.sdk.threads.list.bind(bb.sdk.threads),
+                events: bb.sdk.threads.events,
+              }
+            : undefined,
+      },
+      args.automation.projectId,
+      args.execution,
+    );
+    if (prepared === null) {
+      closeAutomationRun(db, {
+        runId: args.run.id,
+        status: "skipped",
+        skipReason: "No available thread from today",
+        now: Date.now(),
+      });
+      return;
+    }
     if (args.automation.targetThreadId !== null) {
       await reuseTargetThreadForRun(bb, db, {
         ...args,
@@ -120,10 +157,25 @@ export async function executeAgentRun(
     const thread = sdkThreadSchema.parse(
       await bb.sdk.threads.spawn({
         projectId: args.automation.projectId,
-        environment: args.execution.environment,
+        environment: prepared.environment,
+        ...(prepared.sourceThreadId
+          ? {
+              sourceThreadId: prepared.sourceThreadId,
+              originKind: "fork" as const,
+            }
+          : {}),
+        ...(args.execution.networkAccess === false
+          ? {
+              pluginMetadata: {
+                networkAccess: false,
+                automationId: args.automation.id,
+                runId: args.run.id,
+              },
+            }
+          : {}),
         prompt: renderAutomationDueMessage({
           automationId: args.automation.id,
-          prompt: args.execution.prompt,
+          prompt: prepared.prompt,
         }),
         title: args.automation.name,
         providerId: args.execution.providerId,
