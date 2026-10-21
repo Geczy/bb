@@ -210,9 +210,14 @@ async function health(provider) {
 }
 
 async function installation(provider) {
-  const statuses = await api(`/hosts/${encodeURIComponent(hostId)}/provider-clis/status`);
-  if (!statuses[provider]) throw new Error(`${provider} absent from installation status response`);
-  return statuses[provider];
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const statuses = await api(`/hosts/${encodeURIComponent(hostId)}/provider-clis/status`);
+    if (statuses[provider]) return statuses[provider];
+    report.evidence.statusOmissions ??= [];
+    report.evidence.statusOmissions.push({ provider, attempt });
+    if (attempt < 3) await delay(1_000);
+  }
+  throw new Error(`${provider} absent from three installation status responses`);
 }
 
 async function installedStatus(provider) {
