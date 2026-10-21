@@ -153,7 +153,7 @@ export function NotificationsHint() {
       className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"
     >
       <Icon
-        name="Bell"
+        name="BellDot"
         className="size-4 shrink-0 text-muted-foreground"
         aria-hidden
       />
