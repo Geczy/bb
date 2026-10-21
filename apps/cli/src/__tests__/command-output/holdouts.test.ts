@@ -13,7 +13,7 @@ describe("bb holdouts list", () => {
       assignments: [
         {
           key: "app_aa_check",
-          arm: "control",
+          variant: "control",
           assignedAt: 1,
           exposedAt: null,
           appVersion: "1.0.0",

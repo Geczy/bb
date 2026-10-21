@@ -145,9 +145,11 @@ export function createHoldoutService(args: {
           return [];
         return [
           {
-            ...row,
             key: definition.key,
-            arm: row.arm,
+            variant: row.arm,
+            assignedAt: row.assignedAt,
+            exposedAt: row.exposedAt,
+            appVersion: row.appVersion,
             status: definition.status,
           },
         ];
@@ -158,7 +160,7 @@ export function createHoldoutService(args: {
       return Object.fromEntries(
         list()
           .filter((row) => row.status !== "ended")
-          .map((row) => [`$feature/${row.key}`, row.arm]),
+          .map((row) => [`$feature/${row.key}`, row.variant]),
       );
     } catch {
       return {};
@@ -187,8 +189,8 @@ export function createHoldoutService(args: {
         .get();
       if (row === undefined || !definition.arms.includes(row.arm)) return false;
       telemetry.capture({
-        name: "holdout_exposed",
-        properties: { holdout: key, arm: row.arm },
+        name: "experiment_exposed",
+        properties: { experiment_id: key, variant: row.arm },
       });
       return true;
     } catch (error) {

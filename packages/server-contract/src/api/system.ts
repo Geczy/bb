@@ -713,7 +713,7 @@ export const systemHoldoutsResponseSchema = z.object({
     z
       .object({
         key: holdoutKeySchema,
-        arm: holdoutArmSchema,
+        variant: holdoutArmSchema,
         assignedAt: z.number(),
         exposedAt: z.number().nullable(),
         appVersion: z.string(),
@@ -723,8 +723,8 @@ export const systemHoldoutsResponseSchema = z.object({
         (row) =>
           holdoutRegistry
             .find((entry) => entry.key === row.key)
-            ?.arms.includes(row.arm) === true,
-        { message: "Arm must belong to the holdout" },
+            ?.arms.includes(row.variant) === true,
+        { message: "Variant must belong to the holdout" },
       ),
   ),
 });

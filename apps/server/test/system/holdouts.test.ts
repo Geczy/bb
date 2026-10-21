@@ -25,8 +25,8 @@ describe("holdout interfaces", () => {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              name: "holdout_exposed",
-              properties: { holdout: "app_aa_check", arm: "test" },
+              name: "experiment_exposed",
+              properties: { experiment_id: "app_aa_check", variant: "test" },
             }),
           })
         ).status,
@@ -50,10 +50,10 @@ describe("holdout interfaces", () => {
       ).toHaveLength(1);
       expect(capture).toHaveBeenCalledTimes(1);
       expect(capture).toHaveBeenCalledWith({
-        name: "holdout_exposed",
+        name: "experiment_exposed",
         properties: {
-          holdout: "app_aa_check",
-          arm: harness.deps.holdouts.arm("app_aa_check"),
+          experiment_id: "app_aa_check",
+          variant: harness.deps.holdouts.arm("app_aa_check"),
         },
       });
     });

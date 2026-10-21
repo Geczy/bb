@@ -123,4 +123,4 @@ Commands contributed by plugins document their own JSON in `bb <command> --help`
 and the plugin's skill.
 
   bb holdouts list --json
-    {assignments: [{key, arm, assignedAt, exposedAt, appVersion, status}]}    (timestamps are epoch milliseconds; exposedAt can be null)
+    {assignments: [{key, variant, assignedAt, exposedAt, appVersion, status}]}    (timestamps are epoch milliseconds; exposedAt can be null)

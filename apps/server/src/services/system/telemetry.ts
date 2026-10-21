@@ -16,8 +16,11 @@ const telemetryAppSurfaceStorage = new AsyncLocalStorage<RequestAppSurface>();
 
 export type TelemetryEvent =
   | {
-      name: "holdout_exposed";
-      properties: { holdout: HoldoutDefinition["key"]; arm: HoldoutArm };
+      name: "experiment_exposed";
+      properties: {
+        experiment_id: HoldoutDefinition["key"];
+        variant: HoldoutArm;
+      };
     }
   | { name: "app_started" }
   | { name: "telemetry_disabled" }

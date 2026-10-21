@@ -76,7 +76,7 @@ describe("per-install holdouts", () => {
   it("draws exactly once and preserves the assignment through restart, update and a database move", async () => {
     const initial = start(db).list();
     expect(initial).toHaveLength(1);
-    expect(initial[0]?.arm).toMatch(/^(control|test)$/);
+    expect(initial[0]?.variant).toMatch(/^(control|test)$/);
     expect(start(db, { appVersion: "2.0.0" }).list()).toEqual(initial);
     const source = join(dataDir, "source.db");
     const destination = join(dataDir, "moved.db");
@@ -104,7 +104,7 @@ describe("per-install holdouts", () => {
       const install = createMigratedConnection();
       try {
         const assignment = start(install, { registry }).list();
-        const arm = assignment[0]!.arm;
+        const arm = assignment[0]!.variant;
         counts.set(arm, (counts.get(arm) ?? 0) + 1);
         expect(
           start(install, { registry, appVersion: "2.0.0" }).list(),
@@ -149,10 +149,10 @@ describe("per-install holdouts", () => {
     expect(
       JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
     ).toMatchObject({
-      event: "holdout_exposed",
+      event: "experiment_exposed",
       properties: {
-        holdout: key,
-        arm: "guided_return",
+        experiment_id: key,
+        variant: "guided_return",
         "$feature/app_aa_check": "guided_return",
       },
     });
@@ -223,12 +223,14 @@ describe("per-install holdouts", () => {
     const events = fetchMock.mock.calls.map(([, init]) =>
       JSON.parse(String(init?.body)),
     );
-    expect(events.map((event) => event.properties.holdout)).toEqual([
+    expect(events.map((event) => event.properties.experiment_id)).toEqual([
       "app_first",
       "app_second",
     ]);
     for (const event of events) {
-      expect(event.properties.arm).toBe(holdouts.arm(event.properties.holdout));
+      expect(event.properties.variant).toBe(
+        holdouts.arm(event.properties.experiment_id),
+      );
       expect(event.properties["$feature/app_first"]).toBe(
         holdouts.arm("app_first"),
       );
@@ -334,9 +336,16 @@ describe("per-install holdouts", () => {
         expect(
           JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
         ).toMatchObject({
-          event: "holdout_exposed",
-          properties: { holdout: key, arm, "$feature/app_aa_check": arm },
+          event: "experiment_exposed",
+          properties: {
+            experiment_id: key,
+            variant: arm,
+            "$feature/app_aa_check": arm,
+          },
         });
+        const payload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+        expect(payload.properties).not.toHaveProperty("holdout");
+        expect(payload.properties).not.toHaveProperty("arm");
         expect(start(connections[0]!).expose(key, service)).toBe(false);
         expect(clients[0]!.list()[0]?.exposedAt).toEqual(expect.any(Number));
       } finally {
@@ -352,7 +361,7 @@ describe("per-install holdouts", () => {
     const service = await telemetry(holdouts, false);
     service.capture({ name: "app_started" });
     expect(holdouts.expose(key, service)).toBe(true);
-    expect(holdouts.arm(key)).toBe(holdouts.list()[0]?.arm);
+    expect(holdouts.arm(key)).toBe(holdouts.list()[0]?.variant);
     expect(fetchMock).not.toHaveBeenCalled();
     service.setEnabled(true);
     expect(holdouts.expose(key, service)).toBe(false);
@@ -388,7 +397,7 @@ describe("per-install holdouts", () => {
     const forced = start(db, { force: { key, arm: "test" } });
     expect(forced.properties()).toEqual({});
     expect(db.select().from(holdoutAssignments).all()[0]?.arm).toBe(
-      assigned[0]?.arm,
+      assigned[0]?.variant,
     );
     expect(forced.expose(key, await telemetry(forced))).toBe(false);
     expect(start(db).properties()).toEqual({});
@@ -402,7 +411,7 @@ describe("per-install holdouts", () => {
     const enrolled = start(db).list();
     expect(
       start(db, { registry: [{ ...definition, status: "holding" }] }).arm(key),
-    ).toBe(enrolled[0]?.arm);
+    ).toBe(enrolled[0]?.variant);
     for (const winner of [null, "control", "test"] as const) {
       const ended = start(db, {
         registry: [{ ...definition, status: "ended", winner }],

@@ -24,15 +24,15 @@ export function registerHoldoutCommands(
         }
         const rows = result.assignments.map((row) => [
           row.key,
-          row.arm,
+          row.variant,
           new Date(row.assignedAt).toISOString(),
           row.exposedAt === null ? "—" : new Date(row.exposedAt).toISOString(),
           row.status,
         ]);
         printBorderlessTable(
           {
-            head: ["Key", "Arm", "Assigned", "Exposed", "Status"],
-            colWidths: columnWidths(rows, [3, 3, 8, 7, 6]),
+            head: ["Key", "Variant", "Assigned", "Exposed", "Status"],
+            colWidths: columnWidths(rows, [3, 7, 8, 7, 6]),
             trimTrailingWhitespace: true,
           },
           rows,
