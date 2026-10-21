@@ -316,7 +316,7 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
     expect(serverConfig.featureFlags).toEqual({
       placeholder: false,
-      startedByTelemetry: false,
+      initiatorTelemetry: false,
       timelineWindowEventBudget: 1_500,
     });
   });
@@ -403,14 +403,14 @@ describe("consumer-specific config", () => {
     expect(serverConfig.featureFlags.placeholder).toBe(true);
   });
 
-  it("parses the started-by telemetry flag from env", () => {
+  it("parses the initiator telemetry flag from env", () => {
     const serverConfig = loadServerConfig({
       env: createServerRuntimeEnv({
-        BB_FF_STARTED_BY_TELEMETRY: "true",
+        BB_FF_INITIATOR_TELEMETRY: "true",
       }),
     });
 
-    expect(serverConfig.featureFlags.startedByTelemetry).toBe(true);
+    expect(serverConfig.featureFlags.initiatorTelemetry).toBe(true);
   });
 
   it("parses the timeline window event budget from env", () => {

@@ -13,7 +13,12 @@ const TELEMETRY_ID_FILE_NAME = "telemetry-id";
 
 const telemetryAppSurfaceStorage = new AsyncLocalStorage<RequestAppSurface>();
 
-export type StartedBy = "person" | "agent" | "automation" | "plugin" | "bb";
+export type TelemetryInitiator =
+  | "user"
+  | "agent"
+  | "automation"
+  | "plugin"
+  | "system";
 
 export type TelemetryEvent =
   | { name: "app_started" }
@@ -23,7 +28,7 @@ export type TelemetryEvent =
       properties: {
         is_child_thread: boolean;
         provider: string;
-        started_by?: StartedBy;
+        initiator?: TelemetryInitiator;
       };
     }
   | {
@@ -32,7 +37,7 @@ export type TelemetryEvent =
         is_child_thread: boolean;
         message_source: "queued_message" | "thread_create" | "thread_send";
         provider: string;
-        started_by?: StartedBy;
+        initiator?: TelemetryInitiator;
       };
     }
   | {

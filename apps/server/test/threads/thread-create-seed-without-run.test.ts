@@ -102,21 +102,21 @@ describe("thread creation telemetry", () => {
   });
 });
 
-describe("thread creation started_by telemetry", () => {
-  it("adds started_by to thread and message events only when the flag is on", async () => {
+describe("thread creation initiator telemetry", () => {
+  it("adds initiator to thread and message events only when the flag is on", async () => {
     await withTestHarness(async (harness) => {
       const capture = installTelemetryCaptureSpy(harness);
       const { host } = seedHostSession(harness.deps, {
-        id: "host-started-by-telemetry",
+        id: "host-initiator-telemetry",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/started-by-telemetry",
+        path: "/tmp/initiator-telemetry",
       });
       seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/started-by-telemetry",
+        path: "/tmp/initiator-telemetry",
       });
       const request = {
         environment: {
@@ -124,10 +124,10 @@ describe("thread creation started_by telemetry", () => {
           hostId: host.id,
           workspace: {
             type: "unmanaged" as const,
-            path: "/tmp/started-by-telemetry",
+            path: "/tmp/initiator-telemetry",
           },
         },
-        input: textInput("Start with started-by"),
+        input: textInput("Start with initiator"),
         origin: "app" as const,
         projectId: project.id,
         providerId: "codex",
@@ -143,7 +143,7 @@ describe("thread creation started_by telemetry", () => {
       capture.mockClear();
       harness.deps.config.featureFlags = {
         ...harness.deps.config.featureFlags,
-        startedByTelemetry: true,
+        initiatorTelemetry: true,
       };
       await createThreadFromRequest(harness.deps, request);
       expect(capture).toHaveBeenCalledWith({
@@ -151,7 +151,7 @@ describe("thread creation started_by telemetry", () => {
         properties: {
           is_child_thread: false,
           provider: "codex",
-          started_by: "person",
+          initiator: "user",
         },
       });
       expect(capture).toHaveBeenCalledWith({
@@ -160,7 +160,7 @@ describe("thread creation started_by telemetry", () => {
           is_child_thread: false,
           message_source: "thread_create",
           provider: "codex",
-          started_by: "person",
+          initiator: "user",
         },
       });
     });

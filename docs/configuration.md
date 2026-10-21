@@ -286,11 +286,11 @@ ids, account details, prompts, project or file names, terminal output, error
 messages, or session ids. Sign-in `exited` means the command exited before
 readiness was observed, not that authentication succeeded; `new_thread_submit`
 `accepted` means the thread was created, not that the provider answered.
-With `BB_FF_STARTED_BY_TELEMETRY=true` (off by default until the property clears
+With `BB_FF_INITIATOR_TELEMETRY=true` (off by default until the property clears
 its analytics review), `thread_created` and `user_message_sent` also carry
-`started_by`: `person`, `agent`, `automation` (started by the automations
-plugin), `plugin` (any other plugin), or `bb` (bb's own retries and follow-ups). Messages sent into an
-existing thread report `person` for now, because sends carry no plugin
+`initiator`: `user`, `agent`, `automation` (started by the automations
+plugin), `plugin` (any other plugin), or `system` (bb's own retries and follow-ups). Messages sent into an
+existing thread report `user` for now, because sends carry no plugin
 attribution.
 
 ## AI services

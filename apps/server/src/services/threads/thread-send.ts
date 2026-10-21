@@ -77,8 +77,11 @@ import {
   type GroupedPrompt,
   type PromptWithGroups,
 } from "./deferred-first-turn-context.js";
-import type { TelemetryEvent, StartedBy } from "../system/telemetry.js";
-import { startedByTelemetryProperty } from "./started-by.js";
+import type {
+  TelemetryEvent,
+  TelemetryInitiator,
+} from "../system/telemetry.js";
+import { initiatorTelemetryProperty } from "./telemetry-initiator.js";
 import { assertThreadHostAcceptsWork } from "./thread-host-admission.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
@@ -386,7 +389,7 @@ export function captureUserMessageSentTelemetry(
     isChildThread: boolean;
     messageSource: UserMessageSentProperties["message_source"];
     providerId: string;
-    startedBy: StartedBy;
+    initiator: TelemetryInitiator;
   },
 ): void {
   deps.telemetry.capture({
@@ -395,7 +398,7 @@ export function captureUserMessageSentTelemetry(
       is_child_thread: args.isChildThread,
       message_source: args.messageSource,
       provider: args.providerId,
-      ...startedByTelemetryProperty(deps.config.featureFlags, args.startedBy),
+      ...initiatorTelemetryProperty(deps.config.featureFlags, args.initiator),
     },
   });
 }
@@ -618,7 +621,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
-        startedBy: "person",
+        initiator: "user",
       });
     }
     return;
@@ -745,7 +748,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
-        startedBy: "person",
+        initiator: "user",
       });
     }
     return;
@@ -813,7 +816,7 @@ async function sendThreadMessageWithoutContextClear(
       isChildThread: thread.parentThreadId !== null,
       messageSource: "thread_send",
       providerId: thread.providerId,
-      startedBy: "person",
+      initiator: "user",
     });
   }
 }

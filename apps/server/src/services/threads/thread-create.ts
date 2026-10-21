@@ -60,7 +60,10 @@ import {
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
 import { resolveDispatchAuthor } from "./dispatch-author.js";
-import { resolveStartedBy, startedByTelemetryProperty } from "./started-by.js";
+import {
+  resolveTelemetryInitiator,
+  initiatorTelemetryProperty,
+} from "./telemetry-initiator.js";
 import { deriveForkTitle, deriveTitleFallback } from "./title-generation.js";
 import type { ThreadProvisionEnvironmentIntent } from "./thread-startup-store.js";
 import { resolveSystemProviderModels } from "../system/execution-options.js";
@@ -855,7 +858,7 @@ export async function createThreadFromRequest(
     senderThreadId: null,
     startedOnBehalfOf: request.startedOnBehalfOf,
   });
-  const startedBy = resolveStartedBy({
+  const telemetryInitiator = resolveTelemetryInitiator({
     origin: request.origin,
     originPluginId: request.originPluginId ?? null,
     initiator,
@@ -865,7 +868,10 @@ export async function createThreadFromRequest(
     properties: {
       is_child_thread: parentThread !== null,
       provider: request.providerId,
-      ...startedByTelemetryProperty(deps.config.featureFlags, startedBy),
+      ...initiatorTelemetryProperty(
+        deps.config.featureFlags,
+        telemetryInitiator,
+      ),
     },
   });
   if (initiator === "user" && request.input.length > 0) {
@@ -873,7 +879,7 @@ export async function createThreadFromRequest(
       isChildThread: parentThread !== null,
       messageSource: "thread_create",
       providerId: request.providerId,
-      startedBy,
+      initiator: telemetryInitiator,
     });
   }
   return thread;
