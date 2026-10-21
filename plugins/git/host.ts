@@ -47,6 +47,7 @@ async function readWorkspace<T>(
 }
 
 export function createGitHostEntry() {
+  const backgroundWork = new Set<Promise<void>>();
   const watches = new Map<
     string,
     { subscriptions: ExperimentalHostWatchSubscription[]; cancelled: boolean }
@@ -64,12 +65,27 @@ export function createGitHostEntry() {
     contract: gitHostContract,
     experimental_signals: gitHostSignals,
     handlers: {
-      branches({ selectedBranch, ...input }) {
-        return listWorkspaceBranchOptions({
-          ...input,
-          ...(selectedBranch === null ? {} : { selectedBranch }),
-          remoteRefresh: "background",
-        });
+      branches({ selectedBranch, ...input }, context) {
+        return listWorkspaceBranchOptions(
+          {
+            ...input,
+            ...(selectedBranch === null ? {} : { selectedBranch }),
+            remoteRefresh: "background",
+            signal: context.signal,
+          },
+          {
+            signal: context.lifecycle.signal,
+            onStart(work) {
+              const lease = context.experimental_retainWorker();
+              const retained = work.finally(() => lease.dispose());
+              backgroundWork.add(retained);
+              void retained.then(
+                () => backgroundWork.delete(retained),
+                () => backgroundWork.delete(retained),
+              );
+            },
+          },
+        );
       },
       async status({ path, mergeBaseBranch, ...budgets }, context) {
         const workspace = new GitWorkspaceReads(path, {
@@ -185,6 +201,7 @@ export function createGitHostEntry() {
     },
     async dispose() {
       await Promise.all([...watches.keys()].map(unwatch));
+      await Promise.allSettled([...backgroundWork]);
     },
   });
 }

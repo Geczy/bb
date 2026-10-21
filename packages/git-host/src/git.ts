@@ -28,6 +28,7 @@ export class WorkspaceError extends Error {
 }
 
 export interface GitProcessOptions {
+  signal?: AbortSignal;
   priority?: import("@get-bb/plugin-sdk/host").ExperimentalVcsProcessPriority;
   shellPath?: string;
 }
@@ -37,7 +38,6 @@ export interface RunGitOptions extends GitProcessOptions {
   timeoutMs?: number;
   allowFailure?: boolean;
   env?: NodeJS.ProcessEnv;
-  signal?: AbortSignal;
   maxBufferBytes?: number;
   allowTruncatedStdout?: boolean;
   onStderr?: (chunk: string) => void;
@@ -1386,6 +1386,7 @@ async function fetchRemoteBranchesNonInteractively(
   try {
     await execPortableFile("git", ["fetch", "--all", "--prune", "--quiet"], {
       priority: "background",
+      signal: options.signal,
       cwd,
       timeout: options.timeoutMs,
       maxBuffer: DEFAULT_BUFFER_BYTES,

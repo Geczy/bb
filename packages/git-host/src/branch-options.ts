@@ -157,7 +157,7 @@ async function refreshRemoteBranches(
         timeoutMs: remainingTimeoutMs,
       });
     },
-    { timeoutMs: REMOTE_BRANCH_FETCH_TIMEOUT_MS },
+    { timeoutMs: REMOTE_BRANCH_FETCH_TIMEOUT_MS, signal: options.signal },
   )
     .then(
       (result) => !interactive && result.status === "failed",
@@ -215,15 +215,18 @@ async function readBranchOptions({
   };
 }
 
-export async function listWorkspaceBranchOptions({
-  shellPath,
-  ...command
-}: BranchOptionsArgs): Promise<GitBranchOptions> {
+export async function listWorkspaceBranchOptions(
+  { shellPath, signal, priority, ...command }: BranchOptionsArgs,
+  background?: {
+    signal: AbortSignal;
+    onStart(work: Promise<void>): void;
+  },
+): Promise<GitBranchOptions> {
   if (!path.isAbsolute(command.path)) {
     throw new WorkspaceError("invalid_path", "Path must be absolute");
   }
 
-  const gitProcessOptions = shellPath === undefined ? {} : { shellPath };
+  const gitProcessOptions = { shellPath, signal, priority };
   if ((await detectGitRepoKind(command.path, gitProcessOptions)) === "none") {
     return {
       branches: [],
@@ -238,12 +241,18 @@ export async function listWorkspaceBranchOptions({
     };
   }
 
-  if (command.remoteRefresh === "background") {
-    void refreshRemoteBranches(
+  if (
+    command.remoteRefresh === "background" &&
+    background?.signal.aborted !== true
+  ) {
+    const work = refreshRemoteBranches(
       command.path,
-      gitProcessOptions,
+      background
+        ? { ...gitProcessOptions, signal: background.signal }
+        : gitProcessOptions,
       "background",
     ).catch(() => undefined);
+    background?.onStart(work);
   }
 
   return readBranchOptions({ ...command, ...gitProcessOptions });

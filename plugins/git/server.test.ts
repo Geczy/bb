@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import { createDeferredPromise } from "@bb/test-helpers";
 import { execFile } from "node:child_process";
 import { mkdtemp, writeFile, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -382,3 +384,43 @@ it("keeps shared watched reads current across checkout changes and releases thei
     await rm(repo, { recursive: true, force: true });
   }
 });
+
+it("retains and drains a branch refresh when the host entry is disposed", async () => {
+  const repo = await realpath(await mkdtemp(join(tmpdir(), "bb-git-refresh-")));
+  const git = (...args: string[]) => exec("git", args, { cwd: repo });
+  const requested = createDeferredPromise<void>();
+  const server = createServer(() => requested.resolve());
+  const entry = experimental_createHostEntryHarness(createGitHostEntry());
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    if (address === null || typeof address === "string")
+      throw new Error("Missing remote fixture address");
+    await git("init", "--initial-branch=main");
+    await git("config", "http.proxy", "");
+    await git(
+      "remote",
+      "add",
+      "origin",
+      `http://127.0.0.1:${address.port}/repo`,
+    );
+    await entry.experimental_call("branches", {
+      path: repo,
+      query: "",
+      selectedBranch: null,
+      limit: 10,
+    });
+    await requested.promise;
+    expect(entry.experimental_getRetainedWorkerLeaseCount()).toBe(1);
+    await entry.experimental_dispose();
+    expect(entry.experimental_getRetainedWorkerLeaseCount()).toBe(0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await entry.experimental_dispose();
+    await rm(repo, { recursive: true, force: true });
+  }
+}, 15_000);
