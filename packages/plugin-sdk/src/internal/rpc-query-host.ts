@@ -35,6 +35,7 @@ export interface RpcQueryHost {
   queryClient: QueryClient;
   call(pluginId: string, method: string, input: JsonValue): Promise<unknown>;
   subscribe(pluginId: string): () => void;
+  mutationMeta?: Readonly<Record<string, unknown>>;
   watch?(
     pluginId: string,
     method: string,
@@ -343,6 +344,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
         );
         return updates;
       },
+      host.mutationMeta,
     );
     const { mutate } = mutation;
     return {

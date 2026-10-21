@@ -4086,7 +4086,7 @@ export interface PluginSdkApp {
   >(
     options: ExperimentalRpcQueryOptions<Contract, Method>,
   ): ExperimentalRpcQueryState<PluginRpcResult<Contract[Method]>>;
-  /** Call a mutating RPC through BB's query client; pending until the server acknowledges the write; matched reads refresh in the background. */
+  /** Call a mutating RPC through BB's query client; pending until the server acknowledges the write; matched reads refresh in the background. BB shows no error toast for a failed write; show the failure from error or the rejected mutate. */
   experimental_useRpcMutation<
     Contract extends PluginRpcContract,
     Method extends keyof Contract & string,

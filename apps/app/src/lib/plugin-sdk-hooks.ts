@@ -994,6 +994,7 @@ export const {
         method: string,
         input: import("@bb/domain").JsonValue,
       ) => callPluginRpc(fetch, id, method, input, true),
+      mutationMeta: { showErrorToast: false },
       watch: (
         id: string,
         method: string,

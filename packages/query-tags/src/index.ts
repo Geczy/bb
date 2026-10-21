@@ -231,6 +231,7 @@ export function useTaggedMutation<Input, Result>(
   invalidate: (tags: readonly string[]) => Promise<void>,
   call: (input: Input) => Promise<TaggedMutationOutcome<Result>>,
   optimistic?: (input: Input) => readonly TaggedOptimisticUpdate[],
+  meta?: Readonly<Record<string, unknown>>,
 ) {
   const [owner] = useState(() => ({}));
   const predict = useRef(optimistic);
@@ -243,7 +244,7 @@ export function useTaggedMutation<Input, Result>(
   };
   const mutation = useMutation<Result, Error, Variables>(
     {
-      meta: { taggedMutationOwner: owner },
+      meta: { ...meta, taggedMutationOwner: owner },
       mutationFn: ({ input, prediction }) =>
         executeTaggedMutation(invalidate, () => call(input), prediction),
     },
