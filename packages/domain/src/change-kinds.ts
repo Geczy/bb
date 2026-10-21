@@ -189,31 +189,22 @@ export type RealtimeSubscriptionTarget = z.infer<
   typeof realtimeSubscriptionTargetSchema
 >;
 
-function isUnknownSubscriptionTarget(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "kind" in value &&
-    typeof value.kind === "string" &&
-    !realtimeSubscriptionTargetSchema.options.some(
-      (option) => option.shape.kind.value === value.kind,
-    )
-  );
+function isValidSubscriptionTarget(value: unknown): boolean {
+  return realtimeSubscriptionTargetSchema.safeParse(value).success;
 }
-const knownSubscriptionTargetsSchema = z.preprocess(
+const validSubscriptionTargetsSchema = z.preprocess(
   (value) =>
-    Array.isArray(value)
-      ? value.filter((target) => !isUnknownSubscriptionTarget(target))
-      : value,
+    Array.isArray(value) ? value.filter(isValidSubscriptionTarget) : value,
   z.array(realtimeSubscriptionTargetSchema),
 );
-const knownSubscriptionTargetSchema = z.preprocess(
-  (value) => (isUnknownSubscriptionTarget(value) ? null : value),
+const validSubscriptionTargetSchema = z.preprocess(
+  (value) =>
+    value === undefined || isValidSubscriptionTarget(value) ? value : null,
   realtimeSubscriptionTargetSchema.nullable().optional(),
 );
 const subscriptionFields = {
-  target: knownSubscriptionTargetSchema,
-  targets: knownSubscriptionTargetsSchema.optional(),
+  target: validSubscriptionTargetSchema,
+  targets: validSubscriptionTargetsSchema.optional(),
 };
 const hasSubscriptionTargets = (value: {
   target?: RealtimeSubscriptionTarget | null;
