@@ -22,7 +22,7 @@ beforeEach(async () => {
     "/claude-code-parallel-agents?utm_source=community&utm_campaign=desktop-intro&gclid=private-click&bb_variant=private#details",
   );
   container = document.createElement("div");
-  document.body.append(container);
+  document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => root.render(<SendToComputerButton placement="hero" />));
 });
