@@ -53,3 +53,19 @@ bb plugin config push-notifications set expoPushUrl <url>
 
 Inspect `status` before changing a channel, and change only the requested
 channel or device.
+
+## Hint SDK contract
+
+Use `sdk.plugins.callRpc` with plugin `push-notifications` and method
+`notificationsHint.state` or `notificationsHint.reset`, each with `{}`, for
+the same read/reset operations as the CLI.
+`notificationsHint.eligibility` takes `{ threadId, channel: "web" | "desktop" }`
+and returns `{ suggestion: { id } | null, nextCheckAt: number | null }`.
+The server checks sent-turn history and pending interactions; `nextCheckAt`
+is a server timestamp for another eligibility check, never proof of eligibility.
+Call `notificationsHint.shown`, `notificationsHint.accept`, or
+`notificationsHint.dismiss` with `{ id }` for the active suggestion. Repeated
+or stale actions are harmless; mutations return the resulting state. Shown
+records actual desktop/web display only, not eligibility checks. Accept and
+dismiss record the shared server action. All three events use fixed Hint
+properties and a random suggestion analytics ID and respect telemetry opt-out.
