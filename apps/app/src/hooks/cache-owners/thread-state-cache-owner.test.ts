@@ -598,20 +598,33 @@ it.each(["single", "batch"])(
   async (operation) => {
     const { queryClient, original, seed, read, listKey } =
       seedConcurrentThreadCaches();
-    const transaction =
+    const rollback =
       operation === "single"
         ? await beginThreadMetadataTransaction({
             queryClient,
             threadId: original.id,
             title: "Pending",
             sectionId: "pending",
-          })
+          }).then(
+            (transaction) => () =>
+              rollbackThreadListMutationTransaction({
+                queryClient,
+                threadId: original.id,
+                transaction,
+              }),
+          )
         : await beginThreadMetadataBatchTransaction({
             queryClient,
             updates: [
               { threadId: original.id, title: "Pending", sectionId: "pending" },
             ],
-          });
+          }).then(
+            (transaction) => () =>
+              rollbackThreadMetadataBatchTransaction({
+                queryClient,
+                transaction,
+              }),
+          );
     const sibling = makeThreadListEntry({ id: "new-sibling" });
     seed(
       makeThreadListEntry({
@@ -624,15 +637,7 @@ it.each(["single", "batch"])(
       }),
       [sibling],
     );
-    transaction.releasePendingPatches();
-    if ("previousThreads" in transaction)
-      rollbackThreadMetadataBatchTransaction({ queryClient, transaction });
-    else
-      rollbackThreadListMutationTransaction({
-        queryClient,
-        threadId: original.id,
-        transaction,
-      });
+    rollback();
     for (const thread of read())
       expect(thread).toMatchObject({
         title: "Original",

@@ -29,7 +29,7 @@ import {
   settleArchiveThreadsTransaction,
   settleDeleteThreadTransaction,
   settleThreadListMembershipMutation,
-  settleThreadPatchTransaction,
+  succeedThreadListMutationTransaction,
   type ArchiveThreadsTransaction,
   type DeleteThreadTransaction,
   type ThreadListMutationTransaction,
@@ -116,11 +116,13 @@ export function updateThreadMutationOptions(
         transaction: context,
       });
     },
-    onSuccess: (thread, request) => {
-      applyThreadUpdateResult({ queryClient, thread, request });
-    },
-    onSettled: (_data, _error, _variables, context) => {
-      settleThreadPatchTransaction(context);
+    onSuccess: (thread, request, context) => {
+      applyThreadUpdateResult({
+        queryClient,
+        thread,
+        request,
+        transaction: context,
+      });
     },
   });
 }
@@ -225,8 +227,10 @@ export function useUnarchiveThread() {
         transaction: context,
       });
     },
-    onSettled: (_data, _error, variables, context) => {
-      settleThreadPatchTransaction(context);
+    onSuccess: (_data, _variables, context) => {
+      succeedThreadListMutationTransaction(context);
+    },
+    onSettled: (_data, _error, variables) => {
       settleThreadListMembershipMutation({
         queryClient,
         threadId: variables.id,
@@ -304,8 +308,8 @@ export function markThreadReadMutationOptions(
         transaction: context,
       });
     },
-    onSuccess: (thread) => {
-      applyThreadReadStateResult({ queryClient, thread });
+    onSuccess: (thread, _input, context) => {
+      applyThreadReadStateResult({ queryClient, thread, transaction: context });
     },
   });
 }
@@ -338,8 +342,8 @@ export function markThreadUnreadMutationOptions(
         transaction: context,
       });
     },
-    onSuccess: (thread) => {
-      applyThreadReadStateResult({ queryClient, thread });
+    onSuccess: (thread, _input, context) => {
+      applyThreadReadStateResult({ queryClient, thread, transaction: context });
     },
   });
 }

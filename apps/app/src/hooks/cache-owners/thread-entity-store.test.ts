@@ -15,10 +15,6 @@ import {
 } from "../queries/query-keys";
 import { updateCachedThreadListStatusState } from "./query-cache";
 import {
-  acknowledgeThreadEntities,
-  beginThreadEntityPrediction,
-} from "./thread-entity-store";
-import {
   beginArchiveThreadAndChildrenTransaction,
   predictThreadPinState,
   rollbackArchiveThreadsTransaction,
@@ -82,10 +78,10 @@ describe("thread entity store", () => {
       ...server[0],
       queuedMessageCount: 0,
     });
-    const pin = beginThreadEntityPrediction(
-      s.queryClient,
-      predictThreadPinState({ pinnedAt: 5, threadId: "t1" }),
-    );
+    const pin = predictThreadPinState(s.queryClient, {
+      pinnedAt: 5,
+      threadId: "t1",
+    });
     updateCachedThreadListStatusState(s.queryClient, "t1", {
       status: "active",
       runtime: { displayStatus: "active" },
@@ -122,10 +118,10 @@ describe("thread entity store", () => {
   it("does not leak a failed prediction through a write that both adds a row and edits the predicted one", async () => {
     const s = setup([]);
     await s.fetchList(s.listKey, () => [entry("t1")]);
-    const pin = beginThreadEntityPrediction(
-      s.queryClient,
-      predictThreadPinState({ pinnedAt: 5, threadId: "t1" }),
-    );
+    const pin = predictThreadPinState(s.queryClient, {
+      pinnedAt: 5,
+      threadId: "t1",
+    });
     const visible = s.listRows();
     s.queryClient.setQueryData(s.listKey, [
       entry("t0"),
@@ -142,10 +138,10 @@ describe("thread entity store", () => {
     const server = [entry("t1")];
     const s = setup(server);
     await s.fetchList(s.listKey, () => server);
-    const pin = beginThreadEntityPrediction(
-      s.queryClient,
-      predictThreadPinState({ pinnedAt: 5, threadId: "t1" }),
-    );
+    const pin = predictThreadPinState(s.queryClient, {
+      pinnedAt: 5,
+      threadId: "t1",
+    });
     let releaseStale!: () => void;
     const stale = s.queryClient.fetchQuery({
       queryKey: s.lateKey,
@@ -157,8 +153,7 @@ describe("thread entity store", () => {
         return rows;
       },
     });
-    acknowledgeThreadEntities(s.queryClient, ["t1"]);
-    pin.succeed({ ...server[0], pinnedAt: 7 });
+    pin.succeed({ ...server[0]!, pinnedAt: 7 });
     releaseStale();
     await stale;
     expect(s.describeRows(s.listRows(s.lateKey))).toEqual(["t1:7:idle"]);

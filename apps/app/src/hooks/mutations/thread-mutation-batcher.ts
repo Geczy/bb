@@ -7,11 +7,7 @@ import type {
 } from "@bb/sdk";
 import { publicApiRoutes } from "@bb/server-contract";
 import { sdk } from "@/lib/sdk";
-import {
-  acknowledgeThreadEntities,
-  beginThreadEntityPrediction,
-  ensureThreadEntityStore,
-} from "../cache-owners/thread-entity-store";
+import { ensureThreadEntityStore } from "../cache-owners/thread-entity-store";
 import {
   applyThreadMetadataBatchResult,
   beginThreadMetadataBatchTransaction,
@@ -101,13 +97,7 @@ export function createThreadMutationBatcher(
         return result;
       }),
     );
-    transaction?.releasePendingPatches();
     const failure = results.find((result) => result.status === "rejected");
-    if (failure === undefined)
-      acknowledgeThreadEntities(
-        queryClient,
-        batch.map(({ threadId }) => threadId),
-      );
     const acknowledged = batch.map((request, index) => {
       if (request.operation === "update") return undefined;
       const result = results[index]!;
@@ -124,6 +114,7 @@ export function createThreadMutationBatcher(
     if (failure === undefined) {
       applyThreadMetadataBatchResult({
         queryClient,
+        transaction,
         updates: batch.flatMap((request, index) => {
           const result = results[index];
           return request.operation === "update" &&
@@ -158,13 +149,10 @@ export function createThreadMutationBatcher(
     (operation: "pin" | "unpin") =>
     ({ threadId }: { threadId: string }) =>
       new Promise<ThreadMutationResult>((resolve, reject) => {
-        const prediction = beginThreadEntityPrediction(
-          queryClient,
-          predictThreadPinState({
-            pinnedAt: operation === "pin" ? Date.now() : null,
-            threadId,
-          }),
-        );
+        const prediction = predictThreadPinState(queryClient, {
+          pinnedAt: operation === "pin" ? Date.now() : null,
+          threadId,
+        });
         const acknowledge = async (
           outcome: Promise<TaggedMutationOutcome<ThreadMutationResult>>,
         ) => {

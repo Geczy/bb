@@ -214,7 +214,6 @@ describe("bindSdkToPlugin", () => {
         makeThreadWithRuntime({ id, parentThreadId: null }),
       );
     }
-    const cancelQueries = vi.spyOn(queryClient, "cancelQueries");
     const bound = bindSdkToPlugin(sdk, "thread-list", queryClient);
 
     const updates = ["thr_1", "thr_2"].map((threadId) =>
@@ -231,7 +230,7 @@ describe("bindSdkToPlugin", () => {
         ),
       ).toEqual(["thr_parent", "thr_parent"]);
     });
-    expect(cancelQueries).toHaveBeenCalledTimes(4);
+    expect(threads.update).toHaveBeenCalledTimes(2);
 
     for (const id of ["thr_1", "thr_2"]) {
       pending

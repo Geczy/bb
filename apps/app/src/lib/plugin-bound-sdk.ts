@@ -26,6 +26,7 @@ import {
   beginUnarchiveThreadTransaction,
   rollbackThreadListMutationTransaction,
   settleThreadListMembershipMutation,
+  succeedThreadListMutationTransaction,
 } from "@/hooks/cache-owners/thread-state-cache-owner";
 
 import {
@@ -229,7 +230,9 @@ export function bindSdkToPlugin(
           threadId: args.threadId,
         });
         try {
-          return await sdk.threads.unarchive(args);
+          const result = await sdk.threads.unarchive(args);
+          succeedThreadListMutationTransaction(transaction);
+          return result;
         } catch (error) {
           rollbackThreadListMutationTransaction({
             queryClient,

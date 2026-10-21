@@ -102,7 +102,7 @@ const SIDEBAR: ViewFamily = {
     return [
       { key: "personal", items: projectThreads(data.personalProject) },
       ...projects.map((project, index) => ({
-        key: `project:${index}`,
+        key: projectSlot(project, index),
         items: projectThreads(project),
       })),
     ];
@@ -118,7 +118,7 @@ const SIDEBAR: ViewFamily = {
           ? data.personalProject
           : { ...data.personalProject, threads: personal },
       projects: projects.map((project: unknown, index) => {
-        const threads = items.get(`project:${index}`);
+        const threads = items.get(projectSlot(project, index));
         return isRecord(project) && threads !== undefined
           ? { ...project, threads }
           : project;
@@ -127,6 +127,12 @@ const SIDEBAR: ViewFamily = {
   },
   ...ROW_ITEMS,
 };
+
+function projectSlot(project: unknown, index: number): string {
+  return isRecord(project) && typeof project.id === "string"
+    ? `project:${project.id}`
+    : `project-index:${index}`;
+}
 
 function projectThreads(project: unknown): readonly unknown[] {
   return isRecord(project) && Array.isArray(project.threads)
@@ -260,6 +266,7 @@ function mergeEntity(
 }
 
 function isMember(entity: ThreadEntity, membership: Membership): boolean {
+  if (entity.thread.deletedAt != null) return false;
   if (membership === "any" || !("archivedAt" in entity.thread)) return true;
   const archived = entity.thread.archivedAt != null;
   return membership === "archived" ? archived : !archived;
@@ -332,13 +339,17 @@ function ingest(
         list: facet === "list" ? facetFields : null,
         detail: facet === "detail" ? facetFields : null,
       };
-    return isNewer(
-      threadFields.updatedAt,
-      current.thread.updatedAt,
-      readStart,
-      acknowledgedAt,
+    if (
+      isNewer(
+        threadFields.updatedAt,
+        current.thread.updatedAt,
+        readStart,
+        acknowledgedAt,
+      )
     )
-      ? mergeEntity(current, threadFields, facet, facetFields)
+      return mergeEntity(current, threadFields, facet, facetFields);
+    return current[facet] === null
+      ? mergeEntity(current, {}, facet, facetFields)
       : current;
   });
 }
@@ -579,9 +590,7 @@ function onViewWritten(
   }
   const previous = store.skeletons.get(query);
   const materialized = manual ? store.materialized.get(query) : undefined;
-  const readStart = manual
-    ? Number.POSITIVE_INFINITY
-    : (store.fetchStartedAt.get(query) ?? 0);
+  const readStart = manual ? -1 : (store.fetchStartedAt.get(query) ?? 0);
   batch(store, () => {
     const nextSlots = new Map<string, ViewEntry[]>();
     const slotsById = new Map<string, Set<string>>();
@@ -701,6 +710,91 @@ export function patchThreadEntity(
   );
 }
 
+export function getThreadEntity(
+  client: QueryClient,
+  threadId: string,
+): ThreadEntity | undefined {
+  ensureThreadEntityStore(client);
+  return client.getQueryData<ThreadEntity>(threadEntityQueryKey(threadId));
+}
+
+export function getThreadEntities(client: QueryClient): ThreadEntity[] {
+  ensureThreadEntityStore(client);
+  return client
+    .getQueriesData<ThreadEntity>({
+      queryKey: allThreadEntitiesQueryKeyPrefix(),
+    })
+    .flatMap(([, entity]) => (entity === undefined ? [] : [entity]));
+}
+
+export function findThreadEntityIds(
+  client: QueryClient,
+  matches: (thread: Partial<ThreadWithRuntime>) => boolean,
+): string[] {
+  return getThreadEntities(client).flatMap(({ thread }) =>
+    thread.id !== undefined && matches(thread) ? [thread.id] : [],
+  );
+}
+
+export function findThreadTreeIds(
+  client: QueryClient,
+  matchesRoot: (thread: Partial<ThreadWithRuntime>) => boolean,
+): string[] {
+  const threads = getThreadEntities(client).map(({ thread }) => thread);
+  const childrenByParent = new Map<string, string[]>();
+  const threadIds = new Set<string>();
+  for (const thread of threads) {
+    if (thread.id === undefined) continue;
+    if (matchesRoot(thread)) threadIds.add(thread.id);
+    if (thread.parentThreadId != null) {
+      const children = childrenByParent.get(thread.parentThreadId) ?? [];
+      children.push(thread.id);
+      childrenByParent.set(thread.parentThreadId, children);
+    }
+  }
+  for (const threadId of threadIds)
+    for (const childId of childrenByParent.get(threadId) ?? [])
+      threadIds.add(childId);
+  return [...threadIds];
+}
+
+export function insertThreadIntoSidebar(
+  client: QueryClient,
+  threadId: string,
+): void {
+  ensureThreadEntityStore(client);
+  const store = stores.get(client)!;
+  const entity = readEntity(store, threadId);
+  const query = client
+    .getQueryCache()
+    .find({ queryKey: sidebarNavigationQueryKey(), exact: true });
+  const skeleton = query === undefined ? undefined : store.skeletons.get(query);
+  if (
+    query === undefined ||
+    skeleton === undefined ||
+    entity?.list == null ||
+    skeleton.slotsById.has(threadId) ||
+    !isRecord(skeleton.data)
+  )
+    return;
+  const personal = skeleton.data.personalProject;
+  const slot =
+    isRecord(personal) && personal.id === entity.thread.projectId
+      ? "personal"
+      : `project:${String(entity.thread.projectId)}`;
+  const entries = skeleton.slots.get(slot);
+  if (entries === undefined) return;
+  const slots = new Map(skeleton.slots);
+  slots.set(slot, [
+    ...entries,
+    { id: threadId, item: { ...entity.thread, ...entity.list } },
+  ]);
+  const slotsById = new Map(skeleton.slotsById);
+  slotsById.set(threadId, new Set([slot]));
+  setSkeleton(store, query, { ...skeleton, slots, slotsById });
+  notifyManager.batch(() => rematerialize(store, query));
+}
+
 export function acknowledgeThreadEntities(
   client: QueryClient,
   threadIds: Iterable<string>,
@@ -710,46 +804,42 @@ export function acknowledgeThreadEntities(
   for (const id of threadIds) store.acknowledgedAt.set(id, ++store.clock);
 }
 
-export function getThreadEntities(client: QueryClient): ThreadEntity[] {
-  return client
-    .getQueriesData<ThreadEntity>({
-      queryKey: allThreadEntitiesQueryKeyPrefix(),
-    })
-    .flatMap(([, entity]) => (entity === undefined ? [] : [entity]));
-}
-
-export function predictThreadEntity<Result = unknown>(
-  threadId: string,
-  update: (
-    entity: ThreadEntity,
-    result: { value: Result } | undefined,
-  ) => ThreadEntity,
-): TaggedOptimisticUpdate {
-  return optimisticQueryUpdate<ThreadEntity, Result>(
-    threadEntityQueryKey(threadId),
-    update,
-  );
-}
-
-export function pickThreadFields(
-  thread: ThreadWithRuntime,
-): Partial<ThreadWithRuntime> {
-  return pick(thread, THREAD_KEYS);
-}
-
-export interface ThreadEntityPrediction {
-  succeed(result?: unknown): void;
+export interface ThreadEntityPrediction<Result = unknown> {
+  threadIds: readonly string[];
+  succeed(result?: Result): void;
   fail(): void;
 }
 
-export function beginThreadEntityPrediction(
+export function beginThreadEntityPrediction<Result = unknown>(
   client: QueryClient,
-  optimistic: readonly TaggedOptimisticUpdate[],
-): ThreadEntityPrediction {
+  {
+    threadIds,
+    update,
+    extra = [],
+  }: {
+    threadIds: readonly string[];
+    update: (
+      entity: ThreadEntity,
+      threadId: string,
+      result: { value: Result } | undefined,
+    ) => ThreadEntity;
+    extra?: readonly TaggedOptimisticUpdate[];
+  },
+): ThreadEntityPrediction<Result> {
   ensureThreadEntityStore(client);
-  const prediction = beginOptimisticMutation(client, optimistic);
+  const prediction = beginOptimisticMutation(client, [
+    ...threadIds.map((threadId) =>
+      optimisticQueryUpdate<ThreadEntity, Result>(
+        threadEntityQueryKey(threadId),
+        (entity, result) => update(entity, threadId, result),
+      ),
+    ),
+    ...extra,
+  ]);
   return {
+    threadIds,
     succeed(result) {
+      acknowledgeThreadEntities(client, threadIds);
       prediction.accept(result);
       prediction.settle();
     },

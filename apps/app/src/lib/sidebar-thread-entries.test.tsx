@@ -97,7 +97,16 @@ describe("sidebar thread entries", () => {
       queryClient.setQueryData(sidebarNavigationQueryKey(), navigation([]));
       queryClient.setQueryData(archivedThreadsListQueryKey({}), {
         pageParams: [0],
-        pages: [[{ ...active, title: "Newly archived", archivedAt: 84 }]],
+        pages: [
+          [
+            {
+              ...active,
+              title: "Newly archived",
+              archivedAt: 84,
+              updatedAt: active.updatedAt + 1,
+            },
+          ],
+        ],
       });
     });
     await waitFor(() =>
