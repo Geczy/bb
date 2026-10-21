@@ -114,6 +114,26 @@ export function resolveFreeAgentOffer(
   }
 }
 
+export function resolvePendingFreeAgentSignIn({
+  pendingAgentId,
+  agents,
+  activeSignInAgentId,
+}: {
+  pendingAgentId: string | null;
+  agents: readonly { id: string; state: AgentSetupState }[] | null;
+  activeSignInAgentId: string | null;
+}): "wait" | "start" | "clear" {
+  if (pendingAgentId === null || agents === null) return "wait";
+  if (agents.some((agent) => agent.state.status === "ready")) return "clear";
+  if (activeSignInAgentId !== null && activeSignInAgentId !== pendingAgentId) {
+    return "clear";
+  }
+  const state = agents.find((agent) => agent.id === pendingAgentId)?.state;
+  if (state?.status === "signIn") return state.canSignIn ? "start" : "clear";
+  if (state?.status === "installFailed") return "clear";
+  return "wait";
+}
+
 interface ResolveAgentSetupStateArgs {
   health: SystemProviderState;
   cliStatus: ProviderCliStatus | undefined;

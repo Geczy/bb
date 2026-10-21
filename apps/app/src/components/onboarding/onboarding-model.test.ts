@@ -12,6 +12,7 @@ import {
   parseSignInOutput,
   resolveAgentSetupState,
   resolveFreeAgentOffer,
+  resolvePendingFreeAgentSignIn,
   resolveSignInCommand,
   shortRemoteName,
   type AgentSetupState,
@@ -289,6 +290,30 @@ describe("resolveFreeAgentOffer", () => {
       resolveFreeAgentOffer([other({ status: "install", canInstall: true })]),
     ).toEqual({ status: "hidden" });
     expect(resolveFreeAgentOffer(null)).toEqual({ status: "hidden" });
+  });
+});
+
+describe("resolvePendingFreeAgentSignIn", () => {
+  const free = (state: AgentSetupState) => ({ id: "free-agent", state });
+  const other = (state: AgentSetupState) => ({ id: "other-agent", state });
+  const signedOut: AgentSetupState = {
+    status: "signIn",
+    reason: "signedOut",
+    canSignIn: true,
+  };
+
+  it.each<[string, Parameters<typeof resolvePendingFreeAgentSignIn>[0], ReturnType<typeof resolvePendingFreeAgentSignIn>]>([
+    ["nothing is pending", { pendingAgentId: null, agents: [free(signedOut)], activeSignInAgentId: null }, "wait"],
+    ["the install is still running", { pendingAgentId: "free-agent", agents: [free({ status: "installing" })], activeSignInAgentId: null }, "wait"],
+    ["health hasn't caught up with a finished install", { pendingAgentId: "free-agent", agents: [free({ status: "install", canInstall: true })], activeSignInAgentId: null }, "wait"],
+    ["the installed agent needs sign-in", { pendingAgentId: "free-agent", agents: [free(signedOut)], activeSignInAgentId: null }, "start"],
+    ["the agent has no sign-in command", { pendingAgentId: "free-agent", agents: [free({ status: "signIn", reason: "signedOut", canSignIn: false })], activeSignInAgentId: null }, "clear"],
+    ["the install failed", { pendingAgentId: "free-agent", agents: [free({ status: "installFailed", message: "x", canInstall: true })], activeSignInAgentId: null }, "clear"],
+    ["the agent is already ready", { pendingAgentId: "free-agent", agents: [free({ status: "ready", detail: null })], activeSignInAgentId: null }, "clear"],
+    ["another agent became ready", { pendingAgentId: "free-agent", agents: [other({ status: "ready", detail: null }), free(signedOut)], activeSignInAgentId: null }, "clear"],
+    ["another agent is mid sign-in", { pendingAgentId: "free-agent", agents: [other({ status: "signingIn" }), free(signedOut)], activeSignInAgentId: "other-agent" }, "clear"],
+  ])("%s", (_label, args, expected) => {
+    expect(resolvePendingFreeAgentSignIn(args)).toBe(expected);
   });
 });
 

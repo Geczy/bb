@@ -85,6 +85,7 @@ import {
   parseSignInOutput,
   resolveAgentSetupState,
   resolveFreeAgentOffer,
+  resolvePendingFreeAgentSignIn,
   resolveSignInCommand,
   shortRemoteName,
   type OnboardingStepId,
@@ -488,15 +489,11 @@ function AgentStepContainer({
   const [freeAgentSignInPendingId, setFreeAgentSignInPendingId] = useState<
     string | null
   >(null);
-  const pendingFreeAgentState = agents?.find(
-    (agent) => agent.id === freeAgentSignInPendingId,
-  )?.state;
-  const freeAgentAwaitingSignIn =
-    pendingFreeAgentState?.status === "signIn" &&
-    pendingFreeAgentState.canSignIn;
-  const freeAgentSettled =
-    pendingFreeAgentState?.status === "installFailed" ||
-    pendingFreeAgentState?.status === "ready";
+  const pendingFreeAgentSignIn = resolvePendingFreeAgentSignIn({
+    pendingAgentId: freeAgentSignInPendingId,
+    agents,
+    activeSignInAgentId: signIn?.providerId ?? null,
+  });
   const freeAgentReady =
     freeAgentChosenId !== null &&
     agents?.find((agent) => agent.id === freeAgentChosenId)?.state.status ===
@@ -519,13 +516,12 @@ function AgentStepContainer({
   });
   useEffect(() => {
     if (freeAgentSignInPendingId === null) return;
-    if (freeAgentAwaitingSignIn) {
-      setFreeAgentSignInPendingId(null);
+    if (pendingFreeAgentSignIn === "wait") return;
+    setFreeAgentSignInPendingId(null);
+    if (pendingFreeAgentSignIn === "start") {
       void startSignInRef.current(freeAgentSignInPendingId);
-    } else if (freeAgentSettled) {
-      setFreeAgentSignInPendingId(null);
     }
-  }, [freeAgentAwaitingSignIn, freeAgentSettled, freeAgentSignInPendingId]);
+  }, [freeAgentSignInPendingId, pendingFreeAgentSignIn]);
 
   const freeAgentReadyRecordedRef = useRef(false);
   useEffect(() => {
