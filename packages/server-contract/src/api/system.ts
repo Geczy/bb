@@ -218,7 +218,7 @@ const onboardingStepTelemetryPropertiesSchema = z
 
 export const LAPSED_RESUME_SUGGESTION = {
   surface: "next_step",
-  kind: "lapsed_resume",
+  kind: "resume_thread",
   trigger: "event",
 } as const;
 

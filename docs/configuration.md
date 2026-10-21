@@ -284,7 +284,7 @@ first-send events through `POST /api/v1/system/telemetry/events`
 On a lapsed reopen, desktop and web also report `suggestion_shown` once when
 the unfinished thread opens, and `suggestion_dismissed` when the person closes
 the sidebar's While you were away list. These use `surface: next_step`,
-`kind: lapsed_resume`, a random per-lapse `suggestion_analytics_id`,
+`kind: resume_thread`, a random per-lapse `suggestion_analytics_id`,
 `trigger: event` for exposure, and `dismiss: not_now` for dismissal. Native
 mobile apps send neither event. All respect the telemetry setting without
 queuing events while it is off.
