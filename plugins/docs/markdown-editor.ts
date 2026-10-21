@@ -12,8 +12,8 @@ function bareLink(editor: Editor, mark: Mark, parent: Node, index: number) {
     node.text !== mark.attrs.href ||
     mark.attrs.title ||
     node.marks.length !== 1 ||
-    mark.isInSet(parent.maybeChild(index - 1)?.marks ?? []) ||
-    mark.isInSet(parent.maybeChild(index + 1)?.marks ?? [])
+    (parent.maybeChild(index - 1)?.marks.length ?? 0) > 0 ||
+    (parent.maybeChild(index + 1)?.marks.length ?? 0) > 0
   )
     return false;
   const before = parent.maybeChild(index - 1)?.textContent ?? "";

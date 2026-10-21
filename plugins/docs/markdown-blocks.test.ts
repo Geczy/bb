@@ -358,6 +358,13 @@ describe("Markdown editing round trips", () => {
 describe("Markdown serializer safeguards", () => {
   it.each([
     "- all ~1,300 and ~~removed~~ records\n",
+    "Visit [https://example.com](https://example.com)**.** now.\n",
+    "Visit [https://example.com](https://example.com)*.* now.\n",
+    "Visit [https://example.com](https://example.com)~~.~~ now.\n",
+    "Visit [https://example.com](https://example.com)**!** now.\n",
+    "Visit **(**[https://example.com](https://example.com) now.\n",
+    "Visit *(*[https://example.com](https://example.com) now.\n",
+    "Visit ~~(~~[https://example.com](https://example.com) now.\n",
     "Visit [the docs](https://example.com) now.\n",
     'Visit [https://example.com](https://example.com "A title") now.\n',
     "Visit **https://example.com** now.\n",
