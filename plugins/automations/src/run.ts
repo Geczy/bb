@@ -121,11 +121,11 @@ export async function executeAgentRun(
       throw new Error("Network-disabled jobs must use their own session");
     const prepared = await prepareAutomationRun(
       {
-        ...bb.sdk,
+        plugins: bb.sdk.plugins,
         threads:
           bb.sdk.threads.list && bb.sdk.threads.events
             ? {
-                list: bb.sdk.threads.list.bind(bb.sdk.threads),
+                list: (input) => bb.sdk.threads.list!(input),
                 events: bb.sdk.threads.events,
               }
             : undefined,

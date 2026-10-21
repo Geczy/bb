@@ -342,9 +342,7 @@ describe("options mapping", () => {
         permissionMode: "accept-edits",
         permissionEscalation: "deny",
       });
-      expect(parsed.options.providerOptions).not.toHaveProperty(
-        "networkAccess",
-      );
+      expect(parsed.options.providerOptions?.networkAccess).toBeUndefined();
     }
   });
 

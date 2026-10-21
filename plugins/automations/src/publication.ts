@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { devNull } from "node:os";
 import { join } from "node:path";
 import { experimental_runVcsProcess as runVcsProcess } from "@get-bb/plugin-sdk/host";
 import { z } from "zod";
@@ -15,13 +14,16 @@ interface PublicationContext {
   signal: AbortSignal;
 }
 
-function processEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+function processEnvironment(
+  configPath: string,
+  extra: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
   return {
     ...Object.fromEntries(
       Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
     ),
     GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: devNull,
+    GIT_CONFIG_GLOBAL: configPath,
     GIT_TERMINAL_PROMPT: "0",
     GH_PROMPT_DISABLED: "1",
     GH_HOST: "github.com",
@@ -29,12 +31,15 @@ function processEnvironment(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   };
 }
 
-function run(
+async function run(
   file: "git" | "gh",
   args: string[],
   context: PublicationContext,
   options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string> {
+  await mkdir(context.tempDir, { recursive: true });
+  const configPath = join(context.tempDir, "empty-gitconfig");
+  await writeFile(configPath, "");
   return runVcsProcess(
     file,
     args,
@@ -45,7 +50,7 @@ function run(
           args,
           {
             cwd: options.cwd,
-            env: processEnvironment(options.env),
+            env: processEnvironment(configPath, options.env),
             signal: context.signal,
             timeout: 120_000,
             maxBuffer: 4 * 1024 * 1024,
@@ -73,7 +78,7 @@ function sourceGit(
       "-c",
       "core.fsmonitor=false",
       "-c",
-      `core.hooksPath=${devNull}`,
+      `core.hooksPath=${join(context.tempDir, "disabled-hooks")}`,
       ...args,
     ],
     context,

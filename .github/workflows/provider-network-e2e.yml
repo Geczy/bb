@@ -45,4 +45,4 @@ jobs:
           fi
           npm install --global @openai/codex
       - name: Exercise native providers without model credentials
-        run: pnpm exec turbo run test:provider-network --filter=bb
+        run: pnpm exec turbo run //#test:provider-network

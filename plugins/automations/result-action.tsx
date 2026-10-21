@@ -5,7 +5,11 @@ import {
   useRpc,
   type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
-import { Popover, PopoverContent, PopoverTrigger } from "@bb/shared-ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

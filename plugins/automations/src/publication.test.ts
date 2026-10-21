@@ -25,6 +25,7 @@ const calls = vi.hoisted(() => ({
     body: string | null;
   }>,
   existing: false,
+  failures: [] as Array<{ args: string[]; error: string }>,
 }));
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
@@ -61,7 +62,11 @@ vi.mock("node:child_process", async (importOriginal) => {
         callback(null, output, "");
         return;
       }
-      return actual.execFile(file, args, options, callback);
+      return actual.execFile(file, args, options, (error, stdout, stderr) => {
+        if (error)
+          calls.failures.push({ args, error: stderr.trim() || error.message });
+        callback(error, stdout, stderr);
+      });
     },
   };
 });
@@ -84,6 +89,7 @@ function git(...args: string[]): string {
 
 beforeEach(() => {
   calls.network = [];
+  calls.failures = [];
   calls.existing = false;
   root = mkdtempSync(join(tmpdir(), "bb-publication-"));
   checkout = join(root, "checkout");
@@ -115,7 +121,9 @@ async function snapshot(): Promise<PublicationSnapshot> {
     { path: checkout, baseBranch: null },
     { tempDir, signal },
   );
-  expect(result.status).toBe("ready");
+  expect(result, JSON.stringify(calls.failures)).toMatchObject({
+    status: "ready",
+  });
   if (result.status !== "ready")
     throw new Error(`Unexpected inspection: ${result.reason}`);
   return result.snapshot;
