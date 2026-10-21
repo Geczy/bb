@@ -1331,7 +1331,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Use bb's own API from plugin server code. With this, a plugin can:",
         bullets: [
           "Create threads, send messages, and manage projects and machines",
-          "Archive with threads.archive({ threadId, worktree }): auto keeps local work, keep retains worktrees, require-clean refuses unsafe worktrees, and commit-and-push asks the agent to prepare before archiving",
+          "Archive with threads.archive({ threadId, worktree }): auto keeps local work, keep retains worktrees, require-clean refuses if any worktree has unsaved work, and commit-and-push asks the agent to prepare before archiving",
           "Inspect archive safety with threads.childSummary({ threadId, checkWorktrees: true }); unavailable checks keep worktrees",
           "Have the threads it creates attributed to the plugin",
           "Start plugin updates in the background and follow their progress or rollback",

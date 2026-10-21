@@ -107,8 +107,9 @@ export function ThreadArchiveDialogContent({
             <>
               The{" "}
               <span className="font-semibold">
-                {childThreadCount}{" "}
-                {childThreadCount === 1 ? "thread" : "threads"}
+                {childThreadCount === 1
+                  ? "thread"
+                  : `${childThreadCount} threads`}
               </span>{" "}
               under it will be archived too.{" "}
             </>

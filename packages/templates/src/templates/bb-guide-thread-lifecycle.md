@@ -52,8 +52,8 @@ Lifecycle:
 
   bb thread archive [id]                   Archive a thread (and children/hidden forks)
     --self                                 Archive current thread
-    --keep-worktree                         Keep managed worktrees when archiving
-    --require-clean                         Refuse archive if a worktree has local work or cannot be checked
+    --keep-worktree                         Keep the worktrees when archiving
+    --require-clean                         Archive only if no worktree has uncommitted or unpushed changes
     --commit-and-push                       Ask the agent to commit and push, then archive
 
   These worktree flags are mutually exclusive. By default, archive succeeds

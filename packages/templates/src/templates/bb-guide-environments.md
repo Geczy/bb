@@ -197,9 +197,8 @@ Making your repo work with bb:
   every process whose working directory is inside the worktree (the agent
   process, background jobs it left behind, and also shells, editors, or
   servers you started there yourself), removes the worktree, and records the
-  environment as destroyed. The branch is kept. Uncommitted changes, commits
-  absent from all local remote-tracking refs, or an unavailable safety check
-  keep the worktree on disk. The archive dialog offers keeping the worktree
+  environment as destroyed. The branch is kept. bb keeps the worktree on disk if it has uncommitted changes or commits
+  that aren't on any local remote-tracking ref, or if its state can't be checked. The archive dialog offers keeping the worktree
   or asking the agent to commit and push before archiving. Unarchiving a thread inside
   the grace window cancels the teardown. Move your own shells out of the
   worktree first if you want to keep them. Deleting the last thread, or an

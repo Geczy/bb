@@ -290,7 +290,9 @@ export function registerActionsCommands(
 
   parent
     .command("archive [id]")
-    .description("Archive a thread, keeping worktrees with local changes")
+    .description(
+      "Archive a thread and the threads under it. Worktrees with uncommitted or unpushed changes are kept.",
+    )
     .option("--keep-worktree", "Keep the worktrees when archiving")
     .option(
       "--require-clean",

@@ -512,6 +512,10 @@ const ONLINE_RPC_RESPONSE_RESULT_FIXTURES: OnlineRpcResponseResultFixtures = {
       },
     ],
   },
+  "workspace.archive_status": {
+    hasUncommittedChanges: true,
+    hasUnpushedCommits: false,
+  },
   "workspace.status": WORKSPACE_UNAVAILABLE_RESULT,
   "workspace.diff": {
     outcome: "unavailable",
