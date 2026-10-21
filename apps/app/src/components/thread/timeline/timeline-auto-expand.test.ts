@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildTimelineViewRows } from "@bb/thread-view";
+import { buildThreadTimelineFromEvents, buildTimelineViewRows } from "@bb/thread-view";
+import { generatedImageEvents } from "@/test/fixtures/generated-image-turn";
 import {
   ECHO_RECEIPT_PRESENTATION,
   commandRow,
@@ -471,4 +472,40 @@ describe("collectTimelineAutoExpansionRowIds", () => {
     expect(ids.has("active-pending-delegation")).toBe(true);
     expect(ids.has("nested-pending-command")).toBe(false);
   });
+});
+
+describe("completed generated images", () => {
+  it.each([true, false])(
+    "keeps a successful image expanded with scopeActive=%s after later output",
+    (scopeActive) => {
+      const rows = buildThreadTimelineFromEvents({
+        acceptedClientRequestContext: {
+          acceptedClientRequestEvents: [],
+          rejectedClientRequestEvents: [],
+        },
+        contextWindowEvents: [],
+        events: generatedImageEvents(true),
+        options: {
+          completedTurnDisplay: "flat",
+          includeNestedRows: true,
+          includeDiagnosticOperations: false,
+          summarizeShellCommands: true,
+          isLatestPage: true,
+          threadStatus: scopeActive ? "active" : "idle",
+          threadName: "",
+          workspaceRoot: null,
+        },
+      }).rows;
+      const image = rows.find(
+        (row) => row.kind === "work" && row.workKind === "image-generation",
+      );
+      expect(image).toBeDefined();
+      if (image === undefined) throw new Error("Expected generated image row");
+      const ids = collectAutoExpandedIds({
+        rows: buildTimelineViewRows(rows),
+        scopeActive,
+      });
+      expect(ids.has(image.id)).toBe(true);
+    },
+  );
 });
