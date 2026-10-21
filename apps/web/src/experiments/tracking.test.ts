@@ -53,7 +53,12 @@ function stubCapture() {
   return capture;
 }
 
-const exclusions = [
+const exclusions: {
+  name: string;
+  headers?: Record<string, string>;
+  country?: string | null;
+  search?: string;
+}[] = [
   { name: "GPC", headers: { "Sec-GPC": "1" } },
   ...["DE", "GB", "CH", "XX", "T1", null].map((country) => ({
     name: `country ${country}`,
