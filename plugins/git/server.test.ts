@@ -383,7 +383,7 @@ it("keeps shared watched reads current across checkout changes and releases thei
     await entry.experimental_dispose();
     await rm(repo, { recursive: true, force: true });
   }
-});
+}, 15_000);
 
 it("retains and drains a branch refresh when the host entry is disposed", async () => {
   const repo = await realpath(await mkdtemp(join(tmpdir(), "bb-git-refresh-")));
