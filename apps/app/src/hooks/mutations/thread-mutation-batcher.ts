@@ -7,7 +7,7 @@ import type {
 } from "@bb/sdk";
 import { publicApiRoutes } from "@bb/server-contract";
 import { sdk } from "@/lib/sdk";
-import { ensureThreadEntityStore } from "../cache-owners/thread-entity-store";
+import { registerThreadEntityViews } from "../cache-owners/thread-entity-store";
 import {
   applyThreadMetadataBatchResult,
   beginThreadMetadataBatchTransaction,
@@ -45,7 +45,7 @@ export function createThreadMutationBatcher(
   threads: ThreadMutations,
   queryClient: QueryClient,
 ): ThreadMutations {
-  ensureThreadEntityStore(queryClient);
+  registerThreadEntityViews(queryClient);
   let pending: PendingThreadMutation[] = [];
   let scheduled = false;
 

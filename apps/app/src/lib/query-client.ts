@@ -9,7 +9,7 @@ import {
   showMutationErrorToast,
 } from "./mutation-errors";
 import { createBrowserLifecycleFetchController } from "@/hooks/cache-owners/browser-lifecycle-cache-owner";
-import { ensureThreadEntityStore } from "@/hooks/cache-owners/thread-entity-store";
+import { registerThreadEntityViews } from "@/hooks/cache-owners/thread-entity-store";
 import {
   shouldRetryTransientReadQuery,
   TRANSIENT_READ_RETRY_DELAY_MS,
@@ -139,6 +139,6 @@ export function createAppQueryClient(
       },
     },
   });
-  ensureThreadEntityStore(queryClient);
+  registerThreadEntityViews(queryClient);
   return queryClient;
 }

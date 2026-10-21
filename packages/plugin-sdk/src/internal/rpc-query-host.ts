@@ -12,7 +12,9 @@ import {
   runTaggedRead,
   taggedQueryOptions,
   optimisticQueryUpdate,
-  type TaggedOptimisticUpdate,
+  optimisticKeyedUpdate,
+  KeyedCollection,
+  type OptimisticUpdate,
   createTaggedKeyedQueryOwner,
   useTaggedMutation,
   useQuerySelection,
@@ -53,33 +55,40 @@ const rpcQueryKey = (pluginId: string, method: string, input: JsonValue) => [
 ];
 const keyedQueryKey = (pluginId: string, method: string) =>
   rpcQueryKey(pluginId, method, { keyed: true });
+const keyedCollections = new Map<string, KeyedCollection<unknown>>();
+function keyedCollection(pluginId: string, method: string) {
+  const name = JSON.stringify([pluginId, method]);
+  let collection = keyedCollections.get(name);
+  if (!collection) {
+    collection = new KeyedCollection(name);
+    keyedCollections.set(name, collection);
+  }
+  return collection;
+}
+function parsedUpdate<Value>(update: (current: Value) => unknown) {
+  return (current: unknown) => jsonValueSchema.parse(update(current as Value));
+}
 function optimisticCache<Contract extends PluginRpcContract>(
   pluginId: string,
-  updates: TaggedOptimisticUpdate[],
+  updates: OptimisticUpdate[],
 ): ExperimentalRpcOptimisticCache<Contract> {
-  const add = (prediction: TaggedOptimisticUpdate) => {
-    updates.push({
-      ...prediction,
-      update: (current, result) =>
-        jsonValueSchema.parse(prediction.update(current, result)),
-    });
-  };
   return {
     update(method, input, update) {
-      add(
+      updates.push(
         optimisticQueryUpdate(
           rpcQueryKey(pluginId, method, jsonValueSchema.parse(input ?? null)),
-          update,
+          parsedUpdate(update),
           ["result"],
         ),
       );
     },
     updateKey(method, key, update) {
-      add(
-        optimisticQueryUpdate(keyedQueryKey(pluginId, method), update, [
-          "result",
+      updates.push(
+        optimisticKeyedUpdate(
+          keyedCollection(pluginId, method),
           key,
-        ]),
+          parsedUpdate(update),
+        ),
       );
     },
   };
@@ -201,6 +210,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
         client: host.queryClient,
         queryKey: keyedQueryKey(pluginId, options.method),
         scope: pluginTagScope(pluginId),
+        collection: keyedCollection(pluginId, options.method),
         read: async (keys) => {
           const response = await callRpcEnvelope(
             host,
@@ -293,7 +303,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
         };
       },
       optimistic: (input) => {
-        const updates: TaggedOptimisticUpdate[] = [];
+        const updates: OptimisticUpdate[] = [];
         options.optimistic?.(
           input,
           optimisticCache<Contract>(pluginId, updates),

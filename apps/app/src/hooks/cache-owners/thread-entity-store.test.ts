@@ -1,4 +1,8 @@
 import type { ThreadListEntry } from "@bb/domain";
+import {
+  keyedStoreContract,
+  type KeyedStoreSubject,
+} from "@bb/query-tags/testing";
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { makeThreadListEntry as makeEntry } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";
@@ -13,7 +17,10 @@ import {
   threadQueryKey,
 } from "../queries/query-keys";
 import { updateCachedThreadListStatusState } from "./query-cache";
-import { getThreadEntity } from "./thread-entity-store";
+import {
+  beginThreadEntityPrediction,
+  getThreadEntity,
+} from "./thread-entity-store";
 import {
   beginArchiveThreadAndChildrenTransaction,
   predictThreadPinState,
@@ -319,4 +326,67 @@ describe("thread entity store", () => {
     s.queryClient.removeQueries({ queryKey: s.listKey });
     expect(getThreadEntity(s.queryClient, "t1")).toBeUndefined();
   });
+});
+
+function threadSubject(): KeyedStoreSubject {
+  const { queryClient } = createQueryClientTestHarness();
+  const listKey = (key: string) =>
+    threadListQueryKey({ projectId: key, archived: false });
+  const fetchRow = (key: string, value: number, gate?: Promise<void>) =>
+    queryClient.fetchQuery({
+      queryKey: listKey(key),
+      queryFn: async () => {
+        await gate;
+        return [entry(key, { projectId: key, title: `${value}` })];
+      },
+      staleTime: 0,
+    });
+  const fetchRows = (
+    rows: Readonly<Record<string, number>>,
+    gate?: Promise<void>,
+  ) =>
+    Promise.all(
+      Object.entries(rows).map(([key, value]) => fetchRow(key, value, gate)),
+    );
+  return {
+    async load(rows) {
+      await fetchRows(rows);
+    },
+    visible(key) {
+      const title = queryClient.getQueryData<ThreadListEntry[]>(
+        listKey(key),
+      )?.[0]?.title;
+      return title === undefined ? undefined : Number(title);
+    },
+    async read(rows) {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const reading = fetchRows(rows, gate);
+      return {
+        async finish() {
+          release();
+          await reading;
+        },
+      };
+    },
+    async write(key, value) {
+      const prediction = beginThreadEntityPrediction(queryClient, {
+        threadIds: [key],
+        update: (entity) => ({
+          ...entity,
+          thread: { ...entity.thread, title: `${value}` },
+        }),
+      });
+      return {
+        accept: async () => prediction.succeed(),
+        reject: async () => prediction.fail(),
+      };
+    },
+  };
+}
+
+it.each(keyedStoreContract)("thread entities: $name", async ({ run }) => {
+  await run(threadSubject());
 });

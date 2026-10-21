@@ -6,11 +6,34 @@ import {
   type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
+import { tick } from "./clock.js";
+import { predictKeyed, type KeyedCollection } from "./keyed-store.js";
 
 export interface TaggedOptimisticUpdate {
   queryKey: QueryKey;
   path: readonly string[];
   update(current: unknown, result: { value: unknown } | undefined): unknown;
+}
+
+export interface KeyedOptimisticUpdate {
+  collection: KeyedCollection<unknown>;
+  key: string;
+  update(current: unknown, result: { value: unknown } | undefined): unknown;
+}
+
+export type OptimisticUpdate = TaggedOptimisticUpdate | KeyedOptimisticUpdate;
+
+export function optimisticKeyedUpdate<Entity, Result = unknown>(
+  collection: KeyedCollection<Entity>,
+  key: string,
+  update: (current: Entity, result: { value: Result } | undefined) => Entity,
+): KeyedOptimisticUpdate {
+  return {
+    collection,
+    key,
+    update: (current, result) =>
+      update(current as Entity, result as { value: Result } | undefined),
+  };
 }
 
 export function optimisticQueryUpdate<Value, Result = unknown>(
@@ -45,7 +68,7 @@ type PredictionState = {
 };
 type Receipt = {
   data: unknown;
-  paths: readonly { path: readonly string[]; started: number }[];
+  started: number;
 };
 const predictions = new WeakMap<Query, PredictionState>();
 const receipts = new WeakMap<Query, Receipt>();
@@ -54,7 +77,6 @@ const syncedClients = new WeakMap<
   QueryClient,
   { queries: Set<Query>; unsubscribe: () => void }
 >();
-let order = 0;
 
 function valueAt(
   data: unknown,
@@ -283,17 +305,12 @@ export function markTaggedQueryMeta(meta: object): void {
   taggedMeta.add(meta);
 }
 
-export function taggedReadReceipt(query: Query) {
-  const paths: { path: readonly string[]; started: number }[] = [];
-  return {
-    start: () => ++order,
-    record(started: number, loaded: readonly (readonly string[])[]) {
-      paths.push(...loaded.map((path) => ({ path, started })));
-    },
-    commit(data: unknown) {
-      receipts.set(query, { data, paths });
-    },
-  };
+export function commitTaggedReadReceipt(
+  query: Query,
+  data: unknown,
+  started: number,
+): void {
+  receipts.set(query, { data, started });
 }
 
 function consumeReceipt(query: Query, next: unknown): Receipt | undefined {
@@ -304,13 +321,7 @@ function consumeReceipt(query: Query, next: unknown): Receipt | undefined {
 }
 
 function refreshedBy(receipt: Receipt, layer: Prediction): boolean {
-  return (
-    layer.acceptedAt !== null &&
-    receipt.paths.some(
-      ({ path, started }) =>
-        started > layer.acceptedAt! && prefix(path, layer.path),
-    )
-  );
+  return layer.acceptedAt !== null && receipt.started > layer.acceptedAt;
 }
 
 export function taggedStructuralSharing(
@@ -376,14 +387,52 @@ export function getTaggedReadData<Data>(
     | undefined;
 }
 
+function isKeyedUpdate(
+  update: OptimisticUpdate,
+): update is KeyedOptimisticUpdate {
+  return "collection" in update;
+}
+
+function beginKeyedPredictions(
+  client: QueryClient,
+  updates: readonly KeyedOptimisticUpdate[],
+  result: () => { value: unknown } | undefined,
+) {
+  const byCollection = new Map<
+    KeyedCollection<unknown>,
+    Map<string, KeyedOptimisticUpdate[]>
+  >();
+  for (const update of updates) {
+    const byKey = byCollection.get(update.collection) ?? new Map();
+    byKey.set(update.key, [...(byKey.get(update.key) ?? []), update]);
+    byCollection.set(update.collection, byKey);
+  }
+  return [...byCollection].map(([collection, byKey]) =>
+    predictKeyed(client, collection, new Set(byKey.keys()), (entity, key) =>
+      (byKey.get(key) ?? []).reduce(
+        (current, update) => update.update(current, result()),
+        entity,
+      ),
+    ),
+  );
+}
+
 export function beginOptimisticMutation(
   client: QueryClient,
-  updates: readonly TaggedOptimisticUpdate[],
+  allUpdates: readonly OptimisticUpdate[],
 ) {
   const owner = {};
-  const mutationOrder = ++order;
+  const mutationOrder = tick();
   let accepted: { at: number; result: { value: unknown } } | undefined;
   let done = false;
+  const updates = allUpdates.filter(
+    (update): update is TaggedOptimisticUpdate => !isKeyedUpdate(update),
+  );
+  const keyed = beginKeyedPredictions(
+    client,
+    allUpdates.filter(isKeyedUpdate),
+    () => (accepted?.result.value === undefined ? undefined : accepted.result),
+  );
   const affected = new Map<Query, PredictionState>();
   const attached = new Map<TaggedOptimisticUpdate, Set<Query>>(
     updates.map((update) => [update, new Set()]),
@@ -441,6 +490,7 @@ export function beginOptimisticMutation(
     notifyManager.batch(() => {
       if (accepted !== undefined || done) return;
       finish();
+      for (const prediction of keyed) prediction.remove();
       for (const [query, state] of affected) {
         state.layers = state.layers.filter((layer) => layer.owner !== owner);
         publish(query, state);
@@ -462,8 +512,9 @@ export function beginOptimisticMutation(
   return {
     rollback,
     accept(result?: unknown) {
-      accepted = { at: ++order, result: { value: result } };
+      accepted = { at: tick(), result: { value: result } };
       notifyManager.batch(() => {
+        for (const prediction of keyed) prediction.accept();
         for (const [query, state] of affected) {
           for (const layer of state.layers)
             if (layer.owner === owner) layer.acceptedAt = accepted!.at;

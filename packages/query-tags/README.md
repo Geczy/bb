@@ -18,10 +18,10 @@ failed mutation. A later successful read clears the query error.
 
 Pass `{ client, optimistic: [...] }` as the third argument to
 `runTaggedMutation`. Build each prediction with
-`optimisticQueryUpdate<Value>(queryKey, updater, path = [])`. Pure updaters
-receive the visible cached value and return its prediction; missing values are
-skipped. A path selects a nested value, such as `["result", rowId]` for a keyed
-row. `useTaggedMutation({ client, invalidate, call, optimistic, meta })` maps
+`optimisticQueryUpdate<Value>(queryKey, updater, path = [])` for a cached query,
+or `optimisticKeyedUpdate(collection, key, updater)` for a keyed row. Pure
+updaters receive the visible value and return its prediction; missing query
+values are skipped. A path selects a nested value of the query data. `useTaggedMutation({ client, invalidate, call, optimistic, meta })` maps
 each input to the same prediction descriptors, applied synchronously when
 `mutate` is called. `meta` is copied onto the TanStack mutation, so mutation
 cache handlers such as core's error toast see it.
@@ -42,7 +42,7 @@ failure removes that mutation's prediction. If the write succeeds but the read
 fails, the accepted prediction stays with the read error until a successful
 refresh. Later predictions and confirmed values cannot be replaced by an older
 settle or rollback; an inverted completion retains the later confirmed value
-until a subsequent fresh read. Keyed reads acknowledge only rows they fetched.
+until a subsequent fresh read.
 A query without a tagged read has no confirming
 read: its writes and fetches still land beneath the prediction, and an
 acknowledged prediction becomes its value when the write settles.
@@ -58,3 +58,24 @@ Cache writes that are not read receipts keep predictions above them. A
 fields it leaves unchanged from the visible value keep their confirmed value, so
 rollback removes only the prediction. Arrays are replaced whole, so predict on
 object-shaped values (an entity, or a keyed record of rows), not inside arrays.
+
+## Keyed store
+
+A `KeyedCollection` holds each row once per client. `registerKeyedViews(client,
+resolve)` maps query keys to `KeyedView`s, which split a query's data into
+slots of items, read each item into its row, and render rows back into the
+query's data. Every view of a row shows the same visible value: the stored row
+with pending predictions applied in order. `createTaggedKeyedQueryOwner` stores
+its rows in the collection it is given, and core threads use the same store.
+
+A read writes a row only if it fetched that row. A prediction accepted by the
+server becomes the row's stored value. A row read that started before the
+acceptance does not replace it; a view decides how a later read merges, so
+thread rows also compare `updatedAt`. A rejected write removes its prediction,
+leaving later predictions in place, and an accepted prediction waits behind
+older pending ones on the same row. Rows that load while a write is pending
+show its prediction. A row leaves the store when no view holds it.
+`writeKeyedEntity` changes a stored row directly, beneath pending predictions.
+
+`@bb/query-tags/testing` exports `keyedStoreContract`, the cases every keyed
+surface runs through a `KeyedStoreSubject`.
