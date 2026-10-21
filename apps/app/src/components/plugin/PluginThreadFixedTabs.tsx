@@ -1,8 +1,11 @@
+import { hasThreadId } from "@/lib/thread-id";
+import type { SecondaryPanelFixedTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
+import { PluginItemIcon } from "./PluginIcon";
 import { usePluginFrontendsSettled } from "@/lib/plugin-frontend-boot-state";
 import { coreThreadFixedTabs } from "@/components/secondary-panel/thread-info-registration";
 import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
-import type { ExperimentalThreadFixedTabProps } from "@get-bb/plugin-sdk";
 import {
+  createGitDiffFixedPanelTab,
   createPluginFixedPanelTab,
   createThreadInfoFixedPanelTab,
   type FixedPanelViewTab,
@@ -39,6 +42,40 @@ export function createThreadFixedTabDestination(
   };
 }
 
+export function buildThreadFixedPanelViewTabs({
+  entries,
+  includeDiff,
+}: {
+  entries: readonly ThreadFixedTabEntry[];
+  includeDiff: boolean;
+}): readonly FixedPanelViewTab[] {
+  return [
+    ...entries.map((entry) => entry.tab),
+    ...(includeDiff ? [createGitDiffFixedPanelTab()] : []),
+  ];
+}
+
+export function createThreadFixedTabDescriptor(
+  entry: ThreadFixedTabEntry,
+  threadId: string,
+  open: (reference: AppFixedTabReference) => void,
+): SecondaryPanelFixedTab {
+  return {
+    ariaLabel: `Show ${entry.slot.title} panel`,
+    label: entry.slot.title,
+    leadingVisual: (
+      <PluginItemIcon pluginId={entry.slot.pluginId} icon={entry.slot.icon} />
+    ),
+    onSelect: () => open(entry.reference),
+    tab: entry.tab,
+    title: entry.slot.title,
+    contentFillsRegion: entry.slot.layout === "flush",
+    renderContent: () => (
+      <ThreadFixedTabContent entry={entry} threadId={threadId} />
+    ),
+  };
+}
+
 function SlotScope({
   slot,
   threadId,
@@ -71,6 +108,7 @@ export function ThreadFixedTabContent({
   entry: ThreadFixedTabEntry;
   threadId: string;
 }) {
+  if (!hasThreadId(threadId)) return null;
   const Component = entry.slot.component;
   return (
     <SlotScope slot={entry.slot} threadId={threadId}>
@@ -108,9 +146,7 @@ function Visibility(props: VisibilityProps) {
   return <VisibilityResult {...props} visible={visible} />;
 }
 
-export function useThreadFixedTabs({
-  threadId,
-}: ExperimentalThreadFixedTabProps) {
+export function useThreadFixedTabs({ threadId }: { threadId: string | null }) {
   const { threadFixedTabs } = usePluginSlots();
   const [visibility, setVisibility] = useState<
     ReadonlyMap<
@@ -142,55 +178,60 @@ export function useThreadFixedTabs({
   );
   const entries = useMemo<readonly ThreadFixedTabEntry[]>(
     () =>
-      threadFixedTabs
-        .filter(
-          (slot) =>
-            slot.useVisible === undefined ||
-            (visibility.get(slot)?.threadId === threadId &&
-              visibility.get(slot)?.visible === true),
-        )
-        .map((slot) => ({
-          slot,
-          tab: coreThreadFixedTabs.includes(slot)
-            ? createThreadInfoFixedPanelTab()
-            : createPluginFixedPanelTab({
-                pluginId: slot.pluginId,
-                tabId: slot.id,
-              }),
-          reference: coreThreadFixedTabs.includes(slot)
-            ? THREAD_INFO_FIXED_TAB_REFERENCE
-            : {
-                ownerId: getThreadFixedTabOwnerId(slot.pluginId),
-                tabId: slot.id,
-              },
-        })),
+      !hasThreadId(threadId)
+        ? []
+        : threadFixedTabs
+            .filter(
+              (slot) =>
+                slot.useVisible === undefined ||
+                (visibility.get(slot)?.threadId === threadId &&
+                  visibility.get(slot)?.visible === true),
+            )
+            .map((slot) => ({
+              slot,
+              tab: coreThreadFixedTabs.includes(slot)
+                ? createThreadInfoFixedPanelTab()
+                : createPluginFixedPanelTab({
+                    pluginId: slot.pluginId,
+                    tabId: slot.id,
+                  }),
+              reference: coreThreadFixedTabs.includes(slot)
+                ? THREAD_INFO_FIXED_TAB_REFERENCE
+                : {
+                    ownerId: getThreadFixedTabOwnerId(slot.pluginId),
+                    tabId: slot.id,
+                  },
+            })),
     [threadFixedTabs, visibility, threadId],
   );
-  const observers = threadFixedTabs
-    .filter((slot) => slot.useVisible !== undefined)
-    .map((slot) => (
-      <SlotScope
-        key={`${slot.pluginId}/${slot.id}/${slot.generation}/${threadId}/visibility`}
-        slot={slot}
-        threadId={`${threadId}/visibility`}
-        crashFallback={
-          <VisibilityResult
+  const observers = !hasThreadId(threadId)
+    ? []
+    : threadFixedTabs
+        .filter((slot) => slot.useVisible !== undefined)
+        .map((slot) => (
+          <SlotScope
+            key={`${slot.pluginId}/${slot.id}/${slot.generation}/${threadId}/visibility`}
             slot={slot}
-            threadId={threadId}
-            onVisibility={onVisibility}
-            visible={false}
-          />
-        }
-      >
-        <Visibility
-          slot={slot}
-          threadId={threadId}
-          onVisibility={onVisibility}
-        />
-      </SlotScope>
-    ));
+            threadId={`${threadId}/visibility`}
+            crashFallback={
+              <VisibilityResult
+                slot={slot}
+                threadId={threadId}
+                onVisibility={onVisibility}
+                visible={false}
+              />
+            }
+          >
+            <Visibility
+              slot={slot}
+              threadId={threadId}
+              onVisibility={onVisibility}
+            />
+          </SlotScope>
+        ));
   const frontendsSettled = usePluginFrontendsSettled();
   const isReady =
+    hasThreadId(threadId) &&
     frontendsSettled &&
     threadFixedTabs.every(
       (slot) =>

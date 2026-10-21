@@ -23,6 +23,7 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -40,6 +41,8 @@ import { usePluginId } from "./plugin-context";
 import { resetAllCrashedPluginSlotsForTest } from "./PluginSlotMount";
 import {
   createThreadFixedTabDestination,
+  createThreadFixedTabDescriptor,
+  buildThreadFixedPanelViewTabs,
   ThreadFixedTabContent,
   useThreadFixedTabs,
 } from "./PluginThreadFixedTabs";
@@ -68,7 +71,7 @@ function install(title = "Status") {
   );
 }
 
-function Host({ threadId }: { threadId: string }) {
+function Host({ threadId }: { threadId: string | null }) {
   const { entries, observers } = useThreadFixedTabs({ threadId });
   const [activeId, setActiveId] = useState<string | null>(null);
   const [accepted, setAccepted] = useState<boolean | null>(null);
@@ -81,27 +84,40 @@ function Host({ threadId }: { threadId: string }) {
   return (
     <>
       {observers}
-      {entries.map((entry) => (
-        <button
-          key={entry.tab.id}
-          onClick={() =>
-            setAccepted(
-              openAppFixedTabFromDestinations(destinations, {
-                surface: { kind: "current" },
-                tab: entry.reference,
-              }),
-            )
-          }
-        >
-          {entry.slot.title}
-        </button>
-      ))}
+      {threadId === null
+        ? null
+        : entries.map((entry) => {
+            const descriptor = createThreadFixedTabDescriptor(
+              entry,
+              threadId,
+              (reference) =>
+                setAccepted(
+                  openAppFixedTabFromDestinations(destinations, {
+                    surface: { kind: "current" },
+                    tab: reference,
+                  }),
+                ),
+            );
+            return (
+              <button
+                key={entry.tab.id}
+                aria-label={descriptor.ariaLabel}
+                title={descriptor.title}
+                onClick={descriptor.onSelect}
+              >
+                {descriptor.label}
+              </button>
+            );
+          })}
       <button
         onClick={() =>
           setAccepted(
             openAppFixedTabFromDestinations(destinations, {
               surface: { kind: "current" },
-              tab: entries[0]!.reference,
+              tab: entries[0]?.reference ?? {
+                ownerId: "missing",
+                tabId: "missing",
+              },
               target: { invalid: true },
             }),
           )
@@ -113,7 +129,7 @@ function Host({ threadId }: { threadId: string }) {
       <ThreadInfoContentContext.Provider
         value={<div>Core info:{threadId}</div>}
       >
-        {entry === undefined ? null : (
+        {entry === undefined || threadId === null ? null : (
           <ThreadFixedTabContent entry={entry} threadId={threadId} />
         )}
       </ThreadInfoContentContext.Provider>
@@ -139,7 +155,7 @@ function RestoringHost() {
   );
 }
 
-function mount(threadId: string) {
+function mount(threadId: string | null) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -152,7 +168,7 @@ function mount(threadId: string) {
   );
   return {
     ...result,
-    changeThread: (id: string) =>
+    changeThread: (id: string | null) =>
       result.rerender(
         <QueryClientProvider client={client}>
           <MemoryRouter>
@@ -180,14 +196,53 @@ describe("thread fixed-tab contract", () => {
     (title, content) => {
       install();
       mount("thr_one");
-      fireEvent.click(screen.getByRole("button", { name: title }));
+      fireEvent.click(
+        screen.getByRole("button", { name: `Show ${title} panel` }),
+      );
       expect(screen.getByText(content)).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: `Show ${title} panel` })
+          .getAttribute("title"),
+      ).toBe(title);
       expect(screen.getByRole("status").textContent).toBe("true");
       fireEvent.click(screen.getByRole("button", { name: "Invalid target" }));
       expect(screen.getByRole("status").textContent).toBe("false");
       expect(screen.getByText(content)).toBeTruthy();
     },
   );
+
+  it("keeps default Info before pinned Diff to match the Plugin Guide and Theme Preview fixtures", () => {
+    const { result } = renderHook(() => {
+      const { entries } = useThreadFixedTabs({ threadId: "thr_fixture" });
+      return buildThreadFixedPanelViewTabs({ entries, includeDiff: true });
+    });
+    expect(result.current.map((tab) => tab.kind)).toEqual([
+      "thread-info",
+      "git-diff",
+    ]);
+  });
+
+  it("does not expose or mount thread tabs without a thread", () => {
+    install();
+    const view = mount(null);
+    expect(
+      screen.queryByRole("button", { name: "Show Info panel" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Show Status panel" }),
+    ).toBeNull();
+    view.changeThread("");
+    expect(
+      screen.queryByRole("button", { name: "Show Info panel" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Show Status panel" }),
+    ).toBeNull();
+    view.changeThread("thr_one");
+    fireEvent.click(screen.getByRole("button", { name: "Show Status panel" }));
+    expect(screen.getByText("example:thr_one:Status")).toBeTruthy();
+  });
 
   it("keeps a restored selection while registrations and initial visibility are loading", () => {
     const plugin = createPluginFixedPanelTab({
@@ -224,16 +279,24 @@ describe("thread fixed-tab contract", () => {
   it("updates visibility per thread and replaces reloaded components without duplicating tabs", () => {
     install();
     const view = mount("thr_one");
-    fireEvent.click(screen.getByRole("button", { name: "Status" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show Status panel" }));
     view.changeThread("hidden");
-    expect(screen.queryByRole("button", { name: "Status" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Show Status panel" }),
+    ).toBeNull();
     view.changeThread("thr_two");
     expect(screen.getByText("example:thr_two:Status")).toBeTruthy();
     act(() => install("Reloaded"));
-    expect(screen.getAllByRole("button", { name: "Reloaded" })).toHaveLength(1);
+    expect(
+      screen.getAllByRole("button", { name: "Show Reloaded panel" }),
+    ).toHaveLength(1);
     expect(screen.getByText("example:thr_two:Reloaded")).toBeTruthy();
     act(() => removePluginSlotRegistrations("example"));
-    expect(screen.queryByRole("button", { name: "Reloaded" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Info" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Show Reloaded panel" }),
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Show Info panel" }),
+    ).toBeTruthy();
   });
 });

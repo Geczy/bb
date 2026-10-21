@@ -1,7 +1,8 @@
 import {
   createThreadFixedTabDestination,
   useThreadFixedTabs,
-  ThreadFixedTabContent,
+  buildThreadFixedPanelViewTabs,
+  createThreadFixedTabDescriptor,
   type ThreadFixedTabEntry,
 } from "@/components/plugin/PluginThreadFixedTabs";
 import { BrowserTabIcon } from "@/components/secondary-panel/BrowserTabIcon";
@@ -272,10 +273,7 @@ import {
   useTouchFixedPanelTabsState,
   useUpdateFixedPanelTabsState,
 } from "@/lib/fixed-panel-tabs";
-import {
-  createGitDiffFixedPanelTab,
-  type SecondaryFileFixedPanelTab,
-} from "@/lib/fixed-panel-tabs-state";
+import type { SecondaryFileFixedPanelTab } from "@/lib/fixed-panel-tabs-state";
 import { resolveGitDiffTabStatus } from "@/components/secondary-panel/gitDiffTabEligibility";
 import { isRootThread } from "./threadParentSelectorOptions";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
@@ -542,15 +540,14 @@ function ThreadDetailViewInternal(
     hasResolvedThread: thread !== undefined,
     threadArchived: thread?.archivedAt != null || executionUnavailable,
   });
-  const threadFixedTabs = useThreadFixedTabs({ threadId: threadId ?? "" });
+  const threadFixedTabs = useThreadFixedTabs({ threadId: thread?.id ?? null });
   const threadFixedViewTabs = useMemo(
-    () => [
-      ...threadFixedTabs.entries.map((entry) => entry.tab),
-      ...(gitDiffTabStatus === "ineligible"
-        ? []
-        : [createGitDiffFixedPanelTab()]),
-    ],
-    [gitDiffTabStatus, threadFixedTabs.entries],
+    () =>
+      buildThreadFixedPanelViewTabs({
+        entries: threadFixedTabs.entries,
+        includeDiff: thread !== undefined && gitDiffTabStatus !== "ineligible",
+      }),
+    [gitDiffTabStatus, threadFixedTabs.entries, thread],
   );
   const fixedPanelTabsState = useReconciledFixedPanelTabsState({
     fixedTabs: threadFixedViewTabs,
@@ -1237,12 +1234,6 @@ function ThreadDetailViewInternal(
       openCompactDrawer,
     ],
   );
-  const openThreadInfo = useCallback(() => {
-    const entry = threadFixedTabs.entries.find(
-      (entry) => entry.tab.kind === "thread-info",
-    );
-    if (entry !== undefined) openRegisteredFixedTab(entry);
-  }, [threadFixedTabs.entries, openRegisteredFixedTab]);
   const fixedTabDestinations = useMemo(
     () => [
       ...threadFixedTabs.entries.map((entry) =>
@@ -1268,6 +1259,14 @@ function ThreadDetailViewInternal(
     (intent: AppFixedTabOpenIntent): boolean =>
       openAppFixedTabFromDestinations(fixedTabDestinations, intent),
     [fixedTabDestinations],
+  );
+  const openThreadInfo = useCallback(
+    () =>
+      openFixedTab({
+        surface: { kind: "current" },
+        tab: THREAD_INFO_FIXED_TAB_REFERENCE,
+      }),
+    [openFixedTab],
   );
   const openSecondaryPanel = useCallback(
     (panel: ThreadSecondaryPanelTab) =>
@@ -1388,39 +1387,14 @@ function ThreadDetailViewInternal(
         const entry = threadFixedTabs.entries.find(
           (entry) => entry.tab.id === tab.id,
         );
-        if (entry !== undefined)
+        if (entry !== undefined) {
+          if (thread === undefined) return [];
           return [
-            {
-              ariaLabel:
-                entry.tab.kind === "thread-info"
-                  ? "Show thread info panel"
-                  : `Show ${entry.slot.title} panel`,
-              label: entry.slot.title,
-              leadingVisual: (
-                <PluginItemIcon
-                  pluginId={entry.slot.pluginId}
-                  icon={entry.slot.icon}
-                />
-              ),
-              onSelect: () =>
-                openFixedTab({
-                  surface: { kind: "current" },
-                  tab: entry.reference,
-                }),
-              tab,
-              title:
-                entry.tab.kind === "thread-info"
-                  ? "Thread info"
-                  : entry.slot.title,
-              contentFillsRegion: entry.slot.layout === "flush",
-              renderContent: () => (
-                <ThreadFixedTabContent
-                  entry={entry}
-                  threadId={threadId ?? ""}
-                />
-              ),
-            },
+            createThreadFixedTabDescriptor(entry, thread.id, (reference) => {
+              openFixedTab({ surface: { kind: "current" }, tab: reference });
+            }),
           ];
+        }
         return [
           {
             ariaLabel: "Show diff panel",
@@ -1437,7 +1411,7 @@ function ThreadDetailViewInternal(
       orderedThreadFixedViewTabs,
       threadFixedTabs.entries,
       openFixedTab,
-      threadId,
+      thread,
     ],
   );
   const openAttachment = useCallback(
