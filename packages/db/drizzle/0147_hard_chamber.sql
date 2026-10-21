@@ -1,4 +1,4 @@
-CREATE TABLE `holdout_assignments` (
+CREATE TABLE IF NOT EXISTS `holdout_assignments` (
 	`key` text PRIMARY KEY NOT NULL,
 	`arm` text NOT NULL,
 	`assigned_at` integer NOT NULL,
