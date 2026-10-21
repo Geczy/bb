@@ -148,7 +148,7 @@ export function createSetupJobService(
             (entry) =>
               entry.key === SETUP_JOB_HOLDOUT_KEY && entry.status !== "ended",
           );
-        const arm = setupJobArmSchema.safeParse(assignment?.arm);
+        const arm = setupJobArmSchema.safeParse(assignment?.variant);
         if (!arm.success) return { offer: null };
         const hostId = resolvePrimaryHostId(deps);
         if (hostId === null) return { offer: null };
