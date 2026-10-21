@@ -103,6 +103,9 @@ describe("provider usage footer disclosure", () => {
         new Response(
           JSON.stringify({
             ok: true,
+            tags: [],
+            keyTags: {},
+            invalidated: [],
             result: {
               machines: [
                 {

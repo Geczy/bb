@@ -59,7 +59,7 @@ export const usageSnapshotSchema = z.strictObject({
   machines: z.array(usageMachineSchema),
 });
 
-export const usageRpcSuccessSchema = z.strictObject({
+export const usageRpcSuccessSchema = z.object({
   ok: z.literal(true),
   result: usageSnapshotSchema,
 });
