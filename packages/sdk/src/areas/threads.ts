@@ -716,9 +716,7 @@ export interface ThreadsArea {
   storageFiles(args: ThreadStorageFilesArgs): Promise<ThreadStorageFilesResult>;
   storageLocation(args: ThreadStatusArgs): Promise<ThreadStorageLocationResult>;
   storagePaths(args: ThreadStoragePathsArgs): Promise<ThreadStoragePathsResult>;
-  unarchive(
-    args: ThreadActionArgs & ThreadArchiveQuery,
-  ): Promise<ThreadUnarchiveResult>;
+  unarchive(args: ThreadActionArgs): Promise<ThreadUnarchiveResult>;
   unpin(args: ThreadActionArgs): Promise<ThreadMutationResult>;
   update(args: ThreadUpdateArgs): Promise<ThreadMutationResult>;
   wait(args: ThreadWaitArgs): Promise<ThreadWaitResult>;
