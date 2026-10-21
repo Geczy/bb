@@ -528,16 +528,16 @@ describe("download click context", () => {
         visitor_os: os,
         browser,
         mac_chip: chip,
-        repeat_click: "false",
+        download_repeat: "first",
       });
       expect(Object.keys(properties).sort()).toEqual([
         "$current_url",
         "browser",
         "device_class",
+        "download_repeat",
         "download_target",
         "mac_chip",
         "placement",
-        "repeat_click",
         "tracking_source",
         "utm_campaign",
         "visitor_os",
@@ -570,13 +570,13 @@ describe("download click context", () => {
     expect(first.response.headers.get("Set-Cookie")).toBe(
       "bb_dl=1; Path=/download; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax",
     );
-    expect(first.properties.repeat_click).toBe("false");
+    expect(first.properties.download_repeat).toBe("first");
     const second = await click({ headers: { cookie: "other=value; bb_dl=1" } });
-    expect(second.properties.repeat_click).toBe("true");
+    expect(second.properties.download_repeat).toBe("repeat");
     const unrelated = await click({
       headers: { cookie: "prefix_bb_dl=1; bb_dl=10" },
     });
-    expect(unrelated.properties.repeat_click).toBe("false");
+    expect(unrelated.properties.download_repeat).toBe("first");
   });
 
   it.each([
@@ -623,7 +623,7 @@ describe("download click context", () => {
         headers: { cookie: "bb_dl=1" },
       });
       expect(response.headers.get("Set-Cookie")).toBeNull();
-      expect(properties.repeat_click).toBe("unknown");
+      expect(properties.download_repeat).toBe("unknown");
     },
   );
 
@@ -632,7 +632,7 @@ describe("download click context", () => {
       headers: { "Sec-GPC": "1", cookie: "bb_dl=1" },
     });
     expect(response.headers.get("Set-Cookie")).toBeNull();
-    expect(properties.repeat_click).toBe("unknown");
+    expect(properties.download_repeat).toBe("unknown");
   });
 });
 

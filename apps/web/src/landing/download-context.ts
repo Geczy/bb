@@ -3,7 +3,7 @@ export type DownloadContext = {
   visitor_os: "macos" | "windows" | "linux" | "ios" | "android" | "other";
   browser: "safari" | "chrome" | "edge" | "firefox" | "other";
   mac_chip: "apple" | "intel" | "unknown";
-  repeat_click: "true" | "false" | "unknown";
+  download_repeat: "first" | "repeat" | "unknown";
 };
 
 const COOKIE_RESTRICTED_COUNTRIES = new Set([
@@ -44,9 +44,9 @@ const COOKIE_RESTRICTED_COUNTRIES = new Set([
 export const DOWNLOAD_REPEAT_COOKIE =
   "bb_dl=1; Path=/download; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax";
 
-export function downloadRepeatClick(
+export function downloadRepeatStatus(
   request: Request,
-): DownloadContext["repeat_click"] {
+): DownloadContext["download_repeat"] {
   const cf: unknown = Reflect.get(request, "cf");
   const country =
     typeof cf === "object" &&
@@ -69,8 +69,8 @@ export function downloadRepeatClick(
     .get("cookie")
     ?.split(";")
     .some((cookie) => cookie.trim() === "bb_dl=1")
-    ? "true"
-    : "false";
+    ? "repeat"
+    : "first";
 }
 
 export function buildDownloadContext(request: Request): DownloadContext {
@@ -117,6 +117,6 @@ export function buildDownloadContext(request: Request): DownloadContext {
     visitor_os,
     browser,
     mac_chip,
-    repeat_click: downloadRepeatClick(request),
+    download_repeat: downloadRepeatStatus(request),
   };
 }

@@ -1,6 +1,6 @@
 import {
   buildDownloadContext,
-  downloadRepeatClick,
+  downloadRepeatStatus,
   DOWNLOAD_REPEAT_COOKIE,
 } from "./download-context";
 import type { DownloadContext } from "./download-context";
@@ -106,7 +106,7 @@ export async function handleDownload(
   if (
     contextEnabled &&
     firstRequest &&
-    downloadRepeatClick(request) !== "unknown"
+    downloadRepeatStatus(request) !== "unknown"
   ) {
     response.headers.append("Set-Cookie", DOWNLOAD_REPEAT_COOKIE);
   }
