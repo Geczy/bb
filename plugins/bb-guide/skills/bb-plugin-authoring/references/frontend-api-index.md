@@ -315,3 +315,16 @@ Read the installed SDK declarations for the exact current signatures.
 
 The keyed method and row types are inferred from the `contract` option.
 Read-state and error behavior is documented in [Frontend hooks and UI](frontend-hooks-and-ui.md).
+
+## Pinned thread tabs
+
+For `app.slots.experimental_threadFixedTab`, `ExperimentalThreadFixedTabRegistration`,
+`ExperimentalThreadFixedTabReference`, and `ExperimentalThreadFixedTabProps`, see
+[Thread side-panel tabs in the Plugin Guide](https://getbb.app/plugin-guide#surface-thread-panel).
+
+For `app.slots.experimental_threadContextSegment`,
+`ExperimentalThreadContextSegmentRegistration`, and
+`ExperimentalThreadContextSegmentProps` (`threadId`, `part`, `segmentCount`,
+`isExpanded`, `onToggle`), see the Plugin Guide Banners card.
+For `PluginThreadHeaderActionRegistration.experimental_useOverflowActions`,
+see the Plugin Guide Thread header controls card.

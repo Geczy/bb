@@ -1,3 +1,4 @@
+import { ThreadInfoContentContext } from "@/components/secondary-panel/thread-info-registration";
 import {
   DEFAULT_DIFF_FILE_FILTERS,
   filterDiffFiles,
@@ -253,7 +254,11 @@ export interface ThreadSecondaryPanelProps {
 
 export function ThreadSecondaryPanel(props: ThreadSecondaryPanelProps) {
   const panelProps = usePluginDetailPanelProps(props);
-  return <ThreadSecondaryPanelContent {...panelProps} />;
+  return (
+    <ThreadInfoContentContext.Provider value={props.metadataContent}>
+      <ThreadSecondaryPanelContent {...panelProps} />
+    </ThreadInfoContentContext.Provider>
+  );
 }
 
 function ThreadSecondaryPanelContent({
@@ -263,7 +268,6 @@ function ThreadSecondaryPanelContent({
   gitDiffTabStatus,
   requestedMergeBaseBranch,
   environmentId,
-  metadataContent,
   tabs,
   fixedTabs,
   onTabReorder,
@@ -1052,10 +1056,6 @@ function ThreadSecondaryPanelContent({
               pendingGitDiffScrollPath={pendingGitDiffScrollPath}
               workspaceRootPath={workspaceRootPath}
             />
-          ) : activeSurfaceFixedTab?.tab.kind === "thread-info" ? (
-            <div className="flex min-h-0 flex-1 flex-col">
-              {metadataContent}
-            </div>
           ) : isLayoutOpen ? (
             <EmptyStatePanel className="m-4 rounded-lg">
               This panel view is unavailable.

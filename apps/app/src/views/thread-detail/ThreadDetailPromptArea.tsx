@@ -2214,6 +2214,7 @@ export function ThreadDetailPromptArea({
           <ThreadMachineStatus hostId={environmentHostId} />
         ) : null}
         <ThreadPromptContextBanner
+          threadId={thread.id}
           key={contextBannerKey}
           archivedSection={
             thread.archivedAt !== null
@@ -2366,6 +2367,7 @@ export function ThreadDetailPromptArea({
     () => (
       <>
         <ThreadPromptContextBanner
+          threadId={thread.id}
           key={contextBannerKey}
           archivedSection={null}
           environmentGoneSection={null}
@@ -2390,6 +2392,7 @@ export function ThreadDetailPromptArea({
       goal,
       handleToggleBannerSection,
       contextBannerKey,
+      thread.id,
     ],
   );
 

@@ -1,3 +1,10 @@
+import {
+  createThreadFixedTabDestination,
+  useThreadFixedTabs,
+  buildThreadFixedPanelViewTabs,
+  createThreadFixedTabDescriptor,
+  type ThreadFixedTabEntry,
+} from "@/components/plugin/PluginThreadFixedTabs";
 import { BrowserTabIcon } from "@/components/secondary-panel/BrowserTabIcon";
 import { getPanelTabHistoryKey } from "@/components/secondary-panel/recentlyClosedPanelTabs";
 import { appendQuoteAndAttachmentsToDraft } from "@bb/client-core";
@@ -97,7 +104,7 @@ import { Button } from "@bb/shared-ui/button";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { PluginThreadHeaderActions } from "@/components/plugin/PluginThreadHeaderActions";
-import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
+import { CoreWorkspaceHeaderContext } from "@/components/thread/core-thread-header-actions";
 import {
   formatEnvironmentDisplay,
   type EnvironmentDisplayHostContext,
@@ -154,10 +161,7 @@ import {
   createGitDiffFixedTabDestination,
   GIT_DIFF_FIXED_TAB_REFERENCE,
 } from "@/components/secondary-panel/git-diff/git-diff-fixed-tab-navigation";
-import {
-  createThreadInfoFixedTabDestination,
-  THREAD_INFO_FIXED_TAB_REFERENCE,
-} from "@/components/secondary-panel/thread-info-fixed-tab-navigation";
+import { THREAD_INFO_FIXED_TAB_REFERENCE } from "@/components/secondary-panel/thread-info-fixed-tab-navigation";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import {
   ThreadDetailPromptArea,
@@ -269,11 +273,7 @@ import {
   useTouchFixedPanelTabsState,
   useUpdateFixedPanelTabsState,
 } from "@/lib/fixed-panel-tabs";
-import {
-  createGitDiffFixedPanelTab,
-  createThreadInfoFixedPanelTab,
-  type SecondaryFileFixedPanelTab,
-} from "@/lib/fixed-panel-tabs-state";
+import type { SecondaryFileFixedPanelTab } from "@/lib/fixed-panel-tabs-state";
 import { resolveGitDiffTabStatus } from "@/components/secondary-panel/gitDiffTabEligibility";
 import { isRootThread } from "./threadParentSelectorOptions";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
@@ -540,19 +540,20 @@ function ThreadDetailViewInternal(
     hasResolvedThread: thread !== undefined,
     threadArchived: thread?.archivedAt != null || executionUnavailable,
   });
+  const threadFixedTabs = useThreadFixedTabs({ threadId: thread?.id ?? null });
   const threadFixedViewTabs = useMemo(
-    () => [
-      createThreadInfoFixedPanelTab(),
-      ...(gitDiffTabStatus === "ineligible"
-        ? []
-        : [createGitDiffFixedPanelTab()]),
-    ],
-    [gitDiffTabStatus],
+    () =>
+      buildThreadFixedPanelViewTabs({
+        entries: threadFixedTabs.entries,
+        includeDiff: thread !== undefined && gitDiffTabStatus !== "ineligible",
+      }),
+    [gitDiffTabStatus, threadFixedTabs.entries, thread],
   );
   const fixedPanelTabsState = useReconciledFixedPanelTabsState({
     fixedTabs: threadFixedViewTabs,
     isAuthoritative:
-      gitDiffTabStatus === "eligible" || gitDiffTabStatus === "ineligible",
+      threadFixedTabs.isReady &&
+      (gitDiffTabStatus === "eligible" || gitDiffTabStatus === "ineligible"),
     panelStateId: threadId,
     syncThreadId: threadId,
   });
@@ -1183,7 +1184,6 @@ function ThreadDetailViewInternal(
     openDiffFile: openGitDiffFileDestination,
     openDiffPanel: openGitDiffDestination,
     openHostFile,
-    openPanel: openFixedViewDestination,
     openStorageFile,
     openWorkspaceFile,
     togglePanel: toggleWorkspacePanel,
@@ -1210,14 +1210,34 @@ function ThreadDetailViewInternal(
     if (pluginDetails.activePluginId !== null) closeSecondaryPanel();
     else toggleWorkspacePanel();
   }, [pluginDetails.activePluginId, closeSecondaryPanel, toggleWorkspacePanel]);
-  const openThreadInfo = useCallback(
-    () => openFixedViewDestination("thread-info"),
-    [openFixedViewDestination],
+  const openRegisteredFixedTab = useCallback(
+    (entry: ThreadFixedTabEntry) => {
+      dismissPluginDetails();
+      clearActiveFileTabs();
+      updateFixedPanelTabsState((current) => ({
+        ...current,
+        secondary: {
+          ...current.secondary,
+          isOpen: true,
+          activeTabId: entry.tab.id,
+          tabs: current.secondary.tabs.some((tab) => tab.id === entry.tab.id)
+            ? current.secondary.tabs
+            : [...current.secondary.tabs, entry.tab],
+        },
+      }));
+      openCompactDrawer();
+    },
+    [
+      dismissPluginDetails,
+      clearActiveFileTabs,
+      updateFixedPanelTabsState,
+      openCompactDrawer,
+    ],
   );
   const fixedTabDestinations = useMemo(
     () => [
-      createThreadInfoFixedTabDestination(() =>
-        openFixedViewDestination("thread-info"),
+      ...threadFixedTabs.entries.map((entry) =>
+        createThreadFixedTabDestination(entry, openRegisteredFixedTab),
       ),
       createGitDiffFixedTabDestination({
         eligible: canUseGitUi,
@@ -1228,7 +1248,8 @@ function ThreadDetailViewInternal(
     ],
     [
       canUseGitUi,
-      openFixedViewDestination,
+      threadFixedTabs.entries,
+      openRegisteredFixedTab,
       openGitDiffCommitDestination,
       openGitDiffDestination,
       openGitDiffFileDestination,
@@ -1238,6 +1259,14 @@ function ThreadDetailViewInternal(
     (intent: AppFixedTabOpenIntent): boolean =>
       openAppFixedTabFromDestinations(fixedTabDestinations, intent),
     [fixedTabDestinations],
+  );
+  const openThreadInfo = useCallback(
+    () =>
+      openFixedTab({
+        surface: { kind: "current" },
+        tab: THREAD_INFO_FIXED_TAB_REFERENCE,
+      }),
+    [openFixedTab],
   );
   const openSecondaryPanel = useCallback(
     (panel: ThreadSecondaryPanelTab) =>
@@ -1343,28 +1372,47 @@ function ThreadDetailViewInternal(
     },
     [clearActiveFileTabs, openSecondaryPanel],
   );
+  const orderedThreadFixedViewTabs = useMemo(() => {
+    const order = new Map(
+      fixedPanelTabsState.secondary.tabs.map((tab, index) => [tab.id, index]),
+    );
+    return [...threadFixedViewTabs].sort(
+      (left, right) =>
+        (order.get(left.id) ?? Infinity) - (order.get(right.id) ?? Infinity),
+    );
+  }, [fixedPanelTabsState.secondary.tabs, threadFixedViewTabs]);
   const secondaryPanelFixedTabs = useMemo<readonly SecondaryPanelFixedTab[]>(
     () =>
-      threadFixedViewTabs.map((tab) =>
-        tab.kind === "thread-info"
-          ? {
-              ariaLabel: "Show thread info panel",
-              label: "Info",
-              leadingVisual: <Icon name="Info" />,
-              onSelect: () => handleSecondaryPanelChange("thread-info"),
-              tab,
-              title: "Thread info",
-            }
-          : {
-              ariaLabel: "Show diff panel",
-              label: "Diff",
-              leadingVisual: <Icon name="FileDiff" />,
-              onSelect: () => handleSecondaryPanelChange("git-diff"),
-              tab,
-              title: "Diff",
-            },
-      ),
-    [handleSecondaryPanelChange, threadFixedViewTabs],
+      orderedThreadFixedViewTabs.flatMap((tab) => {
+        const entry = threadFixedTabs.entries.find(
+          (entry) => entry.tab.id === tab.id,
+        );
+        if (entry !== undefined) {
+          if (thread === undefined) return [];
+          return [
+            createThreadFixedTabDescriptor(entry, thread.id, (reference) => {
+              openFixedTab({ surface: { kind: "current" }, tab: reference });
+            }),
+          ];
+        }
+        return [
+          {
+            ariaLabel: "Show diff panel",
+            label: "Diff",
+            leadingVisual: <Icon name="FileDiff" />,
+            onSelect: () => handleSecondaryPanelChange("git-diff"),
+            tab,
+            title: "Diff",
+          },
+        ];
+      }),
+    [
+      handleSecondaryPanelChange,
+      orderedThreadFixedViewTabs,
+      threadFixedTabs.entries,
+      openFixedTab,
+      thread,
+    ],
   );
   const openAttachment = useCallback(
     (attachment: OpenAttachmentRequest) => {
@@ -2267,37 +2315,6 @@ function ThreadDetailViewInternal(
     workspaceDeleted: isWorkspaceDeleted,
   });
   const threadTitle = getThreadDisplayTitle(thread);
-  const responsiveWorkspaceActions: PluginThreadActionsInlineItem[] =
-    workspaceOpenPath && preferredDirectoryTarget
-      ? [
-          preferredDirectoryTarget,
-          ...directoryOpenTargets.filter(
-            (target) => target.id !== preferredDirectoryTarget.id,
-          ),
-        ].map((target) => ({
-          key: `workspace/${target.id}`,
-          group: THREAD_HEADER_ACTIONS_GROUP,
-          action: {
-            icon: "FolderOpen",
-            label: `Open workspace in ${target.label}`,
-            run: async () => {
-              if (target.id === preferredDirectoryTarget.id) {
-                await openPathInPreferredDirectoryTarget({
-                  lineNumber: null,
-                  path: workspaceOpenPath,
-                });
-                return;
-              }
-              await openPathInDirectoryTarget({
-                lineNumber: null,
-                path: workspaceOpenPath,
-                rememberTarget: true,
-                targetId: target.id,
-              });
-            },
-          },
-        }))
-      : [];
   const showGitChanges =
     systemConfigQuery.data?.generalSettings.showGitChanges ?? false;
   const threadHeaderGitActions =
@@ -2322,84 +2339,87 @@ function ThreadDetailViewInternal(
       ? { id: thread.environmentId, path: environment.path }
       : null,
   );
-  const responsiveHeaderActions = [
-    ...responsiveWorkspaceActions,
-    ...responsiveGitActions,
-  ];
-  const workspaceOpenButton =
-    workspaceOpenPath && preferredDirectoryTarget ? (
-      <ThreadWorkspaceOpenButton
-        preferredTarget={preferredDirectoryTarget}
-        targets={directoryOpenTargets}
-        onOpenPreferredTarget={async () => {
-          await openPathInPreferredDirectoryTarget({
-            lineNumber: null,
-            path: workspaceOpenPath,
-          });
-        }}
-        onOpenTarget={async (targetId) => {
-          await openPathInDirectoryTarget({
-            lineNumber: null,
-            path: workspaceOpenPath,
-            rememberTarget: true,
-            targetId,
-          });
-        }}
-      />
-    ) : undefined;
+  const workspaceHeader =
+    workspaceOpenPath && preferredDirectoryTarget
+      ? {
+          preferredTarget: preferredDirectoryTarget,
+          targets: directoryOpenTargets,
+          onOpenPreferredTarget: async () => {
+            await openPathInPreferredDirectoryTarget({
+              lineNumber: null,
+              path: workspaceOpenPath,
+            });
+          },
+          onOpenTarget: async (targetId: string) => {
+            await openPathInDirectoryTarget({
+              lineNumber: null,
+              path: workspaceOpenPath,
+              rememberTarget: true,
+              targetId,
+            });
+          },
+        }
+      : null;
   const timelineHeader = (
-    <ThreadDetailHeader
-      actionsMenu={({
-        includeResponsiveActions,
-        requestRename,
-        onCloseAutoFocus,
-      }) => (
-        <ThreadActionsMenu
-          thread={threadActionTarget}
-          trigger={(triggerProps) => (
-            <Button
-              {...triggerProps}
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                triggerProps.className,
-                "rounded-md p-0",
-                "data-[state=open]:bg-state-active data-[state=open]:text-foreground",
-                HEADER_ICON_BUTTON_CLASS,
-              )}
-              aria-label="Thread actions"
-              onClick={(event) => {
-                triggerProps.onClick?.(event);
-                event.stopPropagation();
-              }}
-            >
-              <Icon
-                name="MoreHorizontal"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
+    <CoreWorkspaceHeaderContext.Provider value={workspaceHeader}>
+      <PluginThreadHeaderActions
+        threadId={thread.id}
+        projectId={thread.projectId}
+      >
+        {({ actions: overflowActions, controls }) => (
+          <ThreadDetailHeader
+            actionsMenu={({
+              includeResponsiveActions,
+              requestRename,
+              onCloseAutoFocus,
+            }) => (
+              <ThreadActionsMenu
+                thread={threadActionTarget}
+                trigger={(triggerProps) => (
+                  <Button
+                    {...triggerProps}
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      triggerProps.className,
+                      "rounded-md p-0",
+                      "data-[state=open]:bg-state-active data-[state=open]:text-foreground",
+                      HEADER_ICON_BUTTON_CLASS,
+                    )}
+                    aria-label="Thread actions"
+                    onClick={(event) => {
+                      triggerProps.onClick?.(event);
+                      event.stopPropagation();
+                    }}
+                  >
+                    <Icon
+                      name="MoreHorizontal"
+                      className={COARSE_POINTER_ICON_SIZE_CLASS}
+                    />
+                  </Button>
+                )}
+                inline={
+                  includeResponsiveActions
+                    ? [...overflowActions, ...responsiveGitActions]
+                    : []
+                }
+                requestRename={requestRename}
+                onCloseAutoFocus={onCloseAutoFocus}
               />
-            </Button>
-          )}
-          inline={includeResponsiveActions ? responsiveHeaderActions : []}
-          requestRename={requestRename}
-          onCloseAutoFocus={onCloseAutoFocus}
-        />
-      )}
-      isSecondaryPanelOpen={isSecondaryPanelOpen}
-      onClosePane={onRequestClose ?? undefined}
-      onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
-      onToggleSecondaryPanel={toggleSecondaryPanel}
-      pluginActions={
-        <PluginThreadHeaderActions
-          threadId={thread.id}
-          projectId={thread.projectId}
-        />
-      }
-      threadHeaderGitActions={threadHeaderGitActions}
-      threadId={thread.id}
-      threadTitle={threadTitle}
-      workspaceOpenButton={workspaceOpenButton}
-    />
+            )}
+            isSecondaryPanelOpen={isSecondaryPanelOpen}
+            onClosePane={onRequestClose ?? undefined}
+            onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
+            onToggleSecondaryPanel={toggleSecondaryPanel}
+            pluginActions={controls}
+            threadHeaderGitActions={threadHeaderGitActions}
+            threadId={thread.id}
+            threadTitle={threadTitle}
+          />
+        )}
+      </PluginThreadHeaderActions>
+    </CoreWorkspaceHeaderContext.Provider>
   );
   const composerFooter = (
     <ThreadDetailPromptArea
@@ -2767,6 +2787,7 @@ function ThreadDetailViewInternal(
       />
       <UrlOpenRoutingProvider openInAppBrowser={openBrowser}>
         <AppNavigationHostProvider capabilities={appNavigationCapabilities}>
+          {threadFixedTabs.observers}
           <ThreadDetailSecondaryContent
             footer={composerFooter}
             header={timelineHeader}

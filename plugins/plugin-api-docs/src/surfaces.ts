@@ -218,10 +218,12 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Show live state for the thread on screen, not just a static button",
           "Sit in the same row as bb's own header controls",
+          "Move actions into the menu in compact or narrow split headers",
         ],
         apiSymbols: [
           "PluginThreadHeaderActionRegistration",
           "PluginThreadHeaderActionProps",
+          "PluginThreadHeaderActionRegistration.experimental_useOverflowActions",
         ],
         experimental: true,
       },
@@ -393,11 +395,24 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         summary:
           "Add a tab to the side panel next to a thread. With this, a plugin can:",
         bullets: [
-          "Show plugin content alongside the conversation",
-          "Know which thread it was opened from",
+          "Show closable or pinned plugin tabs alongside the conversation",
+          "Know which thread the tab belongs to and hide pinned tabs when they do not apply",
+          "Keep pinned tabs saved per thread; core Info uses the same registration path",
           "Open from a [message action](message-actions), the side panel's + button, or plugin code",
         ],
+        reference: [
+          "Register pinned tabs with app.slots.experimental_threadFixedTab({ id, title, tooltip?, icon, component, useVisible? }). title labels the tab; tooltip supplies hover text and the lowercased phrase in its Show … panel accessible name, defaulting to title. The component and optional visibility hook receive { threadId }; layout is padded (default) or flush.",
+          "Open a pinned tab with experimental_useAppPanel().openFixedTab({ surface: { kind: 'current' }, tab: { id: 'your-tab' } }). Thread references omit panelId and target; unknown or hidden tabs return false. Nav-panel references retain panelId and their existing typed-target contract.",
+          "Pinned tabs cannot be closed. Identity and order are saved per thread and retained while hidden or disabled. SDK threads.tabs.get/update and CLI bb thread tabs show/set use { id, kind: 'plugin-fixed', pluginId, tabId }; updates require the expected revision. Selection stays client-local.",
+        ],
         apiSymbols: [
+          "PluginAppSlots.experimental_threadFixedTab",
+          "experimental_useAppPanel",
+          "ExperimentalThreadFixedTabRegistration",
+          "ExperimentalThreadFixedTabRegistration.tooltip",
+          "ExperimentalThreadFixedTabReference",
+          "ExperimentalThreadFixedTabProps",
+          "ExperimentalAppPanel.openFixedTab",
           "PluginThreadPanelActionRegistration",
           "BbNavigate.openThreadPanel",
           "PluginThreadPanelProps",
@@ -501,8 +516,15 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Warn or inform before someone sends, such as a rate limit or a retry",
           "Show only on new threads, open threads, or queued messages",
+          "Add an inline thread-context segment, with details below the shared row",
         ],
-        apiSymbols: ["ComposerCustomization", "PluginComposerScope"],
+        apiSymbols: [
+          "ComposerCustomization",
+          "PluginComposerScope",
+          "PluginAppSlots.experimental_threadContextSegment",
+          "ExperimentalThreadContextSegmentRegistration",
+          "ExperimentalThreadContextSegmentProps",
+        ],
         firstParty: ["Send later", "Workflows"],
       },
       {

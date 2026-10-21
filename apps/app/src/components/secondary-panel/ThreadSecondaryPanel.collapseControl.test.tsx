@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { ThreadInfoFixedTabContent } from "@/components/secondary-panel/thread-info-registration";
 import {
   cleanup,
   fireEvent,
@@ -61,6 +62,8 @@ const diffFixedTab = createGitDiffFixedPanelTab();
 const infoFixedTabDescriptor = {
   ariaLabel: "Show thread info panel",
   label: "Info",
+  contentFillsRegion: true,
+  renderContent: () => <ThreadInfoFixedTabContent />,
   leadingVisual: null,
   onSelect: noop,
   tab: infoFixedTab,

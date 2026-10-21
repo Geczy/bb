@@ -13,6 +13,7 @@ export {
   buildFixedPanelTabId,
   createThreadInfoFixedPanelTab,
   createGitDiffFixedPanelTab,
+  createPluginFixedPanelTab,
   createPluginPageFixedPanelTab,
   createPluginPanelFixedPanelTab,
   createWorkspaceFilePreviewFixedPanelTab,
@@ -31,6 +32,7 @@ export {
   areFixedPanelTabsEquivalent,
 } from "@bb/client-core";
 export type {
+  PluginFixedPanelTab,
   PluginPageFixedPanelTab,
   FixedPanelViewTab,
   PluginPanelFixedPanelTab,
