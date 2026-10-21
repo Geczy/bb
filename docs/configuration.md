@@ -274,7 +274,8 @@ lists what `bb project discover` and
 
 **Anonymous usage telemetry.** PostHog events carry a random install id, app
 version, install kind, platform, OS release, architecture, and Node version.
-The server sends `app_started`, `telemetry_disabled`, `thread_created`,
+Some new installs try a new version of a feature before everyone else, chosen at random on your device; their events note which version that install has.
+The server sends `holdout_exposed` (fixed `holdout` and `arm` values), `app_started`, `telemetry_disabled`, `thread_created`,
 `user_message_sent`, and `plugin_installed`. The app reports setup-guide and
 first-send events through `POST /api/v1/system/telemetry/events`
 (`sdk.system.experimental_recordTelemetryEvent`): `onboarding_started`,
@@ -1207,3 +1208,9 @@ metadata is preserved. This is a desktop-local preference, with no server
 settings CLI/SDK endpoint. Builds with tolerant readers ignore the field and
 may drop it on save; older strict readers can reject the whole file, so keep a
 backup before rolling back to a build predating the tolerant-reader fix #5286.
+
+## Per-install holdouts
+
+`bb holdouts list [--json]` reads assignments, including key, arm, assigned and exposed timestamps, version at assignment, and registry status. The SDK equivalents are `sdk.system.holdouts()` and `sdk.system.exposeHoldout(key)`; HTTP routes are `GET /api/v1/system/holdouts` and `POST /api/v1/system/holdouts/:key/exposure`. Exposure checks that setup is complete, a project exists, and an agent is ready, then records once. The A/A holdout `app_aa_check` changes no behavior. New installs draw once regardless of telemetry; existing installs keep control. Live assignments add `$feature/app_aa_check` (`control` or `test`) to events. Ended holdouts stop reporting and use their winner or control.
+
+`BB_HOLDOUT_FORCE=app_aa_check:control` (or `:test`) is a startup-only QA override parsed by the server. It never stores the forced arm or reports holdout telemetry. A local exclusion marker persists across restarts and removal of the variable so QA cannot later enter analysis. No assignment is created for an excluded holdout. Use a fresh data directory for ordinary enrollment after QA. Telemetry opt-out stops all reporting without changing assignment.

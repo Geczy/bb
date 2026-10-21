@@ -1,3 +1,8 @@
+import {
+  holdoutKeySchema,
+  holdoutArmSchema,
+  holdoutStatusSchema,
+} from "@bb/domain";
 import { rejectMultipleWorkspaceSelectors } from "./shared.js";
 import { z } from "zod";
 import {
@@ -700,4 +705,20 @@ export const systemProviderEnabledRequestSchema = z
   .strict();
 export type SystemProviderEnabledRequest = z.infer<
   typeof systemProviderEnabledRequestSchema
+>;
+
+export const systemHoldoutsResponseSchema = z.object({
+  assignments: z.array(
+    z.object({
+      key: holdoutKeySchema,
+      arm: holdoutArmSchema,
+      assignedAt: z.number(),
+      exposedAt: z.number().nullable(),
+      appVersion: z.string(),
+      status: holdoutStatusSchema,
+    }),
+  ),
+});
+export type SystemHoldoutsResponse = z.infer<
+  typeof systemHoldoutsResponseSchema
 >;

@@ -1,3 +1,4 @@
+import { sdk } from "@/lib/sdk";
 import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@bb/shared-ui/tooltip";
 import { useUpdateGeneralSettings } from "@/hooks/mutations/settings-mutations";
@@ -61,10 +62,19 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
             entry={seenBefore ? "replay" : "first_run"}
             onClose={() => {
               setFirstRunClosed(true);
-              updateSettings.mutate({
-                ...settings,
-                onboardingCompletedAt: new Date().toISOString(),
-              });
+              updateSettings.mutate(
+                {
+                  ...settings,
+                  onboardingCompletedAt: new Date().toISOString(),
+                },
+                {
+                  onSuccess: () => {
+                    void sdk.system
+                      .exposeHoldout("app_aa_check")
+                      .catch(() => {});
+                  },
+                },
+              );
             }}
           />
         </Suspense>

@@ -26,6 +26,11 @@ function group<Module>(
 
 export const CORE_COMMAND_GROUPS: readonly CommandGroup[] = [
   group(
+    "holdouts",
+    () => import("./commands/holdouts.js"),
+    (m) => (program, deps) => m.registerHoldoutCommands(program, deps.getUrl),
+  ),
+  group(
     "browser",
     () => import("./commands/browser.js"),
     (m) => (program, deps) => m.registerBrowserCommands(program, deps.getUrl),

@@ -6,7 +6,12 @@ import { OnboardingGate } from "./OnboardingGate";
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
+  exposeHoldout: vi.fn().mockResolvedValue({ exposed: true }),
   useSystemConfig: vi.fn(),
+}));
+
+vi.mock("@/lib/sdk", () => ({
+  sdk: { system: { exposeHoldout: mocks.exposeHoldout } },
 }));
 
 vi.mock("@/hooks/queries/system-queries", () => ({
@@ -83,6 +88,9 @@ describe("OnboardingGate", () => {
 
     expect(screen.getByText("App shell")).toBeTruthy();
     expect(mocks.mutate).toHaveBeenCalledTimes(1);
+    expect(mocks.exposeHoldout).not.toHaveBeenCalled();
+    mocks.mutate.mock.calls[0]?.[1].onSuccess();
+    expect(mocks.exposeHoldout).toHaveBeenCalledWith("app_aa_check");
     const written = mocks.mutate.mock.calls[0]?.[0] as AppSettings;
     expect(written).toMatchObject({
       streamerMode: true,
