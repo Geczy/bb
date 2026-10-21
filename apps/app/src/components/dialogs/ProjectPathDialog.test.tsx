@@ -3,7 +3,13 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { makeHost as host } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BbHttpError } from "@bb/sdk/browser";
+import { sdk } from "@/lib/sdk";
 import { ProjectPathDialog } from "./ProjectPathDialog";
+
+vi.mock("@/lib/sdk", () => ({
+  sdk: { hosts: { directory: vi.fn() } },
+}));
 
 vi.mock("@/components/dialogs/RemotePathBrowser", () => ({
   RemotePathBrowser: ({
@@ -170,5 +176,52 @@ describe("ProjectPathDialog machine selection", () => {
         .hasAttribute("disabled"),
     ).toBe(true);
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe("ProjectPathDialog missing folders", () => {
+  it.each([
+    { target: { kind: "create" as const }, label: "Add project" },
+    {
+      target: {
+        kind: "add-source" as const,
+        projectId: "project-example",
+        projectName: "Example",
+      },
+      label: "Add source",
+    },
+  ])("refuses a folder deleted before $label", async ({ target, label }) => {
+    vi.mocked(sdk.hosts.directory).mockRejectedValue(
+      new BbHttpError({
+        status: 502,
+        code: "ENOENT",
+        message: "Folder not found",
+        body: { code: "ENOENT", message: "Folder not found" },
+      }),
+    );
+    const onSubmit = vi.fn();
+    render(
+      <ProjectPathDialog
+        target={target}
+        platform="linux"
+        hostId={atum.id}
+        hostName={atum.name}
+        hosts={[atum]}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose folder on host_atum" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: label }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "This folder isn't on atum. It may have been moved or deleted.",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Choose another folder" }),
+    ).toBeTruthy();
   });
 });
