@@ -54,7 +54,7 @@ export const guide: Guide = {
   heroTop: null,
   concept: <SpawnTimeline />,
   agentPrompt: AGENT_PROMPT,
-  requirement: "two or more agents signed in, like Claude Code and Codex",
+  requirement: "One agent signed in. A second agent is optional.",
   steps: [
     {
       id: "step-1",
