@@ -96,7 +96,7 @@ export function buildParentSelectorOptions({
 
   addOption(
     parentThreadId ?? undefined,
-    parentThreadDisplayName ?? "Parent thread",
+    parentThreadDisplayName ?? "Untitled thread",
   );
   const threadIdsWithChildren = new Set<string>();
   for (const thread of parentThreads) {
@@ -114,7 +114,7 @@ export function buildParentSelectorOptions({
       }
       addOption(
         parentThread.id,
-        parentThread.title?.trim() ? parentThread.title : "Parent thread",
+        parentThread.title?.trim() ? parentThread.title : "Untitled thread",
       );
     }
   }

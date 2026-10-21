@@ -106,7 +106,7 @@ describe("toPluginSidebarThread", () => {
     expect(
       toPluginSidebarThread(makeThread({ hasPendingInteraction: true }))
         .indicatorLabel,
-    ).toBe("Thread needs user input");
+    ).toBe("Thread waiting on you");
     const idle = toPluginSidebarThread(makeThread());
     expect(idle.indicator).toBe("none");
     expect(idle.indicatorLabel).toBeNull();

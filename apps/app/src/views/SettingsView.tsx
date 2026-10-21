@@ -968,7 +968,7 @@ export function GeneralSettingsSection({
 
           <SettingsWithControl
             label="Thread archive confirmation"
-            description="Ask before archiving a thread with unarchived child threads."
+            description="Ask before archiving a thread that has unarchived threads under it."
           >
             <Switch
               checked={confirmThreadArchive}

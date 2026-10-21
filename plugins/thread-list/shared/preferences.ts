@@ -187,7 +187,7 @@ export const preferenceDefinitions = {
   collapsedThreads: definePreference(
     stringListSchema,
     [],
-    "Thread ids whose child threads are collapsed.",
+    "Thread ids whose threads under them are collapsed.",
     null,
   ),
   collapsedEnvironments: definePreference(

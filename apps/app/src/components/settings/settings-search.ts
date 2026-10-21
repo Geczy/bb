@@ -51,7 +51,7 @@ export const SETTINGS_SEARCH_INDEX: Record<
       },
       {
         title: "Thread archive confirmation",
-        keywords: ["confirm", "child threads"],
+        keywords: ["confirm", "child threads", "threads under"],
       },
       {
         title: "Show messages from before a context clear",

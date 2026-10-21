@@ -30,7 +30,7 @@ const PUSH_BODY_MAX_LENGTH = 180;
 const NETWORK_WARNING_INTERVAL_MS = 60 * 60 * 1_000;
 const LAST_OUTCOME_KEY = "last-send-outcome";
 const FALLBACK_BODIES: Record<PushNotificationKind, string> = {
-  "pending-interaction": "Waiting for your input",
+  "pending-interaction": "Waiting on you",
   "thread-error": "The thread hit an error",
   "turn-finished": "Finished and waiting for you",
 };
@@ -190,7 +190,7 @@ function describePendingInteraction(interaction: PendingInteraction): string {
     return "Review the plan before the agent continues";
   }
   if ("title" in payload) return payload.title;
-  return "Waiting for your input";
+  return "Waiting on you";
 }
 
 function pickKind(

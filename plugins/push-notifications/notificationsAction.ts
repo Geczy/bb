@@ -193,7 +193,7 @@ const LEVEL_ICONS: Record<NotificationLevel, string> = {
 };
 
 function capHint(row: ThreadNotifications): string | undefined {
-  if (row.source === "parent") return "Limited by a parent thread";
+  if (row.source === "parent") return "Limited by the thread above";
   if (row.source === "ancestor") return "Limited by an ancestor thread";
   return undefined;
 }

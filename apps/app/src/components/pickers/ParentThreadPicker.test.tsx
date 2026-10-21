@@ -40,7 +40,7 @@ describe("ParentThreadPicker", () => {
     );
 
     const search = screen.getByRole("combobox", {
-      name: "Search parent threads",
+      name: "Search threads",
     });
     const none = screen.getByRole("option", { name: "None" });
     const codex = screen.getByRole("option", { name: "Codex Parent" });
@@ -85,7 +85,7 @@ describe("ParentThreadPicker", () => {
 
     fireEvent.click(screen.getByRole("button"));
     const search = await screen.findByRole("combobox", {
-      name: "Search parent threads",
+      name: "Search threads",
     });
     fireEvent.change(search, { target: { value: "frpar" } });
 
@@ -94,7 +94,7 @@ describe("ParentThreadPicker", () => {
 
     expect(onChange).toHaveBeenCalledWith("thr_frontend_parent");
     expect(
-      screen.queryByRole("combobox", { name: "Search parent threads" }),
+      screen.queryByRole("combobox", { name: "Search threads" }),
     ).toBeNull();
   });
 
@@ -104,7 +104,7 @@ describe("ParentThreadPicker", () => {
     fireEvent.click(screen.getByRole("button"));
     fireEvent.change(
       await screen.findByRole("combobox", {
-        name: "Search parent threads",
+        name: "Search threads",
       }),
       { target: { value: "frontend_parent" } },
     );
@@ -120,7 +120,7 @@ describe("ParentThreadPicker", () => {
 
     fireEvent.click(screen.getByRole("button"));
     const search = await screen.findByRole("combobox", {
-      name: "Search parent threads",
+      name: "Search threads",
     });
     const list = document.querySelector<HTMLElement>("[cmdk-list]");
     expect(list).not.toBeNull();

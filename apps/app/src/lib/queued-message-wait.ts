@@ -144,7 +144,7 @@ export function describeQueuedMessageWait(
     case "host-offline":
       return `Waiting for ${args.waitingOn.hostName} to be ready`;
     case "interaction":
-      return "Waiting for your reply";
+      return "Waiting on you";
     case "plugin":
       return `Held by ${args.pluginDisplayName ?? args.waitingOn.pluginId} · ${args.waitingOn.reason}`;
   }

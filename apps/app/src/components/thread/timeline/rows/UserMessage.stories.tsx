@@ -284,7 +284,7 @@ const parentChildSystemMessageFixtures = [
     ),
   },
   {
-    label: "needs attention",
+    label: "is waiting for an answer",
     hint: "child thread is blocked on a pending interaction",
     message: buildMessage(
       renderTemplate("systemMessageChildThreadNeedsAttention", {

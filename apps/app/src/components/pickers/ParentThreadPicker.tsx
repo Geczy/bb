@@ -102,15 +102,15 @@ export function ParentThreadPicker({
         mobileClassName={PICKER_MOBILE_CLASS_NAME}
         align="start"
         className="flex min-h-0 w-72 flex-col p-0 max-md:flex-1"
-        mobileTitle="Assign parent thread"
+        mobileTitle="Move under…"
       >
         <Command
-          label="Search parent threads"
+          label="Search threads"
           shouldFilter={false}
           className="min-h-0"
         >
           <CommandInput
-            aria-label="Search parent threads"
+            aria-label="Search threads"
             placeholder="Search threads…"
             value={searchQuery}
             onValueChange={setSearchQuery}

@@ -102,7 +102,7 @@ const THREAD_LIST_INDICATOR_LABELS: Record<
   string
 > = {
   "unread-error": "Unread thread failed",
-  "waiting-for-input": "Thread needs user input",
+  "waiting-for-input": "Thread waiting on you",
   "working-draft": "Thread working with unsubmitted draft",
   workflow: "Workflow running",
   "background-agent": "Background agent running",

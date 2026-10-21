@@ -57,7 +57,7 @@ describe("describeQueuedMessageWait", () => {
       "Waiting for workspace",
     );
     expect(describeWait({ kind: "interaction" })).toBe(
-      "Waiting for your reply",
+      "Waiting on you",
     );
   });
 

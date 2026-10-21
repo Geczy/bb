@@ -1791,7 +1791,7 @@ describe("CommandPalette", () => {
       for (const [title, label, icon] of [
         ["Title working", "Thread working", "Loading"],
         ["Title draft", "Thread has unsubmitted draft", "Edit"],
-        ["Title waiting", "Thread needs user input", "CircleQuestion"],
+        ["Title waiting", "Thread waiting on you", "CircleQuestion"],
         ["Title workflow", "Workflow running", "Workflow"],
       ]) {
         const row = within(results).getByRole("option", {
@@ -1857,7 +1857,7 @@ describe("CommandPalette", () => {
       within(screen.getByRole("option", { name: /Title waiting/ })).getByRole(
         "img",
         {
-          name: "Thread needs user input",
+          name: "Thread waiting on you",
         },
       ),
     ).toBeTruthy();

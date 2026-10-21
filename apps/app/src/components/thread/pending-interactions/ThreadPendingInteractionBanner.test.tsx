@@ -564,7 +564,7 @@ describe("ThreadPendingInteractionBanner collapsed strip", () => {
     renderBanner(commandApproval);
     const banner = screen.getByTestId("approval-banner");
     expect(banner.hasAttribute("data-expanded")).toBe(true);
-    expect(screen.getByText("Approval needed")).toBeTruthy();
+    expect(screen.getByText("Approval")).toBeTruthy();
     const preview = screen.getByTestId("command-preview");
     const pre = preview.querySelector("pre");
     expect(pre?.textContent).toContain("bash -n install.sh && echo OK");
@@ -597,19 +597,19 @@ describe("ThreadPendingInteractionBanner collapsed strip", () => {
   it("toggles through the title without submitting an approval", () => {
     renderBanner(commandApproval);
     const title = screen.getByRole("button", {
-      name: "Approval needed",
+      name: "Approval",
     });
     title.focus();
     fireEvent.click(title);
     const collapsedTitle = screen.getByRole("button", {
-      name: "Approval needed",
+      name: "Approval",
     });
     expect(collapsedTitle.getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(collapsedTitle);
     fireEvent.click(collapsedTitle);
     expect(
       screen
-        .getByRole("button", { name: "Approval needed" })
+        .getByRole("button", { name: "Approval" })
         .getAttribute("aria-expanded"),
     ).toBe("true");
     expect(mocks.resolveMutateAsync).not.toHaveBeenCalled();

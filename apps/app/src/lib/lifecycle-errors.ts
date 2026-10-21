@@ -356,7 +356,7 @@ function describeParentThreadInvalid({
   const isSenderThread = error.details.subject === "sender";
   const title = isSenderThread
     ? "Sender thread unavailable"
-    : "Parent thread unavailable";
+    : "Can't move under that thread";
 
   switch (error.details.reason) {
     case "not_found":
@@ -365,7 +365,7 @@ function describeParentThreadInvalid({
         title,
         body: isSenderThread
           ? "The sender thread no longer exists."
-          : "That parent thread no longer exists.",
+          : "That thread no longer exists.",
       });
     case "archived":
       return warning({
@@ -373,7 +373,7 @@ function describeParentThreadInvalid({
         title,
         body: isSenderThread
           ? "The sender thread is archived."
-          : "Unarchive the parent thread first or choose another parent.",
+          : "Unarchive that thread first or choose another.",
       });
     case "deleted":
       return errorDescription({
@@ -381,19 +381,19 @@ function describeParentThreadInvalid({
         title,
         body: isSenderThread
           ? "The sender thread was deleted."
-          : "That parent thread was deleted.",
+          : "That thread was deleted.",
       });
     case "self":
       return errorDescription({
         operation,
         title,
-        body: "A thread cannot be its own parent.",
+        body: "A thread can't be placed under itself.",
       });
     case "cycle":
       return errorDescription({
         operation,
         title,
-        body: "Choose a thread that is not a child of this thread.",
+        body: "Choose a thread that isn't already under this one.",
       });
     case "too_deep":
       return errorDescription({

@@ -17,7 +17,7 @@ describe("ThreadStatusGlyph", () => {
   it.each([
     ["unread-error", "Unread thread failed", "CircleX"],
     ["queued-failed", "Queued message failed to send", "CircleX"],
-    ["waiting-for-input", "Thread needs user input", "CircleQuestion"],
+    ["waiting-for-input", "Thread waiting on you", "CircleQuestion"],
     ["queued-waiting", "Thread has a message waiting to send", "Clock"],
     ["working-draft", "Thread working with unsubmitted draft", "Edit"],
     ["workflow", "Workflow running", "Workflow"],
@@ -101,7 +101,7 @@ describe("ThreadStatusGlyph", () => {
   it.each([
     ["runtime", "Thread working"],
     ["unread-error", "Unread thread failed"],
-    ["waiting-for-input", "Thread needs user input"],
+    ["waiting-for-input", "Thread waiting on you"],
   ] satisfies [PluginSidebarThreadIndicator, string][])(
     "keeps %s ahead of a row status",
     (indicator, label) => {

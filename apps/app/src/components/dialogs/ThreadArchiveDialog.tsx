@@ -88,11 +88,11 @@ export function ThreadArchiveDialogContent({
         <DialogTitle>Archive thread?</DialogTitle>
         <DialogDescription>
           {active ? "This will stop current work. " : null}
-          Its{" "}
+          The{" "}
           <span className="font-semibold">
             {formatChildThreadCount(childThreadCount)}
           </span>{" "}
-          will be archived too. Archived threads stay available and can be
+          under it will be archived too. Archived threads stay available and can be
           unarchived.
         </DialogDescription>
       </DialogHeader>

@@ -54,7 +54,7 @@ interface ArchiveThreadAndChildrenMutationRequest {
 
 export class ArchiveThreadConfirmationRequired extends Error {
   constructor(readonly childThreadCount: number) {
-    super("Archiving child threads requires confirmation");
+    super("Archiving the threads under this one requires confirmation");
   }
 }
 
@@ -201,7 +201,7 @@ export function useArchiveThreadAndChildren() {
 
   return useMutation({
     meta: {
-      errorMessage: "Failed to archive thread and its child threads.",
+      errorMessage: "Failed to archive the thread and the threads under it.",
       lifecycleOperation: "archive_thread",
       showErrorToast: false,
     },

@@ -207,7 +207,7 @@ describe("mobile recents hierarchy interaction", () => {
 
   it.each([
     {
-      label: "Thread needs user input",
+      label: "Thread waiting on you",
       child: makeIdleThread({
         id: "thr_child",
         parentThreadId: "thr_parent",

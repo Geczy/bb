@@ -303,7 +303,7 @@ function ApprovalPendingInteractionBanner({
 
   return (
     <PendingInteractionShell
-      label="Approval needed"
+      label="Approval"
       title={view.title}
       expandedByDefault={!collapsedByDefault}
       errorMessage={errorMessage}

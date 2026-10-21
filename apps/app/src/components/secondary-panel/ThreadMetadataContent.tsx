@@ -165,7 +165,7 @@ export function ParentSelectorRow({
             )}
           >
             <ThreadTitle
-              title={selectedParentOptionLabel ?? "Parent thread"}
+              title={selectedParentOptionLabel ?? "Untitled thread"}
               tooltip
             />
           </Link>
@@ -178,7 +178,7 @@ export function ParentSelectorRow({
             onClick={() => {
               onAssignParent(null);
             }}
-            aria-label="Clear parent thread"
+            aria-label="Move to top level"
           >
             <Icon name="X" />
           </Button>

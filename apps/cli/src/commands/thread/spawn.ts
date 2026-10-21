@@ -365,7 +365,7 @@ export function registerSpawnCommand(
       "--machine-inputs <json>",
       "Persisted non-secret inputs for --new-machine or a composed --environment-provider; store credentials in plugin settings",
     )
-    .option("--parent-thread <id>", "Parent thread ID for worker thread links")
+    .option("--parent-thread <id>", "Thread to place this one under")
     .option("--parent-self", "Parent the new thread to BB_THREAD_ID")
     .option("--provider <id>", PROVIDER_HELP)
     .option(

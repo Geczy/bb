@@ -821,7 +821,7 @@ function ThreadDetailViewInternal(
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread({
-    errorMessage: "Failed to assign parent thread.",
+    errorMessage: "Failed to move the thread.",
   });
   const loadedTerminalSessions = terminalsListQuery.data?.sessions;
   const terminalSessions = loadedTerminalSessions ?? EMPTY_TERMINAL_SESSIONS;

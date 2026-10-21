@@ -74,7 +74,11 @@ export function ChildThreadsSection({ thread }: { thread: Thread }) {
   return (
     <RelatedThreadsSection
       sectionId="childThreads"
-      label="Child threads"
+      label={
+        thread.parentThreadId === null
+          ? "Threads under this lead"
+          : "Started from this thread"
+      }
       threads={(childThreadsQuery.data ?? []).filter(
         (childThread) => childThread.originKind === null,
       )}

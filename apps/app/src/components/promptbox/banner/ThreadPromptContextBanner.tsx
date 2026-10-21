@@ -438,7 +438,7 @@ function ParentThreadSectionBody({
       id={SECTION_IDS.parentThread.body}
       labelledBy={SECTION_IDS.parentThread.toggle}
       isExpanded={isExpanded}
-      collapseLabel="Collapse parent thread"
+      collapseLabel="Collapse the thread above"
       collapseRef={collapseRef}
       onCollapse={onCollapse}
     >
@@ -486,7 +486,7 @@ function ChildThreadsBody({
               <Icon
                 name="CircleQuestion"
                 className="size-3.5 shrink-0 text-muted-foreground/75 no-underline"
-                aria-label="Needs input"
+                aria-label="Waiting on you"
               />
             ) : (
               <Icon
@@ -568,7 +568,7 @@ function ChildThreadsHeaderIcon({ needsInput }: { needsInput: boolean }) {
         <Icon
           name="CircleQuestion"
           className="size-3 text-foreground/80"
-          aria-label="Needs input"
+          aria-label="Waiting on you"
         />
       </span>
     </span>
@@ -595,7 +595,7 @@ function ChildQuestionBackHeader({
       ref={backButtonRef}
       type="button"
       id={SECTION_IDS.childThreads.toggle}
-      aria-label="Back to active child threads"
+      aria-label="Back to active threads"
       onClick={onBack}
       className={activityRowClass(
         "active",
@@ -617,7 +617,7 @@ function ChildQuestionBackHeader({
           "min-w-0 flex-1 truncate text-left font-normal",
         )}
       >
-        Active child threads
+        Active threads
       </span>
     </button>
   );
@@ -1082,11 +1082,12 @@ function ActiveChildThreadsCard({
     }
   };
   const showBackHeader = currentQuestion !== undefined && items.length > 1;
-  const needsInput = items.some((item) => item.hasPendingInteraction);
+  const waitingCount = items.filter((item) => item.hasPendingInteraction).length;
+  const needsInput = waitingCount > 0;
   return (
     <PromptStackCard
       rootRef={cardRef}
-      ariaLabel="Child threads"
+      ariaLabel="Threads under this one"
       onKeyDown={closeQuestionOnEscape}
       className="overflow-hidden"
       style={{ minHeight: PROMPT_STACK_CARD_ROW_HEIGHT }}
@@ -1106,8 +1107,10 @@ function ActiveChildThreadsCard({
           aria-controls={SECTION_IDS.childThreads.body}
           aria-label={
             collapsedQuestion
-              ? `${items.length} active ${childThreadNoun(items.length)}, needs input: ${newestQuestionTitle}: ${collapsedQuestion.text}`
-              : `${items.length} active ${childThreadNoun(items.length)}`
+              ? `${items.length} ${childThreadNoun(items.length)} working · ${waitingCount} waiting on you: ${newestQuestionTitle}: ${collapsedQuestion.text}`
+              : waitingCount > 0
+                ? `${items.length} ${childThreadNoun(items.length)} working · ${waitingCount} waiting on you`
+                : `${items.length} ${childThreadNoun(items.length)} working`
           }
           onClick={focus.onTriggerClick}
           className={activityRowClass(
@@ -1135,7 +1138,7 @@ function ActiveChildThreadsCard({
                 "min-w-0 flex-1 truncate text-left font-normal",
               )}
             >
-              Active child threads
+              Active threads
             </span>
           )}
           <PromptStackCountSlot count={items.length} />

@@ -761,7 +761,7 @@ describe("ThreadRow", () => {
   it.each([
     {
       label: "pending input",
-      expectedStatus: "Thread needs user input",
+      expectedStatus: "Thread waiting on you",
       thread: createThread({ hasPendingInteraction: true }),
     },
     {

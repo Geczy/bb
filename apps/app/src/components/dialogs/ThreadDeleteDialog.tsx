@@ -59,11 +59,11 @@ export function ThreadDeleteDialogContent({
         <>
           {target.childThreadCount ? (
             <>
-              Its{" "}
+              The{" "}
               <span className="font-semibold">
                 {formatChildThreadCount(target.childThreadCount)}
               </span>{" "}
-              will be deleted too.{" "}
+              under it will be deleted too.{" "}
             </>
           ) : null}
           This action cannot be undone.

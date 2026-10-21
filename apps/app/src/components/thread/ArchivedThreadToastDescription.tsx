@@ -11,7 +11,7 @@ interface ArchivedThreadToastDescriptionProps {
 }
 
 function formatArchivedChildThreadLabel(childThreadCount: number): string {
-  return `and ${formatChildThreadCount(childThreadCount)}`;
+  return `and ${formatChildThreadCount(childThreadCount)} under it`;
 }
 
 export function ArchivedThreadToastDescription({

@@ -206,7 +206,7 @@ describe("thread notifications action", () => {
     expect(summary({ id: "thr_child", parentThreadId: "thr_top" })).toEqual({
       detail: "Muted",
       icon: "push-notifications/off",
-      hint: "Limited by a parent thread",
+      hint: "Limited by the thread above",
       selected: "inherit",
     });
     expect(
@@ -218,7 +218,7 @@ describe("thread notifications action", () => {
       selected: "inherit",
     });
     expect(summary({ id: "thr_other", parentThreadId: "thr_top" })).toEqual({
-      detail: "Needs input only",
+      detail: "Waiting on you only",
       icon: "BellDot",
       hint: null,
       selected: "inherit",
@@ -337,7 +337,7 @@ describe("thread notifications action", () => {
     ]);
     await waitFor(() => expect(listCalls()).toHaveLength(1));
     const child = { id: "thr_child", parentThreadId: "thr_top" };
-    expect(summary(child)?.detail).toBe("Needs input only");
+    expect(summary(child)?.detail).toBe("Waiting on you only");
 
     await view.behavior.emitRealtime("threadNotifications", {
       threads: {
@@ -350,7 +350,7 @@ describe("thread notifications action", () => {
     });
     expect(summary(child)).toMatchObject({
       detail: "Muted",
-      hint: "Limited by a parent thread",
+      hint: "Limited by the thread above",
     });
     expect(summary()?.selected).toBe("muted");
     expect(listCalls()).toHaveLength(1);

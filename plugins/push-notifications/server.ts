@@ -91,7 +91,7 @@ function formatStatus(status: StatusView): string {
     `Web: ${status.webEnabled}`,
     `Desktop: ${status.desktopEnabled}`,
     `Default level: ${status.defaultLevel}`,
-    `Child thread level: ${status.childLevel}`,
+    `Threads under other threads: ${status.childLevel}`,
     `Subscriptions: ${status.subscriptionCount}`,
     `Relay URL: ${status.relayUrl}`,
     `Last send: ${formatLastOutcome(status.lastSendOutcome)}`,
@@ -144,7 +144,7 @@ export function createPushNotificationsPlugin(
         type: "select",
         label: "Default notifications",
         description:
-          "For threads you haven't set. Needs input only skips finished turns.",
+          "For threads you haven't set. Waiting on you only skips finished turns.",
         options: [...notificationLevelSchema.options],
         experimental_optionLabels: {
           all: NOTIFICATION_LEVEL_LABELS.all,
@@ -156,9 +156,9 @@ export function createPushNotificationsPlugin(
       },
       childLevel: {
         type: "select",
-        label: "Child thread notifications",
+        label: "Threads under other threads",
         description:
-          "For child threads you haven't set. A thread's level also limits its child threads.",
+          "For threads under another thread that you haven't set. A thread's level also limits the threads under it.",
         options: [...ownNotificationLevelSchema.options],
         experimental_optionLabels: {
           inherit: NOTIFICATION_LEVEL_LABELS.inherit,
