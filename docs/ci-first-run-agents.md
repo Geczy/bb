@@ -8,7 +8,7 @@ gh workflow run ci.yml --ref <branch> -f first_run_agents=true
 
 This selects only the first-run jobs and their setup. Normal CI also selects
 these jobs for provider, provider bridge protocol, host installation/runtime
-shell environment, onboarding, and bb-app changes. Full CI includes them.
+shell environment, onboarding, and bb-app changes, and on `workflow_dispatch` with `first_run_agents=true`. Full CI and pushes to main don't run them. The jobs are `continue-on-error` until the known product fixes (#5948, #5943, #5429) land, so a red matrix doesn't fail the workflow.
 
 The Windows and macOS jobs build the packaged bb-app through Turbo, boot its
 server and daemon with a disposable home containing a space, and exercise the

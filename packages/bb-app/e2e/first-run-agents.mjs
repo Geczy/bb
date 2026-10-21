@@ -302,7 +302,7 @@ async function firstTurn(provider) {
       if (data.status === "completed" && output.output?.includes(modelServer.reply) && requests.some((request) => request.method === "POST")) {
         cell(provider, "turn", "pass", "Real CLI/bb thread completed with canned local SSE reply; inference stubbed");
       } else {
-        cell(provider, "turn", requests.some((request) => request.status >= 400) ? "stubbed" : "fail", `Turn ended ${data.status ?? "unknown"}; canned reply ${output.output?.includes(modelServer.reply) ? "present" : "missing"}; ${requests.length} fixture requests${data.error?.message ? `; ${data.error.message}` : ""}`);
+        cell(provider, "turn", "fail", `Turn ended ${data.status ?? "unknown"}; canned reply ${output.output?.includes(modelServer.reply) ? "present" : "missing"}; ${requests.length} fixture requests${data.error?.message ? `; ${data.error.message}` : ""}`);
       }
       return;
     }
@@ -311,7 +311,7 @@ async function firstTurn(provider) {
   await cli(["thread", "stop", thread.id, "--json"], 15_000).catch(() => undefined);
   const requests = modelServer.requests.slice(requestStart);
   report.evidence[`${provider}.turn`] = { status: "timeout", requests };
-  cell(provider, "turn", "stubbed", `No completed turn within 120 seconds; ${requests.length} fixture requests; CLI/fixture compatibility unknown`);
+  cell(provider, "turn", "fail", `No completed turn within 120 seconds; ${requests.length} fixture requests`);
 }
 
 async function updateProvider(provider) {
@@ -447,7 +447,7 @@ try {
     if (!result.success || !status.installed) throw new Error(`No-npm Pi install verified=${result.success}; installed=${status.installed}; ${result.errors.join("; ")}`);
     const lifecycleRan = />\s+protobufjs@[\d.]+\s+postinstall\s+>\s+node\s+scripts\/postinstall/u.test(report.evidence["pi.install"].output);
     report.evidence.piNodeLifecycle = lifecycleRan;
-    cell("pi", "piInstall", lifecycleRan ? "pass" : "stubbed", `bb installed and verified Pi ${status.currentVersion} without system node/npm; ${lifecycleRan ? "real dependency node postinstall ran" : "dependency node lifecycle not observed; shim coverage unknown"}`);
+    cell("pi", "piInstall", lifecycleRan ? "pass" : "fail", `bb installed and verified Pi ${status.currentVersion} without system node/npm; ${lifecycleRan ? "real dependency node postinstall ran" : "dependency node lifecycle not observed, so the node shim is unproven"}`);
   });
   cell("pi", "install", report.cells.pi.piInstall.status, report.cells.pi.piInstall.reason);
   for (const step of ["signin", "turn", "relaunch", "update"]) cell("pi", step, "stubbed", "Pi scope covers installation without system npm only");

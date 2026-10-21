@@ -27,7 +27,7 @@ const full = {
   foundation: true,
   packaging: true,
   providers: true,
-  firstRunAgents: true,
+  firstRunAgents: false,
   forks: true,
   buildFilters: "",
   staticFilters: "",

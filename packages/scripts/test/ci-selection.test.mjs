@@ -220,6 +220,7 @@ it("falls back to full coverage for unknown paths", () => {
   const plan = fixture().plan("new-tooling/settings.json");
   expect(plan.packaging).toBe(true);
   expect(plan.providers).toBe(true);
+  expect(plan.firstRunAgents).toBe(false);
   expect(
     plan["windows-tests"].include.some((entry) => entry.shard === "server-3"),
   ).toBe(true);

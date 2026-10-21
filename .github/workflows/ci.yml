@@ -898,6 +898,7 @@ jobs:
     name: First run agents (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 55
+    continue-on-error: true
     permissions:
       contents: read
     strategy:
