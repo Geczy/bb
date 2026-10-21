@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   createProject,
@@ -26,6 +26,7 @@ import { textInput } from "../helpers/prompt-input.js";
 const databases: ReturnType<typeof createMigratedConnection>[] = [];
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const db of databases.splice(0)) db.$client.close();
 });
 
@@ -50,11 +51,7 @@ function restrictedThread(providerId: string) {
 }
 
 describe("thread network policy", () => {
-  it("fails closed when stored policy is unreadable or a provider cannot enforce it", () => {
-    const unsupported = restrictedThread("acp-custom");
-    expect(() =>
-      threadNetworkAccess(unsupported.db, unsupported.thread.id),
-    ).toThrow("This agent cannot run with network access disabled");
+  it("fails closed when stored policy is unreadable", () => {
     const corrupt = restrictedThread("codex");
     corrupt.db
       .update(threadPluginMetadata)
@@ -134,6 +131,36 @@ describe("thread network policy", () => {
           expect(command.dynamicTools).toEqual([]);
           expect(command.injectedSkillSources).toEqual([]);
         }
+        const getProvider = harness.deps.providerRegistry.get.bind(
+          harness.deps.providerRegistry,
+        );
+        vi.spyOn(harness.deps.providerRegistry, "get").mockImplementation(
+          (id) => {
+            const registration = getProvider(id);
+            return registration === null
+              ? null
+              : {
+                  ...registration,
+                  info: {
+                    ...registration.info,
+                    capabilities: {
+                      ...registration.info.capabilities,
+                      experimental_supportsNetworkIsolation: false,
+                    },
+                  },
+                };
+          },
+        );
+        await expect(
+          prepareTurnSubmitCommandPayload(harness.deps, {
+            environment,
+            execution,
+            permissionEscalation: "ask",
+            input: textInput("Continue"),
+            target: { mode: "start" },
+            thread,
+          }),
+        ).rejects.toThrow("This agent cannot run with network access disabled");
       });
     },
   );

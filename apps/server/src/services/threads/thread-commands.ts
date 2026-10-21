@@ -227,6 +227,15 @@ function toRuntimeExecutionOptions(
     providerOptions,
   };
   if (!networkAccess) {
+    if (
+      args.deps.providerRegistry.get(args.providerId)?.info.capabilities
+        .experimental_supportsNetworkIsolation !== true
+    )
+      throw new ApiError(
+        409,
+        "network_policy_unsupported",
+        "This agent cannot run with network access disabled.",
+      );
     return {
       ...base,
       permissionMode: "accept-edits",

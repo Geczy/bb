@@ -119,11 +119,6 @@ export async function executeAgentRun(
       args.automation.targetThreadId !== null
     )
       throw new Error("Network-disabled jobs must use their own session");
-    if (
-      args.execution.networkAccess === false &&
-      !["codex", "claude-code"].includes(args.execution.providerId)
-    )
-      throw new Error("This agent cannot run with network access disabled");
     const prepared = await prepareAutomationRun(
       {
         ...bb.sdk,

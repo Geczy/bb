@@ -16,12 +16,5 @@ export function threadNetworkAccess(
     );
   }
   if (stored.metadata.networkAccess !== false) return true;
-  if (thread.providerId !== "codex" && thread.providerId !== "claude-code") {
-    throw new ApiError(
-      409,
-      "network_policy_unsupported",
-      "This agent cannot run with network access disabled.",
-    );
-  }
   return false;
 }

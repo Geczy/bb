@@ -183,7 +183,8 @@ export function createSetupJobService(
         const ready = states.providers.filter(
           (provider) =>
             provider.status === "ready" &&
-            ["codex", "claude-code"].includes(provider.providerId),
+            deps.providerRegistry.get(provider.providerId)?.info.capabilities
+              .experimental_supportsNetworkIsolation === true,
         );
         const provider =
           ready.find((entry) => entry.providerId === defaults?.providerId) ??
