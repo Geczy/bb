@@ -1,11 +1,11 @@
 import { defaultFeatureFlags } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
-  resolveWorkOrigin,
-  workOriginTelemetryProperty,
-} from "../../src/services/threads/work-origin.js";
+  resolveStartedBy,
+  startedByTelemetryProperty,
+} from "../../src/services/threads/started-by.js";
 
-describe("resolveWorkOrigin", () => {
+describe("resolveStartedBy", () => {
   it.each([
     [
       { origin: "plugin", originPluginId: "automations", initiator: "user" },
@@ -21,27 +21,27 @@ describe("resolveWorkOrigin", () => {
     ],
     [{ origin: "app", originPluginId: null, initiator: "user" }, "person"],
     [{ origin: "cli", originPluginId: null, initiator: "agent" }, "agent"],
-    [{ origin: "sdk", originPluginId: null, initiator: "system" }, "system"],
+    [{ origin: "sdk", originPluginId: null, initiator: "system" }, "bb"],
     [{ origin: null, originPluginId: null, initiator: "user" }, "person"],
   ] as const)("maps %o to %s", (args, expected) => {
-    expect(resolveWorkOrigin(args)).toBe(expected);
+    expect(resolveStartedBy(args)).toBe(expected);
   });
 });
 
-describe("workOriginTelemetryProperty", () => {
+describe("startedByTelemetryProperty", () => {
   it("is empty while the flag is off", () => {
-    expect(defaultFeatureFlags.workOriginTelemetry).toBe(false);
-    expect(workOriginTelemetryProperty(defaultFeatureFlags, "person")).toEqual(
+    expect(defaultFeatureFlags.startedByTelemetry).toBe(false);
+    expect(startedByTelemetryProperty(defaultFeatureFlags, "person")).toEqual(
       {},
     );
   });
 
   it("sends the fixed value when the flag is on", () => {
     expect(
-      workOriginTelemetryProperty(
-        { ...defaultFeatureFlags, workOriginTelemetry: true },
+      startedByTelemetryProperty(
+        { ...defaultFeatureFlags, startedByTelemetry: true },
         "automation",
       ),
-    ).toEqual({ work_origin: "automation" });
+    ).toEqual({ started_by: "automation" });
   });
 });

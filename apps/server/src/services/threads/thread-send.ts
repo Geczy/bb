@@ -77,8 +77,8 @@ import {
   type GroupedPrompt,
   type PromptWithGroups,
 } from "./deferred-first-turn-context.js";
-import type { TelemetryEvent, WorkOrigin } from "../system/telemetry.js";
-import { workOriginTelemetryProperty } from "./work-origin.js";
+import type { TelemetryEvent, StartedBy } from "../system/telemetry.js";
+import { startedByTelemetryProperty } from "./started-by.js";
 import { assertThreadHostAcceptsWork } from "./thread-host-admission.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
@@ -386,7 +386,7 @@ export function captureUserMessageSentTelemetry(
     isChildThread: boolean;
     messageSource: UserMessageSentProperties["message_source"];
     providerId: string;
-    workOrigin: WorkOrigin;
+    startedBy: StartedBy;
   },
 ): void {
   deps.telemetry.capture({
@@ -395,7 +395,7 @@ export function captureUserMessageSentTelemetry(
       is_child_thread: args.isChildThread,
       message_source: args.messageSource,
       provider: args.providerId,
-      ...workOriginTelemetryProperty(deps.config.featureFlags, args.workOrigin),
+      ...startedByTelemetryProperty(deps.config.featureFlags, args.startedBy),
     },
   });
 }
@@ -618,7 +618,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
-        workOrigin: "person",
+        startedBy: "person",
       });
     }
     return;
@@ -745,7 +745,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
-        workOrigin: "person",
+        startedBy: "person",
       });
     }
     return;
@@ -813,7 +813,7 @@ async function sendThreadMessageWithoutContextClear(
       isChildThread: thread.parentThreadId !== null,
       messageSource: "thread_send",
       providerId: thread.providerId,
-      workOrigin: "person",
+      startedBy: "person",
     });
   }
 }

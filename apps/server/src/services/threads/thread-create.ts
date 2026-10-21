@@ -60,10 +60,7 @@ import {
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
 import { resolveDispatchAuthor } from "./dispatch-author.js";
-import {
-  resolveWorkOrigin,
-  workOriginTelemetryProperty,
-} from "./work-origin.js";
+import { resolveStartedBy, startedByTelemetryProperty } from "./started-by.js";
 import { deriveForkTitle, deriveTitleFallback } from "./title-generation.js";
 import type { ThreadProvisionEnvironmentIntent } from "./thread-startup-store.js";
 import { resolveSystemProviderModels } from "../system/execution-options.js";
@@ -858,7 +855,7 @@ export async function createThreadFromRequest(
     senderThreadId: null,
     startedOnBehalfOf: request.startedOnBehalfOf,
   });
-  const workOrigin = resolveWorkOrigin({
+  const startedBy = resolveStartedBy({
     origin: request.origin,
     originPluginId: request.originPluginId ?? null,
     initiator,
@@ -868,7 +865,7 @@ export async function createThreadFromRequest(
     properties: {
       is_child_thread: parentThread !== null,
       provider: request.providerId,
-      ...workOriginTelemetryProperty(deps.config.featureFlags, workOrigin),
+      ...startedByTelemetryProperty(deps.config.featureFlags, startedBy),
     },
   });
   if (initiator === "user" && request.input.length > 0) {
@@ -876,7 +873,7 @@ export async function createThreadFromRequest(
       isChildThread: parentThread !== null,
       messageSource: "thread_create",
       providerId: request.providerId,
-      workOrigin,
+      startedBy,
     });
   }
   return thread;

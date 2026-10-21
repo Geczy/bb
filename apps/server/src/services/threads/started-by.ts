@@ -3,28 +3,28 @@ import type {
   ThreadCreateOrigin,
   ThreadTurnInitiator,
 } from "@bb/domain";
-import type { WorkOrigin } from "../system/telemetry.js";
+import type { StartedBy } from "../system/telemetry.js";
 
 const AUTOMATIONS_PLUGIN_ID = "automations";
 
-export function resolveWorkOrigin(args: {
+export function resolveStartedBy(args: {
   origin: ThreadCreateOrigin | null;
   originPluginId: string | null;
   initiator: ThreadTurnInitiator;
-}): WorkOrigin {
+}): StartedBy {
   if (args.origin === "plugin") {
     return args.originPluginId === AUTOMATIONS_PLUGIN_ID
       ? "automation"
       : "plugin";
   }
   if (args.initiator === "agent") return "agent";
-  if (args.initiator === "system") return "system";
+  if (args.initiator === "system") return "bb";
   return "person";
 }
 
-export function workOriginTelemetryProperty(
+export function startedByTelemetryProperty(
   featureFlags: FeatureFlags,
-  workOrigin: WorkOrigin,
-): { work_origin?: WorkOrigin } {
-  return featureFlags.workOriginTelemetry ? { work_origin: workOrigin } : {};
+  startedBy: StartedBy,
+): { started_by?: StartedBy } {
+  return featureFlags.startedByTelemetry ? { started_by: startedBy } : {};
 }

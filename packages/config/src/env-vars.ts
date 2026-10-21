@@ -310,10 +310,10 @@ export const BB_FF_PLACEHOLDER_ENV = defineEnvVar<boolean>({
   parse: parseBooleanEnvValue,
 });
 
-export const BB_FF_WORK_ORIGIN_TELEMETRY_ENV = defineEnvVar<boolean>({
+export const BB_FF_STARTED_BY_TELEMETRY_ENV = defineEnvVar<boolean>({
   description:
-    "Adds a fixed work_origin value (person, agent, automation, plugin or system) to anonymous thread_created and user_message_sent telemetry. Off until the property clears the analytics data model review.",
-  name: "BB_FF_WORK_ORIGIN_TELEMETRY",
+    "Adds a fixed started_by value (person, agent, automation, plugin or bb) to anonymous thread_created and user_message_sent telemetry. Off until the property clears the analytics data model review.",
+  name: "BB_FF_STARTED_BY_TELEMETRY",
   parse: parseBooleanEnvValue,
 });
 
@@ -421,7 +421,7 @@ export const DEFAULT_BB_DEV_APP_HOST = "";
 export const DEFAULT_BB_MARKETPLACE_URL =
   "https://getbb.app/marketplace/v2/marketplace.json";
 export const DEFAULT_BB_FF_PLACEHOLDER = defaultFeatureFlags.placeholder;
-export const DEFAULT_BB_FF_WORK_ORIGIN_TELEMETRY =
-  defaultFeatureFlags.workOriginTelemetry;
+export const DEFAULT_BB_FF_STARTED_BY_TELEMETRY =
+  defaultFeatureFlags.startedByTelemetry;
 export const DEFAULT_BB_FF_TIMELINE_WINDOW_EVENT_BUDGET =
   defaultFeatureFlags.timelineWindowEventBudget;
