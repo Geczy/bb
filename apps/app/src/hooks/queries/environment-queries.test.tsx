@@ -2,7 +2,7 @@
 
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ThreadPullRequest } from "@bb/domain";
-import { CORE_CHANGE_SCOPE, applyQueryChange } from "@bb/query-tags";
+import { CORE_CHANGE_SCOPE, applyQueryChange } from "@bb/query-changes";
 import {
   environmentPullRequestChange,
   type EnvironmentPullRequestResponse,

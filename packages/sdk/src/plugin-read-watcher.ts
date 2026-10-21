@@ -1,4 +1,4 @@
-import { resolveReadChange } from "@bb/query-tags/policy";
+import { resolveReadChange } from "@bb/query-changes/policy";
 import {
   type ReadChange,
   type ReadDependency,

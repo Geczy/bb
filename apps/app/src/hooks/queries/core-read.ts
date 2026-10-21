@@ -5,7 +5,7 @@ import type {
   ReadChangeReaction,
   ChangedMessage,
 } from "@bb/domain";
-import { CORE_CHANGE_SCOPE, liveQueryMeta } from "@bb/query-tags";
+import { CORE_CHANGE_SCOPE, liveQueryMeta } from "@bb/query-changes";
 
 export function coreRead<Data>(
   dependencies:

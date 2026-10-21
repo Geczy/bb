@@ -4,7 +4,7 @@ import {
   CORE_CHANGE_SCOPE,
   resolveReadChange,
   type ReadChange,
-} from "@bb/query-tags";
+} from "@bb/query-changes";
 import { threadStatusChangeMetadataSchema } from "@bb/domain";
 import { patchThreadEntity } from "./thread-entity-store";
 

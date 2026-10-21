@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { LiveMutationOutcome } from "@bb/query-tags";
+import type { LiveMutationOutcome } from "@bb/query-changes";
 import type {
   BbSdkAreas,
   ThreadMutationResult,
@@ -15,7 +15,7 @@ import {
   predictThreadPinState,
   rollbackThreadMetadataBatchTransaction,
 } from "../cache-owners/thread-state-cache-owner";
-import { applyQueryChanges, CORE_CHANGE_SCOPE } from "@bb/query-tags";
+import { applyQueryChanges, CORE_CHANGE_SCOPE } from "@bb/query-changes";
 import { callRoute } from "../queries/route-changes";
 
 type ThreadMutations = Pick<BbSdkAreas["threads"], "update" | "pin" | "unpin">;

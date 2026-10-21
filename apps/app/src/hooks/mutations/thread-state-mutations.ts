@@ -5,7 +5,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useLiveMutation } from "@bb/query-tags";
+import { useLiveMutation } from "@bb/query-changes";
 import type {
   ThreadArchiveAllResponse,
   ThreadResponse,

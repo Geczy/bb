@@ -5,7 +5,7 @@ import {
   pluginChangeScope,
   runLiveRead,
   liveQueryOptions,
-} from "@bb/query-tags";
+} from "@bb/query-changes";
 import { environmentPullRequestChange } from "@bb/server-contract";
 import { machineEnvironmentQueryKey } from "./queries/query-keys";
 import { afterEach, describe, expect, it, vi } from "vitest";

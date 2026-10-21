@@ -11,7 +11,7 @@ import {
   type KeyedView,
   type KeyedViewSlot,
   type LiveQueryOptimisticUpdate,
-} from "@bb/query-tags";
+} from "@bb/query-changes";
 import {
   threadWithRuntimeSchema,
   type ThreadListEntry,

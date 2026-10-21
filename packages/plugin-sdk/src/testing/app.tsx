@@ -1,7 +1,7 @@
 import { readChangeSchema, type ReadChange } from "@bb/domain";
-import { applyQueryChange } from "@bb/query-tags";
+import { applyQueryChange } from "@bb/query-changes";
 import { experimental_PluginRpcCallError } from "../rpc-contract.js";
-import { refreshLiveQueries, pluginChangeScope } from "@bb/query-tags";
+import { refreshLiveQueries, pluginChangeScope } from "@bb/query-changes";
 import { QueryClient } from "@tanstack/react-query";
 import {
   createRpcQueryHooks,

@@ -57,7 +57,7 @@
     "@bb/templates": "workspace:*",
     "ws": "^8.19.0",
     "zod": "^4.3.6",
-    "@bb/query-tags": "workspace:*"
+    "@bb/query-changes": "workspace:*"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

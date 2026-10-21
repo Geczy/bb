@@ -46,5 +46,5 @@ do with `updatedAt`. Pending predictions remain over authoritative patches.
 `writeKeyedEntity` updates the base beneath them. Shared rows remain consistent
 across detail, lists and sidebar views.
 
-`@bb/query-tags/testing` exports `keyedStoreContract`, the cases every keyed
+`@bb/query-changes/testing` exports `keyedStoreContract`, the cases every keyed
 surface runs through a `KeyedStoreSubject`.

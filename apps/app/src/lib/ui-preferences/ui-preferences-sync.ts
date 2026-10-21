@@ -11,7 +11,7 @@ import {
   UI_PREFERENCES_CHANGE,
   type UiPreferencesResponse,
 } from "@bb/server-contract";
-import { CORE_CHANGE_SCOPE, applyQueryChange } from "@bb/query-tags";
+import { CORE_CHANGE_SCOPE, applyQueryChange } from "@bb/query-changes";
 import { appToast } from "@/components/ui/app-toast";
 import { uiPreferencesQueryOptions } from "@/hooks/queries/system-queries";
 import { runRouteMutation } from "@/hooks/queries/route-changes";

@@ -1,5 +1,5 @@
 import { coreRead, dependency, SYSTEM_CONFIG_DEPENDENCY } from "./core-read";
-import { useLiveQuery } from "@bb/query-tags";
+import { useLiveQuery } from "@bb/query-changes";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type {

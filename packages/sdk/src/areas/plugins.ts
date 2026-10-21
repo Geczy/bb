@@ -1,4 +1,4 @@
-import { mapReadChange } from "@bb/query-tags/policy";
+import { mapReadChange } from "@bb/query-changes/policy";
 import {
   pluginUpdateJobResponseSchema,
   pluginUpdateJobListResponseSchema,

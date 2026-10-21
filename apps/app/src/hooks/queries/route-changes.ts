@@ -13,7 +13,7 @@ import {
   type LiveMutationOutcome,
   liveQueryOptions,
   type OptimisticUpdate,
-} from "@bb/query-tags";
+} from "@bb/query-changes";
 
 export function routeLiveRead<Input, Output>(
   client: QueryClient,

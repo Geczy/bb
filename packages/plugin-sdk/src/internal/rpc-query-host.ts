@@ -19,7 +19,7 @@ import {
   createLiveKeyedQueryOwner,
   useLiveMutation,
   useQuerySelection,
-} from "@bb/query-tags";
+} from "@bb/query-changes";
 import {
   canonicalPluginReadInput,
   pluginRpcEnvelopeSchema,

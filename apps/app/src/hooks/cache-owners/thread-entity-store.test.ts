@@ -4,7 +4,7 @@ import type { ThreadListEntry } from "@bb/domain";
 import {
   keyedStoreContract,
   type KeyedStoreSubject,
-} from "@bb/query-tags/testing";
+} from "@bb/query-changes/testing";
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { makeThreadListEntry as makeEntry } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";

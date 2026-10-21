@@ -5,7 +5,7 @@ import {
   CORE_CHANGE_SCOPE,
   refreshLiveQueries,
   pluginChangeScope,
-} from "@bb/query-tags";
+} from "@bb/query-changes";
 import type { QueryClient } from "@tanstack/react-query";
 import { assertNever } from "@bb/core-ui";
 import {

@@ -1,6 +1,6 @@
 import { coreRead, dependency } from "./core-read";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLiveQuery } from "@bb/query-tags";
+import { useLiveQuery } from "@bb/query-changes";
 import type {
   EnvironmentChangeKind,
   Environment,

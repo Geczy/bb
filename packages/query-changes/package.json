@@ -1,5 +1,5 @@
 {
-  "name": "@bb/query-tags",
+  "name": "@bb/query-changes",
   "version": "0.0.1",
   "type": "module",
   "sideEffects": false,
