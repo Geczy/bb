@@ -102,5 +102,4 @@ describe("native command registration", () => {
       availableCommands: [],
     });
   });
-
 });
