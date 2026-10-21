@@ -60,15 +60,16 @@ export function createThreadFixedTabDescriptor(
   threadId: string,
   open: (reference: AppFixedTabReference) => void,
 ): SecondaryPanelFixedTab {
+  const tooltip = entry.slot.tooltip ?? entry.slot.title;
   return {
-    ariaLabel: `Show ${entry.slot.title} panel`,
+    ariaLabel: `Show ${tooltip.toLowerCase()} panel`,
     label: entry.slot.title,
     leadingVisual: (
       <PluginItemIcon pluginId={entry.slot.pluginId} icon={entry.slot.icon} />
     ),
     onSelect: () => open(entry.reference),
     tab: entry.tab,
-    title: entry.slot.title,
+    title: tooltip,
     contentFillsRegion: entry.slot.layout === "flush",
     renderContent: () => (
       <ThreadFixedTabContent entry={entry} threadId={threadId} />

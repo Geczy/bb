@@ -15,6 +15,7 @@ export const coreThreadFixedTabs = collectPluginAppRegistrations(
     app.slots.experimental_threadFixedTab({
       id: "info",
       title: "Info",
+      tooltip: "Thread info",
       icon: "Info",
       layout: "flush",
       component: ThreadInfoFixedTabContent,

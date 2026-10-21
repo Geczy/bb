@@ -1056,6 +1056,8 @@ export interface ExperimentalThreadFixedTabProps {
 /** Pinned, non-closable thread tab. Identity and order are saved per thread. */
 export interface ExperimentalThreadFixedTabRegistration extends ExperimentalThreadFixedTabReference {
   title: string;
+  /** Hover text and accessible-name source; defaults to title. */
+  tooltip?: string;
   icon: BbIconName;
   component: ComponentType<ExperimentalThreadFixedTabProps>;
   layout?: "padded" | "flush";

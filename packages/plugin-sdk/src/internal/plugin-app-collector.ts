@@ -819,6 +819,15 @@ export function collectPluginAppRegistrations(
         collected.threadFixedTabs.push({
           ...collectPanelAction(kind, seenIds.threadFixedTab, registration),
           icon: requireNonEmptyString(kind, "icon", registration.icon),
+          ...(registration.tooltip === undefined
+            ? {}
+            : {
+                tooltip: requireNonEmptyString(
+                  kind,
+                  "tooltip",
+                  registration.tooltip,
+                ),
+              }),
           ...(registration.useVisible !== undefined
             ? { useVisible: registration.useVisible }
             : {}),

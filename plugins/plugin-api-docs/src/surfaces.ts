@@ -399,7 +399,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Open from a [message action](message-actions), the side panel's + button, or plugin code",
         ],
         reference: [
-          "Register pinned tabs with app.slots.experimental_threadFixedTab({ id, title, icon, component, useVisible? }). The component and optional visibility hook receive { threadId }; layout is padded (default) or flush.",
+          "Register pinned tabs with app.slots.experimental_threadFixedTab({ id, title, tooltip?, icon, component, useVisible? }). title labels the tab; tooltip supplies hover text and the lowercased phrase in its Show … panel accessible name, defaulting to title. The component and optional visibility hook receive { threadId }; layout is padded (default) or flush.",
           "Open a pinned tab with experimental_useAppPanel().openFixedTab({ surface: { kind: 'current' }, tab: { id: 'your-tab' } }). Thread references omit panelId and target; unknown or hidden tabs return false. Nav-panel references retain panelId and their existing typed-target contract.",
           "Pinned tabs cannot be closed. Identity and order are saved per thread and retained while hidden or disabled. SDK threads.tabs.get/update and CLI bb thread tabs show/set use { id, kind: 'plugin-fixed', pluginId, tabId }; updates require the expected revision. Selection stays client-local.",
         ],
@@ -407,6 +407,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginAppSlots.experimental_threadFixedTab",
           "experimental_useAppPanel",
           "ExperimentalThreadFixedTabRegistration",
+          "ExperimentalThreadFixedTabRegistration.tooltip",
           "ExperimentalThreadFixedTabReference",
           "ExperimentalThreadFixedTabProps",
           "ExperimentalAppPanel.openFixedTab",

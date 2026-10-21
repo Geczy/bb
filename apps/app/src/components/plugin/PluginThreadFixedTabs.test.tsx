@@ -16,6 +16,7 @@ import {
   resetPluginFrontendBootStateForTest,
 } from "@/lib/plugin-frontend-boot-state";
 import { useState } from "react";
+import { Icon } from "@bb/shared-ui/icon";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -47,7 +48,7 @@ import {
   useThreadFixedTabs,
 } from "./PluginThreadFixedTabs";
 
-function install(title = "Status") {
+function install(title = "Status", tooltip?: string) {
   setPluginSlotRegistrations(
     "example",
     collectPluginAppRegistrations(
@@ -55,6 +56,7 @@ function install(title = "Status") {
         app.slots.experimental_threadFixedTab({
           id: "status",
           title,
+          ...(tooltip === undefined ? {} : { tooltip }),
           icon: "Info",
           useVisible: ({ threadId }) =>
             usePluginId() === "example" && threadId !== "hidden",
@@ -105,6 +107,7 @@ function Host({ threadId }: { threadId: string | null }) {
                 title={descriptor.title}
                 onClick={descriptor.onSelect}
               >
+                {descriptor.leadingVisual}
                 {descriptor.label}
               </button>
             );
@@ -189,28 +192,56 @@ afterEach(() => {
 
 describe("thread fixed-tab contract", () => {
   it.each([
-    ["Info", "Core info:thr_one"],
-    ["Status", "example:thr_one:Status"],
+    [
+      "Info",
+      "Thread info",
+      "Show thread info panel",
+      "Core info:thr_one",
+      undefined,
+    ],
+    [
+      "Status",
+      "Status",
+      "Show status panel",
+      "example:thr_one:Status",
+      undefined,
+    ],
+    [
+      "Status",
+      "Workspace status",
+      "Show workspace status panel",
+      "example:thr_one:Status",
+      "Workspace status",
+    ],
   ])(
-    "selects and renders %s through registered destinations",
-    (title, content) => {
-      install();
+    "selects and renders %s with tooltip %s through registered destinations",
+    (label, tooltip, ariaLabel, content, registrationTooltip) => {
+      install("Status", registrationTooltip);
       mount("thr_one");
-      fireEvent.click(
-        screen.getByRole("button", { name: `Show ${title} panel` }),
-      );
+      const button = screen.getByRole("button", { name: ariaLabel });
+      expect(button.textContent).toBe(label);
+      expect(button.getAttribute("title")).toBe(tooltip);
+      fireEvent.click(button);
       expect(screen.getByText(content)).toBeTruthy();
-      expect(
-        screen
-          .getByRole("button", { name: `Show ${title} panel` })
-          .getAttribute("title"),
-      ).toBe(title);
       expect(screen.getByRole("status").textContent).toBe("true");
       fireEvent.click(screen.getByRole("button", { name: "Invalid target" }));
       expect(screen.getByRole("status").textContent).toBe("false");
       expect(screen.getByText(content)).toBeTruthy();
     },
   );
+
+  it("renders the same Info glyph through the core registration as the original Icon", () => {
+    const original = render(<Icon name="Info" />);
+    mount("thr_one");
+    const registered = screen
+      .getByRole("button", { name: "Show thread info panel" })
+      .querySelector('svg[data-icon="Info"]');
+    const direct = original.container.querySelector('svg[data-icon="Info"]');
+    expect(registered).not.toBeNull();
+    expect(direct).not.toBeNull();
+    expect(registered?.innerHTML).toBe(direct?.innerHTML);
+    expect(registered?.hasAttribute("data-icon-root")).toBe(true);
+  });
 
   it("keeps default Info before pinned Diff to match the Plugin Guide and Theme Preview fixtures", () => {
     const { result } = renderHook(() => {
@@ -227,20 +258,20 @@ describe("thread fixed-tab contract", () => {
     install();
     const view = mount(null);
     expect(
-      screen.queryByRole("button", { name: "Show Info panel" }),
+      screen.queryByRole("button", { name: "Show thread info panel" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Show Status panel" }),
+      screen.queryByRole("button", { name: "Show status panel" }),
     ).toBeNull();
     view.changeThread("");
     expect(
-      screen.queryByRole("button", { name: "Show Info panel" }),
+      screen.queryByRole("button", { name: "Show thread info panel" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Show Status panel" }),
+      screen.queryByRole("button", { name: "Show status panel" }),
     ).toBeNull();
     view.changeThread("thr_one");
-    fireEvent.click(screen.getByRole("button", { name: "Show Status panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show status panel" }));
     expect(screen.getByText("example:thr_one:Status")).toBeTruthy();
   });
 
@@ -279,24 +310,24 @@ describe("thread fixed-tab contract", () => {
   it("updates visibility per thread and replaces reloaded components without duplicating tabs", () => {
     install();
     const view = mount("thr_one");
-    fireEvent.click(screen.getByRole("button", { name: "Show Status panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show status panel" }));
     view.changeThread("hidden");
     expect(
-      screen.queryByRole("button", { name: "Show Status panel" }),
+      screen.queryByRole("button", { name: "Show status panel" }),
     ).toBeNull();
     view.changeThread("thr_two");
     expect(screen.getByText("example:thr_two:Status")).toBeTruthy();
     act(() => install("Reloaded"));
     expect(
-      screen.getAllByRole("button", { name: "Show Reloaded panel" }),
+      screen.getAllByRole("button", { name: "Show reloaded panel" }),
     ).toHaveLength(1);
     expect(screen.getByText("example:thr_two:Reloaded")).toBeTruthy();
     act(() => removePluginSlotRegistrations("example"));
     expect(
-      screen.queryByRole("button", { name: "Show Reloaded panel" }),
+      screen.queryByRole("button", { name: "Show reloaded panel" }),
     ).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Show Info panel" }),
+      screen.getByRole("button", { name: "Show thread info panel" }),
     ).toBeTruthy();
   });
 });
