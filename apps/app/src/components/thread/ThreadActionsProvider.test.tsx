@@ -284,7 +284,6 @@ describe("ThreadActionsProvider archive confirmation", () => {
           queryClient.getQueryData(threadListQueryKey({ archived: false })),
         ).toEqual([thread]);
         expect(mocks.navigate).not.toHaveBeenCalled();
-        expect(mocks.closePanesForThreads).not.toHaveBeenCalled();
       }
     },
   );

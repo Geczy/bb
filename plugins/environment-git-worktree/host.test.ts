@@ -588,6 +588,7 @@ describe("worktree host entry", () => {
 
   it("replaces an invalid target before recreating the expected branch", async () => {
     const { sourcePath, dataDir } = await createSourceRepository();
+    await git(sourcePath, "update-ref", "refs/remotes/origin/main", "HEAD");
     const harness = createHarness(dataDir);
     const input = createInput({
       operationId: "first",

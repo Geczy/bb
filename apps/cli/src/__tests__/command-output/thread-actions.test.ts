@@ -93,6 +93,32 @@ describe("bb thread action command output", () => {
     });
   });
 
+  it.each([
+    ["--keep-worktree", "keep"],
+    ["--require-clean", "require-clean"],
+    ["--commit-and-push", "commit-and-push"],
+  ])(
+    "passes archive protection %s to the shared endpoint",
+    async (flag, worktree) => {
+      const preparing = worktree === "commit-and-push";
+      const archivePost = vi.fn(async () => ({
+        ok: true,
+        archivedThreadIds: preparing ? [] : ["thr_safe"],
+        ...(preparing ? { preparing: true } : {}),
+      }));
+      stubServerApi({ "v1.threads.:id.archive-all.$post": archivePost });
+      await runCommand(["thread", "archive", "thr_safe", flag], register);
+      expect(archivePost).toHaveBeenCalledWith({
+        param: { id: "thr_safe" },
+        query: { worktree },
+      });
+      if (preparing)
+        expect(collectLogLines(vi.mocked(console.log))).toContain(
+          "Asked the agent to commit, push, and archive the thread.",
+        );
+    },
+  );
+
   it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {
     vi.stubEnv("BB_THREAD_ID", "thread-unarchive-1");
     const unarchivePost = vi.fn(async () => ({ ok: true }));
