@@ -4,6 +4,7 @@ import {
   useBbNavigate,
   useSdk,
   useRealtime,
+  useRealtimeConnectionState,
   useRpc,
   useSettings,
 } from "@get-bb/plugin-sdk/app";
@@ -21,6 +22,9 @@ import { notificationsThreadAction } from "./notificationsAction.js";
 function NotificationDelivery() {
   const navigate = useBbNavigate();
   const sdk = useSdk();
+  const rpc = useRpc<typeof pushNotificationsRpcContract>();
+  const connectionState = useRealtimeConnectionState();
+  const opening = useRef(true);
   const { values } = useSettings();
   const delivery = useRef<ReturnType<typeof createClientDelivery> | null>(null);
   useEffect(() => {
@@ -46,6 +50,29 @@ function NotificationDelivery() {
     const enabled = channel !== null && values?.[`${channel}Enabled`] === true;
     void delivery.current?.deliver(payload, enabled).catch(() => undefined);
   });
+  useEffect(() => {
+    const report = () => {
+      if (
+        !opening.current ||
+        values == null ||
+        connectionState !== "connected" ||
+        document.visibilityState !== "visible"
+      )
+        return;
+      opening.current = false;
+      void rpc.call("experimental_day2AppOpened", {}).catch(() => {
+        opening.current = true;
+      });
+    };
+    const visibilityChanged = () => {
+      if (document.visibilityState === "hidden") opening.current = true;
+      else report();
+    };
+    document.addEventListener("visibilitychange", visibilityChanged);
+    report();
+    return () =>
+      document.removeEventListener("visibilitychange", visibilityChanged);
+  }, [connectionState, rpc, values]);
   return null;
 }
 

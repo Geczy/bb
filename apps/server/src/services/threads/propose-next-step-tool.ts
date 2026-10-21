@@ -10,7 +10,7 @@ import { proposeNextStep } from "./next-step.js";
 export const PROPOSE_NEXT_STEP_TOOL: DynamicTool = {
   name: "propose_next_step",
   description:
-    "Propose one grounded next step under this turn. Nothing starts without acceptance. Cite resolvable evidence from this thread or repository. Task starts a child thread; automation schedules one run tomorrow. Do not restate the proposal in prose. Abstain when unsure.",
+    "Propose one grounded next step under this turn. Nothing starts without acceptance. Cite resolvable evidence from this thread or repository. Task starts a child thread; automation starts work now and delivers its result next weekday at 09:00 in the proposed timezone. Do not restate the proposal in prose. Abstain when unsure.",
   inputSchema: z.toJSONSchema(nextStepInputSchema),
   presentation: {
     label: {

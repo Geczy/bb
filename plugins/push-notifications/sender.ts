@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createDay2Delivery } from "./day2-delivery.js";
 import type {
   BbPluginApi,
   PluginThreadEventPayloads,
@@ -131,6 +132,8 @@ interface BatchResult {
 
 export interface PushSender {
   getLastOutcome(): LastSendOutcome;
+  onAppOpened(): Promise<void>;
+  cancelDay2Result(automationId: string): Promise<void>;
   onInteractionPending(
     payload: PluginThreadEventPayloads["interaction.pending"],
   ): void;
@@ -229,6 +232,20 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
   let lastNetworkWarningAt = Number.NEGATIVE_INFINITY;
   let lastOutcome: LastSendOutcome = { status: "never" };
   let running = false;
+  const day2 = createDay2Delivery({
+    bb,
+    now,
+    deliver: (result) =>
+      flushThread(
+        result.threadId,
+        {
+          bodies: new Map([[result.kind, result.body]]),
+          eventAt: result.eventAt,
+          kinds: new Set([result.kind]),
+        },
+        true,
+      ),
+  });
 
   async function setLastOutcome(outcome: LastSendOutcome): Promise<void> {
     lastOutcome = outcome;
@@ -279,7 +296,7 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
 
   async function resolvePush(
     thread: ThreadResponse,
-    entry: PendingThreadPush,
+    entry: Omit<PendingThreadPush, "timer">,
     allowedKinds: ReadonlySet<PushNotificationKind>,
   ): Promise<{ kind: PushNotificationKind; body: string } | null> {
     const kinds = new Set(
@@ -328,7 +345,8 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
 
   async function flushThread(
     threadId: string,
-    entry: PendingThreadPush,
+    entry: Omit<PendingThreadPush, "timer">,
+    heldDelivery = false,
   ): Promise<void> {
     let thread: ThreadResponse;
     try {
@@ -343,7 +361,12 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
     ) {
       return;
     }
+    if (!heldDelivery && (await day2.hasHeldThread(threadId))) {
+      entry.kinds.delete("turn-finished");
+      entry.kinds.delete("thread-error");
+    }
     if (
+      !heldDelivery &&
       thread.originPluginId === "automations" &&
       ((entry.kinds.has("turn-finished") && thread.status === "idle") ||
         (entry.kinds.has("thread-error") && thread.status === "error"))
@@ -355,23 +378,51 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
         }),
       );
       if (metadata.success) {
-        await bb.sdk.threads.updatePluginMetadata({
-          threadId,
-          pluginId: "automations",
-          remove: [DAY2_RESULT_METADATA_KEY],
-        });
-        if (entry.kinds.delete("turn-finished")) {
-          entry.kinds.add("day2_result");
-          entry.bodies.set(
-            "day2_result",
-            entry.bodies.get("turn-finished") ?? "",
-          );
-        }
-        if (entry.kinds.has("thread-error")) {
-          entry.bodies.set(
-            "thread-error",
-            "Scheduled work failed. Open the thread to retry.",
-          );
+        const marker = metadata.data[DAY2_RESULT_METADATA_KEY];
+        if ("automationId" in marker) {
+          const failed = entry.kinds.has("thread-error");
+          await day2.hold({
+            marker,
+            threadId,
+            eventAt: entry.eventAt,
+            kind: failed ? "thread-error" : "day2_result",
+            body: failed
+              ? "Scheduled work failed. Open the thread to retry."
+              : truncate(
+                  await notificationPreviewText(
+                    entry.bodies.get("turn-finished") ?? "",
+                    referencedThreadTitle,
+                  ),
+                  PUSH_BODY_MAX_LENGTH,
+                ),
+            consumeMarker: () =>
+              bb.sdk.threads.updatePluginMetadata({
+                threadId,
+                pluginId: "automations",
+                remove: [DAY2_RESULT_METADATA_KEY],
+              }),
+          });
+          entry.kinds.delete("turn-finished");
+          entry.kinds.delete("thread-error");
+        } else {
+          await bb.sdk.threads.updatePluginMetadata({
+            threadId,
+            pluginId: "automations",
+            remove: [DAY2_RESULT_METADATA_KEY],
+          });
+          if (entry.kinds.delete("turn-finished")) {
+            entry.kinds.add("day2_result");
+            entry.bodies.set(
+              "day2_result",
+              entry.bodies.get("turn-finished") ?? "",
+            );
+          }
+          if (entry.kinds.has("thread-error")) {
+            entry.bodies.set(
+              "thread-error",
+              "Scheduled work failed. Open the thread to retry.",
+            );
+          }
         }
       }
     }
@@ -386,10 +437,9 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
       NOTIFICATION_KINDS_BY_LEVEL[level],
     );
     if (resolved === null) return;
-    const preview = await notificationPreviewText(
-      resolved.body,
-      referencedThreadTitle,
-    );
+    const preview = heldDelivery
+      ? resolved.body
+      : await notificationPreviewText(resolved.body, referencedThreadTitle);
     const title = truncate(threadDisplayTitle(thread), PUSH_TITLE_MAX_LENGTH);
     const body = truncate(
       preview || FALLBACK_BODIES[resolved.kind],
@@ -553,6 +603,8 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
 
   return {
     getLastOutcome: () => lastOutcome,
+    onAppOpened: () => day2.onAppOpened(),
+    cancelDay2Result: (automationId) => day2.cancel(automationId),
     onInteractionPending(payload) {
       schedule(
         payload.thread.id,
@@ -576,11 +628,13 @@ export function createPushSender(args: CreatePushSenderArgs): PushSender {
       if (stored.success) lastOutcome = stored.data;
       dispatcher = new EnvHttpProxyAgent();
       running = true;
+      await day2.start();
     },
     async stop() {
       if (!running) return;
       running = false;
       for (const threadId of [...pending.keys()]) cancel(threadId);
+      await day2.stop();
       await settle();
       const activeDispatcher = dispatcher;
       dispatcher = null;

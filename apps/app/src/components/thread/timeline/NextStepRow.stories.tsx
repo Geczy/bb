@@ -42,7 +42,7 @@ function makeSuggestion(kind: "task" | "automation"): NextStep {
     title:
       kind === "task"
         ? "Fix the 3 related failing tests"
-        : "Triage last night’s CI failures by 9:00 tomorrow",
+        : "Prepare a CI failure summary for the next workday",
     why: "The CI run found related failures outside the release blocker.",
     evidence: [
       {

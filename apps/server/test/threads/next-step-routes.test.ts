@@ -1,3 +1,4 @@
+import { nextStepDeliveryAt } from "../../src/services/threads/next-step.js";
 import { randomUUID } from "node:crypto";
 import { nextSteps } from "@bb/db";
 import { nextStepSchema, turnScope, type NextStep } from "@bb/domain";
@@ -63,7 +64,7 @@ function captureTelemetry(harness: TestAppHarness) {
 function postAction(
   harness: TestAppHarness,
   threadId: string,
-  action: "shown" | "accept" | "dismiss",
+  action: "shown" | "accept" | "dismiss" | "undo",
   surface: string,
   body?: unknown,
 ) {
@@ -142,6 +143,51 @@ function seedOfferedAutomation(harness: TestAppHarness): NextStep {
 }
 
 describe("Next step route analytics", () => {
+  it("normalizes an agent-proposed time to the next weekday morning", async () => {
+    await withTestHarness(async (harness) => {
+      const fixture = seedCompletedTurn(harness);
+      const proposedAt = Date.now();
+      const clock = vi.spyOn(Date, "now").mockReturnValue(proposedAt);
+      try {
+        const response = await harness.app.request(
+          `/api/v1/threads/${fixture.thread.id}/next-step/propose`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              turnId: fixture.turnId,
+              input: {
+                title: "Prepare the CI summary",
+                why: "The completed checks need triage",
+                evidence: [{ source: "conversation", ref: fixture.evidenceId }],
+                action: {
+                  kind: "automation",
+                  automation: {
+                    prompt: "Summarize the failing checks",
+                    schedule: { runAt: 1, timezone: "America/New_York" },
+                  },
+                },
+              },
+            }),
+          },
+        );
+        expect(response.status).toBe(200);
+        expect(
+          nextStepSchema.parse(await readJson(response)).action,
+        ).toMatchObject({
+          automation: {
+            schedule: {
+              runAt: nextStepDeliveryAt(proposedAt, "America/New_York"),
+              timezone: "America/New_York",
+            },
+          },
+        });
+      } finally {
+        clock.mockRestore();
+      }
+    });
+  });
+
   it("ignores mobile and API impressions, then records one anonymous impression across web and desktop", async () => {
     await withTestHarness(async (harness) => {
       const capture = captureTelemetry(harness);
@@ -271,7 +317,10 @@ describe("Next step route analytics", () => {
             result: { kind: "automation", automationId: "restored-automation" },
           });
         }
-        expect(invoke).toHaveBeenCalledOnce();
+        expect(invoke.mock.calls.map((call) => call[1])).toEqual([
+          "automations_create",
+          "automations_run",
+        ]);
       } finally {
         lookup.mockRestore();
         invoke.mockRestore();
@@ -302,7 +351,17 @@ describe("Next step route analytics", () => {
         });
       const invoke = vi
         .spyOn(harness.pluginService, "invokeRpcHandler")
-        .mockImplementation(async () => {
+        .mockImplementation(async (_pluginId, method) => {
+          if (method === "automations_run") {
+            const stored = harness.db.select().from(nextSteps).get();
+            expect(stored?.suggestion).toMatchObject({
+              status: "accepting",
+              result: {
+                kind: "automation",
+                automationId: "automation-private-id",
+              },
+            });
+          }
           await held;
           return {
             ok: true,
@@ -337,22 +396,42 @@ describe("Next step route analytics", () => {
           "mobile",
         );
         expect(repeated.status).toBe(200);
-        expect(nextStepSchema.parse(await readJson(repeated)).result).toEqual({
+        expect(
+          nextStepSchema.parse(await readJson(repeated.clone())).result,
+        ).toEqual({
           kind: "automation",
           automationId: "automation-private-id",
         });
-        expect(invoke).toHaveBeenCalledOnce();
+        expect(invoke).toHaveBeenCalledTimes(2);
         expect(invoke.mock.calls[0]?.[0]).toBe("automations");
         expect(invoke.mock.calls[0]?.[1]).toBe("automations_create");
+        const execution = z
+          .object({
+            execution: z.object({
+              day2ResultDelivery: z.object({
+                acceptedAt: z.number(),
+                deliverAt: z.number(),
+              }),
+            }),
+          })
+          .parse(invoke.mock.calls[0]?.[3]).execution;
+        const { acceptedAt, deliverAt } = execution.day2ResultDelivery;
+        expect(deliverAt).toBe(nextStepDeliveryAt(acceptedAt, "UTC"));
         expect(invoke.mock.calls[0]?.[3]).toMatchObject({
-          trigger: {
-            triggerType: "once",
-            runAt:
-              suggestion.action.kind === "automation"
-                ? suggestion.action.automation.schedule.runAt
-                : 0,
-          },
+          enabled: false,
+          trigger: { triggerType: "once", runAt: deliverAt },
           execution: { resultNotificationKind: "day2_result" },
+        });
+        expect(invoke.mock.calls[1]?.[1]).toBe("automations_run");
+        expect(invoke.mock.calls[1]?.[3]).toEqual({
+          projectId: expect.any(String),
+          automationId: "automation-private-id",
+          idempotencyKey: suggestion.id,
+        });
+        expect(
+          nextStepSchema.parse(await readJson(repeated)).action,
+        ).toMatchObject({
+          automation: { schedule: { runAt: deliverAt } },
         });
         expect(capture).toHaveBeenCalledExactlyOnceWith({
           name: "suggestion_accepted",
@@ -361,6 +440,27 @@ describe("Next step route analytics", () => {
             kind: "automation",
             suggestion_analytics_id: suggestion.analyticsId,
           },
+        });
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const undone = await postAction(
+            harness,
+            suggestion.threadId,
+            "undo",
+            "web",
+          );
+          expect(undone.status).toBe(200);
+          expect(nextStepSchema.parse(await readJson(undone)).status).toBe(
+            "undone",
+          );
+        }
+        expect(invoke.mock.calls.map((call) => [call[0], call[1]])).toEqual([
+          ["automations", "automations_create"],
+          ["automations", "automations_run"],
+          ["push-notifications", "experimental_cancelDay2Result"],
+          ["automations", "automations_delete"],
+        ]);
+        expect(invoke.mock.calls[2]?.[3]).toEqual({
+          automationId: "automation-private-id",
         });
       } finally {
         releaseCreate();

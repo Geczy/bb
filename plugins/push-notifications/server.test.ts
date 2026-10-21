@@ -444,6 +444,135 @@ describe("push subscription RPC and CLI", () => {
 });
 
 describe("push sender", () => {
+  it("holds a result until returning and sends through the existing channels once", async () => {
+    let now = 10_000;
+    const host = await setup({ now: () => now });
+    try {
+      await host.addSubscription();
+      const thread = host.setThread({ originPluginId: "automations" });
+      await host.bb.sdk.threads.updatePluginMetadata({
+        threadId: thread.id,
+        pluginId: "automations",
+        set: {
+          day2Result: {
+            pending: true,
+            automationId: "automation-held",
+            acceptedAt: 9_000,
+            deliverAt: 60_000,
+          },
+        },
+      });
+      await host.harness.behavior.emitThreadEvent("thread.idle", {
+        thread,
+        lastAssistantText: "A useful result",
+      });
+      await waitForCoalesce();
+      expect(host.expo.requests).toHaveLength(0);
+      expect(host.clientSignals()).toHaveLength(0);
+      now += 1;
+      await host.harness.behavior.callRpc("experimental_day2AppOpened", {});
+      expect(host.expo.requests).toHaveLength(1);
+      expect(host.expo.requests[0]?.[0]).toMatchObject({
+        body: "A useful result",
+        data: { kind: "day2_result" },
+      });
+      const opened = await host.harness.behavior.runCli(["opened", "--json"]);
+      expect(opened.exitCode).toBe(0);
+      expect(JSON.parse(opened.stdout)).toEqual({ ok: true });
+      expect(host.expo.requests).toHaveLength(1);
+    } finally {
+      await host.cleanup();
+    }
+  });
+
+  it.each([true, false])(
+    "releases held failures using current channel settings: %s",
+    async (enabled) => {
+      const host = await setup({ now: () => 10_000 });
+      try {
+        await host.addSubscription();
+        const thread = host.setThread({
+          status: "error",
+          originPluginId: "automations",
+        });
+        await host.bb.sdk.threads.updatePluginMetadata({
+          threadId: thread.id,
+          pluginId: "automations",
+          set: {
+            day2Result: {
+              pending: true,
+              automationId: "automation-failed",
+              acceptedAt: 9_000,
+              deliverAt: 60_000,
+            },
+          },
+        });
+        await host.harness.behavior.emitThreadEvent("thread.failed", {
+          thread,
+          error: "Provider failed",
+        });
+        await waitForCoalesce();
+        expect(host.expo.requests).toHaveLength(0);
+        await host.harness.behavior.setSettings({
+          mobileEnabled: enabled,
+          webEnabled: enabled,
+          desktopEnabled: enabled,
+        });
+        await host.harness.behavior.callRpc("experimental_day2AppOpened", {});
+        expect(host.expo.requests).toHaveLength(enabled ? 1 : 0);
+        expect(host.clientSignals()).toHaveLength(enabled ? 1 : 0);
+        const telemetry = host.harness.inspection.sdk.callsTo(
+          "system.experimental_recordTelemetryEvent",
+        );
+        expect(telemetry).toHaveLength(enabled ? 1 : 0);
+        if (enabled) {
+          expect(host.expo.requests[0]?.[0]).toMatchObject({
+            body: "Scheduled work failed. Open the thread to retry.",
+            data: { kind: "thread-error" },
+          });
+          expect(host.clientSignals()[0]?.payload).toMatchObject({
+            kind: "failed",
+          });
+        }
+      } finally {
+        await host.cleanup();
+      }
+    },
+  );
+
+  it("cancels a future result reminder before its completion arrives", async () => {
+    const host = await setup({ now: () => 10_000 });
+    try {
+      await host.addSubscription();
+      const thread = host.setThread({ originPluginId: "automations" });
+      await host.harness.behavior.callRpc("experimental_cancelDay2Result", {
+        automationId: "automation-cancelled",
+      });
+      await host.bb.sdk.threads.updatePluginMetadata({
+        threadId: thread.id,
+        pluginId: "automations",
+        set: {
+          day2Result: {
+            pending: true,
+            automationId: "automation-cancelled",
+            acceptedAt: 9_000,
+            deliverAt: 10_000,
+          },
+        },
+      });
+      await host.harness.behavior.emitThreadEvent("thread.idle", {
+        thread,
+        lastAssistantText: "Finished after cancellation",
+      });
+      await waitForCoalesce();
+      await host.harness.behavior.callRpc("experimental_day2AppOpened", {});
+      expect(host.expo.requests).toHaveLength(0);
+      expect(host.clientSignals()).toHaveLength(0);
+    } finally {
+      await host.cleanup();
+    }
+  });
+
   it("sends one day-two result through existing channels and leaves later turns ordinary", async () => {
     const host = await setup();
     try {

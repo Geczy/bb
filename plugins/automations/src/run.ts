@@ -134,7 +134,19 @@ export async function executeAgentRun(
           : { serviceTier: args.execution.serviceTier }),
         permissionMode: args.execution.permissionMode,
         ...(args.execution.resultNotificationKind === "day2_result"
-          ? { pluginMetadata: { day2Result: { pending: true } } }
+          ? {
+              pluginMetadata: {
+                day2Result: {
+                  pending: true,
+                  ...(args.execution.day2ResultDelivery === undefined
+                    ? {}
+                    : {
+                        automationId: args.automation.id,
+                        ...args.execution.day2ResultDelivery,
+                      }),
+                },
+              },
+            }
           : {}),
       }),
     );

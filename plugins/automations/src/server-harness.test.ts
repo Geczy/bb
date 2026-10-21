@@ -1531,6 +1531,167 @@ describe("automations server plugin harness", () => {
     }
   });
 
+  it("starts accepted work once immediately and never reruns at delivery time", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const { harness } = await bootAutomationsPlugin();
+    const acceptedAt = Date.now();
+    const deliverAt = acceptedAt + 60_000;
+    try {
+      const automation = automationDetailResponseSchema.parse(
+        await harness.callRpc("automations_create", {
+          projectId: PROJECT_ID,
+          name: "Morning CI result",
+          enabled: false,
+          trigger: { triggerType: "once", runAt: deliverAt },
+          execution: {
+            ...agentExecution(),
+            resultNotificationKind: "day2_result",
+            day2ResultDelivery: { acceptedAt, deliverAt },
+          },
+          origin: "app",
+        }),
+      );
+      expect(automation).toMatchObject({ enabled: false, nextRunAt: null });
+      const input = {
+        projectId: PROJECT_ID,
+        automationId: automation.id,
+        idempotencyKey: "nst_accepted",
+      };
+      const first = automationRunRpcResponseSchema.parse(
+        await harness.callRpc("automations_run", input),
+      );
+      await vi.waitFor(async () => {
+        expect(
+          automationRunListResponseSchema.parse(
+            await harness.callRpc("automations_runs", {
+              projectId: PROJECT_ID,
+              automationId: automation.id,
+            }),
+          ).runs,
+        ).toMatchObject([{ id: first.run.id, threadId: "thr_spawned" }]);
+      });
+      expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).toMatchObject({
+        pluginMetadata: {
+          day2Result: {
+            pending: true,
+            automationId: automation.id,
+            acceptedAt,
+            deliverAt,
+          },
+        },
+      });
+      await harness.emitThreadEvent("thread.idle", {
+        thread: makeThreadResponse({
+          id: "thr_spawned",
+          projectId: PROJECT_ID,
+        }),
+        lastAssistantText: "CI triage is ready",
+      });
+      const repeated = automationRunRpcResponseSchema.parse(
+        await harness.callRpc("automations_run", input),
+      );
+      expect(repeated.run.id).toBe(first.run.id);
+      vi.setSystemTime(deliverAt + 1_000);
+      const service = harness.runService("automation-sweep");
+      try {
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(1);
+        expect(
+          automationRunListResponseSchema.parse(
+            await harness.callRpc("automations_runs", {
+              projectId: PROJECT_ID,
+              automationId: automation.id,
+            }),
+          ).runs,
+        ).toMatchObject([{ id: first.run.id, status: "succeeded" }]);
+        expect(
+          await harness.callRpc("automations_get", {
+            projectId: PROJECT_ID,
+            automationId: automation.id,
+          }),
+        ).toMatchObject({
+          enabled: false,
+          nextRunAt: null,
+          execution: { day2ResultDelivery: { acceptedAt, deliverAt } },
+        });
+      } finally {
+        service.controller.abort();
+        await service.done;
+      }
+    } finally {
+      await harness.dispose();
+    }
+  });
+
+  it("rejects invalid day-two delivery timing on creation and updates", async () => {
+    const { harness } = await bootAutomationsPlugin();
+    const acceptedAt = Date.now();
+    const deliverAt = acceptedAt + 60_000;
+    const execution = {
+      ...agentExecution(),
+      resultNotificationKind: "day2_result",
+      day2ResultDelivery: { acceptedAt, deliverAt },
+    };
+    try {
+      for (const [invalidExecution, message] of [
+        [
+          { ...execution, resultNotificationKind: undefined },
+          "Day-two delivery timing requires a day-two result",
+        ],
+        [
+          {
+            ...execution,
+            day2ResultDelivery: { acceptedAt, deliverAt: acceptedAt },
+          },
+          "Day-two result delivery must follow acceptance",
+        ],
+        [
+          {
+            ...execution,
+            day2ResultDelivery: { acceptedAt, deliverAt: deliverAt + 1 },
+          },
+          "Day-two delivery time must match the single-run trigger",
+        ],
+      ] as const) {
+        await expect(
+          harness.callRpc("automations_create", {
+            projectId: PROJECT_ID,
+            name: "Invalid delivery",
+            enabled: false,
+            trigger: { triggerType: "once", runAt: deliverAt },
+            execution: invalidExecution,
+            origin: "app",
+          }),
+        ).rejects.toThrow(message);
+      }
+      const automation = automationDetailResponseSchema.parse(
+        await harness.callRpc("automations_create", {
+          projectId: PROJECT_ID,
+          name: "Morning result",
+          enabled: false,
+          trigger: { triggerType: "once", runAt: deliverAt },
+          execution,
+          origin: "app",
+        }),
+      );
+      for (const patch of [
+        { trigger: { triggerType: "once", runAt: deliverAt + 1 } },
+        { execution: { ...execution, resultNotificationKind: undefined } },
+      ]) {
+        await expect(
+          harness.callRpc("automations_update", {
+            projectId: PROJECT_ID,
+            automationId: automation.id,
+            ...patch,
+          }),
+        ).rejects.toThrow(/Day-two/);
+      }
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("rejects recurring or reused-thread day-two results on create and update", async () => {
     const { harness } = await bootAutomationsPlugin();
     try {

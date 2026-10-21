@@ -45,26 +45,68 @@ function calendarDate(at: number, timezone: string): string {
   }).format(at);
 }
 
-export function isNextStepTomorrow(
-  runAt: number,
-  now: number,
-  timezone: string,
-): boolean {
-  if (runAt <= now) return false;
-  const parts = new Intl.DateTimeFormat("en", {
+export function nextStepDeliveryAt(now: number, timezone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(now);
-  const value = (type: string) =>
-    Number(parts.find((part) => part.type === type)?.value);
-  const tomorrow = new Date(
-    Date.UTC(value("year"), value("month") - 1, value("day") + 1),
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const localParts = (at: number) => {
+    const parts = formatter.formatToParts(at);
+    const value = (type: string) =>
+      Number(parts.find((part) => part.type === type)?.value);
+    return Date.UTC(
+      value("year"),
+      value("month") - 1,
+      value("day"),
+      value("hour"),
+      value("minute"),
+      value("second"),
+    );
+  };
+  const day = new Date(localParts(now));
+  day.setUTCHours(9, 0, 0, 0);
+  do {
+    day.setUTCDate(day.getUTCDate() + 1);
+  } while (day.getUTCDay() === 0 || day.getUTCDay() === 6);
+  const target = day.getTime();
+  let delivery = target;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const difference = target - localParts(delivery);
+    if (difference === 0) return delivery;
+    delivery += difference;
+  }
+  throw new ApiError(
+    400,
+    "next_step_invalid_schedule",
+    "Could not schedule the next weekday at 09:00 in this timezone",
   );
-  return (
-    calendarDate(runAt, timezone) === calendarDate(tomorrow.getTime(), "UTC")
-  );
+}
+
+function normalizeNextStepSchedule(
+  input: NextStepInput,
+  now: number,
+): NextStepInput {
+  if (input.action.kind !== "automation") return input;
+  const automation = input.action.automation;
+  return {
+    ...input,
+    action: {
+      kind: "automation",
+      automation: {
+        ...automation,
+        schedule: {
+          ...automation.schedule,
+          runAt: nextStepDeliveryAt(now, automation.schedule.timezone),
+        },
+      },
+    },
+  };
 }
 
 function isInstallFirstDay(
@@ -188,8 +230,11 @@ export async function proposeNextStep(
     now?: number;
   },
 ): Promise<NextStep> {
-  const input = nextStepInputSchema.parse(args.input);
   const now = args.now ?? Date.now();
+  const input = normalizeNextStepSchedule(
+    nextStepInputSchema.parse(args.input),
+    now,
+  );
   if (readNextStep(deps.db, args.threadId))
     throw new ApiError(
       409,
@@ -199,24 +244,18 @@ export async function proposeNextStep(
   assertThreadCanPropose(deps.db, args.threadId, args.turnId);
   assertNotSuppressed(deps.db, input);
   if (input.action.kind === "automation") {
-    const { runAt, timezone } = input.action.automation.schedule;
-    if (!isNextStepTomorrow(runAt, now, timezone))
-      throw new ApiError(
-        400,
-        "next_step_invalid_schedule",
-        "Schedule one run tomorrow in the proposed timezone",
-      );
+    const { timezone } = input.action.automation.schedule;
     if (!isInstallFirstDay(deps.db, now, timezone))
       throw new ApiError(
         409,
         "next_step_first_day_only",
-        "The overnight offer is available only on the install's first day",
+        "The day-two offer is available only on the install's first day",
       );
     if (installState(deps.db).day2ShownAt !== null)
       throw new ApiError(
         409,
         "next_step_day2_already_shown",
-        "The overnight offer has already been shown",
+        "The day-two offer has already been shown",
       );
   }
   await validateNextStepEvidence(deps, args.threadId, input.evidence);
@@ -408,11 +447,8 @@ function promoteNextStep(
     )
       return writeNextStep(db, { ...suggestion, status: "expired" });
     if (now < row.completedAt + DAY2_IDLE_MS) return suggestion;
-    const { runAt, timezone } = suggestion.action.automation.schedule;
-    if (
-      !isInstallFirstDay(db, now, timezone) ||
-      !isNextStepTomorrow(runAt, now, timezone)
-    )
+    const { timezone } = suggestion.action.automation.schedule;
+    if (!isInstallFirstDay(db, now, timezone))
       return writeNextStep(db, { ...suggestion, status: "expired" });
   }
   try {
@@ -478,12 +514,16 @@ export async function acceptNextStep(
   db: DbConnection,
   args: {
     threadId: string;
-    execute: (suggestion: NextStep) => Promise<NextStepResult>;
+    execute: (
+      suggestion: NextStep,
+      acceptedAt: number,
+    ) => Promise<NextStepResult>;
   },
 ): Promise<{ suggestion: NextStep; newlyAccepted: boolean }> {
+  const acceptedAt = Date.now();
   const claimed = db.transaction(
     (tx) => {
-      promoteNextStep(tx, args.threadId, Date.now());
+      promoteNextStep(tx, args.threadId, acceptedAt);
       const suggestion = requireNextStep(tx, args.threadId);
       if (suggestion.status === "accepted")
         return { suggestion, execute: false };
@@ -493,17 +533,12 @@ export async function acceptNextStep(
           "next_step_not_available",
           "This Next step is no longer available",
         );
-      if (
-        suggestion.action.kind === "automation" &&
-        suggestion.action.automation.schedule.runAt <= Date.now()
-      )
-        throw new ApiError(
-          409,
-          "next_step_schedule_passed",
-          "The proposed run time has passed",
-        );
       return {
-        suggestion: writeNextStep(tx, { ...suggestion, status: "accepting" }),
+        suggestion: writeNextStep(tx, {
+          ...suggestion,
+          ...normalizeNextStepSchedule(suggestion, acceptedAt),
+          status: "accepting",
+        }),
         execute: true,
       };
     },
@@ -512,7 +547,7 @@ export async function acceptNextStep(
   if (!claimed.execute)
     return { suggestion: claimed.suggestion, newlyAccepted: false };
   try {
-    const result = await args.execute(claimed.suggestion);
+    const result = await args.execute(claimed.suggestion, acceptedAt);
     if (result.kind !== claimed.suggestion.action.kind)
       throw new Error("Next step execution returned the wrong result kind");
     const suggestion = writeNextStep(db, {
@@ -582,7 +617,7 @@ export async function undoNextStep(
         throw new ApiError(
           409,
           "next_step_not_undoable",
-          "Only a scheduled Next step can be undone",
+          "Only an automation Next step has a result reminder to cancel",
         );
       return writeNextStep(tx, { ...suggestion, status: "undoing" });
     },

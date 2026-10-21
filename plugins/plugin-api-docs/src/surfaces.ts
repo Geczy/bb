@@ -913,10 +913,10 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         summary:
           "Use the finished-turn Next step path for evidence-backed work. With this, a plugin can:",
         bullets: [
-          "Propose one task or single run tomorrow with verified conversation or repository references",
+          "Propose one task or day-2 result with verified conversation or repository references",
           "Read eligibility and record a visible desktop or web impression",
           "Accept, dismiss, or undo through the same path as the finished-turn row",
-          "Start a child task or schedule an Automations run with a result notification",
+          "Start a child task or run work now with a result reminder at the next workday’s 9:00 or next open",
         ],
         apiSymbols: [
           "ThreadsArea.experimental_nextStep",

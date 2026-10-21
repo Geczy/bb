@@ -166,6 +166,16 @@ const automationAgentExecutionSchema = z
     environment: agentEnvironmentSchema,
     targetThreadId: z.string().min(1).optional(),
     resultNotificationKind: z.literal("day2_result").optional(),
+    day2ResultDelivery: z
+      .object({
+        acceptedAt: z.number().int().positive().max(8_640_000_000_000_000),
+        deliverAt: z.number().int().positive().max(8_640_000_000_000_000),
+      })
+      .strict()
+      .refine((delivery) => delivery.deliverAt > delivery.acceptedAt, {
+        message: "Day-two result delivery must follow acceptance",
+      })
+      .optional(),
   })
   .strict();
 

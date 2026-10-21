@@ -19,7 +19,7 @@ import { conversationRow, turnRow } from "@/test/fixtures/thread-timeline-rows";
 import {
   NextStepRow,
   nextStepRowId,
-  nextStepScheduleLabel,
+  nextStepReminderLabel,
   useThreadNextStep,
 } from "./NextStepRow";
 
@@ -223,7 +223,7 @@ describe("Next step actions", () => {
     expect(dismiss).toHaveBeenCalledWith("thread-1");
   });
 
-  it("shows the accepted single run and undoes through the shared action", async () => {
+  it("shows the result reminder and cancels it through the shared action", async () => {
     const accepted = suggestion({
       status: "accepted",
       action: {
@@ -239,9 +239,9 @@ describe("Next step actions", () => {
       .spyOn(sdk.threads, "experimental_undoNextStep")
       .mockResolvedValue({ ...accepted, status: "undone" });
     const client = renderSuggestion(accepted);
-    expect(screen.getByRole("status").textContent).toContain("Runs once");
-    expect(screen.queryByRole("button", { name: "Schedule" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByRole("status").textContent).toContain("Result reminder");
+    expect(screen.queryByRole("button", { name: "Start now" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel reminder" }));
     await waitFor(() =>
       expect(
         client.getQueryData<NextStep>(["threads", "thread-1", "next-step"])
@@ -280,21 +280,21 @@ describe("Next step impressions", () => {
 describe("Next step schedule", () => {
   it("uses the proposed timezone and tomorrow's calendar day across DST", () => {
     expect(
-      nextStepScheduleLabel(
+      nextStepReminderLabel(
         Date.parse("2026-11-02T14:00:00Z"),
         "America/New_York",
         Date.parse("2026-11-01T04:30:00Z"),
       ),
-    ).toBe("Runs once tomorrow at 9:00");
+    ).toBe("Result reminder tomorrow at 9:00, or when you return");
   });
 
   it("does not keep calling an old scheduled date tomorrow", () => {
     expect(
-      nextStepScheduleLabel(
+      nextStepReminderLabel(
         Date.parse("2026-10-22T09:00:00Z"),
         "UTC",
         Date.parse("2026-10-23T09:00:00Z"),
       ),
-    ).toBe("Runs once Oct 22 at 9:00");
+    ).toBe("Result reminder Oct 22 at 9:00, or when you return");
   });
 });

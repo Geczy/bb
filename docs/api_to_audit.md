@@ -3265,7 +3265,10 @@ back/forward navigation, crash/reload recovery, links and overflow.
 `experimental_dismissNextStep`, and `experimental_undoNextStep` use the same
 server routes as the finished-turn row and `bb thread next-step`. Proposals
 are typed turn records with verified evidence. Task acceptance starts a child;
-automation acceptance creates one run tomorrow through Automations. Only
+automation acceptance creates a disabled one-shot automation and starts it
+immediately through Automations’ idempotent manual-run path. The result is held
+until the next weekday at 9:00 in the proposed timezone or the next app open.
+Undo cancels the reminder without reversing completed work. Only
 desktop/web impressions count; acceptance and dismissal are recorded server-side.
 
 Docs: Plugin Guide, `grounded-next-steps`. Before stabilization, audit evidence

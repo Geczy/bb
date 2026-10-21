@@ -51,8 +51,20 @@ export type AttentionNotificationKind = z.infer<
   typeof attentionNotificationKindSchema
 >;
 export const DAY2_RESULT_METADATA_KEY = "day2Result";
+export const heldDay2ResultMarkerSchema = z
+  .object({
+    pending: z.literal(true),
+    automationId: z.string().min(1),
+    acceptedAt: z.number().int().nonnegative(),
+    deliverAt: z.number().int().nonnegative(),
+  })
+  .strict();
+export type HeldDay2ResultMarker = z.infer<typeof heldDay2ResultMarkerSchema>;
 export const pendingDay2ResultMetadataSchema = z.object({
-  [DAY2_RESULT_METADATA_KEY]: z.object({ pending: z.literal(true) }).strict(),
+  [DAY2_RESULT_METADATA_KEY]: z.union([
+    heldDay2ResultMarkerSchema,
+    z.object({ pending: z.literal(true) }).strict(),
+  ]),
 });
 export const clientNotificationSchema = z
   .object({
@@ -74,6 +86,14 @@ export const listPushSubscriptionsOutputSchema = z
   .strict();
 
 export const pushNotificationsRpcContract = defineRpcContract({
+  experimental_day2AppOpened: {
+    input: emptyInputSchema,
+    output: z.object({ ok: z.literal(true) }).strict(),
+  },
+  experimental_cancelDay2Result: {
+    input: z.object({ automationId: z.string().min(1) }).strict(),
+    output: z.object({ ok: z.literal(true) }).strict(),
+  },
   "notifications.test": {
     input: z.object({ channel: clientChannelSchema }).strict(),
     output: z.object({ ok: z.literal(true) }).strict(),

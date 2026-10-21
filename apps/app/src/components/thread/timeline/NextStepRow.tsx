@@ -84,7 +84,7 @@ function sourceLabel(evidence: NextStep["evidence"][number]): string {
   }
 }
 
-export function nextStepScheduleLabel(
+export function nextStepReminderLabel(
   runAt: number,
   timezone: string,
   now = Date.now(),
@@ -121,7 +121,7 @@ export function nextStepScheduleLabel(
   })
     .format(runAt)
     .replace(/^0/, "");
-  return `Runs once ${day} at ${time}`;
+  return `Result reminder ${day} at ${time}, or when you return`;
 }
 
 function useNextStepImpression(suggestion: NextStep) {
@@ -210,7 +210,7 @@ export function NextStepRow({ suggestion }: { suggestion: NextStep }) {
             <span className="text-muted-foreground" role="status">
               {automation === null
                 ? "Work started"
-                : nextStepScheduleLabel(
+                : nextStepReminderLabel(
                     automation.schedule.runAt,
                     automation.schedule.timezone,
                   )}
@@ -227,7 +227,7 @@ export function NextStepRow({ suggestion }: { suggestion: NextStep }) {
                   disabled={action.isPending}
                   onClick={() => action.mutate("undo")}
                 >
-                  Undo
+                  Cancel reminder
                 </Button>
               </>
             ) : null}
@@ -247,7 +247,7 @@ export function NextStepRow({ suggestion }: { suggestion: NextStep }) {
               disabled={action.isPending}
               onClick={() => action.mutate("accept")}
             >
-              {automation === null ? "Start" : "Schedule"}
+              {automation === null ? "Start" : "Start now"}
             </Button>
             <Button
               variant="ghost"

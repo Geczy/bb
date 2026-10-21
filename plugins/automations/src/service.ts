@@ -152,17 +152,25 @@ function validateResultNotification(
   trigger: AutomationTrigger,
   execution: AutomationExecutionRequest,
 ): void {
+  if (execution.mode !== "agent") return;
   if (
-    execution.mode !== "agent" ||
-    execution.resultNotificationKind === undefined
+    execution.day2ResultDelivery !== undefined &&
+    execution.resultNotificationKind !== "day2_result"
   ) {
-    return;
+    throw new Error("Day-two delivery timing requires a day-two result");
   }
+  if (execution.resultNotificationKind === undefined) return;
   if (
     trigger.triggerType !== "once" ||
     execution.targetThreadId !== undefined
   ) {
     throw new Error("Day-two results require a single run in a new thread");
+  }
+  if (
+    execution.day2ResultDelivery !== undefined &&
+    execution.day2ResultDelivery.deliverAt !== trigger.runAt
+  ) {
+    throw new Error("Day-two delivery time must match the single-run trigger");
   }
 }
 

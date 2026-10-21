@@ -26,20 +26,25 @@ import {
   undoNextStep,
 } from "../../services/threads/next-step.js";
 
-async function callAutomation(
+async function callNextStepPlugin(
   plugins: PluginService,
   method: string,
   input: unknown,
+  pluginId = "automations",
 ) {
-  const lookup = plugins.getRpcHandler("automations", method);
+  const lookup = plugins.getRpcHandler(pluginId, method);
   if (lookup.outcome !== "found")
     throw new ApiError(
       409,
-      "next_step_automations_unavailable",
-      "Enable Automations to schedule this next step",
+      pluginId === "automations"
+        ? "next_step_automations_unavailable"
+        : "next_step_notifications_unavailable",
+      pluginId === "automations"
+        ? "Enable Automations to start this next step"
+        : "Enable Notifications to cancel this reminder",
     );
   const result = await plugins.invokeRpcHandler(
-    "automations",
+    pluginId,
     method,
     lookup.value,
     input,
@@ -58,6 +63,7 @@ async function executeNextStep(
   deps: AppDeps,
   plugins: PluginService,
   suggestion: NextStep,
+  acceptedAt: number,
 ): Promise<NextStepResult> {
   const thread = requirePublicThread(deps.db, suggestion.threadId);
   if (thread.environmentId === null)
@@ -96,11 +102,12 @@ async function executeNextStep(
     return result;
   }
   const automation = suggestion.action.automation;
-  const response = await callAutomation(plugins, "automations_create", {
+  const response = await callNextStepPlugin(plugins, "automations_create", {
     projectId: thread.projectId,
     name: suggestion.title,
     origin: "app",
     createdByThreadId: thread.id,
+    enabled: false,
     trigger: { triggerType: "once", runAt: automation.schedule.runAt },
     execution: {
       mode: "agent",
@@ -111,6 +118,7 @@ async function executeNextStep(
       permissionMode: execution.permissionMode,
       environment: { type: "reuse", environmentId: thread.environmentId },
       resultNotificationKind: "day2_result",
+      day2ResultDelivery: { acceptedAt, deliverAt: automation.schedule.runAt },
     },
   });
   const result: NextStepResult = {
@@ -118,6 +126,11 @@ async function executeNextStep(
     automationId: z.object({ id: z.string() }).parse(response).id,
   };
   linkNextStepResult(deps.db, { threadId: thread.id, result });
+  await callNextStepPlugin(plugins, "automations_run", {
+    projectId: thread.projectId,
+    automationId: result.automationId,
+    idempotencyKey: suggestion.id,
+  });
   return result;
 }
 
@@ -174,20 +187,23 @@ export function registerNextStepRoutes(
       }
       if (
         suggestion.action.kind === "automation" &&
-        plugins.getRpcHandler("automations", "automations_create").outcome !==
-          "found"
+        ["automations_create", "automations_run"].some(
+          (method) =>
+            plugins.getRpcHandler("automations", method).outcome !== "found",
+        )
       ) {
         throw new ApiError(
           409,
           "next_step_automations_unavailable",
-          "Enable Automations to schedule this next step",
+          "Enable Automations to start this next step",
         );
       }
       await buildExecutionOptions(deps, {}, { threadId: thread.id });
     }
     const result = await acceptNextStep(deps.db, {
       threadId: thread.id,
-      execute: (suggestion) => executeNextStep(deps, plugins, suggestion),
+      execute: (suggestion, acceptedAt) =>
+        executeNextStep(deps, plugins, suggestion, acceptedAt),
     });
     if (result.newlyAccepted)
       deps.telemetry.capture({
@@ -221,7 +237,13 @@ export function registerNextStepRoutes(
       await undoNextStep(deps.db, {
         threadId: thread.id,
         undo: async (automationId) => {
-          await callAutomation(plugins, "automations_delete", {
+          await callNextStepPlugin(
+            plugins,
+            "experimental_cancelDay2Result",
+            { automationId },
+            "push-notifications",
+          );
+          await callNextStepPlugin(plugins, "automations_delete", {
             projectId: thread.projectId,
             automationId,
           });

@@ -20,7 +20,7 @@ import {
   completeNextStepTurn,
   dismissNextStep,
   getNextStep,
-  isNextStepTomorrow,
+  nextStepDeliveryAt,
   linkNextStepResult,
   noteNextStepUserMessage,
   showNextStep,
@@ -316,23 +316,39 @@ describe("Next step lifecycle", () => {
 });
 
 describe("Next step boundaries", () => {
-  it("uses the local calendar day across DST instead of adding 24 hours", () => {
-    const before = Date.parse("2026-10-31T23:30:00-04:00");
-    expect(
-      isNextStepTomorrow(
-        Date.parse("2026-11-01T23:45:00-05:00"),
-        before,
-        "America/New_York",
-      ),
-    ).toBe(true);
-    expect(
-      isNextStepTomorrow(
-        Date.parse("2026-11-02T00:00:00-05:00"),
-        before,
-        "America/New_York",
-      ),
-    ).toBe(false);
-  });
+  it.each([
+    ["2026-10-22T18:00:00Z", "UTC", "2026-10-23T09:00:00Z"],
+    ["2026-10-23T08:00:00Z", "UTC", "2026-10-26T09:00:00Z"],
+    ["2026-10-24T18:00:00Z", "UTC", "2026-10-26T09:00:00Z"],
+    ["2026-10-25T18:00:00Z", "UTC", "2026-10-26T09:00:00Z"],
+    [
+      "2026-03-06T18:00:00-05:00",
+      "America/New_York",
+      "2026-03-09T09:00:00-04:00",
+    ],
+    [
+      "2026-10-30T18:00:00-04:00",
+      "America/New_York",
+      "2026-11-02T09:00:00-05:00",
+    ],
+    [
+      "2026-10-02T18:00:00+10:30",
+      "Australia/Lord_Howe",
+      "2026-10-05T09:00:00+11:00",
+    ],
+    [
+      "2026-10-23T00:30:00Z",
+      "America/Los_Angeles",
+      "2026-10-23T09:00:00-07:00",
+    ],
+  ])(
+    "delivers after %s on the next weekday at 09:00 in %s",
+    (acceptedAt, timezone, expected) => {
+      expect(nextStepDeliveryAt(Date.parse(acceptedAt), timezone)).toBe(
+        Date.parse(expected),
+      );
+    },
+  );
 
   it("rejects off-project, credential-bearing and mismatched evidence URLs", () => {
     const remote = "git@github.com:owner/repo.git";
