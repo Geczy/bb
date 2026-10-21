@@ -1,28 +1,17 @@
 import type { CompareHighlight } from "./compare-types";
 import {
-  AGENTS_COPY,
-  agentsSection,
   ANYWHERE_COPY,
   anywhereSection,
+  PLUGINS_COPY,
   PRICING_COPY,
   pricingSection,
-  LIMITS_COPY,
-  limitsSection,
   SPAWN_COPY,
   spawnSection,
   pluginsSection,
   type SectionCopy,
 } from "./compare-sections";
 import { UsageVisual, TaskLedger } from "./compare-visuals";
-import { CONDUCTOR_LOGO } from "./pages/conductor.meta";
 import { SUPERSET_LOGO } from "./pages/superset.meta";
-
-const COST_SECTION = pricingSection(PRICING_COPY, {
-  plan: "Conductor Teams",
-  logo: CONDUCTOR_LOGO,
-  yearlyPerSeatMonthly: 60,
-  priceNote: "Conductor Teams at $60 per person a month.",
-});
 
 const PLANS_SECTION = {
   title: "Every agent on its own subscription",
@@ -69,16 +58,13 @@ const LEDGER_HIGHLIGHT: CompareHighlight = {
   ),
 };
 
-export const COMPARISON_SECTIONS = {
-  agents: agentsSection(AGENTS_COPY),
-  anywhere: anywhereSection(ANYWHERE_COPY),
-  conductorCost: COST_SECTION,
-  limits: limitsSection(LIMITS_COPY),
-  spawn: spawnSection(SPAWN_COPY),
-};
+export const COMPARISON_SECTIONS = [
+  pluginsSection(PLUGINS_COPY),
+  spawnSection(SPAWN_COPY),
+];
 
 export const CUSTOM_COMPARISON_SECTIONS = {
-  conductor: COMPARISON_SECTIONS.anywhere,
+  conductor: anywhereSection(ANYWHERE_COPY),
   cursor: PLANS_SECTION,
   superset: pricingSection(PRICING_COPY, {
     plan: "Superset Pro",
