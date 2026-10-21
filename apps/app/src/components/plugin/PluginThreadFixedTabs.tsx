@@ -1,3 +1,4 @@
+import type { JsonValue } from "@get-bb/plugin-sdk";
 import { hasThreadId } from "@/lib/thread-id";
 import type { SecondaryPanelFixedTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { PluginItemIcon } from "./PluginIcon";
@@ -5,13 +6,16 @@ import { usePluginFrontendsSettled } from "@/lib/plugin-frontend-boot-state";
 import { coreThreadFixedTabs } from "@/components/secondary-panel/thread-info-registration";
 import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  createGitDiffFixedPanelTab,
   createPluginFixedPanelTab,
   createThreadInfoFixedPanelTab,
   type FixedPanelViewTab,
 } from "@/lib/fixed-panel-tabs-state";
 import {
   type AppFixedTabDestination,
+  AppFixedTabTargetProvider,
+  createValidatedFixedTabDestination,
+  threadFixedTabTargetKey,
+  useFixedTabSessionTarget,
   getThreadFixedTabOwnerId,
 } from "@/lib/app-fixed-tab-navigation";
 import type { AppFixedTabReference } from "@/lib/app-navigation-host";
@@ -30,29 +34,24 @@ export interface ThreadFixedTabEntry {
 
 export function createThreadFixedTabDestination(
   entry: ThreadFixedTabEntry,
-  select: (entry: ThreadFixedTabEntry) => void,
+  select: (entry: ThreadFixedTabEntry, toggle: boolean) => void,
+  deliver?: (target: JsonValue) => void,
 ): AppFixedTabDestination {
-  return {
+  return createValidatedFixedTabDestination({
     tab: entry.reference,
-    open(target) {
-      if (target !== undefined) return false;
-      select(entry);
-      return true;
-    },
-  };
+    contract:
+      deliver === undefined ? undefined : entry.slot.experimental_target,
+    deliver: (target) => deliver?.(target),
+    select: (toggle) => select(entry, toggle),
+  });
 }
 
 export function buildThreadFixedPanelViewTabs({
   entries,
-  includeDiff,
 }: {
   entries: readonly ThreadFixedTabEntry[];
-  includeDiff: boolean;
 }): readonly FixedPanelViewTab[] {
-  return [
-    ...entries.map((entry) => entry.tab),
-    ...(includeDiff ? [createGitDiffFixedPanelTab()] : []),
-  ];
+  return [...entries.map((entry) => entry.tab)];
 }
 
 export function createThreadFixedTabDescriptor(
@@ -70,6 +69,12 @@ export function createThreadFixedTabDescriptor(
     onSelect: () => open(entry.reference),
     tab: entry.tab,
     title: tooltip,
+    ...(entry.slot.experimental_shortcutCommandId === undefined
+      ? {}
+      : {
+          shortcutCommandId:
+            `plugin:${entry.slot.pluginId}/${entry.slot.experimental_shortcutCommandId}` as const,
+        }),
     contentFillsRegion: entry.slot.layout === "flush",
     renderContent: () => (
       <ThreadFixedTabContent entry={entry} threadId={threadId} />
@@ -109,11 +114,17 @@ export function ThreadFixedTabContent({
   entry: ThreadFixedTabEntry;
   threadId: string;
 }) {
+  const targetState = useFixedTabSessionTarget(
+    threadFixedTabTargetKey(threadId, entry.reference),
+    entry.reference,
+  );
   if (!hasThreadId(threadId)) return null;
   const Component = entry.slot.component;
   return (
     <SlotScope slot={entry.slot} threadId={threadId}>
-      <Component threadId={threadId} />
+      <AppFixedTabTargetProvider state={targetState}>
+        <Component threadId={threadId} />
+      </AppFixedTabTargetProvider>
     </SlotScope>
   );
 }

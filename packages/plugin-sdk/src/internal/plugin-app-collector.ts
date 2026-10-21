@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import { z } from "zod";
 import type {
-  ExperimentalThreadFixedTabRegistration,
+  ExperimentalThreadFixedTabDeclaration,
   ComposerCustomization,
   ExperimentalAppOverlayRegistration,
   ExperimentalCodeFenceRendererRegistration,
@@ -375,7 +375,7 @@ export interface CollectedPluginAppRegistrations {
   appOverlays: ExperimentalAppOverlayRegistration[];
   navPanels: PluginNavPanelRegistration[];
   threadContextSegments: ExperimentalThreadContextSegmentRegistration[];
-  threadFixedTabs: ExperimentalThreadFixedTabRegistration[];
+  threadFixedTabs: ExperimentalThreadFixedTabDeclaration[];
   threadPanelActions: PluginThreadPanelActionRegistration[];
   newThreadPanelActions: PluginNewThreadPanelActionRegistration[];
   composerCustomizations: ComposerCustomization[];
@@ -820,9 +820,29 @@ export function collectPluginAppRegistrations(
         ) {
           throw new Error(`${kind}: "useVisible" must be a function when set`);
         }
+        const target = registration.experimental_target;
+        if (
+          target !== undefined &&
+          (target === null ||
+            typeof target !== "object" ||
+            typeof target.validate !== "function")
+        )
+          throw new Error(
+            `${kind}: "experimental_target.validate" must be a function when set`,
+          );
         collected.threadFixedTabs.push({
           ...collectPanelAction(kind, seenIds.threadFixedTab, registration),
+          ...(target === undefined ? {} : { experimental_target: target }),
           icon: requireNonEmptyString(kind, "icon", registration.icon),
+          ...(registration.experimental_shortcutCommandId === undefined
+            ? {}
+            : {
+                experimental_shortcutCommandId: requireNonEmptyString(
+                  kind,
+                  "experimental_shortcutCommandId",
+                  registration.experimental_shortcutCommandId,
+                ),
+              }),
           ...(registration.tooltip === undefined
             ? {}
             : {

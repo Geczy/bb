@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Icon } from "@bb/shared-ui/icon";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
-  createGitDiffFixedPanelTab,
+  createPluginFixedPanelTab,
   createThreadInfoFixedPanelTab,
   type HostFilePreviewFixedPanelTab,
   type SecondaryFixedPanelTab,
@@ -117,14 +117,14 @@ function ShelfPanel({
     };
   });
   const infoTab = createThreadInfoFixedPanelTab();
-  const diffTab = createGitDiffFixedPanelTab();
+  const diffTab = createPluginFixedPanelTab({
+    pluginId: "bb--git",
+    tabId: "diff",
+  });
 
   return (
     <ThreadSecondaryPanel
       activeTab={activeTab}
-      canUseGitUi
-      requestedMergeBaseBranch="main"
-      environmentId={undefined}
       isOpen
       metadataContent={<ThreadMetadataContent {...baseMetadataProps} />}
       tabs={tabs}

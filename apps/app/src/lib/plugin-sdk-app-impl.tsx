@@ -1,3 +1,5 @@
+import { ImageLightbox } from "@/components/ui/image-lightbox";
+import { CopyButton } from "@/components/ui/copy-button";
 import { ProviderIcon } from "@/components/plugin/ProviderIcon";
 import { Icon } from "@bb/shared-ui/icon";
 import { useCallback, useMemo } from "react";
@@ -124,6 +126,8 @@ export const pluginSdkAppImplementation = {
   experimental_useCheckoutState: usePluginCheckoutState,
   experimental_SourceCode: PluginSourceCode,
   experimental_Diff: PluginDiff,
+  experimental_ImageLightbox: ImageLightbox,
+  experimental_CopyButton: CopyButton,
   experimental_useSidebarThreads: useSidebarThreads,
   experimental_useSidebarThreadActions: useSidebarThreadActions,
   experimental_useThreadActions: useThreadActionEntries,

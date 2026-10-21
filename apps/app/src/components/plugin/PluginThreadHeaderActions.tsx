@@ -32,7 +32,8 @@ const OverflowCollector = memo(function OverflowCollector({
     actions: readonly PluginThreadAction[] | null,
   ): void;
 }) {
-  const actions = slot.experimental_useOverflowActions?.(input);
+  const useOverflowActions = slot.experimental_useOverflowActions;
+  const actions = useOverflowActions?.(input);
   if (
     !Array.isArray(actions) ||
     actions.some(

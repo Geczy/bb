@@ -62,8 +62,6 @@ function Banner({
     <MemoryRouter>
       <ThreadPromptContextBanner
         threadId={threadId}
-        gitSection={null}
-        gitSectionPending={false}
         archivedSection={null}
         environmentGoneSection={null}
         parentThreadSection={

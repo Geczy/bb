@@ -148,14 +148,9 @@ const VIEW_FIXTURE_ANCHORS: Record<string, readonly FixtureAnchor[]> = {
     },
     {
       file: "apps/app/src/components/secondary-panel/ThreadMetadataContent.tsx",
-      mustContain: [
-        'appearance="flat"',
-        "<EnvironmentRow",
-        "<BranchRow",
-        "<PullRequestRow",
-      ],
+      mustContain: ['appearance="flat"', "<EnvironmentRow", "<PullRequestRow"],
       because:
-        "The open Info panel projects BB's flat metadata card and representative environment, branch, and pull-request rows.",
+        "The open Info panel projects BB's flat metadata card and representative environment and pull-request rows.",
     },
     {
       file: "apps/app/src/components/promptbox/follow-up-placeholder.ts",

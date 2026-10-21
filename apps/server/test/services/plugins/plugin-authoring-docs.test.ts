@@ -356,6 +356,7 @@ const FRONTEND_SLOT_PROP_FIELDS = {
   navPanel: ["subPath"],
   experimental_threadFixedTab: ["threadId"],
   experimental_threadContextSegment: [
+    "experimental_instanceId",
     "threadId",
     "part",
     "segmentCount",
@@ -419,7 +420,12 @@ const FRONTEND_SLOT_PROP_FIELDS = {
     "openPanel",
     "composer",
   ],
-  commandPaletteAction: ["threadId", "projectId", "openPanel"],
+  commandPaletteAction: [
+    "threadId",
+    "projectId",
+    "openPanel",
+    "experimental_openThreadFixedTab",
+  ],
   experimental_providerIcon: ["providerKind", "providerId", "icon"],
   experimental_timelineRenderer: [
     "row",

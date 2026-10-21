@@ -135,7 +135,6 @@ function Harness({
         <ThreadSecondaryPanel
           splitPanelStateId={panelStateId}
           activeTab={tabs.find((tab) => tab.tab.id === activeId)?.tab ?? null}
-          canUseGitUi={false}
           fixedTabs={[]}
           tabs={tabs}
           isOpen

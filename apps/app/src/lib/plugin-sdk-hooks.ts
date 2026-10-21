@@ -1,3 +1,4 @@
+import { createPluginFixedTabOpener } from "@/lib/app-fixed-tab-navigation";
 import { coreRead, PLUGIN_DEPENDENCY } from "@/hooks/queries/core-read";
 import { experimental_PluginRpcCallError } from "@get-bb/plugin-sdk";
 import { createRpcQueryHooks } from "@get-bb/plugin-sdk/internal/rpc-query-host";
@@ -31,10 +32,11 @@ import type {
   ExperimentalAppPanel,
   ExperimentalFixedTabTargetState,
   ExperimentalPluginFixedTabReference,
+  ExperimentalThreadFixedTabReference,
   JsonValue,
 } from "@get-bb/plugin-sdk";
-import { jsonValueSchema } from "@bb/domain";
 import {
+  PluginContext,
   PluginSlotOwnershipContext,
   usePluginId,
 } from "@/components/plugin/plugin-context";
@@ -90,7 +92,10 @@ import { useServerConnectionState } from "@/hooks/useServerConnectionState";
 import { wsManager } from "@/lib/ws";
 import { pluginSdkSettingsQueryKey } from "@/hooks/queries/query-keys";
 import { useAppNavigationHost } from "@/lib/app-navigation-host";
-import { normalizeExperimentalFileOpenOptions } from "@/lib/live-file-navigation";
+import {
+  normalizeExperimentalFileOpenOptions,
+  normalizeExperimentalFilePreviewOptions,
+} from "@/lib/live-file-navigation";
 import {
   getThreadFixedTabOwnerId,
   getPluginFixedTabOwnerId,
@@ -468,8 +473,21 @@ export function useBbNavigate(): BbNavigate {
     BbNavigate["experimental_openFilePreview"]
   >(
     (options) => {
-      const normalized = normalizeExperimentalFileOpenOptions(options);
+      const normalized = normalizeExperimentalFilePreviewOptions(options);
       return normalized !== null && appNavigation.openFilePreview(normalized);
+    },
+    [appNavigation],
+  );
+  const experimental_canOpenFileExternally = useCallback(
+    (
+      options: Parameters<
+        NonNullable<BbNavigate["experimental_canOpenFileExternally"]>
+      >[0],
+    ) => {
+      const normalized = normalizeExperimentalFileOpenOptions(options);
+      return (
+        normalized !== null && appNavigation.canOpenFileExternally(normalized)
+      );
     },
     [appNavigation],
   );
@@ -505,6 +523,7 @@ export function useBbNavigate(): BbNavigate {
       toPluginPanel,
       toCompose,
       openThreadPanel,
+      experimental_canOpenFileExternally,
       experimental_openFileExternally,
       experimental_openFilePreview,
       experimental_openTerminal,
@@ -516,6 +535,7 @@ export function useBbNavigate(): BbNavigate {
       toPluginPanel,
       toCompose,
       openThreadPanel,
+      experimental_canOpenFileExternally,
       experimental_openFileExternally,
       experimental_openFilePreview,
       experimental_openTerminal,
@@ -527,38 +547,24 @@ export function useBbNavigate(): BbNavigate {
 function useExperimentalAppPanel(): ExperimentalAppPanel {
   const pluginId = usePluginId();
   const appNavigation = useAppNavigationHost();
-  const openFixedTab = useCallback<ExperimentalAppPanel["openFixedTab"]>(
-    (options) => {
-      const targetResult =
-        options.target === undefined
-          ? null
-          : jsonValueSchema.safeParse(options.target);
-      if (targetResult !== null && !targetResult.success) return false;
-      return appNavigation.openFixedTab({
-        surface: options.surface,
-        tab: {
-          ownerId:
-            options.tab.panelId === undefined
-              ? getThreadFixedTabOwnerId(pluginId)
-              : getPluginFixedTabOwnerId(pluginId, options.tab.panelId),
-          tabId: options.tab.id,
-        },
-        ...(targetResult?.success === true
-          ? { target: targetResult.data }
-          : {}),
-      });
-    },
-    [appNavigation, pluginId],
+  const openFixedTab = useMemo(
+    () => createPluginFixedTabOpener(pluginId, appNavigation.openFixedTab),
+    [pluginId, appNavigation.openFixedTab],
   );
+
   return useMemo(() => ({ openFixedTab }), [openFixedTab]);
 }
 
 function useExperimentalFixedTabTarget<Target extends JsonValue>(
-  tab: ExperimentalPluginFixedTabReference<Target>,
+  tab:
+    | ExperimentalPluginFixedTabReference<Target>
+    | ExperimentalThreadFixedTabReference<Target>,
 ): ExperimentalFixedTabTargetState<Target> | null {
   const pluginId = usePluginId();
   const state = useAppFixedTabTarget(
-    getPluginFixedTabOwnerId(pluginId, tab.panelId),
+    tab.panelId === undefined
+      ? getThreadFixedTabOwnerId(pluginId)
+      : getPluginFixedTabOwnerId(pluginId, tab.panelId),
     tab.id,
   );
   if (state === null || tab.experimental_target === undefined) return null;
@@ -985,12 +991,12 @@ export function useComposers(): readonly PluginComposerApi[] {
 }
 
 export const {
-  experimental_useRpcQuery,
+  experimental_useRpcQuery: usePluginRpcQuery,
   experimental_useRpcKeyedQuery,
   experimental_useRpcMutation,
   experimental_useRpcRefresh,
 } = createRpcQueryHooks(() => {
-  const pluginId = usePluginId();
+  const pluginId = useContext(PluginContext) ?? "core";
   const queryClient = useQueryClient();
   return useMemo(
     () => ({
@@ -1025,3 +1031,5 @@ export const {
     [pluginId, queryClient],
   );
 });
+
+export { usePluginRpcQuery as experimental_useRpcQuery };

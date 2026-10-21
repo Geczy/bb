@@ -28,7 +28,6 @@ export const FIXED_PANEL_TABS_IDLE_EXPIRY_MS = 14 * 24 * 60 * 60 * 1000;
 
 const SECONDARY_PANEL_TAB_ID_ENVIRONMENT_NONE = "none";
 const THREAD_INFO_TAB_ID = "thread-info:thread-info:none";
-const GIT_DIFF_TAB_ID = "git-diff:git-diff:none";
 const NEW_TAB_TAB_ID = "new-tab:new-tab:none";
 
 const environmentFilePreviewSourceSchema: z.ZodType<EnvironmentFilePreviewSource> =
@@ -65,12 +64,16 @@ const threadInfoFixedPanelTabSchema = z
     kind: z.literal("thread-info"),
   })
   .strict();
-const gitDiffFixedPanelTabSchema = z
+const legacyGitDiffFixedPanelTabSchema = z
   .object({
     id: z.string().min(1),
     kind: z.literal("git-diff"),
   })
-  .strict();
+  .strict()
+  .transform((tab) => ({
+    ...createPluginFixedPanelTab({ pluginId: "bb--git", tabId: "diff" }),
+    id: tab.id,
+  }));
 const pluginFixedPanelTabSchema = z
   .object({
     id: z.string().min(1),
@@ -172,7 +175,7 @@ const pluginPanelFixedPanelTabSchema = z
   .strict();
 const secondaryFixedPanelTabSchema = z.union([
   threadInfoFixedPanelTabSchema,
-  gitDiffFixedPanelTabSchema,
+  legacyGitDiffFixedPanelTabSchema,
   pluginFixedPanelTabSchema,
   pluginPageFixedPanelTabSchema,
   pluginPanelFixedPanelTabSchema,
@@ -218,11 +221,6 @@ interface ThreadInfoFixedPanelTab {
   kind: "thread-info";
 }
 
-interface GitDiffFixedPanelTab {
-  id: string;
-  kind: "git-diff";
-}
-
 export interface PluginFixedPanelTab {
   id: string;
   kind: "plugin-fixed";
@@ -240,7 +238,6 @@ export interface PluginPageFixedPanelTab {
 
 export type FixedPanelViewTab =
   | ThreadInfoFixedPanelTab
-  | GitDiffFixedPanelTab
   | PluginPageFixedPanelTab
   | PluginFixedPanelTab;
 
@@ -316,7 +313,6 @@ export interface TerminalFixedPanelTab {
 
 export type SecondaryFixedPanelTab =
   | ThreadInfoFixedPanelTab
-  | GitDiffFixedPanelTab
   | PluginPageFixedPanelTab
   | PluginFixedPanelTab
   | PluginPanelFixedPanelTab
@@ -564,13 +560,6 @@ export function createThreadInfoFixedPanelTab(): ThreadInfoFixedPanelTab {
   };
 }
 
-export function createGitDiffFixedPanelTab(): GitDiffFixedPanelTab {
-  return {
-    id: GIT_DIFF_TAB_ID,
-    kind: "git-diff",
-  };
-}
-
 export function createPluginFixedPanelTab({
   pluginId,
   tabId,
@@ -768,13 +757,6 @@ function normalizeFixedPanelTabId(tab: FixedPanelTab): FixedPanelTab {
             ...tab,
             id: THREAD_INFO_TAB_ID,
           };
-    case "git-diff":
-      return tab.id === GIT_DIFF_TAB_ID
-        ? tab
-        : {
-            ...tab,
-            id: GIT_DIFF_TAB_ID,
-          };
     case "plugin-fixed": {
       const id = createPluginFixedPanelTab(tab).id;
       return tab.id === id ? tab : { ...tab, id };
@@ -916,7 +898,6 @@ function stripTransientFixedPanelTabForStorage(
         lineRange: null,
       };
     case "thread-info":
-    case "git-diff":
     case "plugin-fixed":
     case "plugin-page-fixed":
     case "attachment-file-preview":
@@ -1125,7 +1106,6 @@ export function areFixedPanelTabsEquivalent(
   }
   switch (a.kind) {
     case "thread-info":
-    case "git-diff":
     case "new-tab":
       return true;
     case "plugin-fixed":

@@ -122,8 +122,6 @@ function Harness({
   return (
     <ThreadPromptContextBanner
       threadId="thread-banner-fixture"
-      gitSection={null}
-      gitSectionPending={false}
       archivedSection={null}
       environmentGoneSection={null}
       parentThreadSection={null}

@@ -1,3 +1,7 @@
+import {
+  installGitBannerFixture,
+  ThreadPromptContextBanner,
+} from "./banner/ThreadPromptContextBanner.git-fixture";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type {
   Environment,
@@ -6,8 +10,8 @@ import type {
   PromptMentionResource,
   PromptTextMention,
   ThreadQueuedMessage,
-  WorkspaceStatus,
 } from "@bb/domain";
+import type { WorkspaceStatus } from "bb-git-contract";
 import { makeThreadQueuedMessage } from "@bb/test-helpers/domain-fixtures";
 import {
   formatEnvironmentDisplay,
@@ -36,7 +40,6 @@ import {
   type PromptBoxAction,
   type TypeaheadConfig,
 } from "@/components/promptbox/PromptBoxInternal";
-import { ThreadPromptContextBanner } from "@/components/promptbox/banner/ThreadPromptContextBanner";
 import type {
   QueuedMessageEditRequest,
   QueuedMessageInlineEditor,
@@ -47,9 +50,9 @@ import type { CompactBeforeSendOffer } from "@/components/promptbox/CompactBefor
 import {
   formatWorkspaceCheckoutDisplay,
   type WorkspaceCheckoutDisplay,
-} from "@/lib/workspace-checkout-display";
+} from "bb-plugin-bb--git/workspace-checkout-display";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
-import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
+import { selectWorkspaceChangedFilesSection } from "bb-plugin-bb--git/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { ModelPickerStoryQueryProvider } from "../../../.ladle/model-picker-query-provider";
 import {
@@ -1042,3 +1045,5 @@ export function EnvironmentSummary() {
     </StoryCard>
   );
 }
+
+installGitBannerFixture();

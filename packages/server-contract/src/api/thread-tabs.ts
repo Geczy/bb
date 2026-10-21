@@ -87,7 +87,6 @@ export type ThreadTabFileOpenerOwner = z.infer<
 
 export const threadTabSchema = z.discriminatedUnion("kind", [
   z.object({ id: threadTabIdSchema, kind: z.literal("thread-info") }).strict(),
-  z.object({ id: threadTabIdSchema, kind: z.literal("git-diff") }).strict(),
   z
     .object({
       id: threadTabIdSchema,

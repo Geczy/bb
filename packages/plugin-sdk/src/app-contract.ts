@@ -643,7 +643,38 @@ export interface SourceCodeProps {
  * and the live BB code theme. Content that cannot be parsed as a patch
  * degrades to plain monospace text.
  */
+export interface ExperimentalImageLightboxProps {
+  hasMultipleImages?: boolean;
+  previousDisabled?: boolean;
+  nextDisabled?: boolean;
+  navigationStatus?: string;
+  mediaType?: "image" | "video";
+  imageAlt: string;
+  imageSrc: string | null;
+  isOpen?: boolean;
+  onClose(): void;
+  onNext?(): void;
+  onPrevious?(): void;
+  title: string;
+}
+
+export interface ExperimentalCopyButtonProps extends Omit<
+  ComponentPropsWithoutRef<"button">,
+  "type" | "onClick" | "title"
+> {
+  /** Render a copyable text label using the same control and feedback. */
+  experimental_inlineLabel?: { title?: string };
+  text: string;
+  iconClassName?: string;
+  label?: string;
+  successMessage?: string | null;
+  errorMessage?: string | null;
+  imageUrl?: string;
+}
+
 export interface DiffProps {
+  /** Add selected changed lines to the caller’s composer. */
+  experimental_onSelectionAddToChat?: (text: string) => void;
   /** Unified patch text for exactly ONE file. */
   patch: string;
   /**
@@ -1043,27 +1074,40 @@ export interface PluginThreadPanelActionContext {
 }
 
 /** A pinned tab reference in the current thread's panel. */
-export interface ExperimentalThreadFixedTabReference {
+export type ExperimentalThreadFixedTabReference<
+  Target extends JsonValue = never,
+> = {
   readonly id: string;
   readonly panelId?: never;
-  readonly experimental_target?: never;
-}
+} & ([Target] extends [never]
+  ? { readonly experimental_target?: never }
+  : {
+      readonly experimental_target: ExperimentalFixedTabTargetContract<Target>;
+    });
 
 export interface ExperimentalThreadFixedTabProps {
   threadId: string;
 }
 
 /** Pinned, non-closable thread tab. Identity and order are saved per thread. */
-export interface ExperimentalThreadFixedTabRegistration extends ExperimentalThreadFixedTabReference {
+export type ExperimentalThreadFixedTabRegistration<
+  Target extends JsonValue = never,
+> = ExperimentalThreadFixedTabReference<Target> & {
   title: string;
   /** Hover text and accessible-name source; defaults to title. */
   tooltip?: string;
+  /** Plugin command id whose current binding appears in the tab tooltip and accessible name. */
+  experimental_shortcutCommandId?: string;
   icon: BbIconName;
   component: ComponentType<ExperimentalThreadFixedTabProps>;
   layout?: "padded" | "flush";
   /** Evaluated inside the plugin scope for each thread. Hidden tabs retain their saved identity. */
   useVisible?(props: ExperimentalThreadFixedTabProps): boolean;
-}
+};
+
+export type ExperimentalThreadFixedTabDeclaration =
+  | ExperimentalThreadFixedTabRegistration
+  | ExperimentalThreadFixedTabRegistration<JsonValue>;
 
 export interface PluginThreadPanelActionRegistration {
   /** Unique within the plugin; letters, digits, `-`, `_`. */
@@ -1764,6 +1808,8 @@ export interface PluginSidebarThreadActions {
 
 /** Integrated context beside the thread composer, with shared disclosure state. */
 export interface ExperimentalThreadContextSegmentProps {
+  /** Shared by summary and details; unique to this mounted banner. */
+  experimental_instanceId: string;
   threadId: string;
   /** Summary renders in the row; details renders below the whole row. Each is a separate mount. */
   part: "summary" | "details";
@@ -2374,6 +2420,12 @@ export interface PluginCommandContext {
   /** The thread in view, or null on a surface without one. */
   threadId: string | null;
   projectId: string | null;
+  /** Open this plugin's pinned tab in the focused thread, through the same path as the tab strip. Optional on older hosts. */
+  experimental_openThreadFixedTab?<Target extends JsonValue = never>(options: {
+    tab: ExperimentalThreadFixedTabReference<Target>;
+    target?: NoInfer<Target>;
+    experimental_toggle?: boolean;
+  }): boolean;
   /**
    * Open one of this plugin's panel components in the focused side panel.
    * In a thread, `actionId` resolves against `threadPanelAction`; on the New
@@ -2656,8 +2708,8 @@ export interface PluginAppSlots {
   ): void;
   navPanel(registration: PluginNavPanelRegistration): void;
   /** Register a pinned thread tab. Experimental: see docs/api_to_audit.md. */
-  experimental_threadFixedTab(
-    registration: ExperimentalThreadFixedTabRegistration,
+  experimental_threadFixedTab<Target extends JsonValue = never>(
+    registration: ExperimentalThreadFixedTabRegistration<Target>,
   ): void;
   /**
    * Add an action to an existing thread's panel launcher. This slot is
@@ -3889,6 +3941,11 @@ export interface ExperimentalFileOpenOptions {
   location: ExperimentalFileLocation | null;
 }
 
+/** A workspace file at a Git revision; omitted revision opens the live file. */
+export interface ExperimentalFilePreviewOptions extends ExperimentalFileOpenOptions {
+  experimental_revision?: { ref: string; deleted: boolean };
+}
+
 /**
  * Props for BB's host-rendered semantic file link. Valid targets receive a
  * scheme-safe anchor href; traversal paths, ill-formed Unicode, and other
@@ -3925,8 +3982,10 @@ export type ExperimentalOpenFixedTabOptions<Target extends JsonValue> =
     }
   | {
       surface: ExperimentalAppPanelSurface;
-      tab: ExperimentalThreadFixedTabReference;
-      target?: never;
+      tab: ExperimentalThreadFixedTabReference<Target>;
+      target?: NoInfer<Target>;
+      /** Close an already selected, open thread tab; rejects a simultaneous target. */
+      experimental_toggle?: boolean;
     };
 
 /** Surface-aware controller for selecting owner-scoped fixed tabs. */
@@ -3995,8 +4054,14 @@ export interface BbNavigate {
    */
   openUrl(url: string): boolean;
   /** Open a live file in this surface's shared BB preview panel. */
-  experimental_openFilePreview(options: ExperimentalFileOpenOptions): boolean;
+  experimental_openFilePreview(
+    options: ExperimentalFilePreviewOptions,
+  ): boolean;
   /** Open a live file in this client's preferred external file target. */
+  /** Whether this surface can open the file in its preferred editor. False when availability is unknown, including older hosts. */
+  experimental_canOpenFileExternally?(
+    options: ExperimentalFileOpenOptions,
+  ): boolean;
   experimental_openFileExternally(
     options: ExperimentalFileOpenOptions,
   ): boolean;
@@ -4220,7 +4285,9 @@ export interface PluginSdkApp {
   experimental_useAppPanel(): ExperimentalAppPanel;
   /** Read or clear the owning tab's validated, session-scoped target. */
   experimental_useFixedTabTarget<Target extends JsonValue>(
-    tab: ExperimentalPluginFixedTabReference<Target>,
+    tab:
+      | ExperimentalPluginFixedTabReference<Target>
+      | ExperimentalThreadFixedTabReference<Target>,
   ): ExperimentalFixedTabTargetState<Target> | null;
   useComposer(): PluginComposerApi;
   /**
@@ -4574,6 +4641,10 @@ export interface PluginSdkApp {
    * docs/api_to_audit.md.
    */
   experimental_Diff: ComponentType<DiffProps>;
+  /** BB’s persistent image viewer, including browser dimming and keyboard navigation. */
+  experimental_ImageLightbox: ComponentType<ExperimentalImageLightboxProps>;
+  /** BB’s clipboard button, including success state and copy-failure feedback. */
+  experimental_CopyButton: ComponentType<ExperimentalCopyButtonProps>;
   /** @internal Superseded by `useComposer()`; kept for plugins built against older SDKs. */
   useComposerView(): ComposerView;
 }

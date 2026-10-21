@@ -244,13 +244,26 @@ describe("thread fixed-tab contract", () => {
   });
 
   it("keeps default Info before pinned Diff to match the Plugin Guide and Theme Preview fixtures", () => {
+    setPluginSlotRegistrations(
+      "bb--git",
+      collectPluginAppRegistrations(
+        definePluginApp((app) => {
+          app.slots.experimental_threadFixedTab({
+            id: "diff",
+            title: "Diff",
+            icon: "FileDiff",
+            component: () => null,
+          });
+        }),
+      ),
+    );
     const { result } = renderHook(() => {
       const { entries } = useThreadFixedTabs({ threadId: "thr_fixture" });
-      return buildThreadFixedPanelViewTabs({ entries, includeDiff: true });
+      return buildThreadFixedPanelViewTabs({ entries });
     });
     expect(result.current.map((tab) => tab.kind)).toEqual([
       "thread-info",
-      "git-diff",
+      "plugin-fixed",
     ]);
   });
 

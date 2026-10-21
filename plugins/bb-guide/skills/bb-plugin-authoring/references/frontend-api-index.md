@@ -328,3 +328,14 @@ For `app.slots.experimental_threadContextSegment`,
 `isExpanded`, `onToggle`), see the Plugin Guide Banners card.
 For `PluginThreadHeaderActionRegistration.experimental_useOverflowActions`,
 see the Plugin Guide Thread header controls card.
+
+For `ExperimentalFilePreviewOptions`, `ExperimentalFilePreviewOptions.experimental_revision`,
+`experimental_CopyButton`, `ExperimentalCopyButtonProps`, `experimental_ImageLightbox`,
+`ExperimentalImageLightboxProps`, and `ExperimentalThreadContextSegmentProps.experimental_instanceId`,
+open the Plugin Guide. For `PluginCommandContext.experimental_openThreadFixedTab`,
+`ExperimentalOpenFixedTabOptions.experimental_toggle`, and
+`ExperimentalThreadFixedTabRegistration.experimental_shortcutCommandId`, open the Plugin Guide.
+
+For `ExperimentalThreadFixedTabDeclaration`, open the Plugin Guide.
+
+For `BbNavigate.experimental_canOpenFileExternally`, open the Plugin Guide.

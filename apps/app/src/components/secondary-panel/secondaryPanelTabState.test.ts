@@ -3,10 +3,9 @@ import {
   createAttachmentFilePreviewFixedPanelTab,
   createBrowserFixedPanelTab,
   createEmptyFixedPanelTabsState,
-  createGitDiffFixedPanelTab,
+  createPluginFixedPanelTab,
   createHostFilePreviewFixedPanelTab,
   createNewTabFixedPanelTab,
-  createPluginFixedPanelTab,
   createPluginPageFixedPanelTab,
   createPluginPanelFixedPanelTab,
   parseFixedPanelTabsState,
@@ -53,7 +52,7 @@ describe("secondaryPanelTabState", () => {
     });
     const tabs = [
       createThreadInfoFixedPanelTab(),
-      createGitDiffFixedPanelTab(),
+      createPluginFixedPanelTab({ pluginId: "bb--git", tabId: "diff" }),
       workspaceTab,
       hostTab,
       createThreadStorageFilePreviewFixedPanelTab({
@@ -192,7 +191,10 @@ describe("secondaryPanelTabState", () => {
 
   it("reconciles every surface's fixed tabs ahead of closable content", () => {
     const infoTab = createThreadInfoFixedPanelTab();
-    const diffTab = createGitDiffFixedPanelTab();
+    const diffTab = createPluginFixedPanelTab({
+      pluginId: "bb--git",
+      tabId: "diff",
+    });
     const contentTab = makeWorkspaceTab("env-1");
     const state = createEmptyFixedPanelTabsState({
       secondary: {
@@ -278,7 +280,10 @@ describe("secondaryPanelTabState", () => {
 
   it("retains an active Diff tab until eligibility is authoritative", () => {
     const infoTab = createThreadInfoFixedPanelTab();
-    const diffTab = createGitDiffFixedPanelTab();
+    const diffTab = createPluginFixedPanelTab({
+      pluginId: "bb--git",
+      tabId: "diff",
+    });
     const state = createEmptyFixedPanelTabsState({
       secondary: {
         activeTabId: diffTab.id,
@@ -300,7 +305,8 @@ describe("secondaryPanelTabState", () => {
     expect(onceIneligible.secondary).toEqual({
       activeTabId: infoTab.id,
       isOpen: true,
-      tabs: [infoTab],
+      previousActiveTabId: diffTab.id,
+      tabs: [infoTab, diffTab],
     });
   });
 
@@ -483,7 +489,10 @@ describe("secondary panel close activation", () => {
   it.each([true, false])(
     "returns to a fixed source with other content tabs: %s",
     (hasNeighbor) => {
-      const fixed = createGitDiffFixedPanelTab();
+      const fixed = createPluginFixedPanelTab({
+        pluginId: "bb--git",
+        tabId: "diff",
+      });
       let state = createEmptyFixedPanelTabsState({
         secondary: {
           tabs: [

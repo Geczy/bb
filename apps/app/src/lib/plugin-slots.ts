@@ -3,7 +3,7 @@ import { setAppIcons } from "@bb/shared-ui/icon-registry";
 import { useSyncExternalStore } from "react";
 import type {
   ExperimentalThreadContextSegmentRegistration,
-  ExperimentalThreadFixedTabRegistration,
+  ExperimentalThreadFixedTabDeclaration,
   ComposerCustomization,
   ExperimentalAppOverlayRegistration,
   ExperimentalCodeFenceRendererRegistration,
@@ -45,7 +45,7 @@ export interface PluginRegistrationSet {
   appOverlays?: readonly ExperimentalAppOverlayRegistration[];
   navPanels: readonly PluginNavPanelRegistration[];
   threadContextSegments?: readonly ExperimentalThreadContextSegmentRegistration[];
-  threadFixedTabs?: readonly ExperimentalThreadFixedTabRegistration[];
+  threadFixedTabs?: readonly ExperimentalThreadFixedTabDeclaration[];
   threadPanelActions: readonly PluginThreadPanelActionRegistration[];
   newThreadPanelActions?: readonly PluginNewThreadPanelActionRegistration[];
   composerCustomizations?: readonly ComposerCustomization[];
@@ -86,8 +86,8 @@ export interface PluginNavPanelSlot
   extends PluginNavPanelRegistration, PluginSlotBase {}
 export interface PluginThreadContextSegmentSlot
   extends ExperimentalThreadContextSegmentRegistration, PluginSlotBase {}
-export interface PluginThreadFixedTabSlot
-  extends ExperimentalThreadFixedTabRegistration, PluginSlotBase {}
+export type PluginThreadFixedTabSlot = ExperimentalThreadFixedTabDeclaration &
+  PluginSlotBase;
 export interface PluginThreadPanelActionSlot
   extends PluginThreadPanelActionRegistration, PluginSlotBase {}
 export interface PluginNewThreadPanelActionSlot

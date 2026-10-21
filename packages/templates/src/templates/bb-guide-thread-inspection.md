@@ -62,11 +62,6 @@ Inspecting:
     --clear <option>                       Drop a choice that has not been applied yet (repeatable)
   bb thread show [id]                      Show thread details and pull request status
     --self                                 Target current thread
-    --work-status                          Include git working-tree status
-    --git-diff                             Include git diff
-    --diff-target <type>                   Diff scope: uncommitted, branch_committed, all, commit
-    --diff-sha <sha>                       Commit SHA (for --diff-target commit)
-    --diff-merge-base <branch>             Override merge-base branch for diff
 
   Shows pull request status for the attached environment branch when available.
 
