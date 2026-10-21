@@ -483,9 +483,7 @@ function AgentStepContainer({
         });
 
   const freeAgentOffer = resolveFreeAgentOffer(agents);
-  const [freeAgentChosenId, setFreeAgentChosenId] = useState<string | null>(
-    null,
-  );
+  const [freeAgentChosen, setFreeAgentChosen] = useState(false);
   const [freeAgentSignInPendingId, setFreeAgentSignInPendingId] = useState<
     string | null
   >(null);
@@ -494,21 +492,22 @@ function AgentStepContainer({
     agents,
     activeSignInAgentId: signIn?.providerId ?? null,
   });
-  const freeAgentReady =
-    freeAgentChosenId !== null &&
-    agents?.find((agent) => agent.id === freeAgentChosenId)?.state.status ===
-      "ready";
-
+  const [freeAgentSuggestionId] = useState(() => crypto.randomUUID());
   const freeAgentOffered = freeAgentOffer.status === "available";
   const freeAgentOfferRecordedRef = useRef(false);
   useEffect(() => {
     if (!freeAgentOffered || freeAgentOfferRecordedRef.current) return;
     freeAgentOfferRecordedRef.current = true;
     recordTelemetryEvent({
-      name: "onboarding_free_agent",
-      properties: { entry, action: "offered" },
+      name: "suggestion_shown",
+      properties: {
+        surface: "setup_card",
+        kind: "free_agent",
+        trigger: "first_run",
+        suggestion_analytics_id: freeAgentSuggestionId,
+      },
     });
-  }, [entry, freeAgentOffered]);
+  }, [freeAgentOffered, freeAgentSuggestionId]);
 
   const startSignInRef = useRef(startSignIn);
   useEffect(() => {
@@ -523,24 +522,18 @@ function AgentStepContainer({
     }
   }, [freeAgentSignInPendingId, pendingFreeAgentSignIn]);
 
-  const freeAgentReadyRecordedRef = useRef(false);
-  useEffect(() => {
-    if (!freeAgentReady || freeAgentReadyRecordedRef.current) return;
-    freeAgentReadyRecordedRef.current = true;
-    recordTelemetryEvent({
-      name: "onboarding_free_agent",
-      properties: { entry, action: "ready" },
-    });
-  }, [entry, freeAgentReady]);
-
   const setUpFreeAgent = () => {
     if (freeAgentOffer.status !== "available") return;
     const agentId = freeAgentOffer.agent.id;
     recordTelemetryEvent({
-      name: "onboarding_free_agent",
-      properties: { entry, action: "chosen" },
+      name: "suggestion_accepted",
+      properties: {
+        surface: "setup_card",
+        kind: "free_agent",
+        suggestion_analytics_id: freeAgentSuggestionId,
+      },
     });
-    setFreeAgentChosenId(agentId);
+    setFreeAgentChosen(true);
     if (freeAgentOffer.action === "signIn") {
       void startSignIn(agentId);
       return;
@@ -552,10 +545,29 @@ function AgentStepContainer({
   const createFreeAccount = () => {
     if (freeAgentOffer.status === "hidden") return;
     recordTelemetryEvent({
-      name: "onboarding_free_agent",
-      properties: { entry, action: "create_account" },
+      name: "suggestion_accepted",
+      properties: {
+        surface: "setup_card",
+        kind: "free_agent_signup",
+        suggestion_analytics_id: freeAgentSuggestionId,
+      },
     });
     openUrlInExternalBrowser(freeAgentOffer.agent.freeSignUp.url);
+  };
+
+  const skipAgentStep = () => {
+    if (freeAgentOffered && !freeAgentChosen) {
+      recordTelemetryEvent({
+        name: "suggestion_dismissed",
+        properties: {
+          surface: "setup_card",
+          kind: "free_agent",
+          suggestion_analytics_id: freeAgentSuggestionId,
+          dismiss: "not_now",
+        },
+      });
+    }
+    onContinue();
   };
 
   const agentReady = hasReadyAgent(states);
@@ -573,7 +585,7 @@ function AgentStepContainer({
       primaryDisabled={!agentReady}
       secondaryLabel={agentBlocked ? "Skip for now" : undefined}
       onPrimary={onContinue}
-      onSecondary={onContinue}
+      onSecondary={skipAgentStep}
     >
       <AgentStep
         machineName={hostName}
