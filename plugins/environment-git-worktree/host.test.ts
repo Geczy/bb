@@ -125,6 +125,39 @@ afterEach(async () => {
 });
 
 describe("worktree host entry", () => {
+  it.each(["tracked", "untracked", "unpushed"])(
+    "preserves a worktree with %s work when cleanup runs",
+    async (kind) => {
+      const { sourcePath, dataDir } = await createSourceRepository();
+      await git(sourcePath, "update-ref", "refs/remotes/origin/main", "HEAD");
+      const harness = createHarness(dataDir);
+      const created = await harness.experimental_call(
+        "create",
+        createInput({
+          operationId: "create-safe",
+          sourcePath,
+          pathKey: "thr_safe",
+          branchName: "bb/keep-work",
+        }),
+      );
+      if (created.status !== "created") throw new Error(created.message);
+      const file = kind === "tracked" ? "README.md" : "work.txt";
+      await writeFile(join(created.path, file), "work to preserve\n");
+      if (kind === "unpushed") {
+        await git(created.path, "add", file);
+        await git(created.path, "commit", "-m", "not pushed");
+      }
+      const result = await harness.experimental_call("remove", {
+        operationId: "remove-safe",
+        pathKey: "thr_safe",
+        path: created.path,
+      });
+      expect(result.status).toBe("failed");
+      expect(await readFile(join(created.path, file), "utf8")).toBe("work to preserve\n");
+      await harness.experimental_dispose();
+    },
+  );
+
   it.each([
     { existingBranch: false, branchMode: "reset" },
     { existingBranch: false, branchMode: "reuse-existing" },

@@ -1565,6 +1565,36 @@ describe("core environment orchestration", () => {
       expect(fake.harness.experimental_hostRpcCalls).toHaveLength(0);
     }));
 
+  it("keeps an archived worktree across subsequent cleanup sweeps", async () =>
+    withTestHarness(async (harness) => {
+      let removals = 0;
+      const fixture = setup(harness, {
+        policy: { retireGraceMs: 0 },
+        remove: async () => {
+          removals += 1;
+          return { status: "removed" };
+        },
+      });
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db.update(environments).set({ isGitRepo: true, isWorktree: true })
+        .where(eq(environments.id, environmentId)).run();
+      updateThread(harness.db, harness.hub, fixture.thread.id, { environmentId, status: "idle" });
+      const response = await harness.app.request(
+        `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=keep`,
+        { method: "POST" },
+      );
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, fixture.thread.id)?.archivedAt).not.toBeNull();
+      await sweepProviderEnvironment(harness.deps, environmentId);
+      await sweepProviderLifecycles(harness.deps);
+      expect(removals).toBe(0);
+      expect(getEnvironment(harness.db, environmentId)).toMatchObject({
+        status: "ready", teardownStatus: null,
+      });
+    }));
+
   it("keeps retained environments until explicitly asked to clean up", async () =>
     withTestHarness(async (harness) => {
       const fixture = setup(harness, { policy: { retireGraceMs: null } });
