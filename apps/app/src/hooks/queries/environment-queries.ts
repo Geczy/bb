@@ -1,7 +1,3 @@
-import { gitReadFailureError } from "bb-plugin-bb--git/read-error";
-import { useMemo } from "react";
-import { gitRpcContract } from "bb-plugin-bb--git/contract";
-import { usePluginRpcQuery } from "@/lib/plugin-rpc-hooks";
 import { coreRead, dependency } from "./core-read";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@bb/query-changes";
@@ -76,30 +72,6 @@ export function useEnvironment(
     enabled,
     staleTime: options?.staleTime,
   });
-}
-
-export function useEnvironmentWorkStatus(
-  environmentId: string | null | undefined,
-  mergeBaseBranch?: string,
-  options?: QueryOptions,
-) {
-  const query = usePluginRpcQuery({
-    pluginId: "bb--git",
-    contract: gitRpcContract,
-    method: "status",
-    input: {
-      environmentId: environmentId ?? "",
-      mergeBaseBranch: mergeBaseBranch ?? null,
-    },
-    enabled: (options?.enabled ?? true) && Boolean(environmentId),
-  });
-  const failure =
-    query.data?.outcome === "unavailable" ? query.data.failure : undefined;
-  const error = useMemo(
-    () => query.error ?? (failure ? gitReadFailureError(failure) : null),
-    [query.error, failure],
-  );
-  return { ...query, error };
 }
 
 export function getEnvironmentPullRequestFromResponse(

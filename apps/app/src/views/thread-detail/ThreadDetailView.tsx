@@ -83,8 +83,8 @@ import {
   useEnvironment,
   getEnvironmentPullRequestFromResponse,
   useEnvironmentPullRequest,
-  useEnvironmentWorkStatus,
 } from "../../hooks/queries/environment-queries";
+import { useEnvironmentWorkStatus } from "../../hooks/queries/environment-work-status";
 import {
   useChildThreadPendingAttention,
   type ChildThreadPendingAttentionSource,
