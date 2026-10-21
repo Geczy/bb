@@ -122,6 +122,7 @@ async function setup(options: SetupOptions = {}) {
     ...(options.appUrl === undefined ? {} : { appUrl: options.appUrl }),
     settings: { expoPushUrl: EXPO_URL },
     sdk: {
+      system: { experimental_recordTelemetryEvent: async () => ({ ok: true }) },
       threads: {
         get: async ({ threadId }) => {
           const thread = threads.get(threadId);
@@ -443,6 +444,105 @@ describe("push subscription RPC and CLI", () => {
 });
 
 describe("push sender", () => {
+  it("sends one day-two result through existing channels and leaves later turns ordinary", async () => {
+    const host = await setup();
+    try {
+      await host.addSubscription();
+      await host.addSubscription("ExponentPushToken[tablet]", "Tablet");
+      const thread = host.setThread({
+        origin: "plugin",
+        originPluginId: "automations",
+      });
+      await host.bb.sdk.threads.updatePluginMetadata({
+        threadId: thread.id,
+        pluginId: "automations",
+        set: { day2Result: { pending: true } },
+      });
+      await host.harness.behavior.emitThreadEvent("thread.idle", {
+        thread,
+        lastAssistantText: "CI triage is ready: 2 flaky tests, 1 real failure.",
+      });
+      await vi.waitFor(() => expect(host.expo.requests).toHaveLength(1));
+      expect(host.expo.requests[0]).toHaveLength(2);
+      expect(host.expo.requests[0]?.[0]).toMatchObject({
+        body: "CI triage is ready: 2 flaky tests, 1 real failure.",
+        data: { kind: "day2_result", threadId: thread.id },
+      });
+      expect(host.clientSignals()).toHaveLength(1);
+      expect(host.clientSignals()[0]?.payload).toMatchObject({
+        kind: "day2_result",
+        threadId: thread.id,
+      });
+      await vi.waitFor(() => {
+        expect(
+          host.harness.inspection.sdk.callsTo(
+            "system.experimental_recordTelemetryEvent",
+          ),
+        ).toEqual([
+          [
+            {
+              name: "notification_sent",
+              properties: { kind: "day2_result", channel: "phone" },
+            },
+          ],
+        ]);
+      });
+      await host.harness.behavior.emitThreadEvent("thread.idle", {
+        thread,
+        lastAssistantText: "A later follow-up finished.",
+      });
+      await vi.waitFor(() => expect(host.expo.requests).toHaveLength(2));
+      expect(host.expo.requests[1]?.[0]?.data.kind).toBe("turn-finished");
+    } finally {
+      await host.cleanup();
+    }
+  });
+
+  it("reports scheduled failure honestly and respects muted result threads", async () => {
+    const host = await setup();
+    try {
+      await host.addSubscription();
+      const failed = host.setThread({
+        status: "error",
+        origin: "plugin",
+        originPluginId: "automations",
+      });
+      await host.bb.sdk.threads.updatePluginMetadata({
+        threadId: failed.id,
+        pluginId: "automations",
+        set: { day2Result: { pending: true } },
+      });
+      await host.harness.behavior.emitThreadEvent("thread.failed", {
+        thread: failed,
+        error: "Provider unavailable",
+      });
+      await vi.waitFor(() => expect(host.expo.requests).toHaveLength(1));
+      expect(host.expo.requests[0]?.[0]).toMatchObject({
+        body: "Scheduled work failed. Open the thread to retry.",
+        data: { kind: "thread-error", threadId: failed.id },
+      });
+      const muted = host.setThread({
+        origin: "plugin",
+        originPluginId: "automations",
+      });
+      await host.bb.sdk.threads.updatePluginMetadata({
+        threadId: muted.id,
+        pluginId: "automations",
+        set: { day2Result: { pending: true } },
+      });
+      await host.setLevel(muted.id, "muted");
+      await host.harness.behavior.emitThreadEvent("thread.idle", {
+        thread: muted,
+        lastAssistantText: "Ready",
+      });
+      await waitForCoalesce();
+      expect(host.expo.requests).toHaveLength(1);
+      expect(host.clientSignals()).toHaveLength(1);
+    } finally {
+      await host.cleanup();
+    }
+  });
+
   it("sends a root idle preview to each device and reads the relay setting at flush", async () => {
     const host = await setup();
     try {

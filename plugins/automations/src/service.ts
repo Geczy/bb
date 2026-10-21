@@ -33,6 +33,7 @@ import {
   automationsOverviewResponseSchema,
   type AgentExecutionUpdate,
   type AutomationExecution,
+  type AutomationTrigger,
   type AutomationExecutionRequest,
   type AutomationDetailReadResult,
   type AutomationDetailResponse,
@@ -144,6 +145,24 @@ function assertNotRecursiveCreation(
   if (createdByThreadId === undefined) return;
   if (isAutomationSpawnedThread(db, createdByThreadId)) {
     throw new Error("Automation-spawned threads cannot create automations");
+  }
+}
+
+function validateResultNotification(
+  trigger: AutomationTrigger,
+  execution: AutomationExecutionRequest,
+): void {
+  if (
+    execution.mode !== "agent" ||
+    execution.resultNotificationKind === undefined
+  ) {
+    return;
+  }
+  if (
+    trigger.triggerType !== "once" ||
+    execution.targetThreadId !== undefined
+  ) {
+    throw new Error("Day-two results require a single run in a new thread");
   }
 }
 
@@ -600,6 +619,7 @@ export function createAutomationService(args: {
       const project = await requireProjectAvailable(bb, payload.projectId);
       const now = Date.now();
       validateTrigger(payload.trigger, now);
+      validateResultNotification(payload.trigger, payload.execution);
       assertNotRecursiveCreation(db, payload.createdByThreadId);
       if (payload.execution.mode === "agent") {
         await resolvePermissionMode(
@@ -765,6 +785,10 @@ export function createAutomationService(args: {
       }
       let updated: AutomationRow | null;
       try {
+        validateResultNotification(
+          patch.trigger ?? currentAutomation.trigger,
+          patch.execution ?? currentExecution,
+        );
         updated = updateAutomation(db, {
           projectId: input.projectId,
           automationId: input.automationId,

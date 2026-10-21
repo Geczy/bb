@@ -191,3 +191,25 @@ Lifecycle ownership:
   dependents; deleting it deletes them. Unarchive the owner before explicitly
   restoring a dependent. Stop does not cascade. Sidebar parents and ordinary
   forks keep their own policies.
+
+## Next step
+
+The core `propose_next_step` tool stores one grounded proposal on a turn. It
+requires a title (70 characters), why (140 characters), evidence references,
+and an action. `task` takes `{prompt, parallel}`. `automation` takes
+`{prompt, schedule: {runAt, timezone}}`: an epoch-millisecond time tomorrow
+and an IANA timezone, for one run only. Plugin and skill kinds are reserved.
+Nothing starts until accepted. A dismissed kind is suppressed until different
+evidence appears. A new message expires an unaccepted proposal.
+
+`bb thread next-step show [threadId] --self --json` reads the proposal without
+recording an impression. Use `accept`, `dismiss`, or `undo` in place of `show`
+to act on it. Undo removes the scheduled automation; it does not reverse work
+that already ran. `bb thread next-step propose [threadId] --self --turn <id>
+--file <proposal.json> --json` submits the same validated schema as the tool.
+Specify either a thread ID or `--self`.
+
+For a successful first-day turn, an overnight proposal waits for 30 minutes
+without a new message before appearing. It is offered once per install, on
+the calendar day of the earliest thread in the proposed timezone. Its
+completed result uses the existing notification pipeline.

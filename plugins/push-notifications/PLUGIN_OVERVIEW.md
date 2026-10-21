@@ -37,3 +37,7 @@ Channel switches apply to this server and save immediately. Browser permission i
 Every command takes `--help`. A failure with `--json` prints `{ "ok": false, "error": { "code", "message" } }` on stdout and the readable text on stderr.
 
 Agents can use the SDK's plugin settings API for the same switches and `sdk.plugins.callRpc` with method `notifications.test` (`{ channel }`), `threadNotifications.list` (`{ threadIds }`, up to 200), or `threadNotifications.set` (`{ threadId, level }`). Permission requests still require a click in the target client.
+
+Accepted Next step schedules use the same delivery path. The automations plugin atomically seeds its result thread with `{ "day2Result": { "pending": true } }` in the `automations` plugin metadata namespace when the scheduled run starts. The first finished turn consumes that marker and sends `day2_result`; a failed turn consumes it and reports failure with a retry instruction. Later turns use ordinary finished notifications. Existing channel switches, thread levels, ancestor limits, and read-state suppression still apply.
+
+Anonymous `notification_sent` events contain only `kind` (`needs_input`, `failed`, `finished`, `day2_result`) and `channel` (`desktop`, `browser`, `phone`). Desktop and browser events fire when the system notification emits its show event; phone events fire once per notification after the push relay accepts at least one device, without claiming OS delivery. Test notifications do not send telemetry. The shared telemetry setting applies to every event.

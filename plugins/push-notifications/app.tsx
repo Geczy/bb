@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
   useBbNavigate,
+  useSdk,
   useRealtime,
   useRpc,
   useSettings,
@@ -19,16 +20,27 @@ import { notificationsThreadAction } from "./notificationsAction.js";
 
 function NotificationDelivery() {
   const navigate = useBbNavigate();
+  const sdk = useSdk();
   const { values } = useSettings();
   const delivery = useRef<ReturnType<typeof createClientDelivery> | null>(null);
   useEffect(() => {
-    const next = createClientDelivery((id) => navigate.toThread(id));
+    const next = createClientDelivery(
+      (id) => navigate.toThread(id),
+      (kind, channel) => {
+        void sdk.system
+          .experimental_recordTelemetryEvent({
+            name: "notification_sent",
+            properties: { kind, channel },
+          })
+          .catch(() => undefined);
+      },
+    );
     delivery.current = next;
     return () => {
       delivery.current = null;
       next.dispose();
     };
-  }, [navigate]);
+  }, [navigate, sdk]);
   useRealtime(CLIENT_NOTIFICATION_CHANNEL, (payload) => {
     const channel = clientChannel();
     const enabled = channel !== null && values?.[`${channel}Enabled`] === true;

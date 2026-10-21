@@ -785,7 +785,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
     sections: [
       {
         title: "Commands & agent capabilities",
-        surfaceIds: ["cli", "agent-tools"],
+        surfaceIds: ["cli", "agent-tools", "grounded-next-steps"],
       },
       {
         title: "Running & reacting",
@@ -818,6 +818,27 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       },
     ],
     surfaces: [
+      {
+        id: "grounded-next-steps",
+        title: "Grounded next steps",
+        summary:
+          "Propose evidence-backed work and use the same acceptance path as the finished-turn row.",
+        bullets: [
+          "Propose one typed task or single run tomorrow per thread, with verified conversation or repository references",
+          "Read eligibility, acknowledge a visible desktop/web impression, accept, dismiss, or undo a scheduled run",
+          "Task acceptance starts a child thread; automation acceptance uses Automations and reports its result through notifications",
+        ],
+        apiSymbols: [
+          "ThreadsArea.experimental_nextStep",
+          "ThreadsArea.experimental_proposeNextStep",
+          "ThreadsArea.experimental_showNextStep",
+          "ThreadsArea.experimental_acceptNextStep",
+          "ThreadsArea.experimental_dismissNextStep",
+          "ThreadsArea.experimental_undoNextStep",
+        ],
+        firstParty: ["Finished-turn Next step row", "bb thread next-step"],
+        experimental: true,
+      },
       {
         id: "cli",
         tagline: "Your own `bb <name>` command",

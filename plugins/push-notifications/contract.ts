@@ -41,6 +41,19 @@ export const removePushSubscriptionInputSchema = z
 
 export const clientChannelSchema = z.enum(["web", "desktop"]);
 export const CLIENT_NOTIFICATION_CHANNEL = "notification";
+export const attentionNotificationKindSchema = z.enum([
+  "needs_input",
+  "failed",
+  "finished",
+  "day2_result",
+]);
+export type AttentionNotificationKind = z.infer<
+  typeof attentionNotificationKindSchema
+>;
+export const DAY2_RESULT_METADATA_KEY = "day2Result";
+export const pendingDay2ResultMetadataSchema = z.object({
+  [DAY2_RESULT_METADATA_KEY]: z.object({ pending: z.literal(true) }).strict(),
+});
 export const clientNotificationSchema = z
   .object({
     id: z.string().min(1),
@@ -48,6 +61,7 @@ export const clientNotificationSchema = z
     body: z.string(),
     threadId: z.string().nullable(),
     channels: z.array(clientChannelSchema),
+    kind: attentionNotificationKindSchema.optional(),
   })
   .strict();
 export type ClientNotification = z.infer<typeof clientNotificationSchema>;

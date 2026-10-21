@@ -165,6 +165,7 @@ const automationAgentExecutionSchema = z
     permissionMode: permissionModeSchema,
     environment: agentEnvironmentSchema,
     targetThreadId: z.string().min(1).optional(),
+    resultNotificationKind: z.literal("day2_result").optional(),
   })
   .strict();
 

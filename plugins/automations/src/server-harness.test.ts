@@ -1477,6 +1477,117 @@ describe("automations server plugin harness", () => {
     await harness.dispose();
   });
 
+  it("starts a day-two result only when due, tags its result atomically, and stops after one run", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const host = await bootAutomationsPlugin();
+    const { harness } = host;
+    const automation = automationDetailResponseSchema.parse(
+      await harness.callRpc("automations_create", {
+        projectId: PROJECT_ID,
+        name: "Morning CI triage",
+        trigger: oneShotTrigger(),
+        execution: {
+          ...agentExecution(),
+          resultNotificationKind: "day2_result",
+        },
+        origin: "app",
+      }),
+    );
+    expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(0);
+    expect(automation.execution).toMatchObject({
+      resultNotificationKind: "day2_result",
+    });
+    vi.setSystemTime(new Date("2026-01-01T00:01:05.000Z"));
+    const service = harness.runService("automation-sweep");
+    try {
+      await vi.waitFor(() =>
+        expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(1),
+      );
+      expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).toMatchObject({
+        origin: "plugin",
+        originPluginId: "automations",
+        pluginMetadata: { day2Result: { pending: true } },
+      });
+      await harness.emitThreadEvent("thread.idle", {
+        thread: makeThreadResponse({
+          id: "thr_spawned",
+          projectId: PROJECT_ID,
+        }),
+        lastAssistantText: "CI triage is ready",
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(1);
+      expect(
+        await harness.callRpc("automations_get", {
+          projectId: PROJECT_ID,
+          automationId: automation.id,
+        }),
+      ).toMatchObject({ enabled: false, nextRunAt: null, runCount: 1 });
+    } finally {
+      service.controller.abort();
+      await service.done;
+      await harness.dispose();
+    }
+  });
+
+  it("rejects recurring or reused-thread day-two results on create and update", async () => {
+    const { harness } = await bootAutomationsPlugin();
+    try {
+      for (const input of [
+        {
+          trigger: {
+            triggerType: "schedule",
+            cron: "* * * * *",
+            timezone: "UTC",
+          },
+          execution: agentExecution(),
+        },
+        { trigger: oneShotTrigger(), execution: agentExecution(THREAD_ID) },
+      ]) {
+        await expect(
+          harness.callRpc("automations_create", {
+            projectId: PROJECT_ID,
+            name: "Invalid day-two result",
+            ...input,
+            execution: {
+              ...input.execution,
+              resultNotificationKind: "day2_result",
+            },
+            origin: "app",
+          }),
+        ).rejects.toThrow(
+          "Day-two results require a single run in a new thread",
+        );
+      }
+      const automation = automationDetailResponseSchema.parse(
+        await harness.callRpc("automations_create", {
+          projectId: PROJECT_ID,
+          name: "Morning result",
+          trigger: oneShotTrigger(),
+          execution: {
+            ...agentExecution(),
+            resultNotificationKind: "day2_result",
+          },
+          origin: "app",
+        }),
+      );
+      await expect(
+        harness.callRpc("automations_update", {
+          projectId: PROJECT_ID,
+          automationId: automation.id,
+          trigger: {
+            triggerType: "schedule",
+            cron: "* * * * *",
+            timezone: "UTC",
+          },
+        }),
+      ).rejects.toThrow("Day-two results require a single run in a new thread");
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("disables automations targeting a deleted thread", async () => {
     const { harness } = await bootAutomationsPlugin();
     const automation = await createAgentAutomation(harness, {
