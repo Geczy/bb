@@ -21,6 +21,7 @@ const exec = promisify(execFile);
 const root = await mkdtemp(join(tmpdir(), "provider-network-e2e-"));
 const servers = [];
 const evidence = [];
+const failures = [];
 
 async function run(command, args, options = {}) {
   try {
@@ -326,140 +327,154 @@ try {
   const publicationPort = await listen(publication);
 
   for (const provider of ["codex", "claude-code"]) {
-    const cwd = join(root, provider, "workspace");
-    const home = join(root, provider, "home");
-    await mkdir(cwd, { recursive: true });
-    await mkdir(home, { recursive: true });
-    const model = await modelFixture(provider);
-    const env = {
-      PATH: process.env.PATH,
-      HOME: home,
-      LANG: "C.UTF-8",
-      GH_HOST: `localhost:${publicationPort}`,
-      GH_ENTERPRISE_TOKEN: "fixture-token",
-      GH_PROMPT_DISABLED: "1",
-      SSL_CERT_FILE: certificate,
-      GIT_SSL_CAINFO: certificate,
-      GIT_TERMINAL_PROMPT: "0",
-      CODEX_HOME: join(home, ".codex"),
-      CLAUDE_CONFIG_DIR: join(home, ".claude"),
-      ANTHROPIC_BASE_URL: `http://127.0.0.1:${model.port}`,
-      ANTHROPIC_API_KEY: "fixture-key",
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
-    };
-    for (const args of [
-      ["init", "-b", "change"],
-      ["config", "user.email", "fixture@example.invalid"],
-      ["config", "user.name", "Sandbox fixture"],
-      ["commit", "--allow-empty", "-m", "Fixture"],
-      [
-        "remote",
-        "add",
-        "origin",
-        `https://localhost:${publicationPort}/owner/repository.git`,
-      ],
-    ]) {
-      const result = await run("git", args, { cwd, env });
-      assert.equal(result.code, 0, result.stderr);
-    }
-    const commands = [
-      ["git", ["push", "origin", "HEAD"]],
-      [
-        "gh",
-        [
-          "pr",
-          "create",
-          "--repo",
-          `${env.GH_HOST}/owner/repository`,
-          "--head",
-          "change",
-          "--base",
-          "main",
-          "--title",
-          "Fixture",
-          "--body",
-          "Fixture",
-        ],
-      ],
-    ];
-    for (const [command, args] of commands) {
-      const before = publicationRequests;
-      const result = await run(command, args, { cwd, env });
-      assert.ok(
-        publicationRequests > before,
-        `${provider}: unsandboxed ${command} must reach the publication fixture: ${result.stderr}`,
-      );
-    }
-    await writeFile(
-      join(cwd, "probe.sh"),
-      [
-        "set -u",
-        `export GH_HOST='localhost:${publicationPort}'`,
-        "export GH_ENTERPRISE_TOKEN='fixture-token' GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0",
-        `export SSL_CERT_FILE='${certificate}' GIT_SSL_CAINFO='${certificate}'`,
-        "printf 'edited locally\\n' > edited.txt",
-        "node -e \"require('node:assert/strict').equal(require('node:fs').readFileSync('edited.txt','utf8'),'edited locally\\n')\" || exit 91",
-        "git push origin HEAD > git-output.txt 2>&1",
-        "git_result=$?",
-        'gh pr create --repo "$GH_HOST/owner/repository" --head change --base main --title Fixture --body Fixture > gh-output.txt 2>&1',
-        "gh_result=$?",
-        'printf \'%s %s\\n\' "$git_result" "$gh_result" > results.txt',
-      ].join("\n"),
-    );
-    const before = publicationRequests;
-    const transcript =
-      provider === "codex"
-        ? await codexRun(cwd, env, model.port)
-        : await claudeRun(cwd, env);
-    assert.deepEqual(model.errors, []);
-    assert.equal(model.didRun(), true);
-    let statuses;
     try {
-      statuses = (await readFile(join(cwd, "results.txt"), "utf8"))
-        .trim()
-        .split(" ")
-        .map(Number);
+      const cwd = join(root, provider, "workspace");
+      const home = join(root, provider, "home");
+      await mkdir(cwd, { recursive: true });
+      await mkdir(home, { recursive: true });
+      await mkdir(join(home, ".codex"), { recursive: true });
+      await mkdir(join(home, ".claude"), { recursive: true });
+      const model = await modelFixture(provider);
+      const env = {
+        PATH: process.env.PATH,
+        HOME: home,
+        LANG: "C.UTF-8",
+        GH_HOST: `localhost:${publicationPort}`,
+        GH_ENTERPRISE_TOKEN: "fixture-token",
+        GH_PROMPT_DISABLED: "1",
+        SSL_CERT_FILE: certificate,
+        GIT_SSL_CAINFO: certificate,
+        GIT_TERMINAL_PROMPT: "0",
+        CODEX_HOME: join(home, ".codex"),
+        CLAUDE_CONFIG_DIR: join(home, ".claude"),
+        ANTHROPIC_BASE_URL: `http://127.0.0.1:${model.port}`,
+        ANTHROPIC_API_KEY: "fixture-key",
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      };
+      for (const args of [
+        ["init", "-b", "change"],
+        ["config", "user.email", "fixture@example.invalid"],
+        ["config", "user.name", "Sandbox fixture"],
+        ["commit", "--allow-empty", "-m", "Fixture"],
+        [
+          "remote",
+          "add",
+          "origin",
+          `https://localhost:${publicationPort}/owner/repository.git`,
+        ],
+      ]) {
+        const result = await run("git", args, { cwd, env });
+        assert.equal(result.code, 0, result.stderr);
+      }
+      const commands = [
+        ["git", ["push", "origin", "HEAD"]],
+        [
+          "gh",
+          [
+            "pr",
+            "create",
+            "--repo",
+            `${env.GH_HOST}/owner/repository`,
+            "--head",
+            "change",
+            "--base",
+            "main",
+            "--title",
+            "Fixture",
+            "--body",
+            "Fixture",
+          ],
+        ],
+      ];
+      for (const [command, args] of commands) {
+        const before = publicationRequests;
+        const result = await run(command, args, { cwd, env });
+        assert.ok(
+          publicationRequests > before,
+          `${provider}: unsandboxed ${command} must reach the publication fixture: ${result.stderr}`,
+        );
+      }
+      await writeFile(
+        join(cwd, "probe.sh"),
+        [
+          "set -u",
+          `export GH_HOST='localhost:${publicationPort}'`,
+          "export GH_ENTERPRISE_TOKEN='fixture-token' GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0",
+          `export SSL_CERT_FILE='${certificate}' GIT_SSL_CAINFO='${certificate}'`,
+          "printf 'edited locally\\n' > edited.txt",
+          "node -e \"require('node:assert/strict').equal(require('node:fs').readFileSync('edited.txt','utf8'),'edited locally\\n')\" || exit 91",
+          "git push origin HEAD > git-output.txt 2>&1",
+          "git_result=$?",
+          'gh pr create --repo "$GH_HOST/owner/repository" --head change --base main --title Fixture --body Fixture > gh-output.txt 2>&1',
+          "gh_result=$?",
+          'printf \'%s %s\\n\' "$git_result" "$gh_result" > results.txt',
+        ].join("\n"),
+      );
+      const before = publicationRequests;
+      const transcript =
+        provider === "codex"
+          ? await codexRun(cwd, env, model.port)
+          : await claudeRun(cwd, env);
+      assert.deepEqual(model.errors, []);
+      assert.equal(model.didRun(), true);
+      let statuses;
+      try {
+        statuses = (await readFile(join(cwd, "results.txt"), "utf8"))
+          .trim()
+          .split(" ")
+          .map(Number);
+      } catch (error) {
+        throw new Error(
+          `${provider}: native shell did not complete the probe: ${JSON.stringify(transcript)}`,
+          { cause: error },
+        );
+      }
+      assert.equal(
+        await readFile(join(cwd, "edited.txt"), "utf8"),
+        "edited locally\n",
+      );
+      assert.equal(statuses.length, 2);
+      assert.ok(
+        statuses.every(
+          (status) => Number.isInteger(status) && status > 0 && status !== 127,
+        ),
+      );
+      for (const output of ["git-output.txt", "gh-output.txt"]) {
+        const message = await readFile(join(cwd, output), "utf8");
+        assert.match(
+          message,
+          /connect|network|proxy|resolve|denied|operation not permitted|socket/i,
+        );
+        assert.doesNotMatch(
+          message,
+          /not logged|auth login|authentication required|certificate verify/i,
+        );
+      }
+      assert.equal(
+        publicationRequests,
+        before,
+        `${provider}: sandbox allowed a publication request`,
+      );
+      evidence.push({
+        provider,
+        localEditAndTest: "passed",
+        gitPush: "blocked",
+        ghPrCreate: "blocked",
+        publicationRequests: 0,
+      });
+      console.log(JSON.stringify(evidence.at(-1)));
     } catch (error) {
-      throw new Error(
-        `${provider}: native shell did not complete the probe: ${JSON.stringify(transcript)}`,
-        { cause: error },
+      failures.push(
+        new Error(`${provider} network isolation failed`, { cause: error }),
       );
+      console.error(provider, error);
     }
-    assert.equal(
-      await readFile(join(cwd, "edited.txt"), "utf8"),
-      "edited locally\n",
-    );
-    assert.equal(statuses.length, 2);
-    assert.ok(
-      statuses.every(
-        (status) => Number.isInteger(status) && status > 0 && status !== 127,
-      ),
-    );
-    for (const output of ["git-output.txt", "gh-output.txt"]) {
-      const message = await readFile(join(cwd, output), "utf8");
-      assert.match(
-        message,
-        /connect|network|proxy|resolve|denied|operation not permitted|socket/i,
-      );
-      assert.doesNotMatch(
-        message,
-        /not logged|auth login|authentication required|certificate verify/i,
-      );
-    }
-    assert.equal(
-      publicationRequests,
-      before,
-      `${provider}: sandbox allowed a publication request`,
-    );
-    evidence.push({
-      provider,
-      localEditAndTest: "passed",
-      gitPush: "blocked",
-      ghPrCreate: "blocked",
-      publicationRequests: 0,
-    });
-    console.log(JSON.stringify(evidence.at(-1)));
   }
+  if (failures.length > 0)
+    throw new AggregateError(
+      failures,
+      "Native provider network isolation failed",
+    );
   if (process.env.GITHUB_STEP_SUMMARY) {
     await writeFile(
       process.env.GITHUB_STEP_SUMMARY,
