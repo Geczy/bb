@@ -142,6 +142,10 @@ describe("fixed comparison template", () => {
           "Let one agent orchestrate the rest",
           "FAQ",
           "Get your agents working together",
+          "Product",
+          "Guides",
+          "Compare",
+          "Community",
         ].map(text),
       );
       expect(html).not.toMatch(
