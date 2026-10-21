@@ -242,12 +242,8 @@ export const guide: Guide = {
             </li>
             <li>
               {
-                "Stops agents that have been idle for 30 minutes (the default), to free memory. Change this in "
+                "Stops agents that have been idle for 30 minutes, to free memory."
               }
-              <strong>
-                {"Settings → Providers → Release idle agent sessions"}
-              </strong>
-              {"."}
             </li>
           </ul>
         </>
@@ -368,12 +364,8 @@ export const guide: Guide = {
         <>
           <p>
             {
-              "Archiving stops the thread's running turn, its terminals, and anything running in its worktree. bb also stops agents that sit idle: "
+              "Archiving stops the thread's running turn, its terminals, and anything running in its worktree. bb also stops agents that have been idle for 30 minutes."
             }
-            <strong>
-              {"Settings → Providers → Release idle agent sessions"}
-            </strong>
-            {" (30 minutes by default)."}
           </p>
         </>
       ),
