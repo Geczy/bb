@@ -10,7 +10,7 @@ Click a notification to open its thread; on Linux desktop the click also restore
 
 ## Thread menu
 
-Every thread menu (header, sidebar row, right-click, compact drawer, optional row quick action) has a **Notifications** entry for unarchived threads: Default, All activity, Needs input only, Muted. The entry shows the current level; Default names its fallback; a footnote says when a parent limits it. Thread plugin metadata stores only a thread's own level, `{ "notifications": { "own" } }`; limits are read from the current parent chain. Menus fetch levels for threads on screen in batches.
+Unarchived threads have a **Notifications** menu: Default, All activity, Needs input only, Muted. Thread plugin metadata stores only a thread's own level, `{ "notifications": { "own" } }`; limits are read from the current parent chain.
 
 ## Settings
 
@@ -34,10 +34,8 @@ Channel switches apply to this server and save immediately. Browser permission i
 - `bb plugin config push-notifications set <mobileEnabled|webEnabled|desktopEnabled> <true|false>`: change a channel.
 - `bb plugin config push-notifications set <defaultLevel|childLevel> <level>`: change a default.
 
-Every command takes `--help`. A failure with `--json` prints `{ "ok": false, "error": { "code", "message" } }` on stdout and the readable text on stderr.
+Commands support `--help` and structured `--json` errors.
 
 Agents can use the SDK's plugin settings API for the same switches and `sdk.plugins.callRpc` with method `notifications.test` (`{ channel }`), `threadNotifications.list` (`{ threadIds }`, up to 200), or `threadNotifications.set` (`{ threadId, level }`). Permission requests still require a click in the target client.
 
-Accepted Next step schedules use the same delivery path. The automations plugin atomically seeds its result thread with `{ "day2Result": { "pending": true } }` in the `automations` plugin metadata namespace when the scheduled run starts. The first finished turn consumes that marker and sends `day2_result`; a failed turn consumes it and reports failure with a retry instruction. Later turns use ordinary finished notifications. Existing channel switches, thread levels, ancestor limits, and read-state suppression still apply.
-
-Anonymous `notification_sent` events contain only `kind` (`needs_input`, `failed`, `finished`, `day2_result`) and `channel` (`desktop`, `browser`, `phone`). Desktop and browser events fire when the system notification emits its show event; phone events fire once per notification after the push relay accepts at least one device, without claiming OS delivery. Test notifications do not send telemetry. The shared telemetry setting applies to every event.
+Accepted one-time Next steps send `day2_result` on completion, or a failure with a retry instruction. Later turns notify normally. Existing settings still apply. Anonymous `notification_sent` records only kind and channel, respects telemetry opt-out, and excludes test notifications.

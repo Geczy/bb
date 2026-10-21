@@ -163,6 +163,28 @@ export function registerNextStepRoutes(
   });
   post(routes.acceptNextStep, async (context) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
+    const suggestion = getNextStep(deps.db, thread.id);
+    if (suggestion?.status === "proposed") {
+      if (thread.environmentId === null) {
+        throw new ApiError(
+          409,
+          "next_step_environment_unavailable",
+          "This thread needs an environment before starting the next step",
+        );
+      }
+      if (
+        suggestion.action.kind === "automation" &&
+        plugins.getRpcHandler("automations", "automations_create").outcome !==
+          "found"
+      ) {
+        throw new ApiError(
+          409,
+          "next_step_automations_unavailable",
+          "Enable Automations to schedule this next step",
+        );
+      }
+      await buildExecutionOptions(deps, {}, { threadId: thread.id });
+    }
     const result = await acceptNextStep(deps.db, {
       threadId: thread.id,
       execute: (suggestion) => executeNextStep(deps, plugins, suggestion),

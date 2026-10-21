@@ -1,9 +1,22 @@
 import { readFile } from "node:fs/promises";
 import { Command } from "commander";
-import { nextStepInputSchema } from "@bb/domain";
+import { nextStepInputSchema, type NextStep } from "@bb/domain";
 import { action } from "../../action.js";
 import { createCliBbSdk } from "../../client.js";
 import { outputJson, requireThreadIdOrSelf } from "../helpers.js";
+
+function printNextStep(
+  options: { json?: boolean },
+  suggestion: NextStep | null,
+): void {
+  if (outputJson(options, suggestion)) return;
+  if (suggestion === null) {
+    console.log("No next step for this thread.");
+    return;
+  }
+  console.log(`${suggestion.title} · ${suggestion.status}`);
+  console.log(suggestion.why);
+}
 
 export function registerNextStepCommands(
   thread: Command,
@@ -20,7 +33,10 @@ export function registerNextStepCommands(
       .description(`${operation} the next step`)
       .action(
         action(
-          async (threadId: string | undefined, options: { self?: boolean }) => {
+          async (
+            threadId: string | undefined,
+            options: { self?: boolean; json?: boolean },
+          ) => {
             const sdk = createCliBbSdk(getUrl());
             const id = requireThreadIdOrSelf(threadId, options);
             const methods = {
@@ -29,7 +45,7 @@ export function registerNextStepCommands(
               dismiss: sdk.threads.experimental_dismissNextStep,
               undo: sdk.threads.experimental_undoNextStep,
             };
-            outputJson({ json: true }, await methods[operation](id));
+            printNextStep(options, await methods[operation](id));
           },
         ),
       );
@@ -45,14 +61,19 @@ export function registerNextStepCommands(
       action(
         async (
           threadId: string | undefined,
-          options: { self?: boolean; turn: string; file: string },
+          options: {
+            self?: boolean;
+            json?: boolean;
+            turn: string;
+            file: string;
+          },
         ) => {
           const sdk = createCliBbSdk(getUrl());
           const input = nextStepInputSchema.parse(
             JSON.parse(await readFile(options.file, "utf8")),
           );
-          outputJson(
-            { json: true },
+          printNextStep(
+            options,
             await sdk.threads.experimental_proposeNextStep(
               requireThreadIdOrSelf(threadId, options),
               options.turn,

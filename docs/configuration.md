@@ -292,6 +292,16 @@ readiness was observed, not that authentication succeeded; `new_thread_submit`
 event. Phone events mean the relay accepted at least one push; they do not
 claim OS delivery. Notification titles and content are never telemetry.
 
+Core Next step routes send `suggestion_shown`, `suggestion_accepted`, and
+`suggestion_dismissed`, each with `surface: next_step`, kind (`task` or
+`automation`), and a random `suggestion_analytics_id`. Shown adds
+`trigger: agent`; dismissal adds `dismiss: this_thread`. Desktop/web display
+is counted once per proposal; mobile/API reads are not impressions. Acceptance
+and dismissal are recorded on the server for all clients. Proposal text,
+evidence, and domain IDs are excluded. `thread_analytics_id` is reserved as an
+optional random usage identity, pending the work-analytics identity stack.
+All events respect the existing telemetry opt-out, with no offline queue.
+
 ## AI services
 
 Thread titles (and the branch names built from them), commit messages, and

@@ -115,6 +115,42 @@ function finish(
 }
 
 describe("Next step lifecycle", () => {
+  it("keeps the parent proposal valid after a nested turn and expires it after a newer root turn", () => {
+    const suggestion = seedSuggestion("parent");
+    db.insert(events)
+      .values({
+        id: "nested-started",
+        threadId: suggestion.threadId,
+        turnId: "nested-turn",
+        scopeKind: "turn",
+        sequence: 2,
+        type: "turn/started",
+        parentToolCallId: "delegation-tool-call",
+        data: JSON.stringify({ parentToolCallId: "delegation-tool-call" }),
+        createdAt: now + 1,
+      })
+      .run();
+    finish(suggestion, true, now + 2);
+    expect(getNextStep(db, suggestion.threadId, now + 3)?.status).toBe(
+      "proposed",
+    );
+    db.insert(events)
+      .values({
+        id: "new-root-started",
+        threadId: suggestion.threadId,
+        turnId: "new-root-turn",
+        scopeKind: "turn",
+        sequence: 3,
+        type: "turn/started",
+        data: "{}",
+        createdAt: now + 4,
+      })
+      .run();
+    expect(getNextStep(db, suggestion.threadId, now + 5)?.status).toBe(
+      "expired",
+    );
+  });
+
   it("waits for a successful turn and records an actual display only once", () => {
     const suggestion = seedSuggestion("first");
     expect(showNextStep(db, { threadId: "first", now }).newlyShown).toBe(false);

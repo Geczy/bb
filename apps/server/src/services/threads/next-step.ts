@@ -130,7 +130,13 @@ function assertThreadCanPropose(
   const latestTurn = db
     .select({ turnId: events.turnId })
     .from(events)
-    .where(and(eq(events.threadId, threadId), eq(events.type, "turn/started")))
+    .where(
+      and(
+        eq(events.threadId, threadId),
+        eq(events.type, "turn/started"),
+        isNull(events.parentToolCallId),
+      ),
+    )
     .orderBy(desc(events.sequence))
     .limit(1)
     .get();
@@ -218,10 +224,7 @@ export async function proposeNextStep(
     (tx) => {
       assertNotSuppressed(tx, input);
       assertThreadCanPropose(tx, args.threadId, args.turnId);
-      if (
-        input.action.kind === "automation" &&
-        installState(tx).lastUserMessageAt > now
-      )
+      if (installState(tx).lastUserMessageAt > now)
         throw new ApiError(
           409,
           "next_step_new_message",
