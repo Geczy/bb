@@ -54,11 +54,23 @@ const textMarkdown: MarkdownNodeSpec = {
       state.text(node.text!, false);
       return;
     }
+    const hasStrike = (candidate: Node | null) =>
+      candidate?.marks.some((mark) => mark.type.name === "strike");
+    const strikeBefore =
+      hasStrike(node) || hasStrike(parent.maybeChild(index - 1));
+    const strikeAfter =
+      hasStrike(node) || hasStrike(parent.maybeChild(index + 1));
     const escape = state.esc;
     state.esc = (text, startOfLine) =>
       escape
         .call(state, text, startOfLine)
-        .replace(/(?:\\~)+/g, (run) => (run.length === 2 ? "~" : run));
+        .replace(/(?:\\~)+/g, (run, offset: number, escaped: string) =>
+          run.length === 2 &&
+          !(offset === 0 && strikeBefore) &&
+          !(offset + run.length === escaped.length && strikeAfter)
+            ? "~"
+            : run,
+        );
     try {
       state.text(
         node.text!.replace(/</g, "&lt;").replace(/>/g, "&gt;"),
@@ -78,6 +90,7 @@ const hardBreakMarkdown: MarkdownNodeSpec = {
     state.write(
       ("inTable" in state && state.inTable) ||
         adjacentBreak ||
+        index === 0 ||
         index === parent.childCount - 1
         ? "<br>"
         : "  \n",
