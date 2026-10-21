@@ -1,7 +1,7 @@
 import { gitReadFailureError } from "bb-plugin-bb--git/read-error";
 import { useMemo } from "react";
 import { gitRpcContract } from "bb-plugin-bb--git/contract";
-import { usePluginRpcQuery } from "@/lib/plugin-sdk-hooks";
+import { usePluginRpcQuery } from "@/lib/plugin-rpc-hooks";
 import { coreRead, dependency } from "./core-read";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLiveQuery } from "@bb/query-changes";

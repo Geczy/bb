@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { PluginContext } from "@/components/plugin/plugin-context";
-import { experimental_useRpcMutation } from "./plugin-sdk-hooks";
+import { experimental_useRpcMutation } from "./plugin-rpc-hooks";
 import { createAppQueryClient } from "./query-client";
 
 const showMutationErrorToast = vi.hoisted(() => vi.fn());
