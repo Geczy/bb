@@ -7,6 +7,7 @@ import { resolveCodexCommand } from "./codex-executable.js";
 import {
   __testing,
   codexInstallerCommand,
+  codexLoginCommand,
   getCodexProviderHealth,
   getCodexProviderInstallationStatus,
   getCodexProviderUsage,
@@ -431,6 +432,16 @@ describe("Codex native install", () => {
         `${path.join(nativeBin, "codex")} login`,
       );
     }
+  });
+
+  it("calls a native Windows path with PowerShell's call operator", () => {
+    const nativePath =
+      "C:\\Users\\First Last\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.exe";
+    expect(codexLoginCommand(nativePath, ["login"], "win32")).toMatch(/^& '/);
+    expect(codexLoginCommand("codex", ["login"], "win32")).toBe("codex login");
+    expect(
+      codexLoginCommand("/home/a/.local/bin/codex", ["login"], "linux"),
+    ).toBe("/home/a/.local/bin/codex login");
   });
 
   it.each(["darwin", "linux", "win32"] as const)(

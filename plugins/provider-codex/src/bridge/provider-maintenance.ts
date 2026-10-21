@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   type ProviderHealthResult,
   type ProviderInstallationCommand,
@@ -85,6 +86,17 @@ function codexUpdateCommand(): {
     args,
     displayCommand: formatCommand(command, args),
   };
+}
+
+export function codexLoginCommand(
+  command: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const text = formatCommand(command, args);
+  return platform === "win32" && path.win32.isAbsolute(command)
+    ? `& ${text}`
+    : text;
 }
 
 export function codexInstallerCommand(
@@ -222,8 +234,8 @@ function healthResult(
       minimumSupportedVersion: CODEX_MINIMUM_SUPPORTED_VERSION,
       canInstall: true,
       canUpdate: status !== "not_installed",
-      loginCommand: formatCommand(command, ["login", "--device-auth"]),
-      localLoginCommand: formatCommand(command, ["login"]),
+      loginCommand: codexLoginCommand(command, ["login", "--device-auth"]),
+      localLoginCommand: codexLoginCommand(command, ["login"]),
     },
   };
 }
