@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const setupJobArmSchema = /* @__PURE__ */ z.enum(["a", "b"]);
+export const setupJobArmSchema = z.enum(["a", "b"]);
 export type SetupJobArm = z.infer<typeof setupJobArmSchema>;
 
 export const setupJobTimezoneSchema = z
@@ -19,18 +19,17 @@ export const setupJobTimezoneSchema = z
     { message: "Choose a valid time zone" },
   );
 
-export const setupJobOfferSchema = /* @__PURE__ */ (() =>
-  z.object({
-    arm: setupJobArmSchema,
-    suggestionAnalyticsId: z.uuid(),
-    title: z.string(),
-    projectId: z.string(),
-    projectName: z.string(),
-    providerName: z.string(),
-    timezone: setupJobTimezoneSchema,
-    status: z.enum(["offered", "accepted", "dismissed"]),
-    automationId: z.string().nullable(),
-  }))();
+export const setupJobOfferSchema = z.object({
+  arm: setupJobArmSchema,
+  suggestionAnalyticsId: z.uuid(),
+  title: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  providerName: z.string(),
+  timezone: setupJobTimezoneSchema,
+  status: z.enum(["offered", "accepted", "dismissed"]),
+  automationId: z.string().nullable(),
+});
 export type SetupJobOffer = z.infer<typeof setupJobOfferSchema>;
 
 export const setupJobDecisionRequestSchema = z
@@ -52,8 +51,7 @@ export const setupJobShownRequestSchema = z
     suggestionAnalyticsId: z.uuid(),
   })
   .strict();
-export const setupJobResponseSchema = /* @__PURE__ */ (() =>
-  z.object({
-    offer: setupJobOfferSchema.nullable(),
-  }))();
+export const setupJobResponseSchema = z.object({
+  offer: setupJobOfferSchema.nullable(),
+});
 export type SetupJobResponse = z.infer<typeof setupJobResponseSchema>;
