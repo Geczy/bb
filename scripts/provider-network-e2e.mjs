@@ -25,11 +25,13 @@ const failures = [];
 
 async function run(command, args, options = {}) {
   try {
-    const result = await exec(command, args, {
+    const pending = exec(command, args, {
       timeout: 120_000,
       maxBuffer: 8 * 1024 * 1024,
       ...options,
     });
+    pending.child.stdin?.end();
+    const result = await pending;
     return { code: 0, ...result };
   } catch (error) {
     if (typeof error.code !== "number") throw error;
@@ -288,7 +290,7 @@ async function codexRun(cwd, env, modelPort) {
     { cwd, env },
   );
   assert.equal(result.code, 0, result.stderr);
-  return result.stdout;
+  return `${result.stdout}\n${result.stderr}`;
 }
 
 try {
@@ -416,7 +418,11 @@ try {
           ? await codexRun(cwd, env, model.port)
           : await claudeRun(cwd, env);
       assert.deepEqual(model.errors, []);
-      assert.equal(model.didRun(), true);
+      assert.equal(
+        model.didRun(),
+        true,
+        `${provider}: no model tool call was requested: ${JSON.stringify(transcript)}`,
+      );
       let statuses;
       try {
         statuses = (await readFile(join(cwd, "results.txt"), "utf8"))
