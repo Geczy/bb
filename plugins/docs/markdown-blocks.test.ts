@@ -193,3 +193,73 @@ describe("markdown blocks", () => {
     }
   });
 });
+
+
+describe("Markdown editing round trips", () => {
+  it.each([
+    ["- all ~1,300 records\n", "- New all ~1,300 records\n"],
+    ["Visit https://example.com/docs\n", "New Visit https://example.com/docs\n"],
+    ["- Visit https://example.com/a_b?q=one&n=2\n", "- New Visit https://example.com/a_b?q=one&n=2\n"],
+  ])("does not add syntax when editing %s", (source, expected) => {
+    const { editor, save } = open(source);
+    try {
+      editor.view.dispatch(editor.state.tr.insertText("New ", textPosition(editor, editor.state.doc.textContent)));
+      expect(save()).toBe(expected);
+      const reopened = open(save());
+      try {
+        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+      } finally {
+        reopened.editor.destroy();
+      }
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("uses paragraphs for ordinary Enter after leaving a list", () => {
+    const { editor, save } = open("- Item\n");
+    try {
+      editor.commands.setTextSelection(textPosition(editor, "Item") + 4);
+      editor.commands.keyboardShortcut("Enter");
+      editor.commands.keyboardShortcut("Enter");
+      editor.view.dispatch(editor.state.tr.insertText("Let me know."));
+      editor.commands.keyboardShortcut("Enter");
+      editor.view.dispatch(editor.state.tr.insertText("Thanks."));
+      expect(save()).toBe("- Item\n\nLet me know.\n\nThanks.\n");
+      expect(editor.getHTML()).not.toContain("<br");
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("preserves intentional hard breaks without backslash syntax", () => {
+    const { editor, save } = open("- Item\n\nLet me know.\n");
+    try {
+      editor.commands.setTextSelection(textPosition(editor, "Let me know.") + 12);
+      editor.commands.setHardBreak();
+      editor.commands.setHardBreak();
+      editor.view.dispatch(editor.state.tr.insertText("Thanks."));
+      expect(save()).toBe("- Item\n\nLet me know.  \n  \nThanks.\n");
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it.each([
+    "*literal*", "_literal_", "~~literal~~", "[label](https://example.com)",
+    "# heading", "- item", "1. item", "\\~literal", "<script>alert(1)</script>",
+  ])("keeps typed %s literal after reopening", (text) => {
+    const { editor, save } = open("");
+    try {
+      editor.view.dispatch(editor.state.tr.insertText(text, 1));
+      const reopened = open(save());
+      try {
+        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+      } finally {
+        reopened.editor.destroy();
+      }
+    } finally {
+      editor.destroy();
+    }
+  });
+});
