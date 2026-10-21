@@ -1337,10 +1337,13 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Have the threads it creates attributed to the plugin",
           "Start plugin updates in the background and follow their progress or rollback",
           "Read Viewed state for up to 500 file paths; mark and clear return acknowledgements",
+          "Read the last unfinished thread after 14 days away, or claim its one-time return",
         ],
         apiSymbols: [
           "BbPluginApi",
           "PluginServerApi",
+          "PluginBbSdk.system.experimental_lapsedResume",
+          "PluginBbSdk.system.experimental_openLapsedResume",
           "PluginBbSdk.hosts.get",
           "PluginBbSdk.hosts.experimental_discoverRepos",
           "PluginBbSdk.experimental_promptHistory.list",
