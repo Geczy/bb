@@ -14,7 +14,11 @@ import {
   type OnboardingConnectState,
   type OnboardingRepo,
 } from "./OnboardingViews";
-import type { AgentSetupState, OnboardingStepId } from "./onboarding-model";
+import {
+  resolveFreeAgentOffer,
+  type AgentSetupState,
+  type OnboardingStepId,
+} from "./onboarding-model";
 import claudeLogoUrl from "../../../../../plugins/provider-claude-code/icons/claude-code.svg";
 import codexLogoUrl from "../../../../../plugins/provider-codex/icons/codex.svg";
 import piLogoUrl from "../../../../../plugins/provider-pi/icons/pi.svg";
@@ -315,6 +319,7 @@ function AgentFrame({
 }) {
   const ready = anyReady(states);
   const blocked = !loading && !ready;
+  const agents = loading ? null : buildAgents(states, signInVariant);
   return (
     <OnboardingLayout
       step="agent"
@@ -334,7 +339,10 @@ function AgentFrame({
     >
       <AgentStep
         machineName={machineName}
-        agents={loading ? null : buildAgents(states, signInVariant)}
+        agents={agents}
+        freeAgentOffer={resolveFreeAgentOffer(agents)}
+        onSetUpFreeAgent={noop}
+        onCreateChatGptAccount={noop}
         onSignIn={onSignIn}
         onInstall={onInstall}
         onViewInstallLog={onViewInstallLog}

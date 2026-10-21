@@ -2,7 +2,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentStep, type OnboardingAgent } from "./OnboardingViews";
-import type { AgentSetupState } from "./onboarding-model";
+import {
+  resolveFreeAgentOffer,
+  type AgentSetupState,
+} from "./onboarding-model";
 
 function agent(id: string, state: AgentSetupState): OnboardingAgent {
   return { id, name: id, provider: { id, logoUrl: null }, state };
@@ -15,9 +18,18 @@ function renderAgents(agents: OnboardingAgent[]) {
     onViewInstallLog: vi.fn(),
     onCancelSignIn: vi.fn(),
     onGetNodejs: vi.fn(),
+    onSetUpFreeAgent: vi.fn(),
+    onCreateChatGptAccount: vi.fn(),
     onRecheck: vi.fn(),
   };
-  render(<AgentStep machineName="bee" agents={agents} {...handlers} />);
+  render(
+    <AgentStep
+      machineName="bee"
+      agents={agents}
+      freeAgentOffer={resolveFreeAgentOffer(agents)}
+      {...handlers}
+    />,
+  );
   return handlers;
 }
 
@@ -66,5 +78,29 @@ describe("AgentStep", () => {
     );
 
     expect(handlers.onGetNodejs).toHaveBeenCalledOnce();
+  });
+
+  it("offers Codex as the free path when no agent is ready, and hides it once one is", () => {
+    const handlers = renderAgents([
+      agent("claude-code", { status: "install", canInstall: true }),
+      agent("codex", { status: "install", canInstall: true }),
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Set up Codex" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Create a free ChatGPT account (opens chatgpt.com)",
+      }),
+    );
+
+    expect(handlers.onSetUpFreeAgent).toHaveBeenCalledOnce();
+    expect(handlers.onCreateChatGptAccount).toHaveBeenCalledOnce();
+
+    cleanup();
+    renderAgents([
+      agent("claude-code", { status: "ready", detail: null }),
+      agent("codex", { status: "install", canInstall: true }),
+    ]);
+    expect(screen.queryByRole("button", { name: "Set up Codex" })).toBeNull();
   });
 });

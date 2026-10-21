@@ -21,6 +21,7 @@ import {
 import {
   ONBOARDING_STEPS,
   type AgentSetupState,
+  type FreeAgentOffer,
   type OnboardingStepId,
   type SignInGuide,
 } from "./onboarding-model";
@@ -362,15 +363,75 @@ function AgentRow({
   );
 }
 
+interface FreeAgentCardProps {
+  offer: Exclude<FreeAgentOffer, { status: "hidden" }>;
+  onSetUp: () => void;
+  onCreateAccount: () => void;
+}
+
+export function FreeAgentCard({
+  offer,
+  onSetUp,
+  onCreateAccount,
+}: FreeAgentCardProps) {
+  const installing = offer.status === "installing";
+  return (
+    <section
+      aria-labelledby="free-agent-card-heading"
+      className="flex flex-col gap-3 rounded-lg border border-border px-3 py-3 @min-[36rem]/onboarding:flex-row @min-[36rem]/onboarding:items-center"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <h3 id="free-agent-card-heading" className="text-sm font-medium">
+          No agent yet? Start free with Codex
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Codex is included with ChatGPT plans, including Free. bb installs it
+          and opens ChatGPT sign-in for you.
+        </p>
+        <button
+          type="button"
+          aria-label="Create a free ChatGPT account (opens chatgpt.com)"
+          onClick={onCreateAccount}
+          className="flex w-fit items-center gap-1 rounded-sm text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          No ChatGPT account? Create one for free
+          <Icon name="ArrowUpRight" aria-hidden className="size-3" />
+        </button>
+      </div>
+      <Button
+        size="sm"
+        className="shrink-0 self-start @min-[36rem]/onboarding:self-center"
+        disabled={installing}
+        onClick={onSetUp}
+      >
+        {installing ? (
+          <Icon name="Spinner" aria-hidden className="animate-spin" />
+        ) : null}
+        {installing
+          ? "Installing Codex…"
+          : offer.action === "retry"
+            ? "Try again"
+            : "Set up Codex"}
+      </Button>
+    </section>
+  );
+}
+
 interface AgentStepProps extends AgentRowHandlers {
   machineName: string | null;
   agents: readonly OnboardingAgent[] | null;
+  freeAgentOffer: FreeAgentOffer;
+  onSetUpFreeAgent: () => void;
+  onCreateChatGptAccount: () => void;
   onRecheck: () => void;
 }
 
 export function AgentStep({
   machineName,
   agents,
+  freeAgentOffer,
+  onSetUpFreeAgent,
+  onCreateChatGptAccount,
   onRecheck,
   ...rowHandlers
 }: AgentStepProps) {
@@ -398,6 +459,13 @@ export function AgentStep({
           </button>
         )}
       </div>
+      {freeAgentOffer.status === "hidden" ? null : (
+        <FreeAgentCard
+          offer={freeAgentOffer}
+          onSetUp={onSetUpFreeAgent}
+          onCreateAccount={onCreateChatGptAccount}
+        />
+      )}
       {agents === null ? (
         <ul className="divide-y divide-border-hairline rounded-lg border border-border">
           {[0, 1, 2].map((index) => (

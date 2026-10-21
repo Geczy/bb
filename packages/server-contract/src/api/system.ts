@@ -248,6 +248,17 @@ export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
     .strict(),
   z
     .object({
+      name: z.literal("onboarding_free_agent"),
+      properties: z
+        .object({
+          entry: onboardingEntryTelemetrySchema,
+          action: z.enum(["offered", "chosen", "create_account", "ready"]),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
       name: z.literal("new_thread_submit"),
       properties: z
         .object({ outcome: z.enum(["started", "accepted", "failed"]) })

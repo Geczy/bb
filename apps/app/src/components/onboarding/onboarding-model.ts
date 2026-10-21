@@ -35,6 +35,10 @@ export const CONNECT_PLUGIN_ID = "connect";
 
 export const NODEJS_DOWNLOAD_URL = "https://nodejs.org/en/download";
 
+export const FREE_AGENT_PROVIDER_ID = "codex";
+
+export const CHATGPT_SIGNUP_URL = "https://chatgpt.com/";
+
 export type AgentSetupState =
   | { status: "checking" }
   | { status: "ready"; detail: string | null }
@@ -50,6 +54,42 @@ export type AgentSetupState =
   | { status: "installing" }
   | { status: "installFailed"; message: string; canInstall: boolean }
   | { status: "unknown"; message: string | null };
+
+export type FreeAgentOffer =
+  | { status: "hidden" }
+  | { status: "available"; action: "install" | "retry" | "signIn" }
+  | { status: "installing" };
+
+export function resolveFreeAgentOffer(
+  agents: readonly { id: string; state: AgentSetupState }[] | null,
+): FreeAgentOffer {
+  if (agents === null) return { status: "hidden" };
+  if (agents.some((agent) => agent.state.status === "ready")) {
+    return { status: "hidden" };
+  }
+  const state = agents.find(
+    (agent) => agent.id === FREE_AGENT_PROVIDER_ID,
+  )?.state;
+  switch (state?.status) {
+    case "install":
+    case "update":
+      return state.canInstall
+        ? { status: "available", action: "install" }
+        : { status: "hidden" };
+    case "installFailed":
+      return state.canInstall
+        ? { status: "available", action: "retry" }
+        : { status: "hidden" };
+    case "signIn":
+      return state.canSignIn
+        ? { status: "available", action: "signIn" }
+        : { status: "hidden" };
+    case "installing":
+      return { status: "installing" };
+    default:
+      return { status: "hidden" };
+  }
+}
 
 interface ResolveAgentSetupStateArgs {
   health: SystemProviderState;

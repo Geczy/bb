@@ -11,8 +11,10 @@ import {
   hasReadyAgent,
   parseSignInOutput,
   resolveAgentSetupState,
+  resolveFreeAgentOffer,
   resolveSignInCommand,
   shortRemoteName,
+  type AgentSetupState,
 } from "./onboarding-model";
 
 function health(
@@ -239,6 +241,43 @@ describe("resolveAgentSetupState", () => {
         ...idle,
       }),
     ).toEqual({ status: "unknown", message: "Machine is paused." });
+  });
+});
+
+describe("resolveFreeAgentOffer", () => {
+  const codex = (state: AgentSetupState) => ({ id: "codex", state });
+  const claude = (state: AgentSetupState) => ({ id: "claude-code", state });
+
+  it.each<[string, AgentSetupState, ReturnType<typeof resolveFreeAgentOffer>]>([
+    ["Codex is missing", { status: "install", canInstall: true }, { status: "available", action: "install" }],
+    ["Codex is too old", { status: "update", detail: null, canInstall: true }, { status: "available", action: "install" }],
+    ["Codex's install failed", { status: "installFailed", message: "x", canInstall: true }, { status: "available", action: "retry" }],
+    ["Codex is installed but signed out", { status: "signIn", reason: "signedOut", canSignIn: true }, { status: "available", action: "signIn" }],
+    ["Codex is installing", { status: "installing" }, { status: "installing" }],
+    ["Codex can't be installed here", { status: "install", canInstall: false }, { status: "hidden" }],
+    ["Codex has no sign-in command", { status: "signIn", reason: "signedOut", canSignIn: false }, { status: "hidden" }],
+    ["Codex is mid sign-in", { status: "signingIn" }, { status: "hidden" }],
+    ["Codex is still being checked", { status: "checking" }, { status: "hidden" }],
+  ])("when no agent is ready and %s", (_label, state, expected) => {
+    expect(
+      resolveFreeAgentOffer([
+        claude({ status: "install", canInstall: true }),
+        codex(state),
+      ]),
+    ).toEqual(expected);
+  });
+
+  it("hides once any agent is ready, or when Codex isn't offered", () => {
+    expect(
+      resolveFreeAgentOffer([
+        claude({ status: "ready", detail: null }),
+        codex({ status: "install", canInstall: true }),
+      ]),
+    ).toEqual({ status: "hidden" });
+    expect(
+      resolveFreeAgentOffer([claude({ status: "install", canInstall: true })]),
+    ).toEqual({ status: "hidden" });
+    expect(resolveFreeAgentOffer(null)).toEqual({ status: "hidden" });
   });
 });
 

@@ -280,7 +280,10 @@ first-send events through `POST /api/v1/system/telemetry/events`
 (`sdk.system.experimental_recordTelemetryEvent`): `onboarding_started`,
 `onboarding_step_reached`, `onboarding_step_completed`,
 `onboarding_step_skipped`, `onboarding_finished`, `onboarding_agent_state`,
-`onboarding_sign_in`, and `new_thread_submit` (started, accepted, or failed).
+`onboarding_sign_in`, `onboarding_free_agent` (the setup card that installs
+Codex and opens ChatGPT sign-in was offered, chosen, used to open ChatGPT's
+sign-up page, or led to a ready Codex), and `new_thread_submit` (started,
+accepted, or failed).
 The route accepts only these events with fixed enums and booleans: no provider
 ids, account details, prompts, project or file names, terminal output, error
 messages, or session ids. Sign-in `exited` means the command exited before

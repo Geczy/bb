@@ -75,7 +75,9 @@ import {
   type OnboardingRepo,
 } from "./OnboardingViews";
 import {
+  CHATGPT_SIGNUP_URL,
   CONNECT_PLUGIN_ID,
+  FREE_AGENT_PROVIDER_ID,
   NODEJS_DOWNLOAD_URL,
   ONBOARDING_PLUGINS,
   ONBOARDING_PLUGIN_MARKETPLACE,
@@ -84,6 +86,7 @@ import {
   hasReadyAgent,
   parseSignInOutput,
   resolveAgentSetupState,
+  resolveFreeAgentOffer,
   resolveSignInCommand,
   shortRemoteName,
   type OnboardingStepId,
@@ -477,6 +480,78 @@ function AgentStepContainer({
           };
         });
 
+  const freeAgentOffer = resolveFreeAgentOffer(agents);
+  const freeAgentState = agents?.find(
+    (agent) => agent.id === FREE_AGENT_PROVIDER_ID,
+  )?.state;
+  const freeAgentAwaitingSignIn =
+    freeAgentState?.status === "signIn" && freeAgentState.canSignIn;
+  const freeAgentSettled =
+    freeAgentState?.status === "installFailed" ||
+    freeAgentState?.status === "ready";
+  const freeAgentReady = freeAgentState?.status === "ready";
+
+  const freeAgentOffered = freeAgentOffer.status === "available";
+  const freeAgentOfferRecordedRef = useRef(false);
+  useEffect(() => {
+    if (!freeAgentOffered || freeAgentOfferRecordedRef.current) return;
+    freeAgentOfferRecordedRef.current = true;
+    recordTelemetryEvent({
+      name: "onboarding_free_agent",
+      properties: { entry, action: "offered" },
+    });
+  }, [entry, freeAgentOffered]);
+
+  const [freeAgentChosen, setFreeAgentChosen] = useState(false);
+  const [freeAgentSignInPending, setFreeAgentSignInPending] = useState(false);
+  const startSignInRef = useRef(startSignIn);
+  useEffect(() => {
+    startSignInRef.current = startSignIn;
+  });
+  useEffect(() => {
+    if (!freeAgentSignInPending) return;
+    if (freeAgentAwaitingSignIn) {
+      setFreeAgentSignInPending(false);
+      void startSignInRef.current(FREE_AGENT_PROVIDER_ID);
+    } else if (freeAgentSettled) {
+      setFreeAgentSignInPending(false);
+    }
+  }, [freeAgentAwaitingSignIn, freeAgentSettled, freeAgentSignInPending]);
+
+  const freeAgentReadyRecordedRef = useRef(false);
+  useEffect(() => {
+    if (!freeAgentChosen || !freeAgentReady) return;
+    if (freeAgentReadyRecordedRef.current) return;
+    freeAgentReadyRecordedRef.current = true;
+    recordTelemetryEvent({
+      name: "onboarding_free_agent",
+      properties: { entry, action: "ready" },
+    });
+  }, [entry, freeAgentChosen, freeAgentReady]);
+
+  const setUpFreeAgent = () => {
+    if (freeAgentOffer.status !== "available") return;
+    recordTelemetryEvent({
+      name: "onboarding_free_agent",
+      properties: { entry, action: "chosen" },
+    });
+    setFreeAgentChosen(true);
+    if (freeAgentOffer.action === "signIn") {
+      void startSignIn(FREE_AGENT_PROVIDER_ID);
+      return;
+    }
+    setFreeAgentSignInPending(true);
+    startInstall(FREE_AGENT_PROVIDER_ID);
+  };
+
+  const createChatGptAccount = () => {
+    recordTelemetryEvent({
+      name: "onboarding_free_agent",
+      properties: { entry, action: "create_account" },
+    });
+    openUrlInExternalBrowser(CHATGPT_SIGNUP_URL);
+  };
+
   const agentReady = hasReadyAgent(states);
   const agentBlocked = agents === null ? statesQuery.isError : !agentReady;
   return (
@@ -497,6 +572,9 @@ function AgentStepContainer({
       <AgentStep
         machineName={hostName}
         agents={agents}
+        freeAgentOffer={freeAgentOffer}
+        onSetUpFreeAgent={setUpFreeAgent}
+        onCreateChatGptAccount={createChatGptAccount}
         onSignIn={(providerId) => void startSignIn(providerId)}
         onInstall={startInstall}
         onViewInstallLog={viewInstallLog}
