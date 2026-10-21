@@ -233,7 +233,7 @@ async function installAction(provider, actionKind) {
   const completed = events.findLast((event) => event.type === "completed");
   const errors = events.filter((event) => event.type === "error").map((event) => event.message);
   report.evidence[`${provider}.${actionKind}`] = {
-    started: events.some((event) => event.type === "started"), completed: completed ?? null,
+    started: events.some((event) => event.type === "started"), command: sanitize(events.find((event) => event.type === "started")?.command ?? ""), completed: completed ?? null,
     errors: errors.map(sanitize),
     output: sanitize(events.filter((event) => event.type === "output").map((event) => event.text).join("")),
   };
@@ -414,8 +414,20 @@ try {
       if (state.status !== "ready") throw new Error(`Health after relaunch ${state.status}`);
       cell(provider, "relaunch", "pass", "Health ready after server/daemon restart with stubbed credentials");
     });
-    await attempt(provider, "update", () => updateProvider(provider));
   }
+  if (windows) {
+    const nativeDirectories = [join(isolatedHome, ".local", "bin"), join(env.LOCALAPPDATA, "Programs", "OpenAI", "Codex", "bin")];
+    const updatePath = [...nativeDirectories, env.PATH].join(delimiter);
+    await api("/settings/machine-environment", { method: "POST", body: JSON.stringify({ name: "PATH", value: updatePath, note: "CI native updater PATH after opening a new terminal" }) });
+    await stop(launcher);
+    env.PATH = updatePath;
+    cliEnv.PATH = updatePath;
+    await boot();
+    report.evidence.updateExecutables = await inventory(env);
+    report.limitations.push("Windows updates run after adding the actual native install directories to PATH and restarting, exercising bare-command resolution as in a new terminal.");
+  }
+  for (const provider of ["claude-code", "codex"]) await attempt(provider, "update", () => updateProvider(provider));
+  await writeFile(join(isolatedHome, ".npmrc"), "foreground-scripts=true\n");
   await api("/settings/machine-environment", { method: "POST", body: JSON.stringify({ name: "PATH", value: minimalPath, note: "CI first-run Pi without system npm" }) });
   await stop(launcher);
   env.PATH = minimalPath;
@@ -424,10 +436,13 @@ try {
   if (report.evidence.piExecutables.npm.length || report.evidence.piExecutables.node.length) throw new Error("Pi fixture still exposes system npm/node");
   await boot();
   await attempt("pi", "piInstall", async () => {
+    report.evidence.piBeforeInstall = await installation("pi");
     const result = await installAction("pi", "install");
     const status = await installedStatus("pi");
     if (!result.success || !status.installed) throw new Error(`No-npm Pi install verified=${result.success}; installed=${status.installed}; ${result.errors.join("; ")}`);
-    cell("pi", "piInstall", "pass", `bb installed and verified Pi ${status.currentVersion} without system node/npm on PATH`);
+    const lifecycleRan = />\s+protobufjs@[\d.]+\s+postinstall\s+>\s+node\s+scripts\/postinstall/u.test(report.evidence["pi.install"].output);
+    report.evidence.piNodeLifecycle = lifecycleRan;
+    cell("pi", "piInstall", lifecycleRan ? "pass" : "stubbed", `bb installed and verified Pi ${status.currentVersion} without system node/npm; ${lifecycleRan ? "real dependency node postinstall ran" : "dependency node lifecycle not observed; shim coverage unknown"}`);
   });
   cell("pi", "install", report.cells.pi.piInstall.status, report.cells.pi.piInstall.reason);
   for (const step of ["signin", "turn", "relaunch", "update"]) cell("pi", step, "stubbed", "Pi scope covers installation without system npm only");
