@@ -159,7 +159,7 @@ describe("per-install holdouts", () => {
   });
 
   it.each([
-    { arms: ["test", "control"] },
+    { arms: ["only_one"] },
     { arms: ["control", "BadArm"] },
     { arms: ["control", "test", "test"], weights: [1, 1, 1] },
     { weights: [1] },
@@ -173,6 +173,94 @@ describe("per-install holdouts", () => {
       holdoutDefinitionSchema.safeParse({ ...holdoutRegistry[0], ...invalid })
         .success,
     ).toBe(false);
+  });
+
+  it("draws custom a/b arms independently for two keys and exposes each key once before setup", async () => {
+    const registry = holdoutRegistrySchema.parse([
+      {
+        key: "app_first",
+        arms: ["a", "b"],
+        weights: [50, 50],
+        surface: "first_offer",
+        status: "enrolling",
+        winner: null,
+      },
+      {
+        key: "app_second",
+        arms: ["a", "b"],
+        weights: [50, 50],
+        surface: "second_offer",
+        status: "enrolling",
+        winner: null,
+      },
+    ]);
+    const pairs = new Map<string, number>();
+    for (let index = 0; index < 1000; index += 1) {
+      const install = createMigratedConnection();
+      try {
+        const holdouts = start(install, { registry });
+        expect(holdouts.list()).toHaveLength(2);
+        const pair = `${holdouts.arm("app_first")}/${holdouts.arm("app_second")}`;
+        pairs.set(pair, (pairs.get(pair) ?? 0) + 1);
+      } finally {
+        install.$client.close();
+      }
+    }
+    for (const pair of ["a/a", "a/b", "b/a", "b/b"]) {
+      expect(Math.abs((pairs.get(pair) ?? 0) / 1000 - 0.25)).toBeLessThan(0.07);
+    }
+    const holdouts = start(db, { registry });
+    const service = await telemetry(holdouts);
+    expect(getAppSettings(db).onboardingCompletedAt).toBeNull();
+    for (const definition of registry) {
+      expect(holdouts.expose(definition.key, service)).toBe(true);
+      expect(holdouts.expose(definition.key, service)).toBe(false);
+      expect(start(db, { registry }).expose(definition.key, service)).toBe(
+        false,
+      );
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const events = fetchMock.mock.calls.map(([, init]) =>
+      JSON.parse(String(init?.body)),
+    );
+    expect(events.map((event) => event.properties.holdout)).toEqual([
+      "app_first",
+      "app_second",
+    ]);
+    for (const event of events) {
+      expect(event.properties.arm).toBe(holdouts.arm(event.properties.holdout));
+      expect(event.properties["$feature/app_first"]).toBe(
+        holdouts.arm("app_first"),
+      );
+      expect(event.properties["$feature/app_second"]).toBe(
+        holdouts.arm("app_second"),
+      );
+    }
+  }, 60_000);
+
+  it("supports any number of distinct surfaces and uses each test's first arm as control", () => {
+    const registry = holdoutRegistrySchema.parse(
+      ["first", "second", "third", "fourth"].map((name) => ({
+        key: `app_${name}`,
+        arms: ["a", "b"],
+        weights: [50, 50],
+        surface: name,
+        status: "holding",
+        winner: null,
+      })),
+    );
+    const holdouts = start(db, { registry });
+    for (const entry of registry) expect(holdouts.arm(entry.key)).toBe("a");
+    expect(holdouts.arm("app_unknown")).toBeNull();
+    expect(
+      start(db, {
+        registry: registry.map((entry) => ({
+          ...entry,
+          status: "ended",
+          winner: "b",
+        })),
+      }).arm("app_first"),
+    ).toBe("b");
   });
 
   it.each(["finished_setup", "has_thread", "pending_move"])(

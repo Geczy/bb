@@ -13,7 +13,6 @@ import {
   type HoldoutArm,
   type HoldoutDefinition,
   type HoldoutForce,
-  type HoldoutKey,
 } from "@bb/domain";
 import type { ServerLogger } from "../../types.js";
 import type { TelemetryService } from "./telemetry.js";
@@ -101,7 +100,7 @@ export function createHoldoutService(args: {
     available = false;
     args.logger.warn({ err: error }, "Holdout enrollment unavailable");
   }
-  function assignment(key: HoldoutKey) {
+  function assignment(key: string) {
     if (!available || excluded.has(key)) return undefined;
     return db
       .select()
@@ -109,18 +108,19 @@ export function createHoldoutService(args: {
       .where(eq(holdoutAssignments.key, key))
       .get();
   }
-  function arm(key: HoldoutKey): HoldoutArm {
+  function arm(key: string): HoldoutArm | null {
     const definition = registry.find((entry) => entry.key === key);
-    if (definition === undefined) return "control";
-    if (definition.status === "ended") return definition.winner ?? "control";
+    if (definition === undefined) return null;
+    if (definition.status === "ended")
+      return definition.winner ?? definition.arms[0];
     if (force?.key === key) return force.arm;
     try {
       const stored = assignment(key)?.arm;
       return stored !== undefined && definition.arms.includes(stored)
         ? stored
-        : "control";
+        : definition.arms[0];
     } catch {
-      return "control";
+      return definition.arms[0];
     }
   }
   function list() {
@@ -164,7 +164,7 @@ export function createHoldoutService(args: {
       return {};
     }
   }
-  function expose(key: HoldoutKey, telemetry: TelemetryService): boolean {
+  function expose(key: string, telemetry: TelemetryService): boolean {
     const definition = registry.find((entry) => entry.key === key);
     if (
       !available ||

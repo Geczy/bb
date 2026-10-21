@@ -1,4 +1,4 @@
-import type { HoldoutKey, HoldoutArm } from "@bb/domain";
+import type { HoldoutDefinition, HoldoutArm } from "@bb/domain";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { release } from "node:os";
 import type { AppInstall } from "@bb/config/app-install";
@@ -17,7 +17,7 @@ const telemetryAppSurfaceStorage = new AsyncLocalStorage<RequestAppSurface>();
 export type TelemetryEvent =
   | {
       name: "holdout_exposed";
-      properties: { holdout: HoldoutKey; arm: HoldoutArm };
+      properties: { holdout: HoldoutDefinition["key"]; arm: HoldoutArm };
     }
   | { name: "app_started" }
   | { name: "telemetry_disabled" }

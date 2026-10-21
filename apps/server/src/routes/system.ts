@@ -1,5 +1,3 @@
-import { and, eq, isNull } from "drizzle-orm";
-import { projects, projectSources } from "@bb/db";
 import { holdoutKeySchema } from "@bb/domain";
 import { createMobileAppReleaseService } from "../services/install/mobile-app-releases.js";
 import {
@@ -36,6 +34,7 @@ import {
 } from "@bb/domain";
 import {
   publicApiRoutes,
+  systemHoldoutsResponseSchema,
   typedRoutes,
   type PublicApiSchema,
   type SystemEnvironmentProvider,
@@ -349,26 +348,13 @@ export function registerSystemRoutes(
   });
 
   get(routes.holdouts, (context) =>
-    context.json({ assignments: deps.holdouts.list() }),
+    context.json(
+      systemHoldoutsResponseSchema.parse({ assignments: deps.holdouts.list() }),
+    ),
   );
-  post(routes.holdoutExposure, async (context) => {
+  post(routes.holdoutExposure, (context) => {
     const key = holdoutKeySchema.safeParse(context.req.param("key"));
     if (!key.success) throw new ApiError(404, "not_found", "Unknown holdout");
-    if (getAppSettings(deps.db).onboardingCompletedAt === null)
-      return context.json({ exposed: false });
-    const project = deps.db
-      .select({ id: projects.id })
-      .from(projects)
-      .innerJoin(projectSources, eq(projectSources.projectId, projects.id))
-      .where(and(eq(projects.kind, "standard"), isNull(projects.deletedAt)))
-      .limit(1)
-      .get();
-    if (project === undefined) return context.json({ exposed: false });
-    if (resolvePrimaryHostId(deps) === null)
-      return context.json({ exposed: false });
-    const states = await getProviderStates(deps, {});
-    if (!states.providers.some((provider) => provider.status === "ready"))
-      return context.json({ exposed: false });
     return context.json({
       exposed: deps.holdouts.expose(key.data, deps.telemetry),
     });

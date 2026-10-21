@@ -69,8 +69,23 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
                 },
                 {
                   onSuccess: () => {
-                    void sdk.system
-                      .exposeHoldout("app_aa_check")
+                    void Promise.all([
+                      sdk.projects.list(),
+                      sdk.system.providerStates(),
+                    ])
+                      .then(([projects, states]) => {
+                        if (
+                          projects.some(
+                            (project) =>
+                              project.kind === "standard" &&
+                              project.sources.length > 0,
+                          ) &&
+                          states.providers.some(
+                            (provider) => provider.status === "ready",
+                          )
+                        )
+                          return sdk.system.exposeHoldout("app_aa_check");
+                      })
                       .catch(() => {});
                   },
                 },

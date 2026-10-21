@@ -1,17 +1,31 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { defaultAppSettings, type AppSettings } from "@bb/domain";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingGate } from "./OnboardingGate";
 
 const mocks = vi.hoisted(() => ({
   mutate: vi.fn(),
+  projects: vi.fn(),
+  providerStates: vi.fn(),
   exposeHoldout: vi.fn().mockResolvedValue({ exposed: true }),
   useSystemConfig: vi.fn(),
 }));
 
 vi.mock("@/lib/sdk", () => ({
-  sdk: { system: { exposeHoldout: mocks.exposeHoldout } },
+  sdk: {
+    projects: { list: mocks.projects },
+    system: {
+      exposeHoldout: mocks.exposeHoldout,
+      providerStates: mocks.providerStates,
+    },
+  },
 }));
 
 vi.mock("@/hooks/queries/system-queries", () => ({
@@ -54,6 +68,8 @@ function renderGate() {
 
 beforeEach(() => {
   window.localStorage.clear();
+  mocks.projects.mockResolvedValue([{ kind: "standard", sources: [{}] }]);
+  mocks.providerStates.mockResolvedValue({ providers: [{ status: "ready" }] });
 });
 
 afterEach(() => {
@@ -90,7 +106,9 @@ describe("OnboardingGate", () => {
     expect(mocks.mutate).toHaveBeenCalledTimes(1);
     expect(mocks.exposeHoldout).not.toHaveBeenCalled();
     mocks.mutate.mock.calls[0]?.[1].onSuccess();
-    expect(mocks.exposeHoldout).toHaveBeenCalledWith("app_aa_check");
+    await waitFor(() =>
+      expect(mocks.exposeHoldout).toHaveBeenCalledWith("app_aa_check"),
+    );
     const written = mocks.mutate.mock.calls[0]?.[0] as AppSettings;
     expect(written).toMatchObject({
       streamerMode: true,
@@ -99,6 +117,25 @@ describe("OnboardingGate", () => {
       false,
     );
   });
+
+  it.each(["no_project", "no_source", "no_ready_agent"])(
+    "does not expose the A/A when setup closes with %s",
+    async (missing) => {
+      if (missing === "no_project") mocks.projects.mockResolvedValue([]);
+      if (missing === "no_source")
+        mocks.projects.mockResolvedValue([{ kind: "standard", sources: [] }]);
+      if (missing === "no_ready_agent")
+        mocks.providerStates.mockResolvedValue({
+          providers: [{ status: "not_installed" }],
+        });
+      configWith({ onboardingCompletedAt: null });
+      renderGate();
+      fireEvent.click(await screen.findByText("Setup guide at agent"));
+      mocks.mutate.mock.calls[0]?.[1].onSuccess();
+      await waitFor(() => expect(mocks.providerStates).toHaveBeenCalled());
+      expect(mocks.exposeHoldout).not.toHaveBeenCalled();
+    },
+  );
 
   it("shows the guide again when the completion time is cleared after a close in the same session", async () => {
     configWith({ onboardingCompletedAt: null });

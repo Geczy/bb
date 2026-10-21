@@ -1,11 +1,5 @@
-import { getAppSettings, setAppSettings } from "@bb/db";
+import { getAppSettings } from "@bb/db";
 import { describe, expect, it, vi } from "vitest";
-import { registerHostRpcResponder } from "../helpers/host-rpc.js";
-import {
-  seedHostSession,
-  seedPrimaryHost,
-  seedProjectWithSource,
-} from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 import { readJson } from "../helpers/json.js";
 
@@ -40,49 +34,13 @@ describe("holdout interfaces", () => {
     });
   });
 
-  it("requires finished setup, an imported project and a ready agent, then exposes once across clients", async () => {
+  it("exposes before setup completion and records once across clients", async () => {
     await withTestHarness(async (harness) => {
       const capture = vi.fn();
       harness.deps.telemetry = { capture, setEnabled: vi.fn() };
       const expose = async () =>
         readJson(await harness.app.request(path, { method: "POST" }));
-      expect(await expose()).toEqual({ exposed: false });
-      setAppSettings(harness.db, {
-        ...getAppSettings(harness.db),
-        onboardingCompletedAt: new Date().toISOString(),
-      });
-      expect(await expose()).toEqual({ exposed: false });
-      const { host, session } = seedHostSession(harness.deps);
-      seedPrimaryHost(harness.deps, host.id);
-      seedProjectWithSource(harness.deps, { hostId: host.id });
-      let ready = false;
-      registerHostRpcResponder(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        handle: (request) => {
-          if (request.command.type !== "provider.health")
-            throw new Error(`Unexpected ${request.command.type}`);
-          return {
-            ok: true,
-            result: {
-              supported: true,
-              health: {
-                status: ready ? "ready" : "not_installed",
-                statusMessage: null,
-                accountEmail: null,
-                planLabel: null,
-                installedVersion: null,
-                minimumSupportedVersion: null,
-                canInstall: false,
-                canUpdate: false,
-                loginCommand: null,
-              },
-            },
-          };
-        },
-      });
-      expect(await expose()).toEqual({ exposed: false });
-      ready = true;
+      expect(getAppSettings(harness.db).onboardingCompletedAt).toBeNull();
       const results = await Promise.all(Array.from({ length: 8 }, expose));
       expect(
         results.filter(

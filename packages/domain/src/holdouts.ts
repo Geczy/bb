@@ -10,12 +10,10 @@ export type HoldoutArm = z.infer<typeof holdoutArmSchema>;
 
 export const holdoutDefinitionSchema = z
   .object({
-    key: holdoutKeySchema,
-    arms: z
-      .tuple([z.literal("control"), holdoutArmSchema])
-      .rest(holdoutArmSchema),
+    key: z.string().regex(/^app_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/),
+    arms: z.tuple([holdoutArmSchema, holdoutArmSchema]).rest(holdoutArmSchema),
     weights: z.array(z.number().int().nonnegative()),
-    surface: z.enum(["setup_finished"]),
+    surface: z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/),
     status: holdoutStatusSchema,
     winner: holdoutArmSchema.nullable(),
   })
@@ -41,27 +39,28 @@ export const holdoutRegistrySchema = z
   .superRefine((entries, ctx) => {
     const live = entries.filter((entry) => entry.status !== "ended");
     if (
-      live.length > 2 ||
       new Set(live.map((entry) => entry.surface)).size !== live.length ||
       new Set(entries.map((entry) => entry.key)).size !== entries.length
     ) {
       ctx.addIssue({
         code: "custom",
         message:
-          "Holdouts need unique keys and at most two live holdouts on distinct surfaces",
+          "Holdouts need unique keys and live holdouts on distinct surfaces",
       });
     }
   });
-export const holdoutRegistry = holdoutRegistrySchema.parse([
-  {
-    key: "app_aa_check",
-    arms: ["control", "test"],
-    weights: [50, 50],
-    surface: "setup_finished",
-    status: "enrolling",
-    winner: null,
-  },
-]);
+export const holdoutRegistry = holdoutRegistrySchema
+  .parse([
+    {
+      key: "app_aa_check",
+      arms: ["control", "test"],
+      weights: [50, 50],
+      surface: "setup_finished",
+      status: "enrolling",
+      winner: null,
+    },
+  ])
+  .map((entry) => ({ ...entry, key: holdoutKeySchema.parse(entry.key) }));
 export const holdoutForceSchema = z
   .object({ key: holdoutKeySchema, arm: holdoutArmSchema })
   .superRefine((force, ctx) => {
