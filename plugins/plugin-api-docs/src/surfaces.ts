@@ -785,7 +785,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
     sections: [
       {
         title: "Commands & agent capabilities",
-        surfaceIds: ["cli", "agent-tools"],
+        surfaceIds: ["setup-job", "cli", "agent-tools"],
       },
       {
         title: "Running & reacting",
@@ -821,7 +821,8 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       {
         id: "setup-job",
         title: "Setup recurring job",
-        summary: "Read and choose the same recurring job offered during setup.",
+        summary:
+          "Use the recurring job offered during setup. With this, a plugin can:",
         bullets: [
           "Read the offered job and saved opt-in state without recording an impression",
           "Record a displayed suggestion once, or accept or dismiss its random offer ID",

@@ -360,6 +360,7 @@ This index lists every command path that the core CLI registers, including alias
 
 ## setup-job
 
+- `bb setup-job`
 - `bb setup-job show`
 - `bb setup-job accept`
 - `bb setup-job dismiss`
