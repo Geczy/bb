@@ -32,6 +32,37 @@ const keybindings: AppKeybindings = [
 ];
 
 describe("resolveDesktopBrowserAppCommand", () => {
+  it("leaves Escape to the page until the renderer supplies command availability", () => {
+    const args = {
+      input: {
+        key: "Escape",
+        code: "Escape",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        shiftKey: false,
+      },
+      platform: "darwin",
+      keybindings: [
+        {
+          ...keybindings[0]!,
+          command: "app.back" as const,
+          shortcut: { ...keybindings[0]!.shortcut, key: "Escape", mod: false },
+        },
+      ],
+    };
+    expect(resolveDesktopBrowserAppCommand(args)).toBeNull();
+    expect(
+      resolveDesktopBrowserAppCommand({ ...args, availableCommands: [] }),
+    ).toBeNull();
+    expect(
+      resolveDesktopBrowserAppCommand({
+        ...args,
+        availableCommands: ["app.back"],
+      }),
+    ).toBe("app.back");
+  });
+
   it.each([
     "thread.new",
     "palette.open",
@@ -54,6 +85,7 @@ describe("resolveDesktopBrowserAppCommand", () => {
           },
           platform: "darwin",
           keybindings: [{ ...keybindings[0]!, command }],
+          availableCommands: [command],
         }),
       ).toBe(command);
     },
@@ -79,6 +111,7 @@ describe("resolveDesktopBrowserAppCommand", () => {
           },
           platform: "darwin",
           keybindings: [{ ...keybindings[0]!, when }],
+          availableCommands: ["thread.search"],
         }),
       ).toBeNull();
     },
@@ -273,6 +306,7 @@ describe("resolveDesktopBrowserAppCommand", () => {
           shiftKey: false,
         },
         platform: "win32",
+        availableCommands: ["plugin:example/open"],
         keybindings: [
           {
             command: "plugin:example/open",
@@ -319,6 +353,7 @@ describe("resolveDesktopBrowserAppCommand", () => {
         },
         platform: "darwin",
         keybindings,
+        availableCommands: ["thread.search"],
       }),
     ).toBe("thread.search");
     expect(

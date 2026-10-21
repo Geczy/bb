@@ -31,6 +31,20 @@ export function resolveDesktopBrowserAppCommand({
     isDesktop: true,
     keybindings: keybindings.filter((binding) => {
       if (
+        availableCommands === undefined &&
+        (binding.command.startsWith("plugin:") ||
+          (!binding.when.all.includes("browserFocus") &&
+            binding.command !== "panel.previousTab" &&
+            binding.command !== "panel.nextTab" &&
+            binding.command !== "pane.focus.previous" &&
+            binding.command !== "pane.focus.next" &&
+            !PANE_DIRECTION_APP_COMMAND_IDS.some(
+              (command) => command === binding.command,
+            )))
+      ) {
+        return false;
+      }
+      if (
         binding.command === "pane.focus.previous" ||
         binding.command === "pane.focus.next"
       ) {
