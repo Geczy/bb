@@ -465,17 +465,13 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
   },
   {
     reason:
-      "Queued and follow-up messages omit senderThreadId unless the request originates from another thread.",
+      "Thread creation, queued messages, and follow-up messages omit their sender unless the request originates from another thread or, for sends, a plugin.",
     fields: [
       "createQueuedMessageRequestSchema.senderThreadId",
       "sendMessageRequestSchema.senderThreadId",
       "createThreadRequestSchema.senderThreadId",
+      "sendMessageRequestSchema.originPluginId",
     ],
-  },
-  {
-    reason:
-      "Only sends made through the plugin SDK carry the sending plugin's id.",
-    fields: ["sendMessageRequestSchema.originPluginId"],
   },
   {
     reason:
