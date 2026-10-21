@@ -8,7 +8,6 @@ import {
   type DbConnection,
 } from "@bb/db";
 import {
-  holdoutArmSchema,
   holdoutRegistry,
   holdoutRegistrySchema,
   type HoldoutArm,
@@ -18,6 +17,18 @@ import {
 } from "@bb/domain";
 import type { ServerLogger } from "../../types.js";
 import type { TelemetryService } from "./telemetry.js";
+
+function drawArm(definition: HoldoutDefinition): HoldoutArm {
+  let draw = randomInt(
+    definition.weights.reduce((sum, weight) => sum + weight, 0),
+  );
+  for (const [index, arm] of definition.arms.entries()) {
+    const weight = definition.weights[index]!;
+    if (draw < weight) return arm;
+    draw -= weight;
+  }
+  throw new Error("Holdout weights did not cover the draw");
+}
 
 export function createHoldoutService(args: {
   db: DbConnection;
@@ -76,7 +87,7 @@ export function createHoldoutService(args: {
           db.insert(holdoutAssignments)
             .values({
               key: definition.key,
-              arm: randomInt(100) < definition.weights[0] ? "control" : "test",
+              arm: drawArm(definition),
               assignedAt: Date.now(),
               appVersion: args.appVersion,
               exposedAt: null,
@@ -104,7 +115,10 @@ export function createHoldoutService(args: {
     if (definition.status === "ended") return definition.winner ?? "control";
     if (force?.key === key) return force.arm;
     try {
-      return holdoutArmSchema.safeParse(assignment(key)?.arm).data ?? "control";
+      const stored = assignment(key)?.arm;
+      return stored !== undefined && definition.arms.includes(stored)
+        ? stored
+        : "control";
     } catch {
       return "control";
     }
@@ -123,10 +137,9 @@ export function createHoldoutService(args: {
       .all()
       .flatMap((row) => {
         const definition = registry.find((entry) => entry.key === row.key);
-        const parsedArm = holdoutArmSchema.safeParse(row.arm);
         if (
           definition === undefined ||
-          !parsedArm.success ||
+          !definition.arms.includes(row.arm) ||
           excluded.has(row.key)
         )
           return [];
@@ -134,7 +147,7 @@ export function createHoldoutService(args: {
           {
             ...row,
             key: definition.key,
-            arm: parsedArm.data,
+            arm: row.arm,
             status: definition.status,
           },
         ];
@@ -172,11 +185,10 @@ export function createHoldoutService(args: {
         )
         .returning()
         .get();
-      const parsedArm = holdoutArmSchema.safeParse(row?.arm);
-      if (!parsedArm.success) return false;
+      if (row === undefined || !definition.arms.includes(row.arm)) return false;
       telemetry.capture({
         name: "holdout_exposed",
-        properties: { holdout: key, arm: parsedArm.data },
+        properties: { holdout: key, arm: row.arm },
       });
       return true;
     } catch (error) {

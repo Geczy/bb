@@ -12,6 +12,7 @@ import {
 } from "@bb/db";
 import { createMigratedConnection } from "@bb/db/testing";
 import {
+  holdoutDefinitionSchema,
   holdoutRegistry,
   holdoutRegistrySchema,
   type HoldoutDefinition,
@@ -87,6 +88,91 @@ describe("per-install holdouts", () => {
     } finally {
       moved.$client.close();
     }
+  });
+
+  it("draws three unequal arms by weight across fresh installs and preserves them on restart", async () => {
+    const registry = holdoutRegistrySchema.parse([
+      {
+        ...holdoutRegistry[0],
+        arms: ["control", "reminder", "guided_return"],
+        weights: [1, 3, 6],
+      },
+    ]);
+    const counts = new Map<string, number>();
+    const installs = 3000;
+    for (let index = 0; index < installs; index += 1) {
+      const install = createMigratedConnection();
+      try {
+        const assignment = start(install, { registry }).list();
+        const arm = assignment[0]!.arm;
+        counts.set(arm, (counts.get(arm) ?? 0) + 1);
+        expect(
+          start(install, { registry, appVersion: "2.0.0" }).list(),
+        ).toEqual(assignment);
+        if (index === 0) {
+          const path = join(dataDir, "three-arms.db");
+          await writeFile(path, install.$client.serialize());
+          const restarted = createConnection(path);
+          try {
+            expect(start(restarted, { registry }).list()).toEqual(assignment);
+          } finally {
+            restarted.$client.close();
+          }
+        }
+      } finally {
+        install.$client.close();
+      }
+    }
+    for (const [arm, expected] of [
+      ["control", 0.1],
+      ["reminder", 0.3],
+      ["guided_return", 0.6],
+    ] as const) {
+      expect(
+        Math.abs((counts.get(arm) ?? 0) / installs - expected),
+      ).toBeLessThan(0.05);
+    }
+  }, 60_000);
+
+  it("reports the declared third arm on events and exposure", async () => {
+    const registry = holdoutRegistrySchema.parse([
+      {
+        ...holdoutRegistry[0],
+        arms: ["control", "reminder", "guided_return"],
+        weights: [0, 0, 100],
+      },
+    ]);
+    const holdouts = start(db, { registry });
+    const service = await telemetry(holdouts);
+    expect(holdouts.arm(key)).toBe("guided_return");
+    expect(holdouts.expose(key, service)).toBe(true);
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
+    ).toMatchObject({
+      event: "holdout_exposed",
+      properties: {
+        holdout: key,
+        arm: "guided_return",
+        "$feature/app_aa_check": "guided_return",
+      },
+    });
+  });
+
+  it.each([
+    { arms: ["test", "control"] },
+    { arms: ["control", "BadArm"] },
+    { arms: ["control", "test", "test"], weights: [1, 1, 1] },
+    { weights: [1] },
+    { weights: [0, 0] },
+    { weights: [-1, 2] },
+    { weights: [0.5, 1] },
+    { weights: [4294967295, 1] },
+    { winner: "undeclared" },
+  ])("rejects an invalid arm declaration: %j", (invalid) => {
+    expect(
+      holdoutDefinitionSchema.safeParse({ ...holdoutRegistry[0], ...invalid })
+        .success,
+    ).toBe(false);
   });
 
   it.each(["finished_setup", "has_thread", "pending_move"])(

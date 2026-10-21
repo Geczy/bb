@@ -1,19 +1,40 @@
 import { z } from "zod";
 
 export const holdoutKeySchema = z.enum(["app_aa_check"]);
-export const holdoutArmSchema = z.enum(["control", "test"]);
+export const holdoutArmSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/);
 export const holdoutStatusSchema = z.enum(["enrolling", "holding", "ended"]);
 export type HoldoutKey = z.infer<typeof holdoutKeySchema>;
 export type HoldoutArm = z.infer<typeof holdoutArmSchema>;
 
-export const holdoutDefinitionSchema = z.object({
-  key: holdoutKeySchema,
-  arms: z.tuple([z.literal("control"), z.literal("test")]),
-  weights: z.tuple([z.literal(50), z.literal(50)]),
-  surface: z.enum(["setup_finished"]),
-  status: holdoutStatusSchema,
-  winner: holdoutArmSchema.nullable(),
-});
+export const holdoutDefinitionSchema = z
+  .object({
+    key: holdoutKeySchema,
+    arms: z
+      .tuple([z.literal("control"), holdoutArmSchema])
+      .rest(holdoutArmSchema),
+    weights: z.array(z.number().int().nonnegative()),
+    surface: z.enum(["setup_finished"]),
+    status: holdoutStatusSchema,
+    winner: holdoutArmSchema.nullable(),
+  })
+  .superRefine((entry, ctx) => {
+    const total = entry.weights.reduce((sum, weight) => sum + weight, 0);
+    if (
+      entry.weights.length !== entry.arms.length ||
+      total <= 0 ||
+      total > 0xffffffff ||
+      new Set(entry.arms).size !== entry.arms.length ||
+      (entry.winner !== null && !entry.arms.includes(entry.winner))
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Holdouts need distinct arms, one nonnegative integer weight per arm, total weight between 1 and 4294967295, and a winner from their arms",
+      });
+    }
+  });
 export type HoldoutDefinition = z.infer<typeof holdoutDefinitionSchema>;
 export const holdoutRegistrySchema = z
   .array(holdoutDefinitionSchema)
@@ -41,8 +62,17 @@ export const holdoutRegistry = holdoutRegistrySchema.parse([
     winner: null,
   },
 ]);
-export const holdoutForceSchema = z.object({
-  key: holdoutKeySchema,
-  arm: holdoutArmSchema,
-});
+export const holdoutForceSchema = z
+  .object({ key: holdoutKeySchema, arm: holdoutArmSchema })
+  .superRefine((force, ctx) => {
+    if (
+      !holdoutRegistry
+        .find((entry) => entry.key === force.key)
+        ?.arms.includes(force.arm)
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "Forced arm must belong to the holdout's declared arms",
+      });
+  });
 export type HoldoutForce = z.infer<typeof holdoutForceSchema>;

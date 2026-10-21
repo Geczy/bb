@@ -1370,7 +1370,7 @@ export const projectAttachmentBackfills = sqliteTable(
 
 export const holdoutAssignments = sqliteTable("holdout_assignments", {
   key: text("key").primaryKey(),
-  arm: text("arm", { enum: ["control", "test"] }).notNull(),
+  arm: text("arm").notNull(),
   assignedAt: integer("assigned_at").notNull(),
   appVersion: text("app_version").notNull(),
   exposedAt: integer("exposed_at"),

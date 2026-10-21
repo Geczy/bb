@@ -1,5 +1,6 @@
 import {
   holdoutKeySchema,
+  holdoutRegistry,
   holdoutArmSchema,
   holdoutStatusSchema,
 } from "@bb/domain";
@@ -709,14 +710,22 @@ export type SystemProviderEnabledRequest = z.infer<
 
 export const systemHoldoutsResponseSchema = z.object({
   assignments: z.array(
-    z.object({
-      key: holdoutKeySchema,
-      arm: holdoutArmSchema,
-      assignedAt: z.number(),
-      exposedAt: z.number().nullable(),
-      appVersion: z.string(),
-      status: holdoutStatusSchema,
-    }),
+    z
+      .object({
+        key: holdoutKeySchema,
+        arm: holdoutArmSchema,
+        assignedAt: z.number(),
+        exposedAt: z.number().nullable(),
+        appVersion: z.string(),
+        status: holdoutStatusSchema,
+      })
+      .refine(
+        (row) =>
+          holdoutRegistry
+            .find((entry) => entry.key === row.key)
+            ?.arms.includes(row.arm) === true,
+        { message: "Arm must belong to the holdout" },
+      ),
   ),
 });
 export type SystemHoldoutsResponse = z.infer<
