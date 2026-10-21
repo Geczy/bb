@@ -9,15 +9,17 @@ import {
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
   sidebarNavigationQueryKey,
-  threadEntityQueryKey,
   threadListQueryKey,
   threadQueryKey,
 } from "../queries/query-keys";
 import { updateCachedThreadListStatusState } from "./query-cache";
+import { getThreadEntity } from "./thread-entity-store";
 import {
   beginArchiveThreadAndChildrenTransaction,
   predictThreadPinState,
+  beginUnarchiveThreadTransaction,
   rollbackArchiveThreadsTransaction,
+  rollbackThreadListMutationTransaction,
   settleArchiveThreadsTransaction,
 } from "./thread-state-cache-owner";
 
@@ -220,15 +222,61 @@ describe("thread entity store", () => {
     ]);
   });
 
+  it("keeps an unarchived thread in the sidebar through a sidebar read that started before the unarchive", async () => {
+    const live = [entry("t2")];
+    const s = setup(live);
+    const archivedKey = threadListQueryKey({
+      projectId: "project-1",
+      archived: true,
+    });
+    await s.fetchList(archivedKey, () => [
+      entry("t1", { archivedAt: 5, updatedAt: 11 }),
+    ]);
+    const sidebar = (threads: ThreadListEntry[]) =>
+      makeSidebarBootstrapResponse({
+        projects: [
+          makeProjectWithThreadsResponse({ id: "project-1", threads }),
+        ],
+      });
+    let releaseStale!: () => void;
+    const stale = s.queryClient.fetchQuery({
+      queryKey: sidebarNavigationQueryKey(),
+      queryFn: async () => {
+        await new Promise<void>((resolve) => {
+          releaseStale = resolve;
+        });
+        return sidebar(live);
+      },
+      staleTime: 0,
+    });
+    const transaction = await beginUnarchiveThreadTransaction({
+      queryClient: s.queryClient,
+      threadId: "t1",
+    });
+    expect(s.sidebarRows().map((row) => row.id)).toEqual(["t2", "t1"]);
+    releaseStale();
+    await stale;
+    expect(s.sidebarRows().map((row) => row.id)).toEqual(["t2", "t1"]);
+
+    rollbackThreadListMutationTransaction({
+      queryClient: s.queryClient,
+      threadId: "t1",
+      transaction,
+    });
+    expect(s.sidebarRows().map((row) => row.id)).toEqual(["t2"]);
+    await s.queryClient.fetchQuery({
+      queryKey: sidebarNavigationQueryKey(),
+      queryFn: async () => sidebar(live),
+      staleTime: 0,
+    });
+    expect(s.sidebarRows().map((row) => row.id)).toEqual(["t2"]);
+  });
+
   it("drops an entity once no view holds it", async () => {
     const s = setup([]);
     await s.fetchList(s.listKey, () => [entry("t1")]);
-    expect(
-      s.queryClient.getQueryData(threadEntityQueryKey("t1")),
-    ).toBeDefined();
+    expect(getThreadEntity(s.queryClient, "t1")).toBeDefined();
     s.queryClient.removeQueries({ queryKey: s.listKey });
-    expect(
-      s.queryClient.getQueryData(threadEntityQueryKey("t1")),
-    ).toBeUndefined();
+    expect(getThreadEntity(s.queryClient, "t1")).toBeUndefined();
   });
 });

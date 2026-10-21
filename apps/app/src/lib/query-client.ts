@@ -1,10 +1,9 @@
 import {
   focusManager,
   MutationCache,
-  type QueryClient,
+  QueryClient,
   type QueryClientConfig,
 } from "@tanstack/react-query";
-import { TaggedQueryClient } from "@bb/query-tags";
 import {
   getMutationErrorMeta,
   showMutationErrorToast,
@@ -103,7 +102,7 @@ export function createAppQueryClient(
   const showMutationErrorToasts = options.showMutationErrorToasts ?? true;
   const shouldRefetchOnWindowFocus = options.shouldRefetchOnWindowFocus;
 
-  const queryClient = new TaggedQueryClient({
+  const queryClient = new QueryClient({
     mutationCache: new MutationCache({
       onError: (error, _variables, _context, mutation) => {
         if (!showMutationErrorToasts) {

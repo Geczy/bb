@@ -1,8 +1,7 @@
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   CORE_TAG_SCOPE,
-  TaggedQueryClient,
   optimisticQueryUpdate,
   runTaggedMutation,
   runTaggedRead,
@@ -17,14 +16,8 @@ afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose();
 });
 
-const clients = [
-  ["QueryClient", QueryClient],
-  ["TaggedQueryClient", TaggedQueryClient],
-] as const;
-let Client: typeof QueryClient = TaggedQueryClient;
-
 async function setup(row: Row) {
-  const client = new Client({
+  const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   let server = row;
@@ -84,14 +77,7 @@ function pin(client: QueryClient, pinnedAt: number) {
 const patch = (change: Partial<Row>) => (row?: Row) =>
   row && { ...row, ...change };
 
-describe.each(clients)("%s", (_name, ClientClass) => {
-  beforeEach(() => {
-    Client = ClientClass;
-  });
-  afterEach(() => {
-    Client = TaggedQueryClient;
-  });
-
+describe("cache writes under a prediction", () => {
   it("rolls back a prediction under an unrelated cache write", async () => {
     const cache = await setup({ id: "a", pinnedAt: null, status: "idle" });
     const write = pin(cache.client, 100);
@@ -124,9 +110,7 @@ describe.each(clients)("%s", (_name, ClientClass) => {
 
     expect(cache.row()).toEqual({ id: "a", pinnedAt: null, status: "idle" });
   });
-});
 
-describe("TaggedQueryClient", () => {
   it("replaces an accepted prediction with the next confirmed read", async () => {
     const cache = await setup({ id: "a", pinnedAt: null, status: "idle" });
     const write = pin(cache.client, 100);

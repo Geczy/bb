@@ -6,7 +6,6 @@ import {
   runTaggedMutation,
   runTaggedRead,
   taggedQueryOptions,
-  TaggedQueryClient,
   type TaggedMutationOutcome,
   type TaggedOptimisticUpdate,
 } from "../src/index.js";
@@ -18,7 +17,7 @@ afterEach(() => {
 });
 
 function client() {
-  const result = new TaggedQueryClient({
+  const result = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   disposers.push(() => result.clear());

@@ -58,5 +58,3 @@ Cache writes that are not read receipts keep predictions above them. A
 fields it leaves unchanged from the visible value keep their confirmed value, so
 rollback removes only the prediction. Arrays are replaced whole, so predict on
 object-shaped values (an entity, or a keyed record of rows), not inside arrays.
-`TaggedQueryClient` also runs functional `setQueryData` updaters on the
-confirmed data directly.

@@ -7,7 +7,6 @@ import {
 } from "@tanstack/react-query";
 import {
   beginOptimisticMutation,
-  optimisticQueryUpdate,
   type TaggedOptimisticUpdate,
 } from "@bb/query-tags";
 import {
@@ -19,10 +18,8 @@ import type { ThreadResponse } from "@bb/server-contract";
 import {
   ARCHIVED_THREADS_LIST_KIND,
   allThreadDetailBootstrapQueryKeyPrefix,
-  allThreadEntitiesQueryKeyPrefix,
   allThreadQueryKeyPrefix,
   sidebarNavigationQueryKey,
-  threadEntityQueryKey,
   threadSearchQueryKeyPrefix,
   threadsQueryKey,
 } from "../queries/query-keys";
@@ -288,10 +285,30 @@ interface ViewSkeleton {
 
 type Materialized = Map<string, Map<string, unknown>>;
 
+interface ViewInsertion {
+  slot: string;
+  entry: ViewEntry;
+  at: number;
+}
+
+interface EntityLayer {
+  ids: ReadonlySet<string>;
+  update(
+    entity: ThreadEntity,
+    threadId: string,
+    result: { value: unknown } | undefined,
+  ): ThreadEntity;
+  result: { value: unknown } | undefined;
+  settled: boolean;
+}
+
 interface ThreadEntityStore {
   client: QueryClient;
-  entities: Map<string, Query>;
+  base: Map<string, ThreadEntity>;
+  layers: EntityLayer[];
+  visible: Map<string, ThreadEntity>;
   skeletons: Map<Query, ViewSkeleton>;
+  insertions: WeakMap<Query, ViewInsertion[]>;
   viewsById: Map<string, Set<Query>>;
   materialized: WeakMap<Query, Materialized>;
   fetchStartedAt: WeakMap<Query, number>;
@@ -309,8 +326,45 @@ function readEntity(
   store: ThreadEntityStore,
   id: string,
 ): ThreadEntity | undefined {
-  const data: unknown = store.entities.get(id)?.state.data;
-  return data as ThreadEntity | undefined;
+  const cached = store.visible.get(id);
+  if (cached !== undefined) return cached;
+  let entity = store.base.get(id);
+  if (entity === undefined) return undefined;
+  for (const layer of store.layers)
+    if (layer.ids.has(id)) entity = layer.update(entity, id, layer.result);
+  store.visible.set(id, entity);
+  return entity;
+}
+
+function changed(store: ThreadEntityStore, ids: Iterable<string>): void {
+  const dirty = new Set(ids);
+  for (const id of dirty) store.visible.delete(id);
+  if (store.batching > 0) {
+    for (const id of dirty) store.dirtyIds.add(id);
+    return;
+  }
+  const views = new Map<Query, Set<string>>();
+  for (const id of dirty)
+    for (const view of store.viewsById.get(id) ?? []) {
+      const viewIds = views.get(view) ?? new Set<string>();
+      viewIds.add(id);
+      views.set(view, viewIds);
+    }
+  notifyManager.batch(() => {
+    for (const [view, viewIds] of views) rematerialize(store, view, viewIds);
+  });
+}
+
+function writeBase(
+  store: ThreadEntityStore,
+  id: string,
+  update: (current: ThreadEntity | undefined) => ThreadEntity | undefined,
+): void {
+  const current = store.base.get(id);
+  const next = update(current);
+  if (next === undefined || next === current) return;
+  store.base.set(id, next);
+  changed(store, [id]);
 }
 
 function isNewer(
@@ -334,29 +388,26 @@ function ingest(
   const acknowledgedAt = store.acknowledgedAt.get(id) ?? -1;
   const threadFields = pick(source, THREAD_KEYS);
   const facetFields = pick(source, FACET_KEYS[facet]);
-  store.client.setQueryData<ThreadEntity>(
-    threadEntityQueryKey(id),
-    (current) => {
-      if (current === undefined)
-        return {
-          thread: threadFields,
-          list: facet === "list" ? facetFields : null,
-          detail: facet === "detail" ? facetFields : null,
-        };
-      if (
-        isNewer(
-          threadFields.updatedAt,
-          current.thread.updatedAt,
-          readStart,
-          acknowledgedAt,
-        )
+  writeBase(store, id, (current) => {
+    if (current === undefined)
+      return {
+        thread: threadFields,
+        list: facet === "list" ? facetFields : null,
+        detail: facet === "detail" ? facetFields : null,
+      };
+    if (
+      isNewer(
+        threadFields.updatedAt,
+        current.thread.updatedAt,
+        readStart,
+        acknowledgedAt,
       )
-        return mergeEntity(current, threadFields, facet, facetFields);
-      return current[facet] === null
-        ? mergeEntity(current, {}, facet, facetFields)
-        : current;
-    },
-  );
+    )
+      return mergeEntity(current, threadFields, facet, facetFields);
+    return current[facet] === null
+      ? mergeEntity(current, {}, facet, facetFields)
+      : current;
+  });
 }
 
 function applyChangedFields(
@@ -376,12 +427,10 @@ function applyChangedFields(
     Object.keys(facetFields).length === 0
   )
     return;
-  store.client.setQueryData<ThreadEntity>(
-    threadEntityQueryKey(id),
-    (current) =>
-      current === undefined
-        ? current
-        : mergeEntity(current, threadFields, facet, facetFields),
+  writeBase(store, id, (current) =>
+    current === undefined
+      ? current
+      : mergeEntity(current, threadFields, facet, facetFields),
   );
 }
 
@@ -504,10 +553,8 @@ function setSkeleton(
     views?.delete(query);
     if (views === undefined || views.size === 0) {
       store.viewsById.delete(id);
-      store.client.removeQueries({
-        queryKey: threadEntityQueryKey(id),
-        exact: true,
-      });
+      store.base.delete(id);
+      store.visible.delete(id);
     }
   }
 }
@@ -556,6 +603,19 @@ function keepHiddenEntries(
     else if (isHidden(entry, visible)) result.splice(insertAt, 0, entry);
   }
   return result;
+}
+
+function keptInsertions(
+  store: ThreadEntityStore,
+  query: Query,
+  slot: string,
+  readStart: number,
+): ViewInsertion[] {
+  const insertions = (store.insertions.get(query) ?? []).filter(
+    (insertion) => insertion.at > readStart,
+  );
+  store.insertions.set(query, insertions);
+  return insertions.filter((insertion) => insertion.slot === slot);
 }
 
 function batch(store: ThreadEntityStore, run: () => void): void {
@@ -625,6 +685,15 @@ function onViewWritten(
         previousEntries !== undefined && visible !== undefined
           ? keepHiddenEntries(previousEntries, entries, visible)
           : entries;
+      if (!manual)
+        for (const insertion of keptInsertions(
+          store,
+          query,
+          slot.key,
+          readStart,
+        ))
+          if (!kept.some(({ id }) => id === insertion.entry.id))
+            kept.push(insertion.entry);
       nextSlots.set(slot.key, kept);
       for (const { id } of kept) {
         if (id === null) continue;
@@ -642,8 +711,11 @@ export function ensureThreadEntityStore(client: QueryClient): void {
   if (stores.has(client)) return;
   const store: ThreadEntityStore = {
     client,
-    entities: new Map(),
+    base: new Map(),
+    layers: [],
+    visible: new Map(),
     skeletons: new Map(),
+    insertions: new WeakMap(),
     viewsById: new Map(),
     materialized: new WeakMap(),
     fetchStartedAt: new WeakMap(),
@@ -655,29 +727,8 @@ export function ensureThreadEntityStore(client: QueryClient): void {
     dirtyViews: new Set(),
   };
   stores.set(client, store);
-  client.setQueryDefaults(allThreadEntitiesQueryKeyPrefix(), {
-    gcTime: Infinity,
-  });
-  const entityHead = allThreadEntitiesQueryKeyPrefix()[0];
   client.getQueryCache().subscribe((event) => {
     const { query } = event;
-    if (query.queryKey[0] === entityHead) {
-      const id = String(query.queryKey[1]);
-      if (event.type === "added") store.entities.set(id, query);
-      if (event.type === "removed" && store.entities.get(id) === query)
-        store.entities.delete(id);
-      if (event.type !== "updated") return;
-      if (store.batching > 0) {
-        store.dirtyIds.add(id);
-        return;
-      }
-      const dirty = new Set([id]);
-      notifyManager.batch(() => {
-        for (const view of store.viewsById.get(id) ?? [])
-          rematerialize(store, view, dirty);
-      });
-      return;
-    }
     const family = familyOf(query.queryKey);
     if (family === undefined) return;
     if (event.type === "removed") {
@@ -708,14 +759,12 @@ export function patchThreadEntity(
   ensureThreadEntityStore(client);
   const threadFields = pick(change, THREAD_KEYS);
   const listFields = pick(change, FACET_KEYS.list);
-  client.setQueryData<ThreadEntity>(
-    threadEntityQueryKey(threadId),
-    (current) =>
-      current === undefined ||
-      (updatedAt !== undefined &&
-        (current.thread.updatedAt ?? Number.NEGATIVE_INFINITY) > updatedAt)
-        ? current
-        : mergeEntity(current, threadFields, "list", listFields),
+  writeBase(stores.get(client)!, threadId, (current) =>
+    current === undefined ||
+    (updatedAt !== undefined &&
+      (current.thread.updatedAt ?? Number.NEGATIVE_INFINITY) > updatedAt)
+      ? current
+      : mergeEntity(current, threadFields, "list", listFields),
   );
 }
 
@@ -724,16 +773,16 @@ export function getThreadEntity(
   threadId: string,
 ): ThreadEntity | undefined {
   ensureThreadEntityStore(client);
-  return client.getQueryData<ThreadEntity>(threadEntityQueryKey(threadId));
+  return readEntity(stores.get(client)!, threadId);
 }
 
-export function getThreadEntities(client: QueryClient): ThreadEntity[] {
+function getThreadEntities(client: QueryClient): ThreadEntity[] {
   ensureThreadEntityStore(client);
-  return client
-    .getQueriesData<ThreadEntity>({
-      queryKey: allThreadEntitiesQueryKeyPrefix(),
-    })
-    .flatMap(([, entity]) => (entity === undefined ? [] : [entity]));
+  const store = stores.get(client)!;
+  return [...store.base.keys()].flatMap((id) => {
+    const entity = readEntity(store, id);
+    return entity === undefined ? [] : [entity];
+  });
 }
 
 export function findThreadEntityIds(
@@ -793,30 +842,43 @@ export function insertThreadIntoSidebar(
       : `project:${String(entity.thread.projectId)}`;
   const entries = skeleton.slots.get(slot);
   if (entries === undefined) return;
-  const slots = new Map(skeleton.slots);
-  slots.set(slot, [
-    ...entries,
-    { id: threadId, item: { ...entity.thread, ...entity.list } },
+  const entry = { id: threadId, item: { ...entity.thread, ...entity.list } };
+  store.insertions.set(query, [
+    ...(store.insertions.get(query) ?? []),
+    { slot, entry, at: ++store.clock },
   ]);
+  const slots = new Map(skeleton.slots);
+  slots.set(slot, [...entries, entry]);
   const slotsById = new Map(skeleton.slotsById);
   slotsById.set(threadId, new Set([slot]));
   setSkeleton(store, query, { ...skeleton, slots, slotsById });
   notifyManager.batch(() => rematerialize(store, query));
 }
 
-export function acknowledgeThreadEntities(
-  client: QueryClient,
-  threadIds: Iterable<string>,
-): void {
-  const store = stores.get(client);
-  if (store === undefined) return;
-  for (const id of threadIds) store.acknowledgedAt.set(id, ++store.clock);
-}
-
 export interface ThreadEntityPrediction<Result = unknown> {
   threadIds: readonly string[];
   succeed(result?: Result): void;
   fail(): void;
+}
+
+function bakeSettledLayers(store: ThreadEntityStore): Set<string> {
+  const baked = new Set<string>();
+  const pending = new Set<string>();
+  store.layers = store.layers.filter((layer) => {
+    const blocked = [...layer.ids].some((id) => pending.has(id));
+    if (!layer.settled || blocked) {
+      for (const id of layer.ids) pending.add(id);
+      return true;
+    }
+    for (const id of layer.ids) {
+      const current = store.base.get(id);
+      if (current !== undefined)
+        store.base.set(id, layer.update(current, id, layer.result));
+      baked.add(id);
+    }
+    return false;
+  });
+  return baked;
 }
 
 export function beginThreadEntityPrediction<Result = unknown>(
@@ -836,22 +898,34 @@ export function beginThreadEntityPrediction<Result = unknown>(
   },
 ): ThreadEntityPrediction<Result> {
   ensureThreadEntityStore(client);
-  const prediction = beginOptimisticMutation(client, [
-    ...threadIds.map((threadId) =>
-      optimisticQueryUpdate<ThreadEntity, Result>(
-        threadEntityQueryKey(threadId),
-        (entity, result) => update(entity, threadId, result),
-      ),
-    ),
-    ...extra,
-  ]);
+  const store = stores.get(client)!;
+  const layer: EntityLayer = {
+    ids: new Set(threadIds),
+    update: (entity, threadId, result) =>
+      update(entity, threadId, result as { value: Result } | undefined),
+    result: undefined,
+    settled: false,
+  };
+  store.layers.push(layer);
+  changed(store, threadIds);
+  const others =
+    extra.length === 0 ? undefined : beginOptimisticMutation(client, extra);
   return {
     threadIds,
     succeed(result) {
-      acknowledgeThreadEntities(client, threadIds);
-      prediction.accept(result);
-      prediction.settle();
+      if (layer.settled || !store.layers.includes(layer)) return;
+      for (const id of threadIds) store.acknowledgedAt.set(id, ++store.clock);
+      layer.result = { value: result };
+      layer.settled = true;
+      changed(store, [...threadIds, ...bakeSettledLayers(store)]);
+      others?.accept(result);
+      others?.settle();
     },
-    fail: () => prediction.rollback(),
+    fail() {
+      if (layer.settled || !store.layers.includes(layer)) return;
+      store.layers = store.layers.filter((other) => other !== layer);
+      changed(store, [...threadIds, ...bakeSettledLayers(store)]);
+      others?.rollback();
+    },
   };
 }

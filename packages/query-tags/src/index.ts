@@ -32,7 +32,6 @@ import {
 export {
   beginOptimisticMutation,
   optimisticQueryUpdate,
-  TaggedQueryClient,
   type TaggedOptimisticUpdate,
 } from "./optimistic.js";
 

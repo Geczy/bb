@@ -1,14 +1,10 @@
 import {
   matchQuery,
   notifyManager,
-  QueryClient,
   replaceEqualDeep,
-  type InferDataFromTag,
-  type NoInfer,
   type Query,
+  type QueryClient,
   type QueryKey,
-  type SetDataOptions,
-  type Updater,
 } from "@tanstack/react-query";
 
 export interface TaggedOptimisticUpdate {
@@ -53,7 +49,6 @@ type Receipt = {
 };
 const predictions = new WeakMap<Query, PredictionState>();
 const receipts = new WeakMap<Query, Receipt>();
-const baseWrites = new WeakSet<Query>();
 const taggedMeta = new WeakSet<object>();
 const syncedClients = new WeakMap<
   QueryClient,
@@ -260,7 +255,7 @@ function track(query: Query, state: PredictionState): void {
       const current = predictions.get(event.query);
       if (current === undefined || isTaggedQuery(event.query)) return;
       const data = event.query.state.data;
-      if (event.action.manual && !baseWrites.has(event.query)) {
+      if (event.action.manual) {
         confirmBeforeWrite(event.query, current);
         current.base = rebase(current.base, current.visible, data);
       } else {
@@ -351,8 +346,6 @@ export function taggedStructuralSharing(
           (guard) => !refreshedBy(receipt, guard),
         );
         state.base = state.guards.reduce(applyLayer, next);
-      } else if (baseWrites.has(query)) {
-        state.base = next;
       } else {
         confirmBeforeWrite(query, state);
         state.base = rebase(state.base, previous, next);
@@ -504,42 +497,4 @@ export function beginOptimisticMutation(
       });
     },
   };
-}
-
-export class TaggedQueryClient extends QueryClient {
-  override setQueryData<
-    TQueryFnData = unknown,
-    TTaggedQueryKey extends QueryKey = QueryKey,
-    TInferredQueryFnData = InferDataFromTag<TQueryFnData, TTaggedQueryKey>,
-  >(
-    queryKey: TTaggedQueryKey,
-    updater: Updater<
-      NoInfer<TInferredQueryFnData> | undefined,
-      NoInfer<TInferredQueryFnData> | undefined
-    >,
-    options?: SetDataOptions,
-  ): NoInfer<TInferredQueryFnData> | undefined {
-    const query = this.getQueryCache().get(
-      this.defaultQueryOptions({ queryKey }).queryHash,
-    );
-    const state = query === undefined ? undefined : predictions.get(query);
-    if (
-      query === undefined ||
-      state === undefined ||
-      typeof updater !== "function"
-    )
-      return super.setQueryData(queryKey, updater, options);
-    const update = updater as (
-      current: NoInfer<TInferredQueryFnData> | undefined,
-    ) => NoInfer<TInferredQueryFnData> | undefined;
-    confirmBeforeWrite(query, state);
-    const base = update(getTaggedReadData(this, queryKey));
-    if (base === undefined) return undefined;
-    baseWrites.add(query);
-    try {
-      return super.setQueryData(queryKey, base, options);
-    } finally {
-      baseWrites.delete(query);
-    }
-  }
 }
