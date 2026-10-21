@@ -41,7 +41,9 @@ const fixture = `
 
 function deferred() {
   let resolve!: () => void;
-  const promise = new Promise<void>((done) => { resolve = done; });
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 
@@ -68,17 +70,30 @@ describe("plugin uncaught failures", () => {
     restoreListeners = () => {
       process.removeListener("uncaughtException", handle);
       process.removeListener("unhandledRejection", handle);
-      for (const listener of exceptions) process.on("uncaughtException", listener);
-      for (const listener of rejections) process.on("unhandledRejection", listener);
+      for (const listener of exceptions)
+        process.on("uncaughtException", listener);
+      for (const listener of rejections)
+        process.on("unhandledRejection", listener);
     };
     const root = join(harness.config.dataDir, "fixture");
     await mkdir(root);
-    await writeFile(join(root, "package.json"), JSON.stringify({
-      name: "bb-plugin-uncaught", version: "0.1.0",
-      bb: { name: "Uncaught fixture", description: "Error containment", branding: { icon: "Zap" }, server: "./server.ts" },
-    }));
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "bb-plugin-uncaught",
+        version: "0.1.0",
+        bb: {
+          name: "Uncaught fixture",
+          description: "Error containment",
+          branding: { icon: "Zap" },
+          server: "./server.ts",
+        },
+      }),
+    );
     await writeFile(join(root, "server.ts"), fixture);
-    expect((await harness.pluginService.installPath(root)).status).toBe("running");
+    expect((await harness.pluginService.installPath(root)).status).toBe(
+      "running",
+    );
   });
 
   afterEach(async () => {
@@ -93,7 +108,11 @@ describe("plugin uncaught failures", () => {
     const started = deferred();
     const release = deferred();
     vi.stubGlobal("__pluginErrorControl", {
-      started: started.resolve, release: release.promise, stale, rejection, count,
+      started: started.resolve,
+      release: release.promise,
+      stale,
+      rejection,
+      count,
     });
     return { started: started.promise, release: release.resolve };
   }
@@ -107,30 +126,48 @@ describe("plugin uncaught failures", () => {
     }
     const response = await harness.app.request(
       `${base}/${surface === "route" ? "http/run" : surface === "rpc" ? "rpc/run" : "cli"}`,
-      surface === "route" ? {} : {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify(surface === "rpc" ? null : { argv: [] }),
-      },
+      surface === "route"
+        ? {}
+        : {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(surface === "rpc" ? null : { argv: [] }),
+          },
     );
     expect(response.status).toBe(200);
   }
 
-  it.each([false, true])("contains stale CLI continuations after reload (rejection=%s), once per instance", async (rejection) => {
-    const warn = vi.spyOn(harness.deps.logger, "warn");
-    for (let generation = 0; generation < 2; generation++) {
-      const gate = control(true, rejection, 2);
-      const request = invoke("cli");
-      await gate.started;
-      expect((await harness.pluginService.reload("uncaught")).ok).toBe(true);
-      gate.release();
-      await request;
-      await vi.waitFor(() => expect(observed).toHaveLength((generation + 1) * 2));
-      expect(observed.every((event) => event.contained)).toBe(true);
-      expect(harness.pluginService.list().find((p) => p.id === "uncaught")?.status).toBe("running");
-      expect(warn.mock.calls.filter((call) => call.some((value) => typeof value === "string" && value.includes("stale API handle")))).toHaveLength(generation + 1);
-    }
-    expect((await harness.app.request("/health")).status).toBe(200);
-  }, 20_000);
+  it.each([false, true])(
+    "contains stale CLI continuations after reload (rejection=%s), once per instance",
+    async (rejection) => {
+      const warn = vi.spyOn(harness.deps.logger, "warn");
+      for (let generation = 0; generation < 2; generation++) {
+        const gate = control(true, rejection, 2);
+        const request = invoke("cli");
+        await gate.started;
+        expect((await harness.pluginService.reload("uncaught")).ok).toBe(true);
+        gate.release();
+        await request;
+        await vi.waitFor(() =>
+          expect(observed).toHaveLength((generation + 1) * 2),
+        );
+        expect(observed.every((event) => event.contained)).toBe(true);
+        expect(
+          harness.pluginService.list().find((p) => p.id === "uncaught")?.status,
+        ).toBe("running");
+        expect(
+          warn.mock.calls.filter((call) =>
+            call.some(
+              (value) =>
+                typeof value === "string" && value.includes("stale API handle"),
+            ),
+          ),
+        ).toHaveLength(generation + 1);
+      }
+      expect((await harness.app.request("/health")).status).toBe(200);
+    },
+    20_000,
+  );
 
   it("contains stale handles without async attribution after disable", async () => {
     const api = harness.pluginService.getApi("uncaught");
@@ -139,27 +176,41 @@ describe("plugin uncaught failures", () => {
     setImmediate(() => api!.realtime.publish("changed", null));
     await vi.waitFor(() => expect(observed).toHaveLength(1));
     expect(observed[0]?.contained).toBe(true);
-    expect(harness.pluginService.list().find((p) => p.id === "uncaught")?.status).toBe("disabled");
+    expect(
+      harness.pluginService.list().find((p) => p.id === "uncaught")?.status,
+    ).toBe("disabled");
   });
 
-  it.each(["cli", "route", "rpc", "event"])("attributes detached %s failures and degrades only that plugin", async (surface) => {
-    const gate = control(false, false);
-    const request = invoke(surface);
-    await gate.started;
-    gate.release();
-    await request;
-    await vi.waitFor(() => expect(observed).toHaveLength(1));
-    expect(observed[0]?.contained).toBe(true);
-    expect(harness.pluginService.list().find((p) => p.id === "uncaught")).toMatchObject({
-      status: "degraded", statusDetail: expect.stringContaining("detached plugin failure"),
-    });
-    expect(harness.pluginService.handleUncaughtException(new Error("core failure"))).toBe(false);
-  });
+  it.each(["cli", "route", "rpc", "event"])(
+    "attributes detached %s failures and degrades only that plugin",
+    async (surface) => {
+      const gate = control(false, false);
+      const request = invoke(surface);
+      await gate.started;
+      gate.release();
+      await request;
+      await vi.waitFor(() => expect(observed).toHaveLength(1));
+      expect(observed[0]?.contained).toBe(true);
+      expect(
+        harness.pluginService.list().find((p) => p.id === "uncaught"),
+      ).toMatchObject({
+        status: "degraded",
+        statusDetail: expect.stringContaining("detached plugin failure"),
+      });
+      expect(
+        harness.pluginService.handleUncaughtException(
+          new Error("core failure"),
+        ),
+      ).toBe(false);
+    },
+  );
 
   it("does not contain unattributed core failures or errors that merely copy the stale name", () => {
     const fake = new Error("core bug");
     fake.name = "PluginContextStaleError";
     expect(harness.pluginService.handleUncaughtException(fake)).toBe(false);
-    expect(harness.pluginService.handleUncaughtException("core rejection")).toBe(false);
+    expect(
+      harness.pluginService.handleUncaughtException("core rejection"),
+    ).toBe(false);
   });
 });
