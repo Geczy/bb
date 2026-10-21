@@ -39,23 +39,100 @@ describe("resolveDesktopBrowserAppCommand", () => {
     "panel.toggle",
     "thread.jump.1",
     "thread.previous",
-  ] as const)("forwards a global %s binding from browser content", (command) => {
+  ] as const)(
+    "forwards a global %s binding from browser content",
+    (command) => {
+      expect(
+        resolveDesktopBrowserAppCommand({
+          input: {
+            key: "k",
+            code: "KeyK",
+            altKey: false,
+            ctrlKey: false,
+            metaKey: true,
+            shiftKey: false,
+          },
+          platform: "darwin",
+          keybindings: [{ ...keybindings[0]!, command }],
+        }),
+      ).toBe(command);
+    },
+  );
+
+  it.each([
+    { all: ["mainSurface"], none: ["browserFocus"] },
+    { all: ["mainSurface", "promptAvailable"], none: [] },
+    { all: ["mainSurface"], none: ["editableFocus"] },
+    { all: ["mainSurface", "questionOpen"], none: [] },
+  ] satisfies AppKeybindings[number]["when"][])(
+    "leaves browser input alone when the binding context is unavailable: %j",
+    (when) => {
+      expect(
+        resolveDesktopBrowserAppCommand({
+          input: {
+            key: "k",
+            code: "KeyK",
+            altKey: false,
+            ctrlKey: false,
+            metaKey: true,
+            shiftKey: false,
+          },
+          platform: "darwin",
+          keybindings: [{ ...keybindings[0]!, when }],
+        }),
+      ).toBeNull();
+    },
+  );
+
+  it.each(["c", "v", "x", "a", "ArrowLeft"])(
+    "leaves unbound browser editing key %s alone",
+    (key) => {
+      expect(
+        resolveDesktopBrowserAppCommand({
+          input: {
+            key,
+            code: "",
+            altKey: false,
+            ctrlKey: false,
+            metaKey: true,
+            shiftKey: false,
+          },
+          platform: "darwin",
+          keybindings,
+        }),
+      ).toBeNull();
+    },
+  );
+
+  it("does not fall through an unavailable winning command to an older binding", () => {
+    const args = {
+      input: {
+        key: "k",
+        code: "KeyK",
+        altKey: false,
+        ctrlKey: false,
+        metaKey: true,
+        shiftKey: false,
+      },
+      platform: "darwin",
+      keybindings: [
+        keybindings[0]!,
+        { ...keybindings[0]!, command: "plugin:example/open" as const },
+      ],
+    };
     expect(
       resolveDesktopBrowserAppCommand({
-        input: {
-          key: "k",
-          code: "KeyK",
-          altKey: false,
-          ctrlKey: false,
-          metaKey: true,
-          shiftKey: false,
-        },
-        platform: "darwin",
-        keybindings: [{ ...keybindings[0]!, command }],
+        ...args,
+        availableCommands: ["thread.search"],
       }),
-    ).toBe(command);
+    ).toBeNull();
+    expect(
+      resolveDesktopBrowserAppCommand({
+        ...args,
+        availableCommands: ["plugin:example/open"],
+      }),
+    ).toBe("plugin:example/open");
   });
-
 
   it.each([
     "panel.previousTab",
