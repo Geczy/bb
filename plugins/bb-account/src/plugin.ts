@@ -40,7 +40,10 @@ export function createBbAccountPlugin(
     };
     let logins!: LinkLogins;
     const publish = () => {
-      bb.rpc.experimental_invalidate(["login", "status"]);
+      [
+        { entity: "login", changes: ["updated"] },
+        { entity: "status", changes: ["updated"] },
+      ].forEach((change) => bb.rpc.experimental_publishChange(change));
     };
     const account = new AccountService({
       store: createKvAccountStore(bb.storage.kv),

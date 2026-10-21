@@ -37,7 +37,10 @@ function renderAccount(
     ...slot,
     async publish(next: { status: AccountStatus; login: LoginView | null }) {
       snapshot = next;
-      await slot.experimental_invalidateRpc(null);
+      await slot.experimental_publishRpcChange({
+        entity: "plugin",
+        changes: ["reset"],
+      });
     },
   };
 }
@@ -250,7 +253,10 @@ describe("bb account settings section", () => {
     fireEvent.click(await slot.findByRole("button", { name: "Sign in" }));
     await slot.findByText("K7QP-2M4X");
     fail = true;
-    await slot.experimental_invalidateRpc(null);
+    await slot.experimental_publishRpcChange({
+      entity: "plugin",
+      changes: ["reset"],
+    });
     await slot.findAllByText(/offline/);
     expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
     fail = false;
@@ -288,7 +294,10 @@ describe("bb account settings section", () => {
     fireEvent.click(await slot.findByRole("button", { name: "Sign in" }));
     await slot.findByText("K7QP-2M4X");
     login = pendingLogin({ id: "other-client" });
-    await slot.experimental_invalidateRpc(["login"]);
+    await slot.experimental_publishRpcChange({
+      entity: "login",
+      changes: ["updated"],
+    });
     await waitFor(() => expect(slot.queryByText("K7QP-2M4X")).toBeNull());
     fireEvent.click(await slot.findByRole("button", { name: "Try again" }));
     await slot.findByText("NEWC-0DE2");

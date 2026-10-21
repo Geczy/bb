@@ -50,3 +50,77 @@ it("recovers when closing a failed handshake synchronously emits another error",
     stop();
   }
 });
+
+it("preserves subscribe event payloads while RPC watches receive structured changes", async () => {
+  vi.useFakeTimers();
+  const socket: BbRealtimeSocket = {
+    readyState: 0,
+    onopen: null,
+    onclose: null,
+    onerror: null,
+    onmessage: null,
+    send: vi.fn(),
+    close: vi.fn(),
+  };
+  const client = createBbRealtimeClient({
+    transport: createHttpTransport({
+      baseUrl: "http://bb.test",
+      runtime: "node",
+      websocket: () => socket,
+    }),
+  });
+  const subscribed = vi.fn();
+  const changed = vi.fn();
+  const threadChanged = vi.fn();
+  const stop = client.subscribe({
+    event: "plugin:changed",
+    pluginId: "example",
+    callback: subscribed,
+  });
+  const stopThread = client.subscribe({
+    event: "thread:changed",
+    threadId: "thread-1",
+    callback: threadChanged,
+  });
+  const stopRead = client.watchPluginChanges("example", changed);
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    socket.readyState = 1;
+    socket.onopen?.();
+    const change = { entity: "row", id: "a", changes: ["updated"], value: 2 };
+    const thread = {
+      type: "changed",
+      entity: "thread",
+      id: "thread-1",
+      changes: ["title-changed"],
+    };
+    for (const message of [
+      { type: "changed", entity: "plugin", pluginId: "other", change },
+      { type: "changed", entity: "plugin", pluginId: "example", change },
+      thread,
+    ])
+      socket.onmessage?.({ data: JSON.stringify(message) });
+    expect(changed).toHaveBeenCalledExactlyOnceWith(change);
+    expect(subscribed).toHaveBeenCalledExactlyOnceWith({
+      type: "changed",
+      entity: "plugin",
+      pluginId: "example",
+      tags: null,
+    });
+    expect(threadChanged).toHaveBeenCalledExactlyOnceWith(thread);
+    stopRead();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        type: "changed",
+        entity: "plugin",
+        pluginId: "example",
+        change,
+      }),
+    });
+    expect(changed).toHaveBeenCalledOnce();
+  } finally {
+    stopRead();
+    stopThread();
+    stop();
+  }
+});

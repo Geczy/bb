@@ -7,7 +7,7 @@ import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import {
   providerUsageRpcContract,
   usageRequestSchema,
-  usageTags,
+  usageDependencies,
   type UsageRequest,
 } from "./contract.js";
 import { z } from "zod/mini";
@@ -362,17 +362,20 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
   bb.rpc.experimental_whileWatched("getUsage", (read, signal) => {
     if (!("input" in read)) return;
     const request = usageRequestSchema.parse(read.input);
-    const measurementTags = usageTags(request).filter(
-      (tag) => tag !== "inventory" && tag !== "usage",
+    const measurementChanges = usageDependencies(request).filter(
+      (dependency) => dependency.entity === "usage-machine",
     );
     const timer = setInterval(
       () => {
-        if (measurementTags.length) measurements.expire();
-        bb.rpc.experimental_invalidate(
-          measurementTags.length ? measurementTags : ["inventory"],
-        );
+        if (measurementChanges.length) measurements.expire();
+        (measurementChanges.length
+          ? measurementChanges
+          : [{ entity: "inventory", changes: ["updated"] }]
+        ).forEach((change) => bb.rpc.experimental_publishChange(change));
       },
-      measurementTags.length ? Math.max(1_000, request.maxAgeMs) : 30 * 60_000,
+      measurementChanges.length
+        ? Math.max(1_000, request.maxAgeMs)
+        : 30 * 60_000,
     );
     signal.addEventListener("abort", () => clearInterval(timer), {
       once: true,
@@ -385,7 +388,9 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
         snapshots.invalidate();
         discoveries.invalidate();
         inventories.invalidate();
-        bb.rpc.experimental_invalidate(["inventory"]);
+        [{ entity: "inventory", changes: ["updated"] }].forEach((change) =>
+          bb.rpc.experimental_publishChange(change),
+        );
       };
       const stopHosts = bb.sdk.subscribe({
         event: "host:changed",
@@ -466,7 +471,9 @@ export default function providerUsagePlugin(bb: BbPluginApi): void {
   const markDirty = () => {
     snapshots.invalidate();
     measurements.invalidate();
-    bb.rpc.experimental_invalidate(["usage"]);
+    [{ entity: "usage", changes: ["updated"] }].forEach((change) =>
+      bb.rpc.experimental_publishChange(change),
+    );
   };
   bb.events.on("thread.idle", markDirty);
   bb.events.on("thread.failed", markDirty);

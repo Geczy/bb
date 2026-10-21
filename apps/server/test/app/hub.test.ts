@@ -21,22 +21,23 @@ describe("NotificationHub", () => {
     vi.useRealTimers();
   });
 
-  it("batches tag changes and delivers them to every connected client without subscriptions", async () => {
+  it("delivers read changes with their payload to connected clients", () => {
     const hub = new NotificationHub();
     const first = createMockHubSocket();
-    const second = createMockHubSocket();
     const disconnected = createMockHubSocket();
-    for (const socket of [first, second, disconnected])
-      hub.registerClient(socket);
+    hub.registerClient(first);
+    hub.registerClient(disconnected);
     hub.unregisterClient(disconnected);
-    hub.notifyTags([]);
-    hub.notifyTags(["a", "b"]);
-    hub.notifyTags(["b", "c"]);
-    await Promise.resolve();
-    for (const socket of [first, second])
-      expect(socket.messages.map((message) => JSON.parse(message))).toEqual([
-        { type: "changed", entity: "tags", tags: ["a", "b", "c"] },
-      ]);
+    const change = {
+      entity: "settings",
+      id: "appearance",
+      changes: ["updated"],
+      value: { theme: "dark" },
+    };
+    hub.notifyReadChanged(change);
+    expect(first.messages.map((message) => JSON.parse(message))).toEqual([
+      { type: "changed", entity: "read", change },
+    ]);
     expect(disconnected.messages).toEqual([]);
   });
 

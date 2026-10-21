@@ -872,9 +872,9 @@ describe("public host management", () => {
         .mockResolvedValue({
           ok: true,
           result: { ok: true },
-          tags: [],
-          keyTags: {},
-          invalidated: [],
+          dependencies: [],
+          keyDependencies: {},
+          changes: [],
           whileWatched: false,
         });
 

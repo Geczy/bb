@@ -252,15 +252,21 @@ it("routes batched plugin subscriptions and invalidate-all to the subscribed soc
       ],
     }),
   );
-  hub.notifyPluginChanged("other", null);
-  hub.notifyPluginChanged("push-notifications", null);
+  hub.notifyPluginChanged("other", {
+    entity: "settings",
+    changes: ["updated"],
+  });
+  hub.notifyPluginChanged("push-notifications", {
+    entity: "settings",
+    changes: ["updated"],
+  });
   expect(socket.closed).toEqual([]);
   expect(socket.messages.map((message) => JSON.parse(message))).toEqual([
     {
       type: "changed",
       entity: "plugin",
       pluginId: "push-notifications",
-      tags: null,
+      change: { entity: "settings", changes: ["updated"] },
     },
   ]);
   expect(idle.messages).toEqual([]);

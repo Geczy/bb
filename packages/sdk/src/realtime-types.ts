@@ -36,7 +36,12 @@ export interface BbRealtimeConnectionEvent {
 }
 
 export interface BbRealtimeEventMap {
-  "plugin:changed": Extract<ChangedMessage, { entity: "plugin" }>;
+  "plugin:changed": {
+    type: "changed";
+    entity: "plugin";
+    pluginId: string;
+    tags: string[] | null;
+  };
   "thread:changed": ThreadRealtimeEvent;
   "project:changed": ProjectRealtimeEvent;
   "environment:changed": EnvironmentRealtimeEvent;

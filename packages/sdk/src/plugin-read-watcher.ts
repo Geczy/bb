@@ -1,3 +1,9 @@
+import { resolveReadChange } from "@bb/query-tags/policy";
+import {
+  type ReadChange,
+  type ReadDependency,
+  type ReadChangeReaction,
+} from "@bb/domain";
 import { BbHttpError } from "./response.js";
 
 export type PluginReadWatch = (() => void) & {
@@ -9,20 +15,25 @@ export function createPluginReadWatcher<T>(options: {
   signal: AbortSignal;
   read(signal: AbortSignal): Promise<T>;
   prepare?(value: T): void | Promise<void>;
-  tagsOf?(value: T): readonly string[];
+  dependenciesOf?(value: T): readonly ReadDependency[];
+  reactToChange?(
+    value: T | undefined,
+    change: ReadChange,
+  ): ReadChangeReaction<T>;
   prepareKey?(value: T): string;
   onChange(value: T): void;
   onError?(error: Error): void;
   onStop(): void;
   retryNotFound?: boolean;
-}): PluginReadWatch & { invalidate(tags: readonly string[] | null): void } {
+}): PluginReadWatch & { change(change: ReadChange): void } {
   let finish!: () => void;
   const done = new Promise<void>((resolve) => {
     finish = resolve;
   });
   let revision = 0;
-  let tags: readonly string[] | undefined;
-  const pendingTags = new Set<string>();
+  let value: T | undefined;
+  let dependencies: readonly ReadDependency[] = [];
+  const pendingChanges: ReadChange[] = [];
   let running = false;
   let scheduled = false;
   let stopped = false;
@@ -84,39 +95,47 @@ export function createPluginReadWatcher<T>(options: {
       void run();
     });
   };
+  const publish = (value: T, current: number) => {
+    preparing++;
+    pending = pending
+      .then(async () => {
+        if (stopped || current !== revision) return;
+        if (Date.now() < blockedUntil) return;
+        const key = options.prepareKey?.(value);
+        if (key === undefined || key !== preparedKey)
+          await options.prepare?.(value);
+        if (stopped || current !== revision) return;
+        preparedKey = key;
+        options.onChange(value);
+        failures = 0;
+      })
+      .catch((error: unknown) => failed(error, current))
+      .finally(() => {
+        preparing--;
+        drained();
+      });
+  };
   const run = async () => {
     scheduled = false;
     if (stopped) return;
     running = true;
     const current = revision;
-    pendingTags.clear();
+    pendingChanges.length = 0;
     controller = new AbortController();
     try {
-      const value = await options.read(controller.signal);
+      const next = await options.read(controller.signal);
       if (stopped || current !== revision) return;
-      tags = options.tagsOf?.(value);
-      if (tags?.some((tag) => pendingTags.has(tag))) {
+      dependencies = options.dependenciesOf?.(next) ?? [];
+      if (
+        pendingChanges.some((change) =>
+          resolveReadChange(next, dependencies, change, options.reactToChange),
+        )
+      ) {
         refresh();
         return;
       }
-      preparing++;
-      pending = pending
-        .then(async () => {
-          if (stopped || current !== revision) return;
-          if (Date.now() < blockedUntil) return;
-          const key = options.prepareKey?.(value);
-          if (key === undefined || key !== preparedKey)
-            await options.prepare?.(value);
-          if (stopped || current !== revision) return;
-          preparedKey = key;
-          options.onChange(value);
-          failures = 0;
-        })
-        .catch((error: unknown) => failed(error, current))
-        .finally(() => {
-          preparing--;
-          drained();
-        });
+      value = next;
+      publish(next, current);
     } catch (error) {
       failed(error, current);
     } finally {
@@ -136,14 +155,20 @@ export function createPluginReadWatcher<T>(options: {
   return Object.assign(stop, {
     refresh,
     done,
-    invalidate(invalidated: readonly string[] | null) {
-      if (
-        invalidated === null ||
-        (tags === undefined && !running) ||
-        tags?.some((tag) => invalidated.includes(tag))
-      )
-        refresh();
-      else if (running) for (const tag of invalidated) pendingTags.add(tag);
+    change(change: ReadChange) {
+      if (stopped) return;
+      if (running) pendingChanges.push(change);
+      const reaction = resolveReadChange(
+        value,
+        dependencies,
+        change,
+        options.reactToChange,
+      );
+      if (!reaction) return;
+      if (reaction.action === "patch" && value !== undefined && !running) {
+        value = reaction.data;
+        publish(value, ++revision);
+      } else refresh();
     },
   });
 }

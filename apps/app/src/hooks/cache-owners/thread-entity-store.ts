@@ -10,7 +10,7 @@ import {
   writeKeyedEntity,
   type KeyedView,
   type KeyedViewSlot,
-  type TaggedOptimisticUpdate,
+  type LiveQueryOptimisticUpdate,
 } from "@bb/query-tags";
 import {
   threadWithRuntimeSchema,
@@ -453,7 +453,7 @@ export function beginThreadEntityPrediction<Result = unknown>(
       threadId: string,
       result: { value: Result } | undefined,
     ) => ThreadEntity;
-    extra?: readonly TaggedOptimisticUpdate[];
+    extra?: readonly LiveQueryOptimisticUpdate[];
   },
 ): ThreadEntityPrediction<Result> {
   registerThreadEntityViews(client);

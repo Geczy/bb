@@ -128,7 +128,9 @@ export function registerUsageSource(bb: BbPluginApi) {
   bb.background.service("usage-inventory", {
     async start(signal) {
       const invalidate = () =>
-        bb.rpc.experimental_invalidate(["usage-inventory"]);
+        [{ entity: "usage-inventory", changes: ["updated"] }].forEach(
+          (change) => bb.rpc.experimental_publishChange(change),
+        );
       const stopHosts = bb.sdk.subscribe({
         event: "host:changed",
         callback: invalidate,

@@ -4055,7 +4055,7 @@ export interface ExperimentalRpcMutationOptions<
 
 /**
  * One mutation hook's state. `mutate` calls the RPC, invalidates the
- * response's `invalidated` tags on this client immediately, and resolves when
+ * response's `changes` on this client immediately, and resolves when
  * the server acknowledges the write. Matched reads refresh in the background. `error` holds the last failure
  * until the next `mutate` or `reset`.
  */
@@ -4079,7 +4079,7 @@ export interface ExperimentalRpcMutationState<
 export interface PluginSdkApp {
   experimental_PluginRpcCallError: typeof experimental_PluginRpcCallError;
   experimental_useRpcRefresh(): { refresh(): void; isRefreshing: boolean };
-  /** Read tagged plugin data through BB's shared query cache and realtime lifecycle. */
+  /** Read live plugin data through BB's shared query cache and realtime lifecycle. */
   experimental_useRpcQuery<
     Contract extends PluginRpcContract,
     Method extends keyof Contract & string,

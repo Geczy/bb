@@ -1,81 +1,50 @@
-# Query tags
+# Live query changes
 
-Spread `taggedQueryOptions(client, queryKey, registration)` into query options
-to register the scope and `tagsOf(data)` and project predictions at cache commit.
-Wrap the query function in `runTaggedRead`. `invalidateTags(client, scope, tags)` marks
-matching cached queries stale and awaits active reads. An empty tag list does
-nothing. Clients and scopes are independent.
+`liveQueryOptions(client, queryKey, registration)` and `liveQueryMeta(registration)`
+register a scope, `dependenciesOf(data, client)`, and an optional
+`reactToChange(data, change)`. An optional `read(context)` creates the query
+function through `runLiveRead`, so changes arriving during a read are checked
+before its result commits. Metadata-only registrations preserve the caller's
+query function. `liveQueryOptions` also rebases plain-query optimistic updates.
 
-An invalidation during a read repeats it only when its known or returned tags
-overlap. Reads without a response yet must settle before tag matching is known.
-Failed first loads can recover on the next invalidation.
+Dependencies and changes identify `entity`, optional `id`, and required nonempty
+`changes`. A missing ID matches every instance. Only a change carries an optional
+JSON `value`. A reducer returns `{ action: "patch", data }`, `{ action: "reload" }`,
+or `undefined` for dependency matching. Reducer errors are reported and reload.
+Until the first result, dependencies may be known or `undefined`; unknown reads
+check changes against their result and recover a failed first load on a scoped
+change. `refreshLiveQueries` handles reconnect and explicit refresh without
+inventing a message. A plugin/reset change refreshes its whole plugin scope.
 
-`runTaggedMutation` invalidates the successful call's `invalidated` tags and
-resolves at server acknowledgement. Active reads refresh in the background.
-Refresh failures retain
-the cached data and query error; they do not turn a successful write into a
-failed mutation. A later successful read clears the query error.
+`applyQueryChange` patches cached values or reloads matching reads. An in-flight
+read restarts or gets a trailing refresh so an old result cannot remain
+authoritative. Reload reactions can select `keys` for keyed reads. A pushed row
+patch reduces the stored base value beneath predictions; row differences drive
+store updates. There are no per-path patch receipts.
 
-Pass `{ client, optimistic: [...] }` as the third argument to
-`runTaggedMutation`. Build each prediction with
-`optimisticQueryUpdate<Value>(queryKey, updater, path = [])` for a cached query,
-or `optimisticKeyedUpdate(collection, key, updater)` for a keyed row. Pure
-updaters receive the visible value and return its prediction; missing query
-values are skipped. A path selects a nested value of the query data. `useTaggedMutation({ client, invalidate, call, optimistic, meta })` maps
-each input to the same prediction descriptors, applied synchronously when
-`mutate` is called. `meta` is copied onto the TanStack mutation, so mutation
-cache handlers such as core's error toast see it.
-
-A prediction also attaches to its query if that query first receives data
-while the write is pending. Updaters receive `{ value }` with the acknowledged
-result after the server accepts the write, so the prediction shows the
-server's value from acknowledgement on. A cache write after acknowledgement first folds the
-acknowledged value into the confirmed data, so the later write takes effect;
-reads that started before acknowledgement still get the acknowledged value
-reapplied until a read started after it arrives.
-
-All readers see the prediction through the query cache. Server reads update an
-authoritative value beneath pending predictions. The prediction stays until the
-matched confirmed reads arrive, then fresh server data replaces it, independently
-of the acknowledged mutation's pending state. Write
-failure removes that mutation's prediction. If the write succeeds but the read
-fails, the accepted prediction stays with the read error until a successful
-refresh. Later predictions and confirmed values cannot be replaced by an older
-settle or rollback; an inverted completion retains the later confirmed value
-until a subsequent fresh read.
-A query without a tagged read has no confirming
-read: its writes and fetches still land beneath the prediction, and an
-acknowledged prediction becomes its value when the write settles.
-`structuralSharing` calls for an observer's `select` output leave predictions
-untouched.
-
-`useTaggedMutation` accepts one typed input per call. Its `pendingInputs` contains
-all pending inputs for that hook instance, and `isPending` stays true until all
-writes are acknowledged. Background refreshes are excluded. Other hook instances are excluded.
-
-Cache writes that are not read receipts keep predictions above them. A
-`setQueryData` value is rebased onto the confirmed data field by field: object
-fields it leaves unchanged from the visible value keep their confirmed value, so
-rollback removes only the prediction. Arrays are replaced whole, so predict on
-object-shaped values (an entity, or a keyed record of rows), not inside arrays.
+`runLiveMutation` and `useLiveMutation({ client, publish, call, optimistic, meta })`
+resolve at write acknowledgement; background refresh does not extend pending
+state. `pendingInputs` belongs to the hook instance. Rejected writes roll back.
+Plain-query predictions use `optimisticQueryUpdate(queryKey, updater, path)`;
+full-read receipts preserve accepted values through older reads and refresh
+failures. The keyed store owns keyed prediction confirmation separately.
 
 ## Keyed store
 
 A `KeyedCollection` holds each row once per client. `registerKeyedViews(client,
-resolve)` maps query keys to `KeyedView`s, which split a query's data into
-slots of items, read each item into its row, and render rows back into the
-query's data. Every view of a row shows the same visible value: the stored row
-with pending predictions applied in order. `createTaggedKeyedQueryOwner` stores
-its rows in the collection it is given, and core threads use the same store.
+resolve)` maps query keys to views that split query data into slots, ingest rows,
+and render their visible values back into each query. Core threads and plugin
+keyed RPC rows use this store. `createLiveKeyedQueryOwner` reads only subscribed
+keys, batches up to 200 keys, and retains dependencies per row.
 
-A read writes a row only if it fetched that row. A prediction accepted by the
-server becomes the row's stored value. A row read that started before the
-acceptance does not replace it; a view decides how a later read merges, so
-thread rows also compare `updatedAt`. A rejected write removes its prediction,
-leaving later predictions in place, and an accepted prediction waits behind
-older pending ones on the same row. Rows that load while a write is pending
-show its prediction. A row leaves the store when no view holds it.
-`writeKeyedEntity` changes a stored row directly, beneath pending predictions.
+`optimisticKeyedUpdate` predicts a row through `beginOptimisticMutation`, the
+same path for core threads and plugin `cache.updateKey`. Accepting a write stores
+its value; a rejected write removes its prediction. Reads record per-key start
+epochs, so an older read cannot replace an accepted value, and a partial read
+cannot confirm a different row. Views can apply version checks, as thread views
+do with `updatedAt`. Pending predictions remain over authoritative patches.
+`writeKeyedEntity` updates the base beneath them. Shared rows remain consistent
+across detail, lists and sidebar views.
 
 `@bb/query-tags/testing` exports `keyedStoreContract`, the cases every keyed
 surface runs through a `KeyedStoreSubject`.

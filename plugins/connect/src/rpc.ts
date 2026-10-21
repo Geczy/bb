@@ -88,20 +88,22 @@ export const connectRpcContract = defineRpcContract({
   status: {
     input: z.null(),
     output: connectStatusSchema,
-    tags: () => ["status"],
+    experimental_dependencies: () => [
+      { entity: "status", changes: ["updated"] },
+    ],
   },
   setRemoteAccess: {
-    invalidates: () => ["status"],
+    experimental_changes: () => [{ entity: "status", changes: ["updated"] }],
     input: z.object({ enabled: z.boolean() }).strict(),
     output: connectStatusSchema,
   },
   expose: {
     input: portInputSchema,
     output: shareListingSchema,
-    invalidates: () => ["status"],
+    experimental_changes: () => [{ entity: "status", changes: ["updated"] }],
   },
   unexpose: {
-    invalidates: () => ["status"],
+    experimental_changes: () => [{ entity: "status", changes: ["updated"] }],
     input: portInputSchema,
     output: z
       .object({
@@ -113,7 +115,7 @@ export const connectRpcContract = defineRpcContract({
       .strict(),
   },
   unexposeAll: {
-    invalidates: () => ["status"],
+    experimental_changes: () => [{ entity: "status", changes: ["updated"] }],
     input: z.object({ hostId: z.string().min(1) }).strict(),
     output: z.object({ removed: z.number().int().nonnegative() }).strict(),
   },

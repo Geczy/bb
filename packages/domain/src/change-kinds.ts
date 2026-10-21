@@ -1,3 +1,4 @@
+import { readChangeSchema } from "./read-change.js";
 import { z } from "zod";
 import { jsonValueSchema, type JsonValue } from "./json-value.js";
 import {
@@ -359,21 +360,20 @@ export const systemChangedMessageSchema = z
   })
   .strict();
 
-export const tagsChangedMessageSchema = z
+export const readChangedMessageSchema = z
   .object({
     type: z.literal("changed"),
-    entity: z.literal("tags"),
-    tags: z.array(z.string().min(1)).min(1),
+    entity: z.literal("read"),
+    change: readChangeSchema,
   })
   .strict();
-export type TagsChangedMessage = z.infer<typeof tagsChangedMessageSchema>;
-
+export type ReadChangedMessage = z.infer<typeof readChangedMessageSchema>;
 export const pluginChangedMessageSchema = z
   .object({
     type: z.literal("changed"),
     entity: z.literal("plugin"),
     pluginId: z.string().min(1),
-    tags: z.array(z.string().min(1)).min(1).nullable(),
+    change: readChangeSchema,
   })
   .strict();
 
@@ -383,7 +383,7 @@ export const changedMessageSchema = z.discriminatedUnion("entity", [
   environmentChangedMessageSchema,
   hostChangedMessageSchema,
   systemChangedMessageSchema,
-  tagsChangedMessageSchema,
+  readChangedMessageSchema,
   pluginChangedMessageSchema,
 ]);
 export type ChangedMessage = z.infer<typeof changedMessageSchema>;
@@ -458,6 +458,6 @@ export const changedMessageLenientSchema = z.discriminatedUnion("entity", [
   environmentChangedMessageLenientSchema,
   hostChangedMessageLenientSchema,
   systemChangedMessageLenientSchema,
-  tagsChangedMessageSchema.strip(),
+  readChangedMessageSchema.strip(),
   pluginChangedMessageSchema.strip(),
 ]);

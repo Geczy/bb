@@ -1,3 +1,4 @@
+import type { ReadChange } from "@bb/domain";
 import type {
   ChangedMessage,
   ClientMessage,
@@ -181,6 +182,24 @@ function isIdScopedChangedListenerFor<
 }
 
 export class BbRealtimeClient implements BbRealtime {
+  private readonly pluginChanges = new Set<{
+    pluginId: string;
+    callback: (change: ReadChange) => void;
+  }>();
+
+  watchPluginChanges(
+    pluginId: string,
+    callback: (change: ReadChange) => void,
+  ): () => void {
+    const entry = { pluginId, callback };
+    this.pluginChanges.add(entry);
+    const release = this.retainTarget({ kind: "plugin", pluginId });
+    return () => {
+      this.pluginChanges.delete(entry);
+      release();
+    };
+  }
+
   private readonly listeners = new Set<RealtimeListenerRecord>();
   private readonly targetSubscriptions = new Map<string, TargetSubscription>();
   private readonly transport: BbSdkTransport;
@@ -553,6 +572,9 @@ export class BbRealtimeClient implements BbRealtime {
   private dispatchChangedMessage(message: ChangedMessage): void {
     switch (message.entity) {
       case "plugin":
+        for (const entry of [...this.pluginChanges])
+          if (entry.pluginId === message.pluginId)
+            entry.callback(message.change);
         for (const listener of this.listenerSnapshot()) {
           if (
             listener.active &&
@@ -560,7 +582,12 @@ export class BbRealtimeClient implements BbRealtime {
             listener.target.kind === "plugin" &&
             listener.target.pluginId === message.pluginId
           )
-            this.callListener(listener.callback, message);
+            this.callListener(listener.callback, {
+              type: "changed",
+              entity: "plugin",
+              pluginId: message.pluginId,
+              tags: null,
+            });
         }
         break;
       case "thread":

@@ -201,10 +201,12 @@ describe("bb account sign-in", () => {
     const me = stub.requestsTo("/api/account/me")[0]!;
     expect(me.authorization).toBe(`Bearer ${stored.credential}`);
     expect(me.machineHeader).toBe(stored.credential);
-    expect(host.harness.experimental_rpcInvalidations).toContainEqual([
-      "login",
-      "status",
-    ]);
+    expect(host.harness.experimental_rpcChanges).toEqual(
+      expect.arrayContaining([
+        { entity: "login", changes: ["updated"] },
+        { entity: "status", changes: ["updated"] },
+      ]),
+    );
     expect(
       host.harness.logEntries.some((entry) =>
         entry.message.includes(stored.credential),

@@ -1,10 +1,17 @@
+import { mapReadChange } from "@bb/query-tags/policy";
 import {
   pluginUpdateJobResponseSchema,
   pluginUpdateJobListResponseSchema,
   type PluginUpdateJob,
 } from "@bb/server-contract";
 export type { PluginUpdateJob } from "@bb/server-contract";
-import { jsonValueSchema, type JsonValue } from "@bb/domain";
+import {
+  pluginRpcEnvelopeSchema,
+  type ReadChange,
+  type ReadChangeReaction,
+  jsonValueSchema,
+  type JsonValue,
+} from "@bb/domain";
 import {
   installedPluginSchema,
   pluginRpcDiscoveryQuerySchema,
@@ -186,6 +193,10 @@ export interface ExperimentalPluginWatchRpcArgs<
   TOutput,
 > extends PluginRpcArgs<TOutput> {
   signal: AbortSignal;
+  experimental_reactToChange?(
+    value: TOutput | undefined,
+    change: ReadChange,
+  ): ReadChangeReaction<TOutput>;
   prepare?(value: TOutput): void | Promise<void>;
   onChange(value: TOutput): void;
   onError?(error: Error): void;
@@ -657,13 +668,9 @@ export function createPluginsArea(
               input.pluginId,
               `/rpc/${encodeURIComponent(input.method)}`,
             ),
-            z.object({
-              ok: z.literal(true),
-              result: jsonValueSchema,
-              tags: z.array(z.string()).default([]),
-              keyTags: z.record(z.string(), z.array(z.string())).default({}),
-              whileWatched: z.boolean().default(false),
-            }),
+            pluginRpcEnvelopeSchema
+              .omit({ changes: true })
+              .extend({ ok: z.literal(true) }),
             { ...jsonInit("POST", input.input ?? null), signal },
           );
           signal.throwIfAborted();
@@ -681,11 +688,28 @@ export function createPluginsArea(
           return {
             value: input.outputSchema.parse(envelope.result),
             fingerprint: canonicalPluginReadInput(envelope.result),
-            tags: [...envelope.tags, ...Object.values(envelope.keyTags).flat()],
+            dependencies: [
+              ...envelope.dependencies,
+              ...Object.values(envelope.keyDependencies).flat(),
+            ],
           };
         },
         retryNotFound: true,
-        tagsOf: (result) => result.tags,
+        dependenciesOf: (result) => result.dependencies,
+        reactToChange: (result, change) => {
+          const reaction = input.experimental_reactToChange?.(
+            result?.value,
+            change,
+          );
+          const mapped = mapReadChange(result, reaction, "value", (value) =>
+            input.outputSchema.parse(value),
+          );
+          if (mapped?.action === "patch")
+            mapped.data.fingerprint = canonicalPluginReadInput(
+              jsonValueSchema.parse(mapped.data.value),
+            );
+          return mapped;
+        },
         prepareKey: (result) => result.fingerprint,
         prepare: (result) => input.prepare?.(result.value),
         onChange: (result) => {
@@ -694,13 +718,9 @@ export function createPluginsArea(
       });
       if (input.signal.aborted) return watcher;
       stops.push(
-        realtime.subscribe({
-          event: "plugin:changed",
-          pluginId: input.pluginId,
-          callback: (event) => {
-            watcher.invalidate(event.tags);
-          },
-        }),
+        realtime.watchPluginChanges(input.pluginId, (change) =>
+          watcher.change(change),
+        ),
       );
       stops.push(
         realtime.subscribe({

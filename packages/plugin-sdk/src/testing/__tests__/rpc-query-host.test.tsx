@@ -62,7 +62,9 @@ it("updates selected load state without rendering unchanged rows again", async (
     rows: {
       input: z.object({ keys: z.array(z.string()) }),
       output: z.record(z.string(), z.number()),
-      keyTags: (key) => [key],
+      experimental_keyDependencies: (key) => [
+        { entity: key, changes: ["updated"] },
+      ],
     },
   });
   let release!: (rows: Record<string, number>) => void;
@@ -96,17 +98,21 @@ it.each(["success", "write-failure", "read-failure", "refusal"] as const)(
       detail: {
         input: z.object({ id: z.string() }),
         output: z.number(),
-        tags: () => ["row:a"],
+        experimental_dependencies: () => [
+          { entity: "row:a", changes: ["updated"] },
+        ],
       },
       rows: {
         input: z.object({ keys: z.array(z.string()) }),
         output: z.record(z.string(), z.number()),
-        keyTags: (key) => [`row:${key}`],
+        experimental_keyDependencies: (key) => [
+          { entity: `row:${key}`, changes: ["updated"] },
+        ],
       },
       save: {
         input: z.number(),
         output: z.number(),
-        invalidates: () => ["row:a"],
+        experimental_changes: () => [{ entity: "row:a", changes: ["updated"] }],
       },
     });
     let release!: () => void;
@@ -216,7 +222,10 @@ it.each(["success", "write-failure", "read-failure", "refusal"] as const)(
     fireEvent.click(slot.getByText("Save"));
     expect(slot.getByText("one:2/2")).toBeTruthy();
     expect(slot.getByText("two:2/2")).toBeTruthy();
-    await slot.experimental_invalidateRpc(["row:a"]);
+    await slot.experimental_publishRpcChange({
+      entity: "row:a",
+      changes: ["updated"],
+    });
     expect(slot.getByText("one:2/2")).toBeTruthy();
     await act(async () => {
       release();
@@ -246,7 +255,10 @@ it.each(["success", "write-failure", "read-failure", "refusal"] as const)(
       expect(slot.getByText("one:2/2")).toBeTruthy();
       expect(slot.getByText("two:2/2")).toBeTruthy();
       offline = false;
-      await slot.experimental_invalidateRpc(["row:a"]);
+      await slot.experimental_publishRpcChange({
+        entity: "row:a",
+        changes: ["updated"],
+      });
       await slot.findByText("one:3/3");
       expect(slot.queryByText("read offline")).toBeNull();
     }
@@ -389,4 +401,97 @@ it("retains plain and keyed watched reads until their consumers disable them", a
     probe.unmount();
     client.clear();
   }
+});
+
+it("updates only the keyed rows a pushed patch replaces and reloads invalid outputs", async () => {
+  const contract = defineRpcContract({
+    rows: {
+      input: z.object({ keys: z.array(z.string()) }),
+      output: z.record(z.string(), z.number().max(100)),
+      experimental_reactToChange: (_input, output, change) => {
+        if (
+          !output ||
+          change.entity !== "rows" ||
+          typeof change.value !== "number"
+        )
+          return undefined;
+        const key = change.changes.includes("a-updated") ? "a" : "b";
+        return {
+          action: "patch",
+          data: { ...output, [key]: change.value },
+        };
+      },
+    },
+    save: { input: z.null(), output: z.null() },
+  });
+  function Probe() {
+    const rows = experimental_useRpcKeyedQuery({
+      contract,
+      method: "rows",
+      keys: ["a", "b"],
+    });
+    const save = experimental_useRpcMutation({
+      contract,
+      method: "save",
+      optimistic: (_input, cache) => {
+        cache.updateKey("rows", "a", () => 10);
+        cache.updateKey("rows", "b", () => 20);
+      },
+    });
+    return (
+      <>
+        <output>
+          {rows.data?.a},{rows.data?.b}
+        </output>
+        <button
+          onClick={() => {
+            void save.mutate(null);
+          }}
+        >
+          Save
+        </button>
+      </>
+    );
+  }
+  const read = vi.fn(async () => ({ a: 1, b: 2 }));
+  const slot = renderSlot<{}, typeof contract>(
+    { component: Probe },
+    {},
+    {
+      experimental_rpcContract: contract,
+      rpc: { rows: read, save: () => null },
+    },
+  );
+  await slot.findByText("1,2");
+  fireEvent.click(slot.getByText("Save"));
+  await slot.findByText("10,20");
+  await vi.waitFor(() =>
+    expect(slot.rpcCalls.filter((call) => call.method === "save")).toHaveLength(
+      1,
+    ),
+  );
+  await slot.experimental_publishRpcChange({
+    entity: "rows",
+    id: "resource",
+    changes: ["a-updated"],
+    value: 3,
+  });
+  await slot.findByText("3,20");
+  expect(read).toHaveBeenCalledOnce();
+  await slot.experimental_publishRpcChange({
+    entity: "rows",
+    id: "resource",
+    changes: ["b-updated"],
+    value: 4,
+  });
+  await slot.findByText("3,4");
+  read.mockResolvedValue({ a: 3, b: 4 });
+  await slot.experimental_publishRpcChange({
+    entity: "rows",
+    id: "resource",
+    changes: ["b-updated"],
+    value: 999,
+  });
+  await slot.findByText("3,4");
+  expect(read).toHaveBeenCalledTimes(2);
 });

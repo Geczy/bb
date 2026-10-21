@@ -38,7 +38,10 @@ function renderConnect(
     ...slot,
     async publish(next: ConnectStatus) {
       snapshot = next;
-      await slot.experimental_invalidateRpc(null);
+      await slot.experimental_publishRpcChange({
+        entity: "plugin",
+        changes: ["reset"],
+      });
     },
   };
 }
@@ -208,7 +211,10 @@ describe("connect settings section", () => {
     expect(link.href).toBe("https://getbb.app/link?code=K7QP-2M4X");
     expect(link.target).toBe("_blank");
 
-    await slot.experimental_invalidateRpc(null, "bb-account");
+    await slot.experimental_publishRpcChange(
+      { entity: "plugin", changes: ["reset"] },
+      "bb-account",
+    );
     currentStatus = connected();
     await slot.publish(currentStatus);
     await slot.findByText("Connected");
@@ -666,7 +672,10 @@ describe("connect settings section", () => {
     })) as HTMLImageElement;
     expect(qr.src.startsWith("data:image/png")).toBe(true);
     failStatus = true;
-    await slot.experimental_invalidateRpc(["status"]);
+    await slot.experimental_publishRpcChange({
+      entity: "status",
+      changes: ["updated"],
+    });
     await slot.findByText("Could not load phone pairing: offline");
     expect(slot.getByText("K7QP-2M4X")).toBeTruthy();
     failStatus = false;

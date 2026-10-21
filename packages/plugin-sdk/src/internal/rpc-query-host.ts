@@ -6,23 +6,26 @@ import { experimental_PluginRpcCallError } from "../rpc-contract.js";
 import { useCallback, useEffect, useMemo } from "react";
 import { useIsFetching, type QueryClient } from "@tanstack/react-query";
 import {
-  invalidateTags,
-  useTaggedQuery,
-  pluginTagScope,
-  runTaggedRead,
-  taggedQueryOptions,
+  applyQueryChanges,
+  mapReadChange,
+  refreshLiveQueries,
+  useLiveQuery,
+  pluginChangeScope,
+  liveQueryOptions,
   optimisticQueryUpdate,
   optimisticKeyedUpdate,
   KeyedCollection,
   type OptimisticUpdate,
-  createTaggedKeyedQueryOwner,
-  useTaggedMutation,
+  createLiveKeyedQueryOwner,
+  useLiveMutation,
   useQuerySelection,
 } from "@bb/query-tags";
 import {
   canonicalPluginReadInput,
+  pluginRpcEnvelopeSchema,
   jsonValueSchema,
   type JsonValue,
+  type ReadChange,
 } from "@bb/domain";
 import { z } from "zod";
 import type {
@@ -44,18 +47,13 @@ export interface RpcQueryHost {
     read: { input: JsonValue } | { key: string },
   ): () => void;
 }
-const envelopeSchema = z.object({
-  result: jsonValueSchema,
-  whileWatched: z.boolean().default(false),
-  tags: z.array(z.string()).default([]),
-  keyTags: z.record(z.string(), z.array(z.string())).default({}),
-  invalidated: z.array(z.string()).default([]),
-});
-type Envelope = z.infer<typeof envelopeSchema>;
+type Envelope = z.infer<typeof pluginRpcEnvelopeSchema>;
 import type {
   PluginRpcContract,
+  PluginRpcMethodContract,
   PluginRpcCallArgs,
   PluginRpcResult,
+  StandardSchemaV1,
   StandardSchemaV1InferInput,
 } from "../rpc-contract.js";
 const rpcQueryKey = (pluginId: string, method: string, input: JsonValue) => [
@@ -66,12 +64,12 @@ const rpcQueryKey = (pluginId: string, method: string, input: JsonValue) => [
 ];
 const keyedQueryKey = (pluginId: string, method: string) =>
   rpcQueryKey(pluginId, method, { keyed: true });
-const keyedCollections = new Map<string, KeyedCollection<unknown>>();
+const keyedCollections = new Map<string, KeyedCollection<JsonValue>>();
 function keyedCollection(pluginId: string, method: string) {
   const name = JSON.stringify([pluginId, method]);
   let collection = keyedCollections.get(name);
   if (!collection) {
-    collection = new KeyedCollection(name);
+    collection = new KeyedCollection<JsonValue>(name);
     keyedCollections.set(name, collection);
   }
   return collection;
@@ -116,7 +114,7 @@ async function callRpcEnvelope(
   } catch (error) {
     throw experimental_PluginRpcCallError.from(error);
   }
-  const parsed = envelopeSchema.safeParse(raw);
+  const parsed = pluginRpcEnvelopeSchema.safeParse(raw);
   if (!parsed.success)
     throw new experimental_PluginRpcCallError({
       code: "invalid_response",
@@ -125,14 +123,41 @@ async function callRpcEnvelope(
   return parsed.data;
 }
 
-const tagsOf = (data: Envelope) => [
-  ...data.tags,
-  ...Object.values(data.keyTags).flat(),
-];
+function schemaValue(schema: StandardSchemaV1, value: unknown): unknown {
+  const result = schema["~standard"].validate(value);
+  if (result instanceof Promise) {
+    void result.catch(() => {});
+    throw new Error("Async patch validation requires a reload");
+  }
+  if (result.issues) throw new Error("Invalid patch output");
+  return result.value;
+}
+
+function rpcReadChange<Data extends { result: JsonValue }>(
+  method: PluginRpcMethodContract,
+  input: JsonValue,
+  data: Data | undefined,
+  change: ReadChange,
+  parse: (value: unknown) => Data["result"],
+) {
+  return mapReadChange(
+    data,
+    method.experimental_reactToChange?.(
+      schemaValue(method.input, input),
+      data?.result,
+      change,
+    ),
+    "result",
+    (value) => parse(schemaValue(method.output, value)),
+  );
+}
+
+const dependenciesOf = (data: Envelope | undefined) =>
+  data && [...data.dependencies, ...Object.values(data.keyDependencies).flat()];
 const watchedMethods = new WeakMap<QueryClient, Set<string>>();
 const owners = new WeakMap<
   QueryClient,
-  Map<string, ReturnType<typeof createTaggedKeyedQueryOwner<JsonValue>>>
+  Map<string, ReturnType<typeof createLiveKeyedQueryOwner<JsonValue>>>
 >();
 export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
   function useSubscription(
@@ -153,18 +178,23 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     const input = jsonValueSchema.parse(options.input ?? null);
     const queryKey = rpcQueryKey(pluginId, options.method, input);
     useSubscription(host, pluginId, options.enabled ?? true);
-    const query = useTaggedQuery(
+    const query = useLiveQuery(
       {
         queryKey,
         enabled: options.enabled,
-        ...taggedQueryOptions(host.queryClient, queryKey, {
-          scope: pluginTagScope(pluginId),
-          tagsOf,
+        ...liveQueryOptions(host.queryClient, queryKey, {
+          read: () => callRpcEnvelope(host, pluginId, options.method, input),
+          scope: pluginChangeScope(pluginId),
+          dependenciesOf,
+          reactToChange: (data, change) =>
+            rpcReadChange(
+              options.contract[options.method],
+              input,
+              data,
+              change,
+              jsonValueSchema.parse,
+            ),
         }),
-        queryFn: () =>
-          runTaggedRead(host.queryClient, queryKey, async () =>
-            callRpcEnvelope(host, pluginId, options.method, input),
-          ),
       },
       host.queryClient,
     );
@@ -239,11 +269,19 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     const id = JSON.stringify([pluginId, options.method]);
     let owner = cache.get(id);
     if (!owner) {
-      owner = createTaggedKeyedQueryOwner({
+      owner = createLiveKeyedQueryOwner({
         client: host.queryClient,
         queryKey: keyedQueryKey(pluginId, options.method),
-        scope: pluginTagScope(pluginId),
+        scope: pluginChangeScope(pluginId),
         collection: keyedCollection(pluginId, options.method),
+        reactToChange: (data, change, keys) =>
+          rpcReadChange(
+            options.contract[options.method],
+            { keys: [...keys] },
+            data,
+            change,
+            z.record(z.string(), jsonValueSchema).parse,
+          ),
         read: async (keys) => {
           const response = await callRpcEnvelope(
             host,
@@ -328,13 +366,17 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
   >(options: ExperimentalRpcMutationOptions<Contract, Method>) {
     const host = useHost();
     const pluginId = options.pluginId ?? host.pluginId;
-    const mutation = useTaggedMutation<
+    const mutation = useLiveMutation<
       StandardSchemaV1InferInput<Contract[Method]["input"]>,
       PluginRpcResult<Contract[Method]>
     >({
       client: host.queryClient,
-      invalidate: (tags) =>
-        invalidateTags(host.queryClient, pluginTagScope(pluginId), tags),
+      publish: (changes) =>
+        applyQueryChanges(
+          host.queryClient,
+          pluginChangeScope(pluginId),
+          changes,
+        ),
       call: async (input) => {
         const response = await callRpcEnvelope(
           host,
@@ -347,7 +389,6 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
           result: response.result as PluginRpcResult<Contract[Method]>,
         };
       },
-      meta: host.mutationMeta,
       optimistic: (input) => {
         const updates: OptimisticUpdate[] = [];
         options.optimistic?.(
@@ -356,6 +397,7 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
         );
         return updates;
       },
+      meta: host.mutationMeta,
     });
     const { mutate } = mutation;
     return {
@@ -393,10 +435,9 @@ export function createRpcQueryHooks(useHost: () => RpcQueryHost) {
     return {
       isRefreshing,
       refresh: () => {
-        void invalidateTags(
+        void refreshLiveQueries(
           host.queryClient,
-          pluginTagScope(host.pluginId),
-          null,
+          pluginChangeScope(host.pluginId),
         );
       },
     };

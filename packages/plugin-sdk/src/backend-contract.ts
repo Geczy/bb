@@ -1,3 +1,4 @@
+import type { ReadChange } from "@bb/domain";
 import type { EnvironmentRemoval } from "@bb/domain";
 import type { MachineBootstrapApi } from "./machine-bootstrap.js";
 import type Database from "better-sqlite3";
@@ -879,10 +880,7 @@ export interface PluginRpc {
       signal: AbortSignal,
     ) => void | Promise<void>,
   ): void;
-  /** Refresh reads whose contract tags overlap this nonempty list. */
-  experimental_invalidate(tags: readonly string[]): void;
-  /** Refresh every read of this plugin, including untagged reads. */
-  experimental_invalidateAll(): void;
+  experimental_publishChange(change: ReadChange): void;
   /**
    * Register a Standard Schema-driven rpc contract and its inferred handlers,
    * served at POST

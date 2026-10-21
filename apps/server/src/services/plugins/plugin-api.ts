@@ -1,5 +1,5 @@
-import { rpcInvalidationTags } from "@get-bb/plugin-sdk/internal/rpc-tags";
-import type { ContractTagDeclarations } from "@bb/domain";
+import { readChangeSchema, type ReadChange } from "@bb/domain";
+import type { ContractChangeDeclarations } from "@bb/domain";
 import {
   environmentCompositionSchema,
   validateServerAccessProviderDeclaration,
@@ -194,7 +194,7 @@ export interface PluginWebSocketRouteRecord {
 
 export interface PluginRpcHandler {
   whileWatched?: boolean;
-  declarations: ContractTagDeclarations<unknown, unknown>;
+  declarations: ContractChangeDeclarations<unknown, unknown>;
   publication: ReturnType<typeof publishRpcMethod>;
   inputSchema: StandardSchemaV1;
   outputSchema: StandardSchemaV1;
@@ -499,7 +499,7 @@ export function createPluginApi(options: {
    * Revoked when the handle is invalidated.
    */
   rpcCaller: PluginRpcCallerCredential;
-  invalidateRpc: (tags: readonly string[] | null) => void;
+  publishRpcChange: (change: ReadChange) => void;
   whileRpcWatched?: (
     method: string,
     handler: Parameters<PluginRpc["experimental_whileWatched"]>[1],
@@ -570,7 +570,7 @@ export function createPluginApi(options: {
     getLoopbackBaseUrl,
     rpcCaller,
     publishSignal,
-    invalidateRpc: optionsInvalidate,
+    publishRpcChange: optionsPublish,
     settingsChanged,
     reportNeedsConfiguration,
     isAgentToolNameTaken,
@@ -859,13 +859,9 @@ export function createPluginApi(options: {
       record.whileWatched = true;
       disposeHooks.push(options.whileRpcWatched(method, handler));
     },
-    experimental_invalidate(tags) {
+    experimental_publishChange(change) {
       assertLive();
-      optionsInvalidate(rpcInvalidationTags.parse(tags));
-    },
-    experimental_invalidateAll() {
-      assertLive();
-      optionsInvalidate(null);
+      optionsPublish(readChangeSchema.parse(change));
     },
     register(contract, handlers, options) {
       assertLive();

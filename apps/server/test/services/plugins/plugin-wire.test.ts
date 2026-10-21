@@ -24,7 +24,7 @@ const WIRE_SOURCE = `
     refuse: {
       input: z.enum(["forbidden", "not_found", "conflict", "invalid"]),
       output: z.null(),
-      invalidates: () => ["private"],
+      experimental_changes: () => [{ entity: "private", changes: ["updated"] }],
     },
     boom: { input: z.record(z.string(), z.unknown()), output: z.null() },
     publish: {
@@ -562,9 +562,9 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(await oldRpc.json()).toEqual({
       ok: true,
       result: { echoed: { kept: true } },
-      tags: [],
-      keyTags: {},
-      invalidated: [],
+      dependencies: [],
+      keyDependencies: {},
+      changes: [],
       whileWatched: false,
     });
     const candidateRoute = await harness.app.request(
@@ -587,9 +587,9 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(await ok.json()).toEqual({
       ok: true,
       result: { echoed: { x: 1 } },
-      tags: [],
-      keyTags: {},
-      invalidated: [],
+      dependencies: [],
+      keyDependencies: {},
+      changes: [],
       whileWatched: false,
     });
 
@@ -736,9 +736,9 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(await response.json()).toEqual({
       ok: true,
       result: "published",
-      tags: [],
-      keyTags: {},
-      invalidated: [],
+      dependencies: [],
+      keyDependencies: {},
+      changes: [],
       whileWatched: false,
     });
 
@@ -813,9 +813,9 @@ describe("plugin wire surfaces (http/rpc dispatcher + realtime)", () => {
     expect(await response.json()).toEqual({
       ok: true,
       result: { gen: firstGen + 1 },
-      tags: [],
-      keyTags: {},
-      invalidated: [],
+      dependencies: [],
+      keyDependencies: {},
+      changes: [],
       whileWatched: false,
     });
   });

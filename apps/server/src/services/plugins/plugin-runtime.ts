@@ -1622,7 +1622,8 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       getAppUrl: deps.getAppUrl ?? (() => null),
       getLoopbackBaseUrl: () => boundLoopbackBaseUrl,
       rpcCaller: rpcCallers.issue(row.id),
-      invalidateRpc: (tags) => deps.hub.notifyPluginChanged(row.id, tags),
+      publishRpcChange: (change) =>
+        deps.hub.notifyPluginChanged(row.id, change),
       whileRpcWatched: (method, handler) => {
         const active = new Map<string, AbortController>();
         const isWatchedRead = (target: PluginReadSubscriptionTarget) =>
@@ -1903,7 +1904,10 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
       );
     }
     disposeUnavailableProviderRegistrations(row.id);
-    deps.hub.notifyPluginChanged(row.id, null);
+    deps.hub.notifyPluginChanged(row.id, {
+      entity: "plugin",
+      changes: ["reset"],
+    });
     loaded.set(row.id, plugin);
     appBundles.set(row.id, appBundleCandidate.snapshot);
     if (hostArtifactCandidate === null) hostArtifacts.delete(row.id);
@@ -2003,7 +2007,7 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
     const plugin = loaded.get(id);
     if (!plugin) return;
     loaded.delete(id);
-    deps.hub.notifyPluginChanged(id, null);
+    deps.hub.notifyPluginChanged(id, { entity: "plugin", changes: ["reset"] });
     await disposePluginInstance(id, plugin);
     releaseMutableRoots(plugin.moduleRootUrls);
     hostArtifacts.delete(id);

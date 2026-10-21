@@ -61,7 +61,9 @@ export function createConnectPlugin() {
       getIdentity: () => tunnel.getIdentity(),
       log: bb.log,
       onChange: () => {
-        bb.rpc.experimental_invalidate(["status"]);
+        [{ entity: "status", changes: ["updated"] }].forEach((change) =>
+          bb.rpc.experimental_publishChange(change),
+        );
       },
     });
 
@@ -80,7 +82,9 @@ export function createConnectPlugin() {
       getLoopbackBaseUrl,
       log: bb.log,
       onStatusChange: (status) => {
-        bb.rpc.experimental_invalidate(["status"]);
+        [{ entity: "status", changes: ["updated"] }].forEach((change) =>
+          bb.rpc.experimental_publishChange(change),
+        );
         recheckServerAccess(status);
       },
     });

@@ -1,3 +1,4 @@
+import { coreRead, PLUGIN_DEPENDENCY } from "@/hooks/queries/core-read";
 import { experimental_PluginRpcCallError } from "@get-bb/plugin-sdk";
 import { createRpcQueryHooks } from "@get-bb/plugin-sdk/internal/rpc-query-host";
 import { subscribeComposerSubmitted } from "./composer-submissions";
@@ -293,7 +294,9 @@ export function useSettings(): PluginSettingsState {
   const pluginId = usePluginId();
   const query = useQuery({
     queryKey: pluginSdkSettingsQueryKey(pluginId),
-    queryFn: () => fetchPluginSdkSettings(fetch, pluginId),
+    ...coreRead(PLUGIN_DEPENDENCY, () =>
+      fetchPluginSdkSettings(fetch, pluginId),
+    ),
     staleTime: 30_000,
   });
   return {

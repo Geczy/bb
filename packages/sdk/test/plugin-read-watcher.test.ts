@@ -163,7 +163,7 @@ it("preserves preparation backoff across invalidations while still reading curre
 });
 
 it.each(["own", "unrelated"])(
-  "matches in-flight response tags against %s invalidations",
+  "matches in-flight response dependencies against %s invalidations",
   async (tag) => {
     let release!: (value: number) => void;
     const first = new Promise<number>((resolve) => {
@@ -174,13 +174,13 @@ it.each(["own", "unrelated"])(
     const watch = createPluginReadWatcher({
       signal: new AbortController().signal,
       read,
-      tagsOf: () => ["own"],
+      dependenciesOf: () => [{ entity: "own", changes: ["updated"] }],
       onChange,
       onStop: vi.fn(),
     });
     watch.refresh();
     await vi.waitFor(() => expect(read).toHaveBeenCalledOnce());
-    watch.invalidate([tag]);
+    watch.change({ entity: tag, changes: ["updated"] });
     release(1);
     await vi.waitFor(() => expect(onChange).toHaveBeenCalledOnce());
     expect(onChange.mock.calls).toEqual([[tag === "own" ? 2 : 1]]);
@@ -220,6 +220,39 @@ it("prepares an unchanged snapshot again only after an error resets synchronizat
   vi.setSystemTime(Date.now() - 1);
   await vi.advanceTimersByTimeAsync(1001);
   expect(prepare).toHaveBeenCalledTimes(2);
+  watch();
+  await watch.done;
+});
+
+it("prepares pushed values before publishing without reading again", async () => {
+  const read = vi.fn(async () => 1);
+  const onChange = vi.fn();
+  let finish!: () => void;
+  const prepared = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const prepare = vi.fn(async (value: number) => {
+    if (value === 2) await prepared;
+  });
+  const watch = createPluginReadWatcher({
+    signal: new AbortController().signal,
+    read,
+    prepare,
+    onChange,
+    onStop: vi.fn(),
+    reactToChange: (data, change) =>
+      data !== undefined && typeof change.value === "number"
+        ? { action: "patch", data: change.value }
+        : undefined,
+  });
+  watch.refresh();
+  await vi.waitFor(() => expect(onChange).toHaveBeenCalledWith(1));
+  watch.change({ entity: "row", id: "a", changes: ["updated"], value: 2 });
+  await vi.waitFor(() => expect(prepare).toHaveBeenCalledWith(2));
+  expect(onChange).toHaveBeenCalledOnce();
+  finish();
+  await vi.waitFor(() => expect(onChange).toHaveBeenLastCalledWith(2));
+  expect(read).toHaveBeenCalledOnce();
   watch();
   await watch.done;
 });

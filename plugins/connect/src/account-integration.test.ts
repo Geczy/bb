@@ -108,7 +108,7 @@ async function loadBoth(
       plugins: { callRpc: callAccountRpc as never },
     },
   });
-  accountHost.harness.experimental_onRpcInvalidation(() =>
+  accountHost.harness.experimental_onRpcChange(() =>
     connectHost.harness.sdk.emitPluginChange("bb-account"),
   );
   await seedConnect?.(connectHost);

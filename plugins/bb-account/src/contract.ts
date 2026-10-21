@@ -118,7 +118,9 @@ export const accountRpcContract = defineRpcContract({
       "This bb's getbb.app account. revision increases on every change.",
     input: emptyInputSchema,
     output: accountStatusSchema,
-    tags: () => ["status"],
+    experimental_dependencies: () => [
+      { entity: "status", changes: ["updated"] },
+    ],
   },
   [FETCH_METHOD]: {
     experimental_description:
@@ -146,19 +148,28 @@ export const accountPrivateRpcContract = defineRpcContract({
   "login.start": {
     input: z.object({ baseUrl: baseUrlOverrideSchema }).strict(),
     output: loginViewSchema,
-    invalidates: () => ["login", "status"],
+    experimental_changes: () => [
+      { entity: "login", changes: ["updated"] },
+      { entity: "status", changes: ["updated"] },
+    ],
   },
   "login.poll": {
     input: z
       .object({ loginId: z.string().min(1).nullable().default(null) })
       .strict(),
     output: loginPollOutputSchema,
-    tags: () => ["login", "status"],
+    experimental_dependencies: () => [
+      { entity: "login", changes: ["updated"] },
+      { entity: "status", changes: ["updated"] },
+    ],
   },
   "login.cancel": {
     input: z.object({ loginId: z.string().min(1) }).strict(),
     output: z.object({ login: loginViewSchema.nullable() }).strict(),
-    invalidates: () => ["login", "status"],
+    experimental_changes: () => [
+      { entity: "login", changes: ["updated"] },
+      { entity: "status", changes: ["updated"] },
+    ],
   },
   redeemCode: {
     input: z
@@ -168,12 +179,18 @@ export const accountPrivateRpcContract = defineRpcContract({
       })
       .strict(),
     output: accountStatusSchema,
-    invalidates: () => ["login", "status"],
+    experimental_changes: () => [
+      { entity: "login", changes: ["updated"] },
+      { entity: "status", changes: ["updated"] },
+    ],
   },
   signOut: {
     input: emptyInputSchema,
     output: signOutResultSchema,
-    invalidates: () => ["login", "status"],
+    experimental_changes: () => [
+      { entity: "login", changes: ["updated"] },
+      { entity: "status", changes: ["updated"] },
+    ],
   },
 });
 
