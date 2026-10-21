@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { CHROME_SECTION_LABEL_CLASS } from "@bb/shared-ui/chrome-style-tokens";
 import { Icon } from "@bb/shared-ui/icon";
@@ -119,41 +119,56 @@ export function ComposerStarterRows({
     () => createCoreComposerActions({ ...promptDraft, focus }),
     [focus, promptDraft],
   );
-  const selectedStarterRef = useRef<ComposerStarter["id"] | null>(null);
+  const [suggestionIds] = useState(
+    () =>
+      new Map(
+        COMPOSER_STARTERS.map((starter) => [starter.id, crypto.randomUUID()]),
+      ),
+  );
   const handleSelect = useCallback(
     (starter: ComposerStarter) => {
-      selectedStarterRef.current = starter.id;
-      recordTelemetryEvent({
-        name: "composer_starter",
-        properties: { action: "clicked", starter: starter.id },
-      });
+      const suggestionId = suggestionIds.get(starter.id);
+      if (suggestionId !== undefined) {
+        recordTelemetryEvent({
+          name: "suggestion_accepted",
+          properties: {
+            surface: "starter_row",
+            kind: starter.id,
+            suggestion_analytics_id: suggestionId,
+          },
+        });
+      }
       composerActions.replace({ text: starter.prompt, mentions: [] });
       composerActions.focus();
     },
-    [composerActions],
+    [composerActions, suggestionIds],
   );
   const starters = isProjectless
     ? COMPOSER_STARTERS.filter((starter) => !starter.needsProject)
     : COMPOSER_STARTERS;
   const visible = !isSubmitting && inputEmpty && hasNoThreads;
-  const shownRecordedRef = useRef(false);
+  const shownRef = useRef(new Set<ComposerStarter["id"]>());
   useEffect(() => {
-    if (!visible || shownRecordedRef.current) return;
-    shownRecordedRef.current = true;
-    recordTelemetryEvent({
-      name: "composer_starter",
-      properties: { action: "shown", starter: null },
-    });
-  }, [visible]);
-  useEffect(() => {
-    const starter = selectedStarterRef.current;
-    if (!isSubmitting || starter === null) return;
-    selectedStarterRef.current = null;
-    recordTelemetryEvent({
-      name: "composer_starter",
-      properties: { action: "sent", starter },
-    });
-  }, [isSubmitting]);
+    if (!visible) return;
+    const shownStarters = isProjectless
+      ? COMPOSER_STARTERS.filter((starter) => !starter.needsProject)
+      : COMPOSER_STARTERS;
+    for (const starter of shownStarters) {
+      if (shownRef.current.has(starter.id)) continue;
+      const suggestionId = suggestionIds.get(starter.id);
+      if (suggestionId === undefined) continue;
+      shownRef.current.add(starter.id);
+      recordTelemetryEvent({
+        name: "suggestion_shown",
+        properties: {
+          surface: "starter_row",
+          kind: starter.id,
+          trigger: "first_run",
+          suggestion_analytics_id: suggestionId,
+        },
+      });
+    }
+  }, [isProjectless, suggestionIds, visible]);
   if (!visible) {
     return null;
   }

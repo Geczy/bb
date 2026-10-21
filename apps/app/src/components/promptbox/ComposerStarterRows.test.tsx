@@ -151,46 +151,49 @@ describe("ComposerStarterRows", () => {
     expect(screen.queryByText("Try asking")).toBeNull();
   });
 
-  it("records the rows shown once, a click with its row, and a send after the click", () => {
+  it("records each shown row once, and a click with the same suggestion ID", () => {
     const navigation = navigationWithThreads(0);
     const props = {
       promptDraft,
       focus: vi.fn(),
-      isProjectless: false,
+      isProjectless: true,
+      isSubmitting: false,
       sidebarNavigation: navigation,
     };
-    const { rerender } = render(
-      <ComposerStarterRows {...props} isSubmitting={false} />,
-    );
-    expect(vi.mocked(recordTelemetryEvent).mock.calls).toEqual([
-      [
-        {
-          name: "composer_starter",
-          properties: { action: "shown", starter: null },
-        },
-      ],
-    ]);
+    const { rerender } = render(<ComposerStarterRows {...props} />);
+    rerender(<ComposerStarterRows {...props} isProjectless={false} />);
+
+    const shown = vi
+      .mocked(recordTelemetryEvent)
+      .mock.calls.map(([event]) => event)
+      .filter((event) => event.name === "suggestion_shown");
+    expect(
+      shown.map((event) =>
+        event.name === "suggestion_shown" ? event.properties.kind : null,
+      ),
+    ).toEqual(["make_bb_yours", "explain_codebase", "fix_todo"]);
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Fill the message box: Make bb yours",
+        name: "Fill the message box: Fix a small TODO",
       }),
     );
-    rerender(<ComposerStarterRows {...props} isSubmitting />);
 
-    expect(vi.mocked(recordTelemetryEvent).mock.calls.slice(1)).toEqual([
-      [
-        {
-          name: "composer_starter",
-          properties: { action: "clicked", starter: "make_bb_yours" },
-        },
-      ],
-      [
-        {
-          name: "composer_starter",
-          properties: { action: "sent", starter: "make_bb_yours" },
-        },
-      ],
-    ]);
+    const fixTodoShown = shown.find(
+      (event) =>
+        event.name === "suggestion_shown" &&
+        event.properties.kind === "fix_todo",
+    );
+    expect(vi.mocked(recordTelemetryEvent).mock.calls.at(-1)?.[0]).toEqual({
+      name: "suggestion_accepted",
+      properties: {
+        surface: "starter_row",
+        kind: "fix_todo",
+        suggestion_analytics_id:
+          fixTodoShown?.name === "suggestion_shown"
+            ? fixTodoShown.properties.suggestion_analytics_id
+            : "missing",
+      },
+    });
   });
 });

@@ -216,6 +216,14 @@ const onboardingStepTelemetryPropertiesSchema = z
   })
   .strict();
 
+const starterRowSuggestionTelemetryPropertiesSchema = z
+  .object({
+    surface: z.literal("starter_row"),
+    kind: z.enum(["make_bb_yours", "explain_codebase", "fix_todo"]),
+    suggestion_analytics_id: z.string().uuid(),
+  })
+  .strict();
+
 export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
   z
     .object({
@@ -248,15 +256,16 @@ export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
     .strict(),
   z
     .object({
-      name: z.literal("composer_starter"),
-      properties: z
-        .object({
-          action: z.enum(["shown", "clicked", "sent"]),
-          starter: z
-            .enum(["make_bb_yours", "explain_codebase", "fix_todo"])
-            .nullable(),
-        })
+      name: z.literal("suggestion_shown"),
+      properties: starterRowSuggestionTelemetryPropertiesSchema
+        .extend({ trigger: z.literal("first_run") })
         .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("suggestion_accepted"),
+      properties: starterRowSuggestionTelemetryPropertiesSchema,
     })
     .strict(),
   z
