@@ -78,7 +78,7 @@ async function setup() {
   };
   const record = vi.fn(async () => ({ ok: true as const }));
   const listEvents = vi.fn(async () => data.events);
-  const fake = createFakePluginHost({
+  let fake = createFakePluginHost({
     pluginId: "push-notifications",
     sdk: {
       threads: {
@@ -114,6 +114,12 @@ async function setup() {
   }
   return {
     ...fake,
+    get harness() {
+      return fake.harness;
+    },
+    async reload() {
+      fake = await fake.harness.lifecycle.reload(factory);
+    },
     data,
     factory,
     eligible,
@@ -213,7 +219,7 @@ describe("notification Hint lifecycle", () => {
       host.data.thread.status = "idle";
       host.data.interactions = [];
       expect(await host.eligible()).toEqual(first);
-      await host.harness.lifecycle.reload(host.factory);
+      await host.reload();
       expect(await host.eligible()).toEqual(first);
     } finally {
       await host.harness.lifecycle.dispose();
@@ -230,7 +236,7 @@ describe("notification Hint lifecycle", () => {
       expect(host.record).not.toHaveBeenCalled();
       host.data.thread.status = "idle";
       host.data.events = [];
-      await host.harness.lifecycle.reload(host.factory);
+      await host.reload();
       expect((await host.eligible()).suggestion).not.toBeNull();
       expect(host.record).not.toHaveBeenCalled();
     } finally {
@@ -264,7 +270,7 @@ describe("notification Hint lifecycle", () => {
             lastAssistantText: null,
           });
           host.data.events = [];
-          await host.harness.lifecycle.reload(host.factory);
+          await host.reload();
         }
         expect((await host.eligible()).suggestion).not.toBeNull();
         expect(host.record).not.toHaveBeenCalled();
@@ -309,7 +315,7 @@ describe("notification Hint lifecycle", () => {
           suggestion_analytics_id: id,
         },
       });
-      await host.harness.lifecycle.reload(host.factory);
+      await host.reload();
       await host.action("shown", id);
       const dismissed = await Promise.all([
         host.action("dismiss", id),
@@ -326,7 +332,7 @@ describe("notification Hint lifecycle", () => {
         suggestion: null,
         nextCheckAt: host.data.now + SNOOZE_MS,
       });
-      await host.harness.lifecycle.reload(host.factory);
+      await host.reload();
       host.data.now += SNOOZE_MS - 1;
       expect((await host.eligible()).suggestion).toBeNull();
       host.data.now += 1;
@@ -385,7 +391,7 @@ describe("notification Hint lifecycle", () => {
         dismissCount: 0,
         suggestion: null,
       });
-      await host.harness.lifecycle.reload(host.factory);
+      await host.reload();
       expect((await host.eligible()).suggestion).toBeNull();
     } finally {
       await host.harness.lifecycle.dispose();

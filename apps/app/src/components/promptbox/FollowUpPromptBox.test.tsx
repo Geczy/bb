@@ -371,7 +371,9 @@ describe("FollowUpPromptBox", () => {
     let showStatus = () => {};
     function StatusBanner() {
       const [visible, setVisible] = useState(false);
-      showStatus = () => setVisible(true);
+      useEffect(() => {
+        showStatus = () => setVisible(true);
+      }, []);
       return visible ? (
         <div data-testid="plugin-status">Retrying the turn</div>
       ) : null;

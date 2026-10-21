@@ -1713,7 +1713,7 @@ export function RealComposerAnnotated({
               >
                 <MiniIcon icon="Bell" className="size-3.5" />
                 <span>Your next step</span>
-                <span className="ml-auto rounded bg-primary px-2 py-1 text-primary-foreground">
+                <span className="ml-auto rounded bg-foreground px-2 py-1 text-background">
                   Try it
                 </span>
                 <span>Not now</span>

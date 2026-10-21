@@ -165,7 +165,7 @@ export function NotificationsHint() {
           type="button"
           disabled={busy}
           onClick={() => void turnOn(suggestionId)}
-          className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          className="rounded-md bg-foreground px-3 py-1.5 font-medium text-background hover:opacity-90 disabled:opacity-50"
         >
           Turn on
         </button>

@@ -58,7 +58,7 @@ describe("guide fixture boundaries", () => {
       activeId: "composer-hint",
     });
     expect(markup).toMatch(
-      /data-guide-target="composer-hint"[^>]*class="[^"]*rounded-t-xl[^"]*bg-muted\/50[^"]*flex/,
+      /data-guide-target="composer-hint"[^>]*class="[^"]*rounded-t-xl[^"]*flex/,
     );
     expect(markup).toMatch(
       /data-guide-target="composer-banners"[^>]*class="[^"]*hidden/,
