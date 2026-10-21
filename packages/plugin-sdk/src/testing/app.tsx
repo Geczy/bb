@@ -35,6 +35,7 @@ import {
   type ComposerSelection,
   type ComposerSubmitOptions,
   type ComposerView,
+  type ExperimentalThreadContextSegmentRegistration,
   type ExperimentalThreadFixedTabRegistration,
   type ExperimentalAppOverlayRegistration,
   type ExperimentalSidebarNavigationActions,
@@ -1580,6 +1581,7 @@ export interface CapturedPluginApp {
   settingsSections: PluginSettingsSectionRegistration[];
   appOverlays: ExperimentalAppOverlayRegistration[];
   navPanels: PluginNavPanelRegistration[];
+  threadContextSegments: ExperimentalThreadContextSegmentRegistration[];
   threadFixedTabs: ExperimentalThreadFixedTabRegistration[];
   threadPanelActions: PluginThreadPanelActionRegistration[];
   newThreadPanelActions: PluginNewThreadPanelActionRegistration[];

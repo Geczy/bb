@@ -428,6 +428,7 @@ const dirtyContextBannerSection =
 
 const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
   <ThreadPromptContextBanner
+    threadId="thread-banner-fixture"
     archivedSection={null}
     environmentGoneSection={null}
     gitSection={{
@@ -450,6 +451,7 @@ const contextBannerElement: ReactNode = dirtyContextBannerSection ? (
 
 const archivedContextBannerElement: ReactNode = (
   <ThreadPromptContextBanner
+    threadId="thread-banner-fixture"
     archivedSection={{ archivedAt: 1_731_456_000_000 }}
     environmentGoneSection={null}
     gitSection={null}
@@ -464,6 +466,7 @@ const archivedContextBannerElement: ReactNode = (
 
 const environmentGoneContextBannerElement: ReactNode = (
   <ThreadPromptContextBanner
+    threadId="thread-banner-fixture"
     archivedSection={null}
     environmentGoneSection={{ status: "destroyed" }}
     gitSection={null}

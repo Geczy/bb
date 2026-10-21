@@ -218,10 +218,12 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Show live state for the thread on screen, not just a static button",
           "Sit in the same row as bb's own header controls",
+          "Move actions into the menu in compact or narrow split headers",
         ],
         apiSymbols: [
           "PluginThreadHeaderActionRegistration",
           "PluginThreadHeaderActionProps",
+          "PluginThreadHeaderActionRegistration.experimental_useOverflowActions",
         ],
         experimental: true,
       },
@@ -514,8 +516,15 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Warn or inform before someone sends, such as a rate limit or a retry",
           "Show only on new threads, open threads, or queued messages",
+          "Add an inline thread-context segment, with details below the shared row",
         ],
-        apiSymbols: ["ComposerCustomization", "PluginComposerScope"],
+        apiSymbols: [
+          "ComposerCustomization",
+          "PluginComposerScope",
+          "PluginAppSlots.experimental_threadContextSegment",
+          "ExperimentalThreadContextSegmentRegistration",
+          "ExperimentalThreadContextSegmentProps",
+        ],
         firstParty: ["Send later", "Workflows"],
       },
       {

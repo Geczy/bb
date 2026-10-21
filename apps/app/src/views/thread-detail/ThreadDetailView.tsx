@@ -104,7 +104,7 @@ import { Button } from "@bb/shared-ui/button";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { PluginThreadHeaderActions } from "@/components/plugin/PluginThreadHeaderActions";
-import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOpenButton";
+import { CoreWorkspaceHeaderContext } from "@/components/thread/core-thread-header-actions";
 import {
   formatEnvironmentDisplay,
   type EnvironmentDisplayHostContext,
@@ -2315,37 +2315,6 @@ function ThreadDetailViewInternal(
     workspaceDeleted: isWorkspaceDeleted,
   });
   const threadTitle = getThreadDisplayTitle(thread);
-  const responsiveWorkspaceActions: PluginThreadActionsInlineItem[] =
-    workspaceOpenPath && preferredDirectoryTarget
-      ? [
-          preferredDirectoryTarget,
-          ...directoryOpenTargets.filter(
-            (target) => target.id !== preferredDirectoryTarget.id,
-          ),
-        ].map((target) => ({
-          key: `workspace/${target.id}`,
-          group: THREAD_HEADER_ACTIONS_GROUP,
-          action: {
-            icon: "FolderOpen",
-            label: `Open workspace in ${target.label}`,
-            run: async () => {
-              if (target.id === preferredDirectoryTarget.id) {
-                await openPathInPreferredDirectoryTarget({
-                  lineNumber: null,
-                  path: workspaceOpenPath,
-                });
-                return;
-              }
-              await openPathInDirectoryTarget({
-                lineNumber: null,
-                path: workspaceOpenPath,
-                rememberTarget: true,
-                targetId: target.id,
-              });
-            },
-          },
-        }))
-      : [];
   const showGitChanges =
     systemConfigQuery.data?.generalSettings.showGitChanges ?? false;
   const threadHeaderGitActions =
@@ -2370,84 +2339,87 @@ function ThreadDetailViewInternal(
       ? { id: thread.environmentId, path: environment.path }
       : null,
   );
-  const responsiveHeaderActions = [
-    ...responsiveWorkspaceActions,
-    ...responsiveGitActions,
-  ];
-  const workspaceOpenButton =
-    workspaceOpenPath && preferredDirectoryTarget ? (
-      <ThreadWorkspaceOpenButton
-        preferredTarget={preferredDirectoryTarget}
-        targets={directoryOpenTargets}
-        onOpenPreferredTarget={async () => {
-          await openPathInPreferredDirectoryTarget({
-            lineNumber: null,
-            path: workspaceOpenPath,
-          });
-        }}
-        onOpenTarget={async (targetId) => {
-          await openPathInDirectoryTarget({
-            lineNumber: null,
-            path: workspaceOpenPath,
-            rememberTarget: true,
-            targetId,
-          });
-        }}
-      />
-    ) : undefined;
+  const workspaceHeader =
+    workspaceOpenPath && preferredDirectoryTarget
+      ? {
+          preferredTarget: preferredDirectoryTarget,
+          targets: directoryOpenTargets,
+          onOpenPreferredTarget: async () => {
+            await openPathInPreferredDirectoryTarget({
+              lineNumber: null,
+              path: workspaceOpenPath,
+            });
+          },
+          onOpenTarget: async (targetId: string) => {
+            await openPathInDirectoryTarget({
+              lineNumber: null,
+              path: workspaceOpenPath,
+              rememberTarget: true,
+              targetId,
+            });
+          },
+        }
+      : null;
   const timelineHeader = (
-    <ThreadDetailHeader
-      actionsMenu={({
-        includeResponsiveActions,
-        requestRename,
-        onCloseAutoFocus,
-      }) => (
-        <ThreadActionsMenu
-          thread={threadActionTarget}
-          trigger={(triggerProps) => (
-            <Button
-              {...triggerProps}
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={cn(
-                triggerProps.className,
-                "rounded-md p-0",
-                "data-[state=open]:bg-state-active data-[state=open]:text-foreground",
-                HEADER_ICON_BUTTON_CLASS,
-              )}
-              aria-label="Thread actions"
-              onClick={(event) => {
-                triggerProps.onClick?.(event);
-                event.stopPropagation();
-              }}
-            >
-              <Icon
-                name="MoreHorizontal"
-                className={COARSE_POINTER_ICON_SIZE_CLASS}
+    <CoreWorkspaceHeaderContext.Provider value={workspaceHeader}>
+      <PluginThreadHeaderActions
+        threadId={thread.id}
+        projectId={thread.projectId}
+      >
+        {({ actions: overflowActions, controls }) => (
+          <ThreadDetailHeader
+            actionsMenu={({
+              includeResponsiveActions,
+              requestRename,
+              onCloseAutoFocus,
+            }) => (
+              <ThreadActionsMenu
+                thread={threadActionTarget}
+                trigger={(triggerProps) => (
+                  <Button
+                    {...triggerProps}
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      triggerProps.className,
+                      "rounded-md p-0",
+                      "data-[state=open]:bg-state-active data-[state=open]:text-foreground",
+                      HEADER_ICON_BUTTON_CLASS,
+                    )}
+                    aria-label="Thread actions"
+                    onClick={(event) => {
+                      triggerProps.onClick?.(event);
+                      event.stopPropagation();
+                    }}
+                  >
+                    <Icon
+                      name="MoreHorizontal"
+                      className={COARSE_POINTER_ICON_SIZE_CLASS}
+                    />
+                  </Button>
+                )}
+                inline={
+                  includeResponsiveActions
+                    ? [...overflowActions, ...responsiveGitActions]
+                    : []
+                }
+                requestRename={requestRename}
+                onCloseAutoFocus={onCloseAutoFocus}
               />
-            </Button>
-          )}
-          inline={includeResponsiveActions ? responsiveHeaderActions : []}
-          requestRename={requestRename}
-          onCloseAutoFocus={onCloseAutoFocus}
-        />
-      )}
-      isSecondaryPanelOpen={isSecondaryPanelOpen}
-      onClosePane={onRequestClose ?? undefined}
-      onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
-      onToggleSecondaryPanel={toggleSecondaryPanel}
-      pluginActions={
-        <PluginThreadHeaderActions
-          threadId={thread.id}
-          projectId={thread.projectId}
-        />
-      }
-      threadHeaderGitActions={threadHeaderGitActions}
-      threadId={thread.id}
-      threadTitle={threadTitle}
-      workspaceOpenButton={workspaceOpenButton}
-    />
+            )}
+            isSecondaryPanelOpen={isSecondaryPanelOpen}
+            onClosePane={onRequestClose ?? undefined}
+            onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
+            onToggleSecondaryPanel={toggleSecondaryPanel}
+            pluginActions={controls}
+            threadHeaderGitActions={threadHeaderGitActions}
+            threadId={thread.id}
+            threadTitle={threadTitle}
+          />
+        )}
+      </PluginThreadHeaderActions>
+    </CoreWorkspaceHeaderContext.Provider>
   );
   const composerFooter = (
     <ThreadDetailPromptArea

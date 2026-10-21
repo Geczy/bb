@@ -3264,3 +3264,41 @@ back/forward navigation, crash/reload recovery, links and overflow.
 - **Core caller:** the thread Info registration uses the same registry, content host, destination resolution, and selection path as plugin fixed tabs. Its existing `thread-info` wire kind/id is retained for saved-selection compatibility. Diff remains the pinned core tab until its plugin migration.
 - **Info host dependency:** Info still receives rendered metadata through its core host context. It needs `ThreadMetadataContentProps` from `ThreadDetailView`: thread/project and parent candidates/permissions/loading state, environment/host/workspace/PR snapshots and errors, the pane's merge-base selection/ref/options/search/change handlers, the thread-storage browser controller, and parent/file/commit navigation callbacks. `ThreadDetailSecondaryContent` also supplies metadata loading state and gates fork reads on panel visibility. These pane-local controllers and callbacks cannot be reconstructed from `threadId` alone without moving their ownership or duplicating state; the fixed-tab API does not expose this core-only context.
 - **Stabilization:** exercise visibility changes, plugin reload/disable/re-enable, split panels, compact drawers, independent threads, persistence/conflicts, and untargeted navigation. Audit the reference distinction from nav-panel tabs, then rename project-wide and remove this entry.
+
+## Thread context segments and header overflow (SDK 0.6.68)
+
+`app.slots.experimental_threadContextSegment` registers an integrated context
+contribution for an existing thread. `ExperimentalThreadContextSegmentRegistration`
+uses `placement: "inline"` by default: the host mounts its component separately
+for `part: "summary"` in the context row and `part: "details"` below that row.
+`ExperimentalThreadContextSegmentProps` supplies the thread id, inline segment
+count, and shared per-registration disclosure state (`isExpanded`, `onToggle`).
+Before cards receive only the summary part and own their chrome. The optional
+`useVisible` hook runs in plugin scope; false hides the contribution and excludes
+it from the count. Registrations are ordered by plugin id and registration order,
+after core. Generation and thread changes remount their content. Crashes are
+contained to the contribution. Read-only history retains core's parent context;
+plugin segments appear on the writable context surface.
+
+Core's parent-thread summary and disclosure (including read-only history) and
+active-child-thread card register through the same collector and mounts. They
+consume typed pane-local relationship and disclosure data in React contexts;
+no rendered ReactNode is passed into their implementation. Existing git and PR
+segments remain in core until PR 4. D3 moves their Info rows into Diff in that
+PR, so this change intentionally adds no Info-section API without a core caller.
+
+`PluginThreadHeaderActionRegistration.experimental_useOverflowActions` is a hook
+returning ordered `PluginThreadAction` values for the current thread/project.
+The same registration's control is shown in a wide header; compact and narrow
+split headers replace it with these actions in the existing thread menu. Omit
+the hook to retain the previous always-inline behavior. Hooks run independently
+of viewport and controls, so their state survives the responsive transition.
+Actions use the existing menu's choice handling, rename binding and error
+containment. Core's Open workspace button and its ordered target actions use
+this registration, including preferred-target behavior and target persistence.
+
+Stabilization requires auditing count/visibility changes, independent summary
+and details mounts, disclosure accessibility/focus, reload and disable cleanup,
+plugin crashes, multi-pane isolation, responsive overflow and ordering with
+core actions. Verify core and third-party registrations against the same
+contracts before removing the experimental names.

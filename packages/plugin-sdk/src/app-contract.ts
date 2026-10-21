@@ -1762,6 +1762,28 @@ export interface PluginSidebarThreadActions {
   requestDelete(threadId: string): void;
 }
 
+/** Integrated context beside the thread composer, with shared disclosure state. */
+export interface ExperimentalThreadContextSegmentProps {
+  threadId: string;
+  /** Summary renders in the row; details renders below the whole row. Each is a separate mount. */
+  part: "summary" | "details";
+  /** Number of inline segments, including core. Zero for a before card. */
+  segmentCount: number;
+  isExpanded: boolean;
+  onToggle(): void;
+}
+
+/** Before contributions own their card; inline contributions share the context row. */
+export interface ExperimentalThreadContextSegmentRegistration {
+  id: string;
+  /** Accessible name of the summary group; label controls separately. */
+  title: string;
+  /** Inline by default. Before cards receive only the summary part. */
+  placement?: "inline" | "before";
+  component: ComponentType<ExperimentalThreadContextSegmentProps>;
+  useVisible?(input: { threadId: string }): boolean;
+}
+
 /**
  * Render a plugin component in the thread header's action row.
  *
@@ -1784,6 +1806,10 @@ export interface PluginThreadHeaderActionRegistration {
    */
   title: string;
   component: ComponentType<PluginThreadHeaderActionProps>;
+  /** Replace the control with these actions in compact and narrow split headers. */
+  experimental_useOverflowActions?(
+    input: PluginThreadHeaderActionProps,
+  ): readonly PluginThreadAction[];
 }
 
 export interface ExperimentalPluginBrowserToolbarActionRegistration {
@@ -2614,6 +2640,10 @@ export interface PluginMachineProviderInputsRegistration {
 // ---------------------------------------------------------------------------
 
 export interface PluginAppSlots {
+  /** Integrated thread composer context. Experimental: see docs/api_to_audit.md. */
+  experimental_threadContextSegment(
+    registration: ExperimentalThreadContextSegmentRegistration,
+  ): void;
   homepageSection(registration: PluginHomepageSectionRegistration): void;
   settingsSection(registration: PluginSettingsSectionRegistration): void;
   /**

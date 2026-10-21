@@ -44,6 +44,7 @@ import {
   type PluginSidebarFooterActionRegistration,
   type PluginThreadEventPayloads,
   type ExperimentalThreadFixedTabProps,
+  type ExperimentalThreadContextSegmentProps,
   type PluginThreadPanelProps,
   type ThreadChatMessageAction,
   type ThreadChatProps,
@@ -273,6 +274,7 @@ type SlotPropsByName = {
   experimental_appOverlay: ExperimentalAppOverlayProps;
   navPanel: PluginNavPanelProps;
   experimental_threadFixedTab: ExperimentalThreadFixedTabProps;
+  experimental_threadContextSegment: ExperimentalThreadContextSegmentProps;
   threadPanelAction: PluginThreadPanelProps;
   experimental_newThreadPanelAction: PluginNewThreadPanelProps;
   pendingInteraction: PluginPendingInteractionProps;
@@ -353,6 +355,13 @@ const FRONTEND_SLOT_PROP_FIELDS = {
   experimental_appOverlay: [],
   navPanel: ["subPath"],
   experimental_threadFixedTab: ["threadId"],
+  experimental_threadContextSegment: [
+    "threadId",
+    "part",
+    "segmentCount",
+    "isExpanded",
+    "onToggle",
+  ],
   threadPanelAction: ["threadId", "params"],
   experimental_newThreadPanelAction: ["projectId", "params"],
   pendingInteraction: ["interaction", "submit", "cancel"],

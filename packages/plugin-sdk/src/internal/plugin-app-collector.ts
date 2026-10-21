@@ -30,6 +30,7 @@ import type {
   PluginSettingsSectionRegistration,
   PluginSidebarFooterActionRegistration,
   PluginSourceCodeRendererRegistration,
+  ExperimentalThreadContextSegmentRegistration,
   PluginThreadHeaderActionRegistration,
   PluginThreadActionRegistration,
   ExperimentalPluginBrowserToolbarActionRegistration,
@@ -373,6 +374,7 @@ export interface CollectedPluginAppRegistrations {
   settingsSections: PluginSettingsSectionRegistration[];
   appOverlays: ExperimentalAppOverlayRegistration[];
   navPanels: PluginNavPanelRegistration[];
+  threadContextSegments: ExperimentalThreadContextSegmentRegistration[];
   threadFixedTabs: ExperimentalThreadFixedTabRegistration[];
   threadPanelActions: PluginThreadPanelActionRegistration[];
   newThreadPanelActions: PluginNewThreadPanelActionRegistration[];
@@ -504,6 +506,7 @@ export function collectPluginAppRegistrations(
     settingsSections: [],
     appOverlays: [],
     navPanels: [],
+    threadContextSegments: [],
     threadFixedTabs: [],
     threadPanelActions: [],
     newThreadPanelActions: [],
@@ -547,6 +550,7 @@ export function collectPluginAppRegistrations(
     sidebarNavigation: new Set<string>(),
     sidebarHeader: new Set<string>(),
     threadHeaderAction: new Set<string>(),
+    threadContextSegment: new Set<string>(),
     threadAction: new Set<string>(),
     browserToolbarAction: new Set<string>(),
     fileOpener: new Set<string>(),
@@ -915,11 +919,53 @@ export function collectPluginAppRegistrations(
           ...(headerComponent !== undefined ? { headerComponent } : {}),
         });
       },
+      experimental_threadContextSegment(registration) {
+        const kind = "slots.experimental_threadContextSegment";
+        const result = collectTitledComponent(
+          kind,
+          seenIds.threadContextSegment,
+          registration,
+        );
+        if (
+          registration.placement !== undefined &&
+          registration.placement !== "inline" &&
+          registration.placement !== "before"
+        ) {
+          throw new Error(`${kind}: invalid placement`);
+        }
+        if (
+          registration.useVisible !== undefined &&
+          typeof registration.useVisible !== "function"
+        ) {
+          throw new Error(`${kind}: useVisible must be a function`);
+        }
+        collected.threadContextSegments.push({
+          ...result,
+          placement: registration.placement ?? "inline",
+          ...(registration.useVisible
+            ? { useVisible: registration.useVisible }
+            : {}),
+        });
+      },
       experimental_threadHeaderAction(registration) {
         const kind = "slots.experimental_threadHeaderAction";
         const id = requireSlotId(kind, registration?.id);
         requireUniqueId(kind, seenIds.threadHeaderAction, id);
+        if (
+          registration.experimental_useOverflowActions !== undefined &&
+          typeof registration.experimental_useOverflowActions !== "function"
+        ) {
+          throw new Error(
+            `${kind}: experimental_useOverflowActions must be a function`,
+          );
+        }
         collected.threadHeaderActions.push({
+          ...(registration.experimental_useOverflowActions
+            ? {
+                experimental_useOverflowActions:
+                  registration.experimental_useOverflowActions,
+              }
+            : {}),
           id,
           title: requireNonEmptyString(kind, "title", registration.title),
           component: requireComponent(kind, registration.component),

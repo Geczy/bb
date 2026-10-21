@@ -756,6 +756,7 @@ function ContextBannerPreview({
   return (
     <PromptStage size={size}>
       <ThreadPromptContextBanner
+        threadId="thread-banner-fixture"
         gitSection={
           section
             ? {
