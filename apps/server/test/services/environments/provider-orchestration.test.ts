@@ -1794,6 +1794,125 @@ describe("core environment orchestration", () => {
       });
     }));
 
+  it("revokes another thread's discard choice on environment-wide archive", async () =>
+    withTestHarness(async (harness) => {
+      const remove = vi.fn(async () => ({ status: "removed" as const }));
+      const fixture = setup(harness, { policy: { retireGraceMs: 0 }, remove });
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle" })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
+      const other = seedThread(harness.deps, {
+        projectId: fixture.context.project.id,
+        environmentId,
+        status: "idle",
+      });
+      expect(
+        (
+          await harness.app.request(
+            `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=discard`,
+            { method: "POST" },
+          )
+        ).status,
+      ).toBe(200);
+      expect(getEnvironment(harness.db, environmentId)?.archiveDiscard).toBe(
+        true,
+      );
+      expect(
+        (
+          await harness.app.request(
+            `/api/v1/environments/${environmentId}/archive-threads`,
+            { method: "POST" },
+          )
+        ).status,
+      ).toBe(200);
+      const inspection = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "workspace.archive_status",
+      );
+      await reportQueuedCommandSuccess(harness, inspection, {
+        hasUncommittedChanges: true,
+        hasUnpushedCommits: true,
+      });
+      await sweepProviderEnvironment(harness.deps, environmentId);
+      expect(getThread(harness.db, other.id)?.archivedAt).not.toBeNull();
+      expect(remove).not.toHaveBeenCalled();
+      expect(getEnvironment(harness.db, environmentId)).toMatchObject({
+        archiveDiscard: false,
+        archiveRetained: true,
+        status: "ready",
+      });
+    }));
+
+  it("refuses unarchive after a provider has received discard authorization", async () =>
+    withTestHarness(async (harness) => {
+      let release = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const remove = vi.fn(async () => {
+        await gate;
+        return { status: "removed" as const };
+      });
+      const fixture = setup(harness, { policy: { retireGraceMs: 0 }, remove });
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle" })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
+      try {
+        expect(
+          (
+            await harness.app.request(
+              `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=discard`,
+              { method: "POST" },
+            )
+          ).status,
+        ).toBe(200);
+        await expect.poll(() => remove.mock.calls.length).toBe(1);
+        expect(remove).toHaveBeenCalledWith(
+          expect.objectContaining({ experimental_discardWorktree: true }),
+        );
+        const response = await harness.app.request(
+          `/api/v1/threads/${fixture.thread.id}/unarchive`,
+          { method: "POST" },
+        );
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({
+          code: "worktree_removal_started",
+        });
+        expect(
+          getThread(harness.db, fixture.thread.id)?.archivedAt,
+        ).not.toBeNull();
+        expect(getEnvironment(harness.db, environmentId)?.archiveDiscard).toBe(
+          true,
+        );
+      } finally {
+        release();
+      }
+      await sweepProviderEnvironment(harness.deps, environmentId);
+      expect(getEnvironment(harness.db, environmentId)?.status).toBe(
+        "destroyed",
+      );
+    }));
+
   it("keeps retained environments until explicitly asked to clean up", async () =>
     withTestHarness(async (harness) => {
       const fixture = setup(harness, { policy: { retireGraceMs: null } });

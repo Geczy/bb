@@ -605,6 +605,19 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (!unarchiveThread(deps.db, deps.hub, thread.id)) {
       if (getThread(deps.db, thread.id)?.archivedAt === null)
         return context.json({ ok: true });
+      const environment =
+        thread.environmentId === null
+          ? null
+          : getEnvironment(deps.db, thread.environmentId);
+      if (
+        environment?.archiveDiscard &&
+        environment.teardownStatus === "running"
+      )
+        throw new ApiError(
+          409,
+          "worktree_removal_started",
+          `Worktree ${environment.path ?? environment.id} is already being removed, so it can't be kept now.`,
+        );
       throw new ApiError(
         409,
         "invalid_request",

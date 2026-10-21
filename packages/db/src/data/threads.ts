@@ -2248,6 +2248,7 @@ export function unarchiveThread(
     (tx) => {
       const current = getThread(tx, id);
       if (current?.deletedAt !== null) return null;
+      if (current.environmentId !== null && tx.select({ id: environments.id }).from(environments).where(and(eq(environments.id, current.environmentId), eq(environments.archiveDiscard, true), eq(environments.teardownStatus, "running"))).get() !== undefined) return null;
       if (current.lifecycleOwnerThreadId) {
         const owner = getThread(tx, current.lifecycleOwnerThreadId);
         if (!owner || owner.archivedAt !== null || owner.deletedAt !== null)

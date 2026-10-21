@@ -116,6 +116,9 @@ export function archiveEnvironmentThreads(
   const roots = listLiveThreadsInEnvironment(deps.db, {
     environmentId: args.environment.id,
   });
+  deps.db.transaction(() => {
+    for (const root of roots) setArchiveWorktreeChoice(deps, root, "auto");
+  });
   return archiveThreadTrees(deps, roots, (thread) =>
     thread.environmentId === null
       ? null
