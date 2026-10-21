@@ -1,7 +1,7 @@
 import { renderTemplate } from "@bb/templates";
 import { truncateToWidthAtWordBoundary } from "@bb/text-utils";
 import type { LoggedWorkSessionDeps } from "../../types.js";
-import { runTextTask } from "./ai-tasks.js";
+import { runTextAiTask } from "./ai-tasks.js";
 
 const MAX_COMMIT_SUBJECT_WIDTH = 72;
 
@@ -35,7 +35,7 @@ export async function generateCommitMessage(
   deps: LoggedWorkSessionDeps,
   args: GenerateCommitMessageArgs,
 ): Promise<string | null> {
-  const outcome = await runTextTask(deps, {
+  const outcome = await runTextAiTask(deps, {
     task: "commit-message",
     label: "Commit message generation",
     prompt: buildCommitMessagePrompt(args),

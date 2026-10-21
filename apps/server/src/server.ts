@@ -1,4 +1,3 @@
-import { runTextTask } from "./services/ai/ai-tasks.js";
 import { createPluginUpdateJobs } from "./services/plugins/plugin-update-jobs.js";
 import { registerPluginUpdateJobRoutes } from "./routes/plugin-update-jobs.js";
 import { recheckEnvironmentProvisioning } from "./services/threads/thread-environment-providers.js";
@@ -764,11 +763,6 @@ export function createApp(
     providerRegistry: deps.providerRegistry,
     pluginHostArtifacts: deps.pluginHostArtifacts,
     aiServices: deps.aiServices,
-    runAiTextTask: (input) =>
-      runTextTask(deps, {
-        ...input,
-        label: "Plugin AI text task",
-      }),
     ensureSharedPortTunnel: (hostId) =>
       deps.sharedPorts.ensureTunnelIdentity(hostId, () =>
         callHostRetryableOnlineRpcForWork(deps, {

@@ -1713,11 +1713,6 @@ export function createPluginRuntime(context: PluginRuntimeContext) {
           artifact: hostArtifactCandidate,
         });
       },
-      runAiTextTask: (input) => {
-        if (!deps.runAiTextTask)
-          throw new Error("AI text task runner is unavailable");
-        return deps.runAiTextTask(input);
-      },
       registerAiService: (declaration) =>
         deps.aiServices.register({
           ...declaration,

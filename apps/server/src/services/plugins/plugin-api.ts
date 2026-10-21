@@ -2,7 +2,6 @@ import { rpcInvalidationTags } from "@get-bb/plugin-sdk/internal/rpc-tags";
 import type { ContractTagDeclarations } from "@bb/domain";
 import {
   environmentCompositionSchema,
-  validateAiTextTaskInput,
   validateServerAccessProviderDeclaration,
   type NormalizedPluginEnvironmentComposition,
   type NormalizedPluginInteractionRequest,
@@ -550,7 +549,6 @@ export function createPluginApi(options: {
   registerProvider: (declaration: NormalizedPluginProviderDeclaration) => {
     dispose(): void;
   };
-  runAiTextTask: PluginAiServices["experimental_runTextTask"];
   registerAiService: (declaration: NormalizedPluginAiService) => {
     dispose(): void;
   };
@@ -1338,10 +1336,6 @@ export function createPluginApi(options: {
   });
   const experimental_aiServices: PluginAiServices = {
     register: aiServiceRegistrations.register,
-    experimental_runTextTask(input) {
-      assertLive();
-      return options.runAiTextTask(validateAiTextTaskInput(input));
-    },
   };
 
   const api: BbPluginApi = {

@@ -3726,16 +3726,3 @@ export function normalizeRpcJsonResult(
 
   return visit(value, "$result");
 }
-
-export function validateAiTextTaskInput(input: unknown) {
-  return z
-    .object({
-      task: z.enum(["thread-title", "commit-message"]),
-      prompt: z
-        .string()
-        .refine((value) => value.trim().length > 0, "Prompt must not be empty"),
-      signal: z.instanceof(AbortSignal).optional(),
-    })
-    .strict()
-    .parse(input);
-}

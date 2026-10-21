@@ -30,6 +30,7 @@ const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKin
 
 interface WorkspaceWatchState {
   lastBranchName: string | null | undefined;
+  lastDefaultBranch: string | null | undefined;
   lastLocalFingerprint: string | null;
   lastSharedRefsFingerprint: string | null;
   pendingKinds: Set<WorkspaceStatusWatchChangeKind>;
@@ -229,6 +230,7 @@ export class WatchManager {
         target,
         watchState: {
           lastBranchName: undefined,
+          lastDefaultBranch: undefined,
           lastLocalFingerprint: null,
           lastSharedRefsFingerprint: null,
           pendingKinds: new Set(),
@@ -405,15 +407,19 @@ export class WatchManager {
   }
 
   private async reportCurrentBranch(entry: WorkspaceWatchEntry): Promise<void> {
-    const branchName = await entry.workspace.getCurrentBranch();
+    const [branchName, resolvedDefaultBranch] = await Promise.all([
+      entry.workspace.getCurrentBranch(),
+      entry.workspace.getDefaultBranch(),
+    ]);
+    const defaultBranch = resolvedDefaultBranch ?? branchName;
     if (
       this.workspaceEntries.get(entry.target.environmentId) !== entry ||
-      entry.watchState.lastBranchName === branchName
+      (entry.watchState.lastBranchName === branchName &&
+        entry.watchState.lastDefaultBranch === defaultBranch)
     )
       return;
-    const defaultBranch = await entry.workspace.getDefaultBranch();
-    if (this.workspaceEntries.get(entry.target.environmentId) !== entry) return;
     entry.watchState.lastBranchName = branchName;
+    entry.watchState.lastDefaultBranch = defaultBranch;
     this.options.onWorkspaceMetadataChanged?.({
       environmentId: entry.target.environmentId,
       workspace: {
@@ -421,7 +427,7 @@ export class WatchManager {
         isGitRepo: true,
         isWorktree: entry.workspace.isWorktree,
         branchName,
-        defaultBranch: defaultBranch ?? branchName,
+        defaultBranch,
       },
     });
   }
@@ -468,6 +474,7 @@ export class WatchManager {
     if (this.workspaceEntries.get(entry.target.environmentId) !== entry) return;
     entry.workspace = workspace;
     entry.watchState.lastBranchName = branchName;
+    entry.watchState.lastDefaultBranch = resolvedDefaultBranch ?? branchName;
     entry.watchState.lastSharedRefsFingerprint = sharedRefsFingerprint;
     this.options.onWorkspaceMetadataChanged?.({
       environmentId: entry.target.environmentId,

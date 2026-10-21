@@ -451,14 +451,24 @@ describe("WatchManager", () => {
       onWorkspaceMetadataChanged.mock.calls[1]?.[0].workspace,
     ).toMatchObject({ branchName: "feature/new", defaultBranch: "main" });
     change();
-    workspace.getCurrentBranch.mockResolvedValue(null);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(onWorkspaceMetadataChanged).toHaveBeenCalledTimes(2);
+    workspace.getDefaultBranch.mockResolvedValue("trunk");
     change();
     await vi.waitFor(() =>
       expect(onWorkspaceMetadataChanged).toHaveBeenCalledTimes(3),
     );
     expect(
-      onWorkspaceMetadataChanged.mock.calls[2]?.[0].workspace.branchName,
-    ).toBeNull();
+      onWorkspaceMetadataChanged.mock.calls[2]?.[0].workspace,
+    ).toMatchObject({ branchName: "feature/new", defaultBranch: "trunk" });
+    workspace.getCurrentBranch.mockResolvedValue(null);
+    change();
+    await vi.waitFor(() =>
+      expect(onWorkspaceMetadataChanged).toHaveBeenCalledTimes(4),
+    );
+    expect(
+      onWorkspaceMetadataChanged.mock.calls[3]?.[0].workspace,
+    ).toMatchObject({ branchName: null, defaultBranch: "trunk" });
     await manager.shutdown();
   });
 
