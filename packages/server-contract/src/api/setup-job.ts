@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const setupJobArmSchema = z.enum(["a", "b"]);
+export const setupJobArmSchema = /* @__PURE__ */ z.enum(["a", "b"]);
 export type SetupJobArm = z.infer<typeof setupJobArmSchema>;
 
 export const setupJobTimezoneSchema = z
@@ -19,7 +19,7 @@ export const setupJobTimezoneSchema = z
     { message: "Choose a valid time zone" },
   );
 
-export const setupJobOfferSchema = z.object({
+export const setupJobOfferSchema = /* @__PURE__ */ z.object({
   arm: setupJobArmSchema,
   suggestionAnalyticsId: z.uuid(),
   title: z.string(),
@@ -51,7 +51,7 @@ export const setupJobShownRequestSchema = z
     suggestionAnalyticsId: z.uuid(),
   })
   .strict();
-export const setupJobResponseSchema = z.object({
+export const setupJobResponseSchema = /* @__PURE__ */ z.object({
   offer: setupJobOfferSchema.nullable(),
 });
 export type SetupJobResponse = z.infer<typeof setupJobResponseSchema>;
