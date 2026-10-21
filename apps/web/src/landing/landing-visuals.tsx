@@ -72,9 +72,7 @@ export function InstallOptions({ placement }: { placement: CtaPlacement }) {
                 })
               }
             />
-            <span className="install-note">
-              Install the desktop app with Homebrew
-            </span>
+            <span className="install-note">Apple Silicon · Homebrew</span>
           </span>
         )}
         <span className="install-choice install-browser-command">
