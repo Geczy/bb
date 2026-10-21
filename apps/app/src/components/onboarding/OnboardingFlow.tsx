@@ -57,6 +57,7 @@ import {
   getBbDesktopInfo,
   shouldReserveMacosTrafficLights,
 } from "@/lib/bb-desktop";
+import { randomUuid } from "@/lib/random-uuid";
 import { decodeBase64Bytes } from "@/lib/base64-bytes";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { sdk } from "@/lib/sdk";
@@ -492,7 +493,7 @@ function AgentStepContainer({
     agents,
     activeSignInAgentId: signIn?.providerId ?? null,
   });
-  const [freeAgentSuggestionId] = useState(() => crypto.randomUUID());
+  const [freeAgentSuggestionId] = useState(randomUuid);
   const freeAgentOffered = freeAgentOffer.status === "available";
   const freeAgentOfferRecordedRef = useRef(false);
   useEffect(() => {
