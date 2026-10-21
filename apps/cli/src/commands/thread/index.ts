@@ -19,7 +19,6 @@ export function registerThreadCommands(
   getUrl: () => string,
 ): void {
   const thread = program.command("thread").description("Manage threads");
-  registerNextStepCommands(thread, getUrl);
   registerWaitCommand(thread, getUrl);
   registerSpawnCommand(thread, getUrl);
   registerForkCommand(thread, getUrl);
@@ -33,4 +32,5 @@ export function registerThreadCommands(
   registerOrganizationCommands(thread, getUrl);
   registerActionsCommands(thread, getUrl);
   registerInteractionCommands(thread, getUrl);
+  registerNextStepCommands(thread, getUrl);
 }

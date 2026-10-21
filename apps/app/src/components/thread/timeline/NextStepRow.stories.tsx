@@ -143,6 +143,7 @@ export function Overview() {
         {ready ? (
           <ThreadTimelineRows
             threadId={THREAD_ID}
+            workspaceRootPath={undefined}
             timelineRows={rows}
             threadRuntimeDisplayStatus="idle"
           />
