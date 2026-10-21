@@ -731,7 +731,9 @@ async function runRemove(
         "environment remove",
         () => {
           if (!requestEnvironmentRemoval(deps, environmentId))
-            throw new Error("Worktree retention changed before removal");
+            throw new Error(
+              `Worktree ${row.path ?? row.id} is in use or marked to keep, so it wasn't removed.`,
+            );
           const current = getEnvironment(deps.db, environmentId);
           return record.provider.remove({
             environment:
