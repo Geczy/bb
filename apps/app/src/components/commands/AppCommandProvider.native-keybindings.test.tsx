@@ -95,7 +95,7 @@ describe("native command registration", () => {
       </AppCommandProvider>,
     );
     await flushNativeBindings();
-    rerender(<AppCommandProvider />);
+    rerender(<AppCommandProvider>{null}</AppCommandProvider>);
     await flushNativeBindings();
     expect(state.setAppKeybindings).toHaveBeenLastCalledWith({
       keybindings: bindings,
