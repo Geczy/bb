@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { NextStepInput } from "@bb/domain";
-import { registerThreadCommands } from "../../commands/thread/index.js";
 import {
   collectLogLines,
   runCommand,
@@ -11,6 +10,7 @@ import {
   stubServerApi,
   type CommandRegistrar,
 } from "../helpers/command-output-harness.js";
+import { registerThreadCommands } from "../../commands/thread/index.js";
 
 describe("bb thread next-step", () => {
   setupCommandOutputTestEnvironment();

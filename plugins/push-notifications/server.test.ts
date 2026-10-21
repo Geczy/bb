@@ -450,7 +450,6 @@ describe("push sender", () => {
       await host.addSubscription();
       await host.addSubscription("ExponentPushToken[tablet]", "Tablet");
       const thread = host.setThread({
-        origin: "plugin",
         originPluginId: "automations",
       });
       await host.bb.sdk.threads.updatePluginMetadata({
@@ -504,7 +503,6 @@ describe("push sender", () => {
       await host.addSubscription();
       const failed = host.setThread({
         status: "error",
-        origin: "plugin",
         originPluginId: "automations",
       });
       await host.bb.sdk.threads.updatePluginMetadata({
@@ -522,7 +520,6 @@ describe("push sender", () => {
         data: { kind: "thread-error", threadId: failed.id },
       });
       const muted = host.setThread({
-        origin: "plugin",
         originPluginId: "automations",
       });
       await host.bb.sdk.threads.updatePluginMetadata({

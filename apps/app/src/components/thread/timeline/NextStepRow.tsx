@@ -6,9 +6,10 @@ import { Button } from "@bb/shared-ui/button";
 import { Icon } from "@bb/shared-ui/icon";
 import { getAppSurface } from "@/lib/app-surface";
 import { sdk } from "@/lib/sdk";
-
-const nextStepQueryKey = (threadId: string | undefined) =>
-  ["threads", threadId, "next-step"] as const;
+import {
+  applyNextStep,
+  nextStepQueryKey,
+} from "@/hooks/cache-owners/next-step-cache-owner";
 
 export function useThreadNextStep(
   threadId: string | undefined,
@@ -184,7 +185,11 @@ export function NextStepRow({ suggestion }: { suggestion: NextStep }) {
       }
     },
     onSuccess: (nextStep) => {
-      queryClient.setQueryData(nextStepQueryKey(suggestion.threadId), nextStep);
+      applyNextStep({
+        queryClient,
+        threadId: suggestion.threadId,
+        suggestion: nextStep,
+      });
     },
     onError: () => {
       setError("Couldn’t update this next step. Try again.");

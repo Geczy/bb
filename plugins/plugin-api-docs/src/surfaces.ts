@@ -819,27 +819,6 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
     ],
     surfaces: [
       {
-        id: "grounded-next-steps",
-        title: "Grounded next steps",
-        summary:
-          "Propose evidence-backed work and use the same acceptance path as the finished-turn row.",
-        bullets: [
-          "Propose one typed task or single run tomorrow per thread, with verified conversation or repository references",
-          "Read eligibility, acknowledge a visible desktop/web impression, accept, dismiss, or undo a scheduled run",
-          "Task acceptance starts a child thread; automation acceptance uses Automations and reports its result through notifications",
-        ],
-        apiSymbols: [
-          "ThreadsArea.experimental_nextStep",
-          "ThreadsArea.experimental_proposeNextStep",
-          "ThreadsArea.experimental_showNextStep",
-          "ThreadsArea.experimental_acceptNextStep",
-          "ThreadsArea.experimental_dismissNextStep",
-          "ThreadsArea.experimental_undoNextStep",
-        ],
-        firstParty: ["Finished-turn Next step row", "bb thread next-step"],
-        experimental: true,
-      },
-      {
         id: "cli",
         tagline: "Your own `bb <name>` command",
         title: "bb CLI commands",
@@ -927,6 +906,27 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Thread list",
           "Workflows",
         ],
+      },
+      {
+        id: "grounded-next-steps",
+        title: "Grounded next steps",
+        summary:
+          "Use the finished-turn Next step path for evidence-backed work. With this, a plugin can:",
+        bullets: [
+          "Propose one task or single run tomorrow with verified conversation or repository references",
+          "Read eligibility and record a visible desktop or web impression",
+          "Accept, dismiss, or undo through the same path as the finished-turn row",
+          "Start a child task or schedule an Automations run with a result notification",
+        ],
+        apiSymbols: [
+          "ThreadsArea.experimental_nextStep",
+          "ThreadsArea.experimental_proposeNextStep",
+          "ThreadsArea.experimental_showNextStep",
+          "ThreadsArea.experimental_acceptNextStep",
+          "ThreadsArea.experimental_dismissNextStep",
+          "ThreadsArea.experimental_undoNextStep",
+        ],
+        experimental: true,
       },
       {
         id: "background",
