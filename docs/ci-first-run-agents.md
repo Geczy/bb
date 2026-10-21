@@ -38,6 +38,10 @@ and requires evidence that the real protobufjs dependency ran its Node
 postinstall script. Successful installation without that evidence is labeled
 stubbed for the node-shim regression, not a proven pass.
 The summary records unsupported or unexercised paths explicitly as stubbed.
+The status API can omit a provider when its probe times out. The harness retries
+an omitted entry at most twice and records every omission in the evidence;
+three missing responses fail the check. Failed install actions are never retried
+or converted to success by this polling.
 
 The latest upstream installers are deliberately fetched on every run, so this
 job is not cached. Network/vendor availability and changing CLI behavior can
