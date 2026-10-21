@@ -35,10 +35,6 @@ export const CONNECT_PLUGIN_ID = "connect";
 
 export const NODEJS_DOWNLOAD_URL = "https://nodejs.org/en/download";
 
-export const FREE_AGENT_PROVIDER_ID = "codex";
-
-export const CHATGPT_SIGNUP_URL = "https://chatgpt.com/";
-
 export type AgentSetupState =
   | { status: "checking" }
   | { status: "ready"; detail: string | null }
@@ -55,37 +51,64 @@ export type AgentSetupState =
   | { status: "installFailed"; message: string; canInstall: boolean }
   | { status: "unknown"; message: string | null };
 
+export interface FreeSignUp {
+  accountName: string;
+  url: string;
+}
+
+export interface FreeAgent {
+  id: string;
+  name: string;
+  freeSignUp: FreeSignUp;
+}
+
 export type FreeAgentOffer =
   | { status: "hidden" }
-  | { status: "available"; action: "install" | "retry" | "signIn" }
-  | { status: "installing" };
+  | {
+      status: "available";
+      agent: FreeAgent;
+      action: "install" | "retry" | "signIn";
+    }
+  | { status: "installing"; agent: FreeAgent };
 
 export function resolveFreeAgentOffer(
-  agents: readonly { id: string; state: AgentSetupState }[] | null,
+  agents:
+    | readonly {
+        id: string;
+        name: string;
+        state: AgentSetupState;
+        freeSignUp?: FreeSignUp;
+      }[]
+    | null,
 ): FreeAgentOffer {
   if (agents === null) return { status: "hidden" };
   if (agents.some((agent) => agent.state.status === "ready")) {
     return { status: "hidden" };
   }
-  const state = agents.find(
-    (agent) => agent.id === FREE_AGENT_PROVIDER_ID,
-  )?.state;
-  switch (state?.status) {
+  const candidate = agents.find((agent) => agent.freeSignUp !== undefined);
+  if (candidate?.freeSignUp === undefined) return { status: "hidden" };
+  const agent: FreeAgent = {
+    id: candidate.id,
+    name: candidate.name,
+    freeSignUp: candidate.freeSignUp,
+  };
+  const { state } = candidate;
+  switch (state.status) {
     case "install":
     case "update":
       return state.canInstall
-        ? { status: "available", action: "install" }
+        ? { status: "available", agent, action: "install" }
         : { status: "hidden" };
     case "installFailed":
       return state.canInstall
-        ? { status: "available", action: "retry" }
+        ? { status: "available", agent, action: "retry" }
         : { status: "hidden" };
     case "signIn":
       return state.canSignIn
-        ? { status: "available", action: "signIn" }
+        ? { status: "available", agent, action: "signIn" }
         : { status: "hidden" };
     case "installing":
-      return { status: "installing" };
+      return { status: "installing", agent };
     default:
       return { status: "hidden" };
   }

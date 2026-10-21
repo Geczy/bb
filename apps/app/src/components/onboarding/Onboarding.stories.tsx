@@ -38,9 +38,19 @@ const MOBILE_LINKS = {
 type AgentId = "claude-code" | "codex" | "pi";
 type AgentStates = Record<AgentId, AgentSetupState>;
 
-const AGENT_BASE: readonly { id: AgentId; name: string; logoUrl: string }[] = [
+const CHATGPT_FREE_SIGN_UP = {
+  accountName: "ChatGPT",
+  url: "https://chatgpt.com/",
+};
+
+const AGENT_BASE: readonly {
+  id: AgentId;
+  name: string;
+  logoUrl: string;
+  freeSignUp?: typeof CHATGPT_FREE_SIGN_UP;
+}[] = [
   { id: "claude-code", name: "Claude Code", logoUrl: claudeLogoUrl },
-  { id: "codex", name: "Codex", logoUrl: codexLogoUrl },
+  { id: "codex", name: "Codex", logoUrl: codexLogoUrl, freeSignUp: CHATGPT_FREE_SIGN_UP },
   { id: "pi", name: "Pi", logoUrl: piLogoUrl },
 ];
 
@@ -135,6 +145,7 @@ function buildAgents(
     name: agent.name,
     provider: { id: agent.id, logoUrl: agent.logoUrl },
     state: states[agent.id],
+    ...(agent.freeSignUp === undefined ? {} : { freeSignUp: agent.freeSignUp }),
     expanded:
       states[agent.id].status === "signingIn" ? (
         <StorySignInGuide
@@ -342,7 +353,7 @@ function AgentFrame({
         agents={agents}
         freeAgentOffer={resolveFreeAgentOffer(agents)}
         onSetUpFreeAgent={noop}
-        onCreateChatGptAccount={noop}
+        onCreateFreeAccount={noop}
         onSignIn={onSignIn}
         onInstall={onInstall}
         onViewInstallLog={onViewInstallLog}

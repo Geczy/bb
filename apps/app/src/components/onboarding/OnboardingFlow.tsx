@@ -75,9 +75,7 @@ import {
   type OnboardingRepo,
 } from "./OnboardingViews";
 import {
-  CHATGPT_SIGNUP_URL,
   CONNECT_PLUGIN_ID,
-  FREE_AGENT_PROVIDER_ID,
   NODEJS_DOWNLOAD_URL,
   ONBOARDING_PLUGINS,
   ONBOARDING_PLUGIN_MARKETPLACE,
@@ -439,6 +437,9 @@ function AgentStepContainer({
             id: health.providerId,
             name: health.displayName,
             provider: info ?? { id: health.providerId, logoUrl: null },
+            ...(info?.freeSignUp === undefined
+              ? {}
+              : { freeSignUp: info.freeSignUp }),
             state: resolveAgentSetupState({
               health,
               cliStatus: cliStatusQuery.data?.[health.providerId],
@@ -481,15 +482,25 @@ function AgentStepContainer({
         });
 
   const freeAgentOffer = resolveFreeAgentOffer(agents);
-  const freeAgentState = agents?.find(
-    (agent) => agent.id === FREE_AGENT_PROVIDER_ID,
+  const [freeAgentChosenId, setFreeAgentChosenId] = useState<string | null>(
+    null,
+  );
+  const [freeAgentSignInPendingId, setFreeAgentSignInPendingId] = useState<
+    string | null
+  >(null);
+  const pendingFreeAgentState = agents?.find(
+    (agent) => agent.id === freeAgentSignInPendingId,
   )?.state;
   const freeAgentAwaitingSignIn =
-    freeAgentState?.status === "signIn" && freeAgentState.canSignIn;
+    pendingFreeAgentState?.status === "signIn" &&
+    pendingFreeAgentState.canSignIn;
   const freeAgentSettled =
-    freeAgentState?.status === "installFailed" ||
-    freeAgentState?.status === "ready";
-  const freeAgentReady = freeAgentState?.status === "ready";
+    pendingFreeAgentState?.status === "installFailed" ||
+    pendingFreeAgentState?.status === "ready";
+  const freeAgentReady =
+    freeAgentChosenId !== null &&
+    agents?.find((agent) => agent.id === freeAgentChosenId)?.state.status ===
+      "ready";
 
   const freeAgentOffered = freeAgentOffer.status === "available";
   const freeAgentOfferRecordedRef = useRef(false);
@@ -502,54 +513,53 @@ function AgentStepContainer({
     });
   }, [entry, freeAgentOffered]);
 
-  const [freeAgentChosen, setFreeAgentChosen] = useState(false);
-  const [freeAgentSignInPending, setFreeAgentSignInPending] = useState(false);
   const startSignInRef = useRef(startSignIn);
   useEffect(() => {
     startSignInRef.current = startSignIn;
   });
   useEffect(() => {
-    if (!freeAgentSignInPending) return;
+    if (freeAgentSignInPendingId === null) return;
     if (freeAgentAwaitingSignIn) {
-      setFreeAgentSignInPending(false);
-      void startSignInRef.current(FREE_AGENT_PROVIDER_ID);
+      setFreeAgentSignInPendingId(null);
+      void startSignInRef.current(freeAgentSignInPendingId);
     } else if (freeAgentSettled) {
-      setFreeAgentSignInPending(false);
+      setFreeAgentSignInPendingId(null);
     }
-  }, [freeAgentAwaitingSignIn, freeAgentSettled, freeAgentSignInPending]);
+  }, [freeAgentAwaitingSignIn, freeAgentSettled, freeAgentSignInPendingId]);
 
   const freeAgentReadyRecordedRef = useRef(false);
   useEffect(() => {
-    if (!freeAgentChosen || !freeAgentReady) return;
-    if (freeAgentReadyRecordedRef.current) return;
+    if (!freeAgentReady || freeAgentReadyRecordedRef.current) return;
     freeAgentReadyRecordedRef.current = true;
     recordTelemetryEvent({
       name: "onboarding_free_agent",
       properties: { entry, action: "ready" },
     });
-  }, [entry, freeAgentChosen, freeAgentReady]);
+  }, [entry, freeAgentReady]);
 
   const setUpFreeAgent = () => {
     if (freeAgentOffer.status !== "available") return;
+    const agentId = freeAgentOffer.agent.id;
     recordTelemetryEvent({
       name: "onboarding_free_agent",
       properties: { entry, action: "chosen" },
     });
-    setFreeAgentChosen(true);
+    setFreeAgentChosenId(agentId);
     if (freeAgentOffer.action === "signIn") {
-      void startSignIn(FREE_AGENT_PROVIDER_ID);
+      void startSignIn(agentId);
       return;
     }
-    setFreeAgentSignInPending(true);
-    startInstall(FREE_AGENT_PROVIDER_ID);
+    setFreeAgentSignInPendingId(agentId);
+    startInstall(agentId);
   };
 
-  const createChatGptAccount = () => {
+  const createFreeAccount = () => {
+    if (freeAgentOffer.status === "hidden") return;
     recordTelemetryEvent({
       name: "onboarding_free_agent",
       properties: { entry, action: "create_account" },
     });
-    openUrlInExternalBrowser(CHATGPT_SIGNUP_URL);
+    openUrlInExternalBrowser(freeAgentOffer.agent.freeSignUp.url);
   };
 
   const agentReady = hasReadyAgent(states);
@@ -574,7 +584,7 @@ function AgentStepContainer({
         agents={agents}
         freeAgentOffer={freeAgentOffer}
         onSetUpFreeAgent={setUpFreeAgent}
-        onCreateChatGptAccount={createChatGptAccount}
+        onCreateFreeAccount={createFreeAccount}
         onSignIn={(providerId) => void startSignIn(providerId)}
         onInstall={startInstall}
         onViewInstallLog={viewInstallLog}

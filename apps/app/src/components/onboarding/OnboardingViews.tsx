@@ -22,6 +22,7 @@ import {
   ONBOARDING_STEPS,
   type AgentSetupState,
   type FreeAgentOffer,
+  type FreeSignUp,
   type OnboardingStepId,
   type SignInGuide,
 } from "./onboarding-model";
@@ -211,6 +212,7 @@ export interface OnboardingAgent {
   name: string;
   provider: ExperimentalProviderIconProps["provider"];
   state: AgentSetupState;
+  freeSignUp?: FreeSignUp;
   expanded?: ReactNode;
 }
 
@@ -375,6 +377,7 @@ export function FreeAgentCard({
   onCreateAccount,
 }: FreeAgentCardProps) {
   const installing = offer.status === "installing";
+  const { name, freeSignUp } = offer.agent;
   return (
     <section
       aria-labelledby="free-agent-card-heading"
@@ -382,19 +385,18 @@ export function FreeAgentCard({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <h3 id="free-agent-card-heading" className="text-sm font-medium">
-          No agent yet? Start free with Codex
+          No agent yet? Start free with {name}
         </h3>
         <p className="text-xs text-muted-foreground">
-          Codex is included with ChatGPT plans, including Free. bb installs it
-          and opens ChatGPT sign-in for you.
+          {`${name} is included with ${freeSignUp.accountName} plans, including Free. bb installs it and opens ${freeSignUp.accountName} sign-in for you.`}
         </p>
         <button
           type="button"
-          aria-label="Create a free ChatGPT account (opens chatgpt.com)"
+          aria-label={`Create a free ${freeSignUp.accountName} account (opens ${new URL(freeSignUp.url).hostname})`}
           onClick={onCreateAccount}
           className="flex w-fit items-center gap-1 rounded-sm text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         >
-          No ChatGPT account? Create one for free
+          {`No ${freeSignUp.accountName} account? Create one for free`}
           <Icon name="ArrowUpRight" aria-hidden className="size-3" />
         </button>
       </div>
@@ -408,10 +410,10 @@ export function FreeAgentCard({
           <Icon name="Spinner" aria-hidden className="animate-spin" />
         ) : null}
         {installing
-          ? "Installing Codex…"
+          ? `Installing ${name}…`
           : offer.action === "retry"
             ? "Try again"
-            : "Set up Codex"}
+            : `Set up ${name}`}
       </Button>
     </section>
   );
@@ -422,7 +424,7 @@ interface AgentStepProps extends AgentRowHandlers {
   agents: readonly OnboardingAgent[] | null;
   freeAgentOffer: FreeAgentOffer;
   onSetUpFreeAgent: () => void;
-  onCreateChatGptAccount: () => void;
+  onCreateFreeAccount: () => void;
   onRecheck: () => void;
 }
 
@@ -431,7 +433,7 @@ export function AgentStep({
   agents,
   freeAgentOffer,
   onSetUpFreeAgent,
-  onCreateChatGptAccount,
+  onCreateFreeAccount,
   onRecheck,
   ...rowHandlers
 }: AgentStepProps) {
@@ -463,7 +465,7 @@ export function AgentStep({
         <FreeAgentCard
           offer={freeAgentOffer}
           onSetUp={onSetUpFreeAgent}
-          onCreateAccount={onCreateChatGptAccount}
+          onCreateAccount={onCreateFreeAccount}
         />
       )}
       {agents === null ? (

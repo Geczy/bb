@@ -19,7 +19,7 @@ function renderAgents(agents: OnboardingAgent[]) {
     onCancelSignIn: vi.fn(),
     onGetNodejs: vi.fn(),
     onSetUpFreeAgent: vi.fn(),
-    onCreateChatGptAccount: vi.fn(),
+    onCreateFreeAccount: vi.fn(),
     onRecheck: vi.fn(),
   };
   render(
@@ -80,27 +80,33 @@ describe("AgentStep", () => {
     expect(handlers.onGetNodejs).toHaveBeenCalledOnce();
   });
 
-  it("offers Codex as the free path when no agent is ready, and hides it once one is", () => {
+  it("offers the agent with a free sign-up when no agent is ready, and hides it once one is", () => {
+    const freeAgent: OnboardingAgent = {
+      ...agent("free-agent", { status: "install", canInstall: true }),
+      name: "Free Agent",
+      freeSignUp: { accountName: "Acme", url: "https://acme.test/" },
+    };
     const handlers = renderAgents([
-      agent("claude-code", { status: "install", canInstall: true }),
-      agent("codex", { status: "install", canInstall: true }),
+      agent("other-agent", { status: "install", canInstall: true }),
+      freeAgent,
     ]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Set up Codex" }));
+    expect(screen.getByText("No agent yet? Start free with Free Agent")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Set up Free Agent" }));
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Create a free ChatGPT account (opens chatgpt.com)",
+        name: "Create a free Acme account (opens acme.test)",
       }),
     );
 
     expect(handlers.onSetUpFreeAgent).toHaveBeenCalledOnce();
-    expect(handlers.onCreateChatGptAccount).toHaveBeenCalledOnce();
+    expect(handlers.onCreateFreeAccount).toHaveBeenCalledOnce();
 
     cleanup();
     renderAgents([
-      agent("claude-code", { status: "ready", detail: null }),
-      agent("codex", { status: "install", canInstall: true }),
+      agent("other-agent", { status: "ready", detail: null }),
+      freeAgent,
     ]);
-    expect(screen.queryByRole("button", { name: "Set up Codex" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set up Free Agent" })).toBeNull();
   });
 });
