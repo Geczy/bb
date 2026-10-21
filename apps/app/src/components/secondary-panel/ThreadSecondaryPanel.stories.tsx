@@ -1,3 +1,4 @@
+import { ThreadInfoFixedTabContent } from "@/components/secondary-panel/thread-info-registration";
 import {
   useCallback,
   useEffect,
@@ -68,6 +69,8 @@ function createStoryFixedTabs(
     {
       ariaLabel: "Show thread info panel",
       label: "Info",
+      contentFillsRegion: true,
+      renderContent: () => <ThreadInfoFixedTabContent />,
       leadingVisual: <Icon name="Info" />,
       onSelect: () => onSelectPanel("thread-info"),
       tab: createThreadInfoFixedPanelTab(),

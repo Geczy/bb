@@ -91,6 +91,7 @@ import { pluginSdkSettingsQueryKey } from "@/hooks/queries/query-keys";
 import { useAppNavigationHost } from "@/lib/app-navigation-host";
 import { normalizeExperimentalFileOpenOptions } from "@/lib/live-file-navigation";
 import {
+  getThreadFixedTabOwnerId,
   getPluginFixedTabOwnerId,
   useAppFixedTabTarget,
 } from "@/lib/app-fixed-tab-navigation";
@@ -529,7 +530,10 @@ function useExperimentalAppPanel(): ExperimentalAppPanel {
       return appNavigation.openFixedTab({
         surface: options.surface,
         tab: {
-          ownerId: getPluginFixedTabOwnerId(pluginId, options.tab.panelId),
+          ownerId:
+            options.tab.panelId === undefined
+              ? getThreadFixedTabOwnerId(pluginId)
+              : getPluginFixedTabOwnerId(pluginId, options.tab.panelId),
           tabId: options.tab.id,
         },
         ...(targetResult?.success === true

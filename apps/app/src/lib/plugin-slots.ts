@@ -1,6 +1,8 @@
+import { coreThreadFixedTabs } from "@/components/secondary-panel/thread-info-registration";
 import { setAppIcons } from "@bb/shared-ui/icon-registry";
 import { useSyncExternalStore } from "react";
 import type {
+  ExperimentalThreadFixedTabRegistration,
   ComposerCustomization,
   ExperimentalAppOverlayRegistration,
   ExperimentalCodeFenceRendererRegistration,
@@ -41,6 +43,7 @@ export interface PluginRegistrationSet {
   settingsSections: readonly PluginSettingsSectionRegistration[];
   appOverlays?: readonly ExperimentalAppOverlayRegistration[];
   navPanels: readonly PluginNavPanelRegistration[];
+  threadFixedTabs?: readonly ExperimentalThreadFixedTabRegistration[];
   threadPanelActions: readonly PluginThreadPanelActionRegistration[];
   newThreadPanelActions?: readonly PluginNewThreadPanelActionRegistration[];
   composerCustomizations?: readonly ComposerCustomization[];
@@ -79,6 +82,8 @@ export interface ExperimentalAppOverlaySlot
   extends ExperimentalAppOverlayRegistration, PluginSlotBase {}
 export interface PluginNavPanelSlot
   extends PluginNavPanelRegistration, PluginSlotBase {}
+export interface PluginThreadFixedTabSlot
+  extends ExperimentalThreadFixedTabRegistration, PluginSlotBase {}
 export interface PluginThreadPanelActionSlot
   extends PluginThreadPanelActionRegistration, PluginSlotBase {}
 export interface PluginNewThreadPanelActionSlot
@@ -128,6 +133,7 @@ export interface PluginSlotSnapshot {
   settingsSections: readonly PluginSettingsSectionSlot[];
   appOverlays: readonly ExperimentalAppOverlaySlot[];
   navPanels: readonly PluginNavPanelSlot[];
+  threadFixedTabs: readonly PluginThreadFixedTabSlot[];
   threadPanelActions: readonly PluginThreadPanelActionSlot[];
   newThreadPanelActions: readonly PluginNewThreadPanelActionSlot[];
   composerCustomizations: readonly PluginComposerCustomizationSlot[];
@@ -157,6 +163,7 @@ export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
   settingsSections: [],
   appOverlays: [],
   navPanels: [],
+  threadFixedTabs: coreThreadFixedTabs,
   threadPanelActions: [],
   newThreadPanelActions: [],
   composerCustomizations: [],
@@ -193,6 +200,7 @@ const SLOT_KINDS: readonly SlotKind[] = [
   "settingsSections",
   "appOverlays",
   "navPanels",
+  "threadFixedTabs",
   "threadPanelActions",
   "newThreadPanelActions",
   "composerCustomizations",
@@ -253,6 +261,7 @@ function flattenRegistrations(
     settingsSections: stamp(set.settingsSections),
     appOverlays: stamp(set.appOverlays),
     navPanels: stamp(set.navPanels),
+    threadFixedTabs: stamp(set.threadFixedTabs),
     threadPanelActions: stamp(set.threadPanelActions),
     newThreadPanelActions: stamp(set.newThreadPanelActions),
     composerCustomizations: stamp(set.composerCustomizations),
@@ -294,6 +303,9 @@ function collectKind<K extends SlotKind>(
   pluginIds: readonly string[],
 ): PluginSlotSnapshot[K][number][] {
   const collected: PluginSlotSnapshot[K][number][] = [];
+  if (kind === "threadFixedTabs") {
+    for (const slot of coreThreadFixedTabs) collected.push(slot);
+  }
   for (const pluginId of pluginIds) {
     const flattened = flattenedByPluginId.get(pluginId);
     if (flattened === undefined) continue;

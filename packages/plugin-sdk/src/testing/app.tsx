@@ -35,6 +35,7 @@ import {
   type ComposerSelection,
   type ComposerSubmitOptions,
   type ComposerView,
+  type ExperimentalThreadFixedTabRegistration,
   type ExperimentalAppOverlayRegistration,
   type ExperimentalSidebarNavigationActions,
   type ExperimentalSidebarNavigationTarget,
@@ -226,7 +227,7 @@ export type NavigateCall =
 
 export interface ExperimentalFixedTabOpenCall {
   surface: ExperimentalOpenFixedTabOptions<JsonValue>["surface"];
-  panelId: string;
+  panelId?: string;
   tabId: string;
   target?: JsonValue;
 }
@@ -1442,9 +1443,8 @@ const testPluginSdkApp = {
     _options,
   ): ExperimentalSidebarNavigationSplit {
     const env = useSlotEnv("experimental_useSidebarNavigationSplit");
-    const kind = env.sidebarNavigation.items.find(
-      (item) => item.id === itemId,
-    )?.action.kind;
+    const kind = env.sidebarNavigation.items.find((item) => item.id === itemId)
+      ?.action.kind;
     const isAvailable = kind === "new-thread" || kind === "open-plugin-panel";
     return useMemo(
       () => ({
@@ -1580,6 +1580,7 @@ export interface CapturedPluginApp {
   settingsSections: PluginSettingsSectionRegistration[];
   appOverlays: ExperimentalAppOverlayRegistration[];
   navPanels: PluginNavPanelRegistration[];
+  threadFixedTabs: ExperimentalThreadFixedTabRegistration[];
   threadPanelActions: PluginThreadPanelActionRegistration[];
   newThreadPanelActions: PluginNewThreadPanelActionRegistration[];
   composerCustomizations: ComposerCustomization[];
@@ -2190,13 +2191,19 @@ export function renderSlot<
       }
       const call: ExperimentalFixedTabOpenCall = {
         surface: panelOptions.surface,
-        panelId: panelOptions.tab.panelId,
+        ...(panelOptions.tab.panelId === undefined
+          ? {}
+          : { panelId: panelOptions.tab.panelId }),
         tabId: panelOptions.tab.id,
         ...(target === undefined ? {} : { target }),
       };
       experimental_fixedTabOpenCalls.push(call);
       const accepted = options.experimental_openFixedTab?.(call) ?? false;
-      if (accepted && target !== undefined) {
+      if (
+        accepted &&
+        target !== undefined &&
+        panelOptions.tab.panelId !== undefined
+      ) {
         fixedTabTargetSnapshot = {
           panelId: panelOptions.tab.panelId,
           sequence: (fixedTabTargetSnapshot?.sequence ?? 0) + 1,

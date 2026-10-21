@@ -3255,3 +3255,11 @@ current result as `RenderedSlotInspectionState.experimental_pageTitle`;
 audit test-host lifecycle parity before stabilization.
 Before stabilization, audit focus changes, same-plugin splits, loading,
 back/forward navigation, crash/reload recovery, links and overflow.
+
+## Thread fixed tabs (`experimental_threadFixedTab`)
+
+- **Surface:** `app.slots.experimental_threadFixedTab`, `ExperimentalThreadFixedTabRegistration`, `ExperimentalThreadFixedTabProps`, and `ExperimentalThreadFixedTabReference`; untargeted thread references in `experimental_useAppPanel().openFixedTab` omit `panelId`.
+- **Behavior:** registers a pinned, non-closable tab scoped by plugin id and tab id. `component` and optional `useVisible({threadId})` run inside the plugin scope with crash isolation. `layout` follows panel actions. Hidden, disabled, or temporarily unloaded registrations retain their saved identity and order; only available tabs can be selected. Targets are rejected. Navigation-panel references and their typed targets keep their existing contract.
+- **Persistence and automation:** the `plugin-fixed` thread tab kind stores `{id, pluginId, tabId}` in `thread_tabs.tabs_json`, through `sdk.threads.tabs.get/update` and `bb thread tabs show/set` with revision checks. Selection remains client-local, as for existing tabs.
+- **Core caller:** the thread Info registration uses the same registry, content host, destination resolution, and selection path as plugin fixed tabs. Its existing `thread-info` wire kind/id is retained for saved-selection compatibility. Diff remains the pinned core tab until its plugin migration.
+- **Stabilization:** exercise visibility changes, plugin reload/disable/re-enable, split panels, compact drawers, independent threads, persistence/conflicts, and untargeted navigation. Audit the reference distinction from nav-panel tabs, then rename project-wide and remove this entry.

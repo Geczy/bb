@@ -17,6 +17,10 @@ export function getPluginFixedTabOwnerId(
   return `plugin:${pluginId}:${panelId}`;
 }
 
+export function getThreadFixedTabOwnerId(pluginId: string): string {
+  return `plugin-thread:${pluginId}`;
+}
+
 export function openAppFixedTabFromDestinations(
   destinations: readonly AppFixedTabDestination[],
   intent: AppFixedTabOpenIntent,

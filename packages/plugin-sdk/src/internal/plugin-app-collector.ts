@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { z } from "zod";
 import type {
+  ExperimentalThreadFixedTabRegistration,
   ComposerCustomization,
   ExperimentalAppOverlayRegistration,
   ExperimentalCodeFenceRendererRegistration,
@@ -372,6 +373,7 @@ export interface CollectedPluginAppRegistrations {
   settingsSections: PluginSettingsSectionRegistration[];
   appOverlays: ExperimentalAppOverlayRegistration[];
   navPanels: PluginNavPanelRegistration[];
+  threadFixedTabs: ExperimentalThreadFixedTabRegistration[];
   threadPanelActions: PluginThreadPanelActionRegistration[];
   newThreadPanelActions: PluginNewThreadPanelActionRegistration[];
   composerCustomizations: ComposerCustomization[];
@@ -502,6 +504,7 @@ export function collectPluginAppRegistrations(
     settingsSections: [],
     appOverlays: [],
     navPanels: [],
+    threadFixedTabs: [],
     threadPanelActions: [],
     newThreadPanelActions: [],
     composerCustomizations: [],
@@ -533,6 +536,7 @@ export function collectPluginAppRegistrations(
     settingsSection: new Set<string>(),
     appOverlay: new Set<string>(),
     navPanel: new Set<string>(),
+    threadFixedTab: new Set<string>(),
     threadPanelAction: new Set<string>(),
     newThreadPanelAction: new Set<string>(),
     composerCustomization: new Set<string>(),
@@ -801,6 +805,22 @@ export function collectPluginAppRegistrations(
             : {}),
           ...(registration.headerContent !== undefined
             ? { headerContent: registration.headerContent }
+            : {}),
+        });
+      },
+      experimental_threadFixedTab(registration) {
+        const kind = "slots.experimental_threadFixedTab";
+        if (
+          registration.useVisible !== undefined &&
+          typeof registration.useVisible !== "function"
+        ) {
+          throw new Error(`${kind}: "useVisible" must be a function when set`);
+        }
+        collected.threadFixedTabs.push({
+          ...collectPanelAction(kind, seenIds.threadFixedTab, registration),
+          icon: requireNonEmptyString(kind, "icon", registration.icon),
+          ...(registration.useVisible !== undefined
+            ? { useVisible: registration.useVisible }
             : {}),
         });
       },

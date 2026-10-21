@@ -1042,6 +1042,27 @@ export interface PluginThreadPanelActionContext {
   openPanel(options?: PluginPanelActionOpenOptions): boolean;
 }
 
+/** A pinned tab reference in the current thread's panel. */
+export interface ExperimentalThreadFixedTabReference {
+  readonly id: string;
+  readonly panelId?: never;
+  readonly experimental_target?: never;
+}
+
+export interface ExperimentalThreadFixedTabProps {
+  threadId: string;
+}
+
+/** Pinned, non-closable thread tab. Identity and order are saved per thread. */
+export interface ExperimentalThreadFixedTabRegistration extends ExperimentalThreadFixedTabReference {
+  title: string;
+  icon: BbIconName;
+  component: ComponentType<ExperimentalThreadFixedTabProps>;
+  layout?: "padded" | "flush";
+  /** Evaluated inside the plugin scope for each thread. Hidden tabs retain their saved identity. */
+  useVisible?(props: ExperimentalThreadFixedTabProps): boolean;
+}
+
 export interface PluginThreadPanelActionRegistration {
   /** Unique within the plugin; letters, digits, `-`, `_`. */
   id: string;
@@ -2602,6 +2623,10 @@ export interface PluginAppSlots {
     registration: ExperimentalAppOverlayRegistration,
   ): void;
   navPanel(registration: PluginNavPanelRegistration): void;
+  /** Register a pinned thread tab. Experimental: see docs/api_to_audit.md. */
+  experimental_threadFixedTab(
+    registration: ExperimentalThreadFixedTabRegistration,
+  ): void;
   /**
    * Add an action to an existing thread's panel launcher. This slot is
    * thread-only; use `experimental_newThreadPanelAction` for root compose.
@@ -3859,12 +3884,18 @@ export interface ExperimentalFixedTabTargetState<Target extends JsonValue> {
   clear(): void;
 }
 
-export type ExperimentalOpenFixedTabOptions<Target extends JsonValue> = {
-  surface: ExperimentalAppPanelSurface;
-  tab: ExperimentalPluginFixedTabReference<Target>;
-  /** Omit to select the tab without replacing its current session target. */
-  target?: NoInfer<Target>;
-};
+export type ExperimentalOpenFixedTabOptions<Target extends JsonValue> =
+  | {
+      surface: ExperimentalAppPanelSurface;
+      tab: ExperimentalPluginFixedTabReference<Target>;
+      /** Omit to select the tab without replacing its current session target. */
+      target?: NoInfer<Target>;
+    }
+  | {
+      surface: ExperimentalAppPanelSurface;
+      tab: ExperimentalThreadFixedTabReference;
+      target?: never;
+    };
 
 /** Surface-aware controller for selecting owner-scoped fixed tabs. */
 export interface ExperimentalAppPanel {

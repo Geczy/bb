@@ -393,11 +393,23 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         summary:
           "Add a tab to the side panel next to a thread. With this, a plugin can:",
         bullets: [
-          "Show plugin content alongside the conversation",
-          "Know which thread it was opened from",
+          "Show closable or pinned plugin tabs alongside the conversation",
+          "Know which thread the tab belongs to and hide pinned tabs when they do not apply",
+          "Keep pinned tabs saved per thread; core Info uses the same registration path",
           "Open from a [message action](message-actions), the side panel's + button, or plugin code",
         ],
+        reference: [
+          "Register pinned tabs with app.slots.experimental_threadFixedTab({ id, title, icon, component, useVisible? }). The component and optional visibility hook receive { threadId }; layout is padded (default) or flush.",
+          "Open a pinned tab with experimental_useAppPanel().openFixedTab({ surface: { kind: 'current' }, tab: { id: 'your-tab' } }). Thread references omit panelId and target; unknown or hidden tabs return false. Nav-panel references retain panelId and their existing typed-target contract.",
+          "Pinned tabs cannot be closed. Identity and order are saved per thread and retained while hidden or disabled. SDK threads.tabs.get/update and CLI bb thread tabs show/set use { id, kind: 'plugin-fixed', pluginId, tabId }; updates require the expected revision. Selection stays client-local.",
+        ],
         apiSymbols: [
+          "PluginAppSlots.experimental_threadFixedTab",
+          "experimental_useAppPanel",
+          "ExperimentalThreadFixedTabRegistration",
+          "ExperimentalThreadFixedTabReference",
+          "ExperimentalThreadFixedTabProps",
+          "ExperimentalAppPanel.openFixedTab",
           "PluginThreadPanelActionRegistration",
           "BbNavigate.openThreadPanel",
           "PluginThreadPanelProps",
