@@ -6,12 +6,17 @@
 - `pnpm start:worktree` builds production artifacts and serves the optimized app bundle from the checkout-specific dev server URL, while keeping the same dev data directory and deterministic server/host-daemon ports. It has no Vite dev server or hot reload.
 - `pnpm start:worktree-remote` is the trusted-network variant of `pnpm start:worktree`; it binds that server to all IPv4 interfaces.
 - `pnpm desktop` packages the Electron app and launches it against the installed data directory, ports and Electron user-data directory, the same targets a released build uses. It shares the single-instance lock with an installed bb: quit that first, or the launch focuses it instead of starting your build.
-- `pnpm desktop:worktree` packages and launches it against this checkout's data directory and deterministic ports, the same instance `pnpm start:worktree` uses, with Electron's user-data directory at `$BB_DATA_DIR/desktop` (override with `BB_DESKTOP_USER_DATA_DIR`). Like `pnpm start:worktree`, it skips first-run setup unless `BB_SKIP_ONBOARDING=0`. It refuses to start when the server or host-daemon port is busy, so a stale server cannot answer for your build. Set `BB_DESKTOP_OPEN_DEVTOOLS=1` to open DevTools. Both desktop commands always repackage first; machines without a Developer ID identity produce unsigned artifacts.
+- `pnpm desktop:worktree` packages and launches it against this checkout's data directory and deterministic ports, the same instance `pnpm start:worktree` uses, with Electron's user-data directory at `$BB_DATA_DIR/desktop` (override with `BB_DESKTOP_USER_DATA_DIR`). Like `pnpm start:worktree`, it skips first-run setup unless `BB_SKIP_ONBOARDING=0`. It refuses to start when the server or host-daemon port is busy, so a stale server cannot answer for your build. It shows the dev Dock icon while running (`BB_DESKTOP_DEV_ICON=1`). Set `BB_DESKTOP_OPEN_DEVTOOLS=1` to open DevTools. Both desktop commands always repackage first; machines without a Developer ID identity produce unsigned artifacts.
 - The packaged app defaults to server/frontend `:38886`, host daemon `:38887`, data dir `~/.bb/`, and logs under `~/.bb/logs/`.
-- `bb-app` (including `pnpm start`), `bb-server`, and `bb-host-daemon` capture service stdout and stderr in `logs/server-stdio.log` and `logs/host-daemon-stdio.log` under the selected data directory. These append across restarts and are separate from rotating application logs. Use `tail -F` on these files for console output and early startup errors; service output is not forwarded to the launcher's terminal.
+- `bb-app` (including `pnpm start`), `bb-server`, and `bb-host-daemon` capture service stdout and stderr in `logs/server-stdio.log` and `logs/host-daemon-stdio.log` under the selected data directory. These append across restarts; a file over 10 MB is renamed to `<name>-stdio.1.log` (replacing the previous one) when its service starts. They hold early startup errors, crashes, and other output that bypasses the logger. Application log lines go only to the rotating `<component>.N.log` files, which keep the five newest per component; the logger skips its pretty console copy when stdout is a plain file, so `pnpm dev` terminals still show it. Service output is not forwarded to the launcher's terminal.
 - Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly against the active data dir: `sqlite3 <data>/bb.db "SELECT * FROM threads WHERE id = 'thr_xxx';"`.
 - API routes are under `/api/v1/`, for example `GET /api/v1/threads/:id`. Use `curl` against the server API to isolate frontend issues from server behavior.
 - Use the CLI to inspect state: `pnpm bb thread show <id>`, `pnpm bb project list`, `pnpm bb status`. From source, use `pnpm bb:dev`.
+
+The desktop main process also writes rotating `logs/desktop.log` immediately,
+including updater, Connect, and startup errors. View → Local Logs is available
+on every desktop platform and when attached to an existing server; it follows
+local desktop, server, and daemon files in the selected data directory.
 
 ## Desktop Browser Tab Recovery
 
@@ -25,12 +30,36 @@ in the desktop app attaches the existing view when that window still owns it,
 including after its connection generation changes. While the desktop or host is
 reconnecting, the panel retries for about a minute, then offers Try again.
 
-Switching servers retains each server's native pages in the desktop process.
-Inactive pages and their popups are hidden, media is paused, and automation
-leases are revoked. Returning to the same server origin reattaches its pages
-with their history and unsaved state. Native tab lookup, page events, and broker
-snapshots stay scoped to the active server. Closing the window or quitting the
-desktop app still releases its pages across all servers.
+The desktop keeps at most four hidden user browser pages resident across
+windows and servers, and evicts the renderer of any page hidden or unused for
+five minutes. A sweep runs every 30 seconds while hidden user pages exist; the
+least recently hidden or used pages are evicted first. Visible pages, agent-created
+tabs, downloads (including paused ones), control leases, attached debuggers,
+in-flight evaluations and captures, and pages with open popups are never
+evicted. An evicted (cold) tab keeps its identity in native tab lists and broker
+snapshots. Showing it, navigating it, evaluating, capturing, or leasing it
+restores its navigation history in the same browser session; in-page
+JavaScript state is lost. Hiding, moving, stopping, focusing, searching, or
+closing a cold tab does not restore it. CDP targets cover only resident pages,
+so a cold tab leaves the target list until it is restored.
+
+Archiving a thread evicts its hidden pages in each desktop window at once,
+including agent-created tabs and pages with downloads; a page on screen is
+evicted once it is hidden. Control leases, attached debuggers, open popups, and
+in-flight evaluations or captures still keep a page until they end. Evicted
+tabs keep their saved tabs and restore like any cold tab. Unarchiving stops the
+immediate eviction and leaves the thread's pages to the idle rules above.
+Archive state reaches the window as realtime thread changes, so each time the
+window's realtime connection opens, including after a reconnect or a server
+switch, it re-reads the archive state of every thread with pages in that window.
+An archive or unarchive made while the window was disconnected applies then.
+
+Switching servers hides each server's native pages and popups, pauses media,
+and revokes automation leases. Returning to the same server origin reattaches
+resident pages with their unsaved state; cold pages restore from history when
+shown. Native tab lookup, page events, and broker snapshots stay scoped to the
+active server. Closing the window or quitting the desktop app still releases
+its pages across all servers.
 
 After a window closes or the app relaunches, the panel reopens the saved URL in
 the current window on the same host once the host confirms the old window is
@@ -419,6 +448,14 @@ getbb.app.
 Local machine enrollment follows the same origin: local `http:` server URLs
 produce `ws:` machine tunnels and `http:` share URLs, while non-local machine
 enrollment remains HTTPS-only.
+
+For bb connect next, `pnpm cloud:dev` sets the Connect worker's and bb-web's
+`NEXT_BASE_DOMAIN` to `next.bb.localhost`. `BB_CLOUD_DEV_GATE_SECRET` sets the
+worker's `GATE_SECRET` (the account API answers 404 without it),
+`BB_CLOUD_DEV_GATE_PUBLIC_KEYS` sets bb-web's `GATE_PUBLIC_KEYS`, and
+`BB_CLOUD_DEV_STATE_DIR` moves the local D1 and Durable Object state away from
+`.wrangler/cloud-dev`. `apps/connect-next/scripts/e2e-local.sh` uses all three;
+see [connect-next.md](connect-next.md#local-end-to-end-run).
 
 The AI gateway answers `503 unavailable` until an OpenRouter key is present.
 Export `OPENROUTER_API_KEY` in the shell before `pnpm cloud:dev` to pass it

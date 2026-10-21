@@ -58,7 +58,11 @@ import {
 
 export {
   HOST_ARTIFACT_MAX_BYTES,
+  HOST_DAEMON_COMPATIBLE_PROTOCOL_VERSIONS,
+  HOST_DAEMON_CONNECT_NEXT_PROTOCOL_VERSION,
   HOST_DAEMON_PROTOCOL_VERSION,
+  hostDaemonSupportsConnectNext,
+  isCompatibleHostDaemonProtocolVersion,
 } from "./protocol.js";
 export {
   workspaceResolutionFailureCodeSchema,
@@ -1008,6 +1012,7 @@ const workspaceDiffFilesCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.diffFiles"),
   target: workspaceDiffTargetSchema,
   maxFiles: z.number().int().positive(),
+  ignoreWhitespace: z.boolean(),
 });
 
 const workspaceDiffPatchCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
@@ -1015,6 +1020,7 @@ const workspaceDiffPatchCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   target: workspaceDiffTargetSchema,
   paths: z.array(z.string()),
   maxBytesPerFile: z.number().int().positive(),
+  ignoreWhitespace: z.boolean(),
 });
 
 const workspacePullRequestCommandSchema =

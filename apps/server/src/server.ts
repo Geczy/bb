@@ -15,6 +15,11 @@ import {
   INSTALL_MACHINE_WINDOWS_SCRIPT_PATH,
 } from "./install-machine-asset.js";
 import { createNodeWebSocket } from "@hono/node-ws";
+import { createGateKeyStore } from "./services/connect-next/gate-keys.js";
+import {
+  createTunnelIngressManager,
+  type TunnelIngressManager,
+} from "./services/connect-next/tunnel-ingress.js";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { performance } from "node:perf_hooks";
@@ -154,6 +159,7 @@ interface ServerApp {
   pluginService: PluginService;
   pluginCatalogService: PluginCatalogService;
   serverMove: ServerMoveCoordinator;
+  tunnelIngress: TunnelIngressManager;
 }
 
 interface CloseWebSocketServerArgs {
@@ -194,6 +200,7 @@ interface CreateAppOptions {
   slowApiRequestLogThresholdMs?: number;
   performanceDiagnosticsEnabled?: () => boolean;
   staticDir?: string;
+  tunnelIngressNow?: () => number;
 }
 
 interface StaticResponseHeadersArgs {
@@ -465,6 +472,18 @@ export function createApp(
   const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({
     app,
   });
+  const tunnelIngressNow = options?.tunnelIngressNow ?? Date.now;
+  const tunnelIngress = createTunnelIngressManager({
+    app,
+    injectWebSocket,
+    keys: createGateKeyStore({
+      url: () => deps.config.connectGateKeysUrl,
+      logger: deps.logger,
+      now: tunnelIngressNow,
+    }),
+    loopbackOrigin: () => `http://127.0.0.1:${deps.config.serverPort}`,
+    logger: deps.logger,
+  });
   const slowApiRequestLogThresholdMs =
     options?.slowApiRequestLogThresholdMs ?? SLOW_API_REQUEST_LOG_THRESHOLD_MS;
   const bbAppArtifactService =
@@ -488,6 +507,11 @@ export function createApp(
   };
   const pendingServerMove = serverMoveOptions.pending;
 
+  app.use("*", async (context, next) => {
+    const signal = context.req.raw.signal;
+    await next();
+    if (signal.aborted) await context.res.body?.cancel(signal.reason);
+  });
   app.use("*", async (context, next) => {
     const problem = requestHostProblem(context, deps);
     if (problem !== null) {
@@ -767,6 +791,7 @@ export function createApp(
         }),
       ),
     callPluginHost: (args) => callPluginHostRpc(deps, args),
+    openTunnelIngress: (audience) => tunnelIngress.open(audience),
     disposePluginHost: (args) => disposePluginHostWorkers(deps, args),
     onSettingsChanged: (pluginId) => {
       deps.providerNativeRoots.invalidate(pluginId);
@@ -956,8 +981,8 @@ export function createApp(
       return {
         onOpen: (_event, socket) => onClientSocketOpen(deps.hub, socket),
         onMessage: (event, socket) =>
-          onClientSocketMessage(deps, socket, event.data),
-        onClose: (_event, socket) => onClientSocketClose(deps, socket),
+          onClientSocketMessage(deps.hub, socket, event.data),
+        onClose: (_event, socket) => onClientSocketClose(deps.hub, socket),
       };
     }),
   );
@@ -1050,5 +1075,6 @@ export function createApp(
     pluginService,
     pluginCatalogService,
     serverMove,
+    tunnelIngress,
   };
 }

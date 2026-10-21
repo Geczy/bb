@@ -30,6 +30,10 @@
     "category": "cloud-and-remote",
     "screenshots": []
   },
+  "connect-next": {
+    "category": "cloud-and-remote",
+    "screenshots": []
+  },
   "custom-instructions": {
     "category": "memory-and-context",
     "screenshots": []
@@ -63,10 +67,6 @@
     "screenshots": []
   },
   "provider-acp": {
-    "category": "agents-and-providers",
-    "screenshots": []
-  },
-  "provider-acp-next": {
     "category": "agents-and-providers",
     "screenshots": []
   },
