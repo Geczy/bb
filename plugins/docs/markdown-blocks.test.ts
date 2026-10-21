@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-import Link from "@tiptap/extension-link";
-import StarterKit from "@tiptap/starter-kit";
+import { MarkdownLink, MarkdownStarterKit } from "./markdown-editor";
 import { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import Table from "@tiptap/extension-table";
@@ -38,8 +37,8 @@ const DOCUMENT = `${[
 function open(markdown: string) {
   const editor = new Editor({
     extensions: [
-      StarterKit,
-      Link.configure({ openOnClick: false, autolink: true }),
+      MarkdownStarterKit,
+      MarkdownLink.configure({ openOnClick: false, autolink: true }),
       Image,
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -58,7 +57,12 @@ function open(markdown: string) {
     ],
     content: "",
   });
-  const blocks = loadMarkdownBlocks(editor, markdown, (source) => source, false);
+  const blocks = loadMarkdownBlocks(
+    editor,
+    markdown,
+    (source) => source,
+    false,
+  );
   const save = () =>
     saveMarkdownBlocks(editor, blocks, (nodes) =>
       editor.storage.markdown.serializer.serialize(
@@ -135,7 +139,10 @@ describe("markdown blocks", () => {
             ),
           ),
         ),
-      DOCUMENT.replace("# Release notes\n\n", "# Release notes\n\nInserted.\n\n"),
+      DOCUMENT.replace(
+        "# Release notes\n\n",
+        "# Release notes\n\nInserted.\n\n",
+      ),
     ],
   ])("rewrites only %s", (_name, edit, expected) => {
     const { editor, save } = open(DOCUMENT);
@@ -194,20 +201,36 @@ describe("markdown blocks", () => {
   });
 });
 
-
 describe("Markdown editing round trips", () => {
   it.each([
     ["- all ~1,300 records\n", "- New all ~1,300 records\n"],
-    ["Visit https://example.com/docs\n", "New Visit https://example.com/docs\n"],
-    ["- Visit https://example.com/a_b?q=one&n=2\n", "- New Visit https://example.com/a_b?q=one&n=2\n"],
+    [
+      "Visit https://example.com/docs\n",
+      "New Visit https://example.com/docs\n",
+    ],
+    [
+      "Visit https://example.com/docs.\n",
+      "New Visit https://example.com/docs.\n",
+    ],
+    [
+      "- Visit https://example.com/a_b?q=one&n=2\n",
+      "- New Visit https://example.com/a_b?q=one&n=2\n",
+    ],
   ])("does not add syntax when editing %s", (source, expected) => {
     const { editor, save } = open(source);
     try {
-      editor.view.dispatch(editor.state.tr.insertText("New ", textPosition(editor, source.includes("Visit") ? "Visit" : "all")));
+      editor.view.dispatch(
+        editor.state.tr.insertText(
+          "New ",
+          textPosition(editor, source.includes("Visit") ? "Visit" : "all"),
+        ),
+      );
       expect(save()).toBe(expected);
       const reopened = open(save());
       try {
-        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+        expect(reopened.editor.state.doc.toJSON()).toEqual(
+          editor.state.doc.toJSON(),
+        );
       } finally {
         reopened.editor.destroy();
       }
@@ -235,14 +258,18 @@ describe("Markdown editing round trips", () => {
   it("preserves intentional hard breaks without backslash syntax", () => {
     const { editor, save } = open("- Item\n\nLet me know.\n");
     try {
-      editor.commands.setTextSelection(textPosition(editor, "Let me know.") + 12);
+      editor.commands.setTextSelection(
+        textPosition(editor, "Let me know.") + 12,
+      );
       editor.commands.setHardBreak();
       editor.commands.setHardBreak();
       editor.view.dispatch(editor.state.tr.insertText("Thanks."));
       expect(save()).toBe("- Item\n\nLet me know.<br><br>Thanks.\n");
       const reopened = open(save());
       try {
-        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+        expect(reopened.editor.state.doc.toJSON()).toEqual(
+          editor.state.doc.toJSON(),
+        );
       } finally {
         reopened.editor.destroy();
       }
@@ -252,15 +279,24 @@ describe("Markdown editing round trips", () => {
   });
 
   it.each([
-    "*literal*", "_literal_", "~~literal~~", "[label](target)",
-    "# heading", "- item", "1. item", "\\~literal", "<script>alert(1)</script>",
+    "*literal*",
+    "_literal_",
+    "~~literal~~",
+    "[label](target)",
+    "# heading",
+    "- item",
+    "1. item",
+    "\\~literal",
+    "<script>alert(1)</script>",
   ])("keeps typed %s literal after reopening", (text) => {
     const { editor, save } = open("");
     try {
       editor.view.dispatch(editor.state.tr.insertText(text, 1));
       const reopened = open(save());
       try {
-        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+        expect(reopened.editor.state.doc.toJSON()).toEqual(
+          editor.state.doc.toJSON(),
+        );
       } finally {
         reopened.editor.destroy();
       }
@@ -269,7 +305,6 @@ describe("Markdown editing round trips", () => {
     }
   });
 });
-
 
 describe("Markdown serializer safeguards", () => {
   it.each([
@@ -292,7 +327,9 @@ describe("Markdown serializer safeguards", () => {
       editor.view.dispatch(editor.state.tr.insertText("New ", first));
       const reopened = open(save());
       try {
-        expect(reopened.editor.state.doc.toJSON()).toEqual(editor.state.doc.toJSON());
+        expect(reopened.editor.state.doc.toJSON()).toEqual(
+          editor.state.doc.toJSON(),
+        );
       } finally {
         reopened.editor.destroy();
       }

@@ -1,0 +1,107 @@
+import type { Editor } from "@tiptap/core";
+import Link from "@tiptap/extension-link";
+import { defaultMarkdownSerializer } from "@tiptap/pm/markdown";
+import type { Mark, Node } from "@tiptap/pm/model";
+import StarterKit from "@tiptap/starter-kit";
+import type { MarkdownMarkSpec, MarkdownNodeSpec } from "tiptap-markdown";
+
+function bareLink(editor: Editor, mark: Mark, parent: Node, index: number) {
+  const node = parent.child(index);
+  if (
+    !node.isText ||
+    node.text !== mark.attrs.href ||
+    mark.attrs.title ||
+    node.marks.length !== 1
+  )
+    return false;
+  const before = parent.maybeChild(index - 1)?.textContent ?? "";
+  const after = parent.maybeChild(index + 1)?.textContent ?? "";
+  const matches: { index: number; lastIndex: number; url: string }[] | null =
+    editor.storage.markdown.parser.md.linkify.match(before + node.text + after);
+  return (
+    matches?.some(
+      (match) =>
+        match.index === before.length &&
+        match.lastIndex === before.length + node.text!.length &&
+        match.url === mark.attrs.href,
+    ) ?? false
+  );
+}
+
+const textMarkdown: MarkdownNodeSpec = {
+  serialize(state, node, parent, index) {
+    const link = node.marks.find((mark) => mark.type.name === "link");
+    if (link && bareLink(this.editor, link, parent, index)) {
+      state.text(node.text!, false);
+      return;
+    }
+    const escape = state.esc;
+    state.esc = (text, startOfLine) =>
+      escape
+        .call(state, text, startOfLine)
+        .replace(/(?:\\~)+/g, (run) => (run.length === 2 ? "~" : run));
+    try {
+      state.text(node.text!.replace(/</g, "&lt;").replace(/>/g, "&gt;"));
+    } finally {
+      state.esc = escape;
+    }
+  },
+};
+
+const hardBreakMarkdown: MarkdownNodeSpec = {
+  serialize(state, node, parent, index) {
+    const adjacentBreak =
+      parent.maybeChild(index - 1)?.type === node.type ||
+      parent.maybeChild(index + 1)?.type === node.type;
+    state.write(
+      ("inTable" in state && state.inTable) ||
+        adjacentBreak ||
+        index === parent.childCount - 1
+        ? "<br>"
+        : "  \n",
+    );
+  },
+};
+
+export const MarkdownStarterKit = StarterKit.extend({
+  addExtensions() {
+    return this.parent!().map((extension) => {
+      const markdown =
+        extension.name === "text"
+          ? textMarkdown
+          : extension.name === "hardBreak"
+            ? hardBreakMarkdown
+            : null;
+      return markdown
+        ? extension.extend({ addStorage: () => ({ markdown }) })
+        : extension;
+    });
+  },
+});
+
+export const MarkdownLink = Link.extend({
+  addStorage() {
+    const link = defaultMarkdownSerializer.marks.link!;
+    return {
+      markdown: {
+        serialize: {
+          ...link,
+          open(state, mark, parent, index) {
+            return bareLink(this.editor, mark, parent, index)
+              ? ""
+              : typeof link.open === "string"
+                ? link.open
+                : link.open(state, mark, parent, index);
+          },
+          close(state, mark, parent, index) {
+            return bareLink(this.editor, mark, parent, index - 1)
+              ? ""
+              : typeof link.close === "string"
+                ? link.close
+                : link.close(state, mark, parent, index);
+          },
+        },
+      } satisfies MarkdownMarkSpec,
+    };
+  },
+});
