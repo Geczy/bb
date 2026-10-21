@@ -289,9 +289,10 @@ readiness was observed, not that authentication succeeded; `new_thread_submit`
 With `BB_FF_INITIATOR_TELEMETRY=true` (off by default until the property clears
 its analytics review), `thread_created` and `user_message_sent` also carry
 `initiator`: `user`, `agent`, `automation` (started by the automations
-plugin), `plugin` (any other plugin), or `system` (bb's own retries and follow-ups). Messages sent into an
-existing thread report `user` for now, because sends carry no plugin
-attribution.
+plugin), `plugin` (any other plugin), or `system` (bb's own retries and follow-ups). Sends from a plugin carry its ID (the plugin SDK adds `originPluginId`), so automation
+runs into an existing thread report `automation`. `bb thread spawn` run inside a thread
+sends that thread as `senderThreadId`; the new thread reports `agent` when the sender has a
+turn running, and `user` otherwise.
 
 ## AI services
 

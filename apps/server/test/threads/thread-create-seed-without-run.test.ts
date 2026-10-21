@@ -167,6 +167,69 @@ describe("thread creation initiator telemetry", () => {
   });
 });
 
+describe("thread creation initiator for CLI spawns from a thread", () => {
+  it.each([
+    [true, "agent"],
+    [false, "user"],
+  ] as const)(
+    "labels the spawn %s → %s depending on whether the sender thread is mid-turn",
+    async (senderMidTurn, expected) => {
+      await withTestHarness(async (harness) => {
+        const capture = installTelemetryCaptureSpy(harness);
+        harness.deps.config.featureFlags = {
+          ...harness.deps.config.featureFlags,
+          initiatorTelemetry: true,
+        };
+        const { host } = seedHostSession(harness.deps, {
+          id: `host-sender-${String(senderMidTurn)}`,
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+          path: "/tmp/sender-initiator",
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+          path: "/tmp/sender-initiator",
+        });
+        const sender = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+        });
+        if (senderMidTurn) {
+          seedTurnStarted(harness.deps, {
+            threadId: sender.id,
+            turnId: "turn-sender-1",
+          });
+        }
+
+        await createThreadFromRequest(harness.deps, {
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: { type: "unmanaged", path: "/tmp/sender-initiator" },
+          },
+          input: textInput("spawned from a thread"),
+          origin: "cli",
+          projectId: project.id,
+          providerId: "codex",
+          senderThreadId: sender.id,
+          startedOnBehalfOf: null,
+        });
+
+        expect(capture).toHaveBeenCalledWith({
+          name: "thread_created",
+          properties: {
+            is_child_thread: false,
+            provider: "codex",
+            initiator: expected,
+          },
+        });
+      });
+    },
+  );
+});
+
 describe("thread creation with startedOnBehalfOf (seed-without-run)", () => {
   it("persists an agent fork start while cloning the source provider session", async () => {
     await withTestHarness(async (harness) => {

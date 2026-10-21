@@ -319,6 +319,41 @@ describe("user message telemetry", () => {
     });
   });
 
+  it("labels a send from the automations plugin as automation when initiator telemetry is on", async () => {
+    await withTestHarness(async (harness) => {
+      const capture = installTelemetryCaptureSpy(harness);
+      harness.deps.config.featureFlags = {
+        ...harness.deps.config.featureFlags,
+        initiatorTelemetry: true,
+      };
+      const { environment, thread } = seedColdIdleThreadFixture({
+        harness,
+        value: 7,
+      });
+
+      await sendThreadMessage(harness.deps, {
+        environment,
+        payload: {
+          input: textInput("automation run into an existing thread"),
+          mode: "start",
+          originPluginId: "automations",
+        },
+        thread,
+        trigger: "user",
+      });
+
+      expect(capture).toHaveBeenCalledWith({
+        name: "user_message_sent",
+        properties: {
+          is_child_thread: false,
+          message_source: "thread_send",
+          provider: "codex",
+          initiator: "automation",
+        },
+      });
+    });
+  });
+
   it("does not capture agent-originated sends", async () => {
     await withTestHarness(async (harness) => {
       const capture = installTelemetryCaptureSpy(harness);
@@ -1904,7 +1939,11 @@ describe("turn held open for background work", () => {
     };
   }
 
-  function queueIfActive(harness: TestAppHarness, thread: Thread, text: string) {
+  function queueIfActive(
+    harness: TestAppHarness,
+    thread: Thread,
+    text: string,
+  ) {
     return acceptThreadSendRequest(harness.deps, {
       payload: {
         input: textInput(text),

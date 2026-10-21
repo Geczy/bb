@@ -60,6 +60,7 @@ import {
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
 import { resolveDispatchAuthor } from "./dispatch-author.js";
+import { getActiveTurnId } from "./thread-events.js";
 import {
   resolveTelemetryInitiator,
   initiatorTelemetryProperty,
@@ -858,10 +859,14 @@ export async function createThreadFromRequest(
     senderThreadId: null,
     startedOnBehalfOf: request.startedOnBehalfOf,
   });
+  const spawnedByWorkingAgent =
+    request.senderThreadId !== undefined &&
+    getActiveTurnId(deps, request.senderThreadId) !== null;
   const telemetryInitiator = resolveTelemetryInitiator({
     origin: request.origin,
     originPluginId: request.originPluginId ?? null,
-    initiator,
+    initiator:
+      spawnedByWorkingAgent && initiator === "user" ? "agent" : initiator,
   });
   deps.telemetry.capture({
     name: "thread_created",

@@ -81,7 +81,10 @@ import type {
   TelemetryEvent,
   TelemetryInitiator,
 } from "../system/telemetry.js";
-import { initiatorTelemetryProperty } from "./telemetry-initiator.js";
+import {
+  initiatorTelemetryProperty,
+  resolveTelemetryInitiator,
+} from "./telemetry-initiator.js";
 import { assertThreadHostAcceptsWork } from "./thread-host-admission.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
@@ -569,6 +572,11 @@ async function sendThreadMessageWithoutContextClear(
   });
   const shouldCaptureUserMessageSent =
     args.trigger === "user" && initiator === "user" && input.length > 0;
+  const telemetryInitiator = resolveTelemetryInitiator({
+    origin: args.payload.originPluginId === undefined ? null : "plugin",
+    originPluginId: args.payload.originPluginId ?? null,
+    initiator,
+  });
   const expectedSteerTurnId =
     mode === "auto" || mode === "steer"
       ? getActiveTurnId(deps, thread.id)
@@ -621,7 +629,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
-        initiator: "user",
+        initiator: telemetryInitiator,
       });
     }
     return;
@@ -748,7 +756,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
-        initiator: "user",
+        initiator: telemetryInitiator,
       });
     }
     return;
@@ -816,7 +824,7 @@ async function sendThreadMessageWithoutContextClear(
       isChildThread: thread.parentThreadId !== null,
       messageSource: "thread_send",
       providerId: thread.providerId,
-      initiator: "user",
+      initiator: telemetryInitiator,
     });
   }
 }
