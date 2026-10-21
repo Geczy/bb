@@ -14,7 +14,7 @@ const columns = providers.flatMap((provider) => platforms.map((os) => ({ provide
 const rows = [
   ["1. Clean start", ["clean"]],
   ["2. Detect missing", ["detect"]],
-  ["3. Install and verify unauthenticated", ["install"]],
+  ["3. Install through bb", ["install"]],
   ["4. Launch sign-in; stub credentials", ["signin"]],
   ["5. First turn with fake model", ["turn"]],
   ["6. Relaunch; update", ["relaunch", "update"]],
