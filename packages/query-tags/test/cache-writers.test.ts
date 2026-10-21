@@ -11,7 +11,7 @@ import {
 } from "../src/index.js";
 
 type Row = { id: string; pinnedAt: number | null; status: string };
-const queryKey = ["rows"];
+const queryKey = ["row"];
 const disposers: (() => void)[] = [];
 afterEach(() => {
   for (const dispose of disposers.splice(0)) dispose();
@@ -23,16 +23,16 @@ const clients = [
 ] as const;
 let Client: typeof QueryClient = TaggedQueryClient;
 
-async function setup(rows: Row[]) {
+async function setup(row: Row) {
   const client = new Client({
     defaultOptions: { queries: { retry: false } },
   });
-  let server = rows;
-  const observer = new QueryObserver<Row[]>(client, {
+  let server = row;
+  const observer = new QueryObserver<Row>(client, {
     queryKey,
     ...taggedQueryOptions(client, queryKey, {
       scope: CORE_TAG_SCOPE,
-      tagsOf: () => ["rows"],
+      tagsOf: () => ["row"],
     }),
     queryFn: () =>
       runTaggedRead(client, queryKey, async () => structuredClone(server)),
@@ -44,15 +44,15 @@ async function setup(rows: Row[]) {
   await observer.refetch();
   return {
     client,
-    rows: () => client.getQueryData<Row[]>(queryKey),
-    setServer(next: Row[]) {
+    row: () => client.getQueryData<Row>(queryKey),
+    setServer(next: Row) {
       server = next;
     },
     refetch: () => observer.refetch(),
   };
 }
 
-function pin(client: QueryClient, id: string, pinnedAt: number) {
+function pin(client: QueryClient, pinnedAt: number) {
   let fail!: (error: Error) => void;
   let accept!: () => void;
   const write = runTaggedMutation(
@@ -65,9 +65,7 @@ function pin(client: QueryClient, id: string, pinnedAt: number) {
     {
       client,
       optimistic: [
-        optimisticQueryUpdate<Row[]>(queryKey, (rows) =>
-          rows.map((row) => (row.id === id ? { ...row, pinnedAt } : row)),
-        ),
+        optimisticQueryUpdate<Row>(queryKey, (row) => ({ ...row, pinnedAt })),
       ],
     },
   ).catch(() => {});
@@ -83,8 +81,8 @@ function pin(client: QueryClient, id: string, pinnedAt: number) {
   };
 }
 
-const patch = (id: string, change: Partial<Row>) => (rows?: Row[]) =>
-  rows?.map((row) => (row.id === id ? { ...row, ...change } : row));
+const patch = (change: Partial<Row>) => (row?: Row) =>
+  row && { ...row, ...change };
 
 describe.each(clients)("%s", (_name, ClientClass) => {
   beforeEach(() => {
@@ -95,85 +93,49 @@ describe.each(clients)("%s", (_name, ClientClass) => {
   });
 
   it("rolls back a prediction under an unrelated cache write", async () => {
-    const cache = await setup([{ id: "a", pinnedAt: null, status: "idle" }]);
-    const write = pin(cache.client, "a", 100);
-    cache.client.setQueryData(queryKey, patch("a", { status: "running" }));
-    expect(cache.rows()).toEqual([
-      { id: "a", pinnedAt: 100, status: "running" },
-    ]);
+    const cache = await setup({ id: "a", pinnedAt: null, status: "idle" });
+    const write = pin(cache.client, 100);
+    cache.client.setQueryData(queryKey, patch({ status: "running" }));
+    expect(cache.row()).toEqual({ id: "a", pinnedAt: 100, status: "running" });
 
     await write.fail();
 
-    expect(cache.rows()).toEqual([
-      { id: "a", pinnedAt: null, status: "running" },
-    ]);
+    expect(cache.row()).toEqual({ id: "a", pinnedAt: null, status: "running" });
   });
 
   it("keeps a foreign write to the predicted field after rollback", async () => {
-    const cache = await setup([{ id: "a", pinnedAt: null, status: "idle" }]);
-    const write = pin(cache.client, "a", 100);
-    cache.client.setQueryData(queryKey, patch("a", { pinnedAt: 200 }));
+    const cache = await setup({ id: "a", pinnedAt: null, status: "idle" });
+    const write = pin(cache.client, 100);
+    cache.client.setQueryData(queryKey, patch({ pinnedAt: 200 }));
 
     await write.fail();
 
-    expect(cache.rows()).toEqual([{ id: "a", pinnedAt: 200, status: "idle" }]);
+    expect(cache.row()).toEqual({ id: "a", pinnedAt: 200, status: "idle" });
   });
 
   it("rolls back a prediction under a restored snapshot taken while it was visible", async () => {
-    const cache = await setup([
-      { id: "a", pinnedAt: null, status: "idle" },
-      { id: "b", pinnedAt: null, status: "idle" },
-    ]);
-    const write = pin(cache.client, "a", 100);
-    const snapshot = cache.rows();
-    cache.client.setQueryData<Row[]>(queryKey, (rows) =>
-      rows?.filter((row) => row.id !== "b"),
-    );
+    const cache = await setup({ id: "a", pinnedAt: null, status: "idle" });
+    const write = pin(cache.client, 100);
+    const snapshot = cache.row();
+    cache.client.setQueryData(queryKey, patch({ status: "running" }));
     cache.client.setQueryData(queryKey, snapshot);
 
     await write.fail();
 
-    expect(cache.rows()).toEqual([
-      { id: "a", pinnedAt: null, status: "idle" },
-      { id: "b", pinnedAt: null, status: "idle" },
-    ]);
+    expect(cache.row()).toEqual({ id: "a", pinnedAt: null, status: "idle" });
   });
 });
 
 describe("TaggedQueryClient", () => {
-  it("rolls back a prediction under writes that add and remove rows", async () => {
-    const cache = await setup([
-      { id: "a", pinnedAt: null, status: "idle" },
-      { id: "b", pinnedAt: null, status: "idle" },
-    ]);
-    const write = pin(cache.client, "a", 100);
-    cache.client.setQueryData<Row[]>(queryKey, (rows) =>
-      rows?.filter((row) => row.id !== "b"),
-    );
-    cache.client.setQueryData<Row[]>(queryKey, (rows) => [
-      { id: "c", pinnedAt: null, status: "idle" },
-      ...(rows ?? []).map((row) => ({ ...row, status: "running" })),
-    ]);
-
-    await write.fail();
-
-    expect(cache.rows()).toEqual([
-      { id: "c", pinnedAt: null, status: "idle" },
-      { id: "a", pinnedAt: null, status: "running" },
-    ]);
-  });
-
   it("replaces an accepted prediction with the next confirmed read", async () => {
-    const cache = await setup([{ id: "a", pinnedAt: null, status: "idle" }]);
-    const write = pin(cache.client, "a", 100);
-    cache.client.setQueryData(queryKey, patch("a", { status: "running" }));
+    const cache = await setup({ id: "a", pinnedAt: null, status: "idle" });
+    const write = pin(cache.client, 100);
+    cache.client.setQueryData(queryKey, patch({ status: "running" }));
     await write.accept();
-    cache.setServer([{ id: "a", pinnedAt: 150, status: "running" }]);
+    cache.setServer({ id: "a", pinnedAt: 150, status: "running" });
 
     await cache.refetch();
 
-    expect(cache.rows()).toEqual([
-      { id: "a", pinnedAt: 150, status: "running" },
-    ]);
+    expect(cache.row()).toEqual({ id: "a", pinnedAt: 150, status: "running" });
   });
 });

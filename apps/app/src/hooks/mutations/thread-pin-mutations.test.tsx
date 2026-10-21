@@ -14,8 +14,8 @@ import {
 } from "@/test/fixtures/projects";
 import { makeThreadResponse } from "@/test/fixtures/thread-responses";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import type { QueryClient } from "@tanstack/react-query";
 import {
-  applyToCachedThreadListsAndSidebarNavigation,
   listSidebarNavigationThreads,
   updateCachedThreadListStatusState,
   updateCachedThreadStatusState,
@@ -33,6 +33,31 @@ import {
 import { applyPinnedThreadOrderResult } from "../cache-owners/thread-state-cache-owner";
 import { createThreadMutationBatcher } from "./thread-mutation-batcher";
 import { usePinThread, useUnpinThread } from "./thread-state-mutations";
+
+function writeEveryThreadList(
+  queryClient: QueryClient,
+  mapper: (list: ThreadListEntry[]) => ThreadListEntry[],
+): void {
+  queryClient.setQueriesData<ThreadListEntry[]>(
+    { queryKey: threadsQueryKey() },
+    (list) => (Array.isArray(list) ? mapper(list) : list),
+  );
+  queryClient.setQueryData<SidebarBootstrapResponse>(
+    sidebarNavigationQueryKey(),
+    (sidebar) =>
+      sidebar && {
+        ...sidebar,
+        personalProject: {
+          ...sidebar.personalProject,
+          threads: mapper(sidebar.personalProject.threads),
+        },
+        projects: sidebar.projects.map((project) => ({
+          ...project,
+          threads: mapper(project.threads),
+        })),
+      },
+  );
+}
 
 vi.mock("@/components/ui/app-toast", () => ({
   appToast: { error: vi.fn() },
@@ -178,7 +203,7 @@ it("rolls back a failed pin under concurrent status and membership writes", asyn
     server.setRows([{ ...entry("t1", null), ...statusChange }]);
     updateCachedThreadListStatusState(server.queryClient, "t1", statusChange);
     updateCachedThreadStatusState(server.queryClient, "t1", statusChange);
-    applyToCachedThreadListsAndSidebarNavigation(server.queryClient, (list) =>
+    writeEveryThreadList(server.queryClient, (list) =>
       list.filter((thread) => thread.id !== "t2"),
     );
   });
@@ -377,7 +402,7 @@ it("keeps concurrent thread state when a pin succeeds", async () => {
     };
     updateCachedThreadListStatusState(server.queryClient, "t1", statusChange);
     updateCachedThreadStatusState(server.queryClient, "t1", statusChange);
-    applyToCachedThreadListsAndSidebarNavigation(server.queryClient, (list) =>
+    writeEveryThreadList(server.queryClient, (list) =>
       list.map((thread) =>
         thread.id === "t1"
           ? { ...thread, sectionId: "new", lastReadAt: 25 }

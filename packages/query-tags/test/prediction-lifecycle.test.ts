@@ -1,13 +1,7 @@
-import {
-  InfiniteQueryObserver,
-  QueryClient,
-  QueryObserver,
-  type InfiniteData,
-} from "@tanstack/react-query";
+import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, expect, it } from "vitest";
 import {
   CORE_TAG_SCOPE,
-  optimisticQueriesUpdate,
   optimisticQueryUpdate,
   runTaggedMutation,
   runTaggedRead,
@@ -54,167 +48,93 @@ function write(client: QueryClient, optimistic: TaggedOptimisticUpdate[]) {
   };
 }
 
-const pinRows = (id: string, predicted: number) =>
-  optimisticQueriesUpdate<Row[], number>(["rows"], (rows, result) =>
-    rows.map((row) =>
-      row.id === id ? { ...row, pinnedAt: result?.value ?? predicted } : row,
-    ),
-  );
+const pinRow = (queryKey: string[], predicted: number) =>
+  optimisticQueryUpdate<Row, number>(queryKey, (row, result) => ({
+    ...row,
+    pinnedAt: result?.value ?? predicted,
+  }));
 
-function observe(client: QueryClient, queryKey: string[], rows: () => Row[]) {
-  const observer = new QueryObserver<Row[]>(client, {
+function observe(client: QueryClient, queryKey: string[], row: () => Row) {
+  const observer = new QueryObserver<Row>(client, {
     queryKey,
     ...taggedQueryOptions(client, queryKey, {
       scope: CORE_TAG_SCOPE,
       tagsOf: () => [],
     }),
     queryFn: () =>
-      runTaggedRead(client, queryKey, async () => structuredClone(rows())),
+      runTaggedRead(client, queryKey, async () => structuredClone(row())),
   });
   disposers.push(observer.subscribe(() => {}));
   return observer;
 }
 
-it("predicts on matching reads that load while the write is pending", async () => {
-  const cache = client();
-  const server: Row[] = [{ id: "a", pinnedAt: null, status: "idle" }];
-  await observe(cache, ["rows", "first"], () => server).refetch();
-  const pending = write(cache, [pinRows("a", 100)]);
-
-  await observe(cache, ["rows", "late"], () => server).refetch();
-  expect(cache.getQueryData<Row[]>(["rows", "late"])?.[0]?.pinnedAt).toBe(100);
-
-  await pending.fail();
-  expect(cache.getQueryData<Row[]>(["rows", "late"])?.[0]?.pinnedAt).toBeNull();
-  expect(
-    cache.getQueryData<Row[]>(["rows", "first"])?.[0]?.pinnedAt,
-  ).toBeNull();
-});
-
 it("shows the acknowledged value in place of the prediction", async () => {
   const cache = client();
-  const server: Row[] = [{ id: "a", pinnedAt: null, status: "idle" }];
-  await observe(cache, ["rows", "first"], () => server).refetch();
-  const pending = write(cache, [pinRows("a", 100)]);
+  const server: Row = { id: "a", pinnedAt: null, status: "idle" };
+  await observe(cache, ["row", "first"], () => server).refetch();
+  const pending = write(cache, [pinRow(["row", "first"], 100)]);
 
   await pending.accept(250);
 
-  expect(cache.getQueryData<Row[]>(["rows", "first"])?.[0]?.pinnedAt).toBe(250);
+  expect(cache.getQueryData<Row>(["row", "first"])?.pinnedAt).toBe(250);
 });
 
 it("keeps writes to a cache without a read and settles to the acknowledged value", async () => {
   const cache = new QueryClient();
   disposers.push(() => cache.clear());
-  cache.setQueryData<Row[]>(
-    ["rows"],
-    [{ id: "a", pinnedAt: null, status: "idle" }],
-  );
-  const failed = write(cache, [pinRows("a", 100)]);
-  cache.setQueryData<Row[]>(["rows"], (rows) =>
-    rows?.map((row) => ({ ...row, status: "running" })),
-  );
+  cache.setQueryData<Row>(["row"], { id: "a", pinnedAt: null, status: "idle" });
+  const failed = write(cache, [pinRow(["row"], 100)]);
+  cache.setQueryData<Row>(["row"], (row) => row && { ...row, status: "running" });
   await failed.fail();
-  expect(cache.getQueryData(["rows"])).toEqual([
-    { id: "a", pinnedAt: null, status: "running" },
-  ]);
-
-  const accepted = write(cache, [pinRows("a", 100)]);
-  await accepted.accept(300);
-  cache.setQueryData<Row[]>(["rows"], (rows) =>
-    rows?.map((row) => ({ ...row, status: "idle" })),
-  );
-  expect(cache.getQueryData(["rows"])).toEqual([
-    { id: "a", pinnedAt: 300, status: "idle" },
-  ]);
-});
-
-it("releases an accepted infinite-list prediction only after every page is reread", async () => {
-  const cache = client();
-  const queryKey = ["rows", "pages"];
-  const pages: Row[][] = [
-    [{ id: "a", pinnedAt: null, status: "idle" }],
-    [{ id: "b", pinnedAt: null, status: "idle" }],
-  ];
-  const observer = new InfiniteQueryObserver<
-    Row[],
-    Error,
-    InfiniteData<Row[], number>,
-    string[],
-    number
-  >(cache, {
-    queryKey,
-    ...taggedQueryOptions(cache, queryKey, {
-      scope: CORE_TAG_SCOPE,
-      tagsOf: () => [],
-    }),
-    queryFn: ({ pageParam }) =>
-      runTaggedRead(cache, queryKey, async () =>
-        structuredClone(pages[pageParam] ?? []),
-      ),
-    initialPageParam: 0,
-    getNextPageParam: (_last, all) => (all.length < 2 ? all.length : undefined),
+  expect(cache.getQueryData(["row"])).toEqual({
+    id: "a",
+    pinnedAt: null,
+    status: "running",
   });
-  disposers.push(observer.subscribe(() => {}));
-  await observer.refetch();
-  const pinnedAt = () =>
-    cache
-      .getQueryData<InfiniteData<Row[]>>(queryKey)
-      ?.pages.flat()
-      .map((row) => row.pinnedAt);
-  const pending = write(cache, [
-    optimisticQueryUpdate<InfiniteData<Row[]>, number>(
-      queryKey,
-      (data, result) => ({
-        ...data,
-        pages: data.pages.map((page) =>
-          page.map((row) =>
-            row.id === "a" ? { ...row, pinnedAt: result?.value ?? 100 } : row,
-          ),
-        ),
-      }),
-    ),
-  ]);
-  await pending.accept(200);
 
-  await observer.fetchNextPage();
-  expect(pinnedAt()).toEqual([200, null]);
-
-  pages[0] = [{ id: "a", pinnedAt: 400, status: "idle" }];
-  await observer.refetch();
-  expect(pinnedAt()).toEqual([400, null]);
+  const accepted = write(cache, [pinRow(["row"], 100)]);
+  await accepted.accept(300);
+  cache.setQueryData<Row>(["row"], (row) => row && { ...row, status: "idle" });
+  expect(cache.getQueryData(["row"])).toEqual({
+    id: "a",
+    pinnedAt: 300,
+    status: "idle",
+  });
 });
 
 it("leaves predictions alone when an observer selects from the query", async () => {
   const cache = client();
-  const queryKey = ["rows", "selected"];
-  const server: Row[] = [{ id: "a", pinnedAt: null, status: "idle" }];
+  const queryKey = ["row", "selected"];
+  const server: Row = { id: "a", pinnedAt: null, status: "idle" };
   await observe(cache, queryKey, () => server).refetch();
-  const selected = new QueryObserver<Row[], Error, string[]>(cache, {
+  const selected = new QueryObserver<Row, Error, string>(cache, {
     queryKey,
     ...taggedQueryOptions(cache, queryKey, {
       scope: CORE_TAG_SCOPE,
       tagsOf: () => [],
     }),
     enabled: false,
-    select: (rows) => rows.map((row) => `${row.id}:${row.pinnedAt}`),
+    select: (row) => `${row.id}:${row.pinnedAt}`,
   });
   disposers.push(selected.subscribe(() => {}));
-  const pending = write(cache, [pinRows("a", 100)]);
-  expect(selected.getCurrentResult().data).toEqual(["a:100"]);
+  const pending = write(cache, [pinRow(queryKey, 100)]);
+  expect(selected.getCurrentResult().data).toEqual("a:100");
 
   await pending.fail();
 
   expect(cache.getQueryData(queryKey)).toEqual(server);
-  expect(selected.getCurrentResult().data).toEqual(["a:null"]);
+  expect(selected.getCurrentResult().data).toEqual("a:null");
 });
 
 it("lets a write after acknowledgement replace the acknowledged value", async () => {
   const cache = client();
-  const queryKey = ["rows", "ordered"];
-  let read: Promise<Row[]> = Promise.resolve([
-    { id: "a", pinnedAt: null, status: "idle" },
-  ]);
-  const observer = new QueryObserver<Row[]>(cache, {
+  const queryKey = ["row", "ordered"];
+  let read: Promise<Row> = Promise.resolve({
+    id: "a",
+    pinnedAt: null,
+    status: "idle",
+  });
+  const observer = new QueryObserver<Row>(cache, {
     queryKey,
     ...taggedQueryOptions(cache, queryKey, {
       scope: CORE_TAG_SCOPE,
@@ -224,25 +144,25 @@ it("lets a write after acknowledgement replace the acknowledged value", async ()
   });
   disposers.push(observer.subscribe(() => {}));
   await observer.refetch();
-  const rows = () => cache.getQueryData<Row[]>(queryKey);
-  let finishStale!: (rows: Row[]) => void;
+  const row = () => cache.getQueryData<Row>(queryKey);
+  let finishStale!: (row: Row) => void;
   read = new Promise((resolve) => {
     finishStale = resolve;
   });
   const stale = observer.refetch();
-  const pending = write(cache, [pinRows("a", 100)]);
+  const pending = write(cache, [pinRow(queryKey, 100)]);
   await pending.accept(250);
 
-  cache.setQueryData<Row[]>(queryKey, (current) =>
-    current?.map((row) => ({ ...row, pinnedAt: 260 })),
+  cache.setQueryData<Row>(queryKey, (current) =>
+    current && { ...current, pinnedAt: 260 },
   );
-  expect(rows()?.[0]?.pinnedAt).toBe(260);
+  expect(row()?.pinnedAt).toBe(260);
 
-  finishStale([{ id: "a", pinnedAt: null, status: "idle" }]);
+  finishStale({ id: "a", pinnedAt: null, status: "idle" });
   await stale;
-  expect(rows()?.[0]?.pinnedAt).toBe(250);
+  expect(row()?.pinnedAt).toBe(250);
 
-  read = Promise.resolve([{ id: "a", pinnedAt: 270, status: "idle" }]);
+  read = Promise.resolve({ id: "a", pinnedAt: 270, status: "idle" });
   await observer.refetch();
-  expect(rows()?.[0]?.pinnedAt).toBe(270);
+  expect(row()?.pinnedAt).toBe(270);
 });

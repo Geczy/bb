@@ -13,7 +13,6 @@ import {
 
 export interface TaggedOptimisticUpdate {
   queryKey: QueryKey;
-  exact: boolean;
   path: readonly string[];
   update(current: unknown, result: { value: unknown } | undefined): unknown;
 }
@@ -25,19 +24,10 @@ export function optimisticQueryUpdate<Value, Result = unknown>(
 ): TaggedOptimisticUpdate {
   return {
     queryKey,
-    exact: true,
     path: [...path],
     update: (current, result) =>
       update(current as Value, result as { value: Result } | undefined),
   };
-}
-
-export function optimisticQueriesUpdate<Value, Result = unknown>(
-  queryKey: QueryKey,
-  update: (current: Value, result: { value: Result } | undefined) => Value,
-  path: readonly string[] = [],
-): TaggedOptimisticUpdate {
-  return { ...optimisticQueryUpdate(queryKey, update, path), exact: false };
 }
 
 type Prediction = {
@@ -62,7 +52,7 @@ type Receipt = {
   paths: readonly { path: readonly string[]; started: number }[];
 };
 const predictions = new WeakMap<Query, PredictionState>();
-const receipts = new WeakMap<Query, Receipt[]>();
+const receipts = new WeakMap<Query, Receipt>();
 const baseWrites = new WeakSet<Query>();
 const taggedMeta = new WeakSet<object>();
 const syncedClients = new WeakMap<
@@ -164,20 +154,11 @@ function rebase(base: unknown, visible: unknown, next: unknown): unknown {
     visible === null ||
     typeof next !== "object" ||
     next === null ||
-    Array.isArray(base) !== Array.isArray(next) ||
-    Array.isArray(visible) !== Array.isArray(next)
+    Array.isArray(base) ||
+    Array.isArray(visible) ||
+    Array.isArray(next)
   )
     return next;
-  if (Array.isArray(base) && Array.isArray(visible) && Array.isArray(next)) {
-    const aligned = base.length === visible.length;
-    return next.map((item: unknown, index) => {
-      const kept = visible.indexOf(item);
-      if (kept >= 0) return aligned ? base[kept] : item;
-      return aligned && next.length === visible.length
-        ? rebase(base[index], visible[index], item)
-        : item;
-    });
-  }
   const result: Record<string, unknown> = {};
   for (const key of Object.keys(base))
     if (!Object.hasOwn(visible, key) && !Object.hasOwn(next, key))
@@ -315,48 +296,24 @@ export function taggedReadReceipt(query: Query) {
       paths.push(...loaded.map((path) => ({ path, started })));
     },
     commit(data: unknown) {
-      receipts.set(query, [...(receipts.get(query) ?? []), { data, paths }]);
+      receipts.set(query, { data, paths });
     },
   };
 }
 
-function isInfiniteData(value: unknown): value is { pages: unknown[] } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Array.isArray(Reflect.get(value, "pages")) &&
-    Array.isArray(Reflect.get(value, "pageParams"))
-  );
-}
-
-function consumeReceipts(
-  query: Query,
-  next: unknown,
-): { kind: "read"; receipts: Receipt[] } | { kind: "partial" } | undefined {
-  const pending = receipts.get(query);
-  if (pending === undefined) return;
-  const direct = pending.find((receipt) => Object.is(receipt.data, next));
-  if (direct !== undefined) {
-    receipts.delete(query);
-    return { kind: "read", receipts: [direct] };
-  }
-  if (!isInfiniteData(next)) return;
-  const pages = pending.filter((receipt) => next.pages.includes(receipt.data));
-  if (pages.length === 0) return;
+function consumeReceipt(query: Query, next: unknown): Receipt | undefined {
+  const receipt = receipts.get(query);
+  if (receipt === undefined || !Object.is(receipt.data, next)) return;
   receipts.delete(query);
-  return pages.length === next.pages.length
-    ? { kind: "read", receipts: pages }
-    : { kind: "partial" };
+  return receipt;
 }
 
-function refreshedBy(receipts: Receipt[], layer: Prediction): boolean {
+function refreshedBy(receipt: Receipt, layer: Prediction): boolean {
   return (
     layer.acceptedAt !== null &&
-    receipts.every((receipt) =>
-      receipt.paths.some(
-        ({ path, started }) =>
-          started > layer.acceptedAt! && prefix(path, layer.path),
-      ),
+    receipt.paths.some(
+      ({ path, started }) =>
+        started > layer.acceptedAt! && prefix(path, layer.path),
     )
   );
 }
@@ -371,13 +328,13 @@ export function taggedStructuralSharing(
     .getQueryCache()
     .get(client.defaultQueryOptions({ queryKey }).queryHash);
   if (query !== undefined && Object.is(previous, query.state.data)) {
-    const receipt = consumeReceipts(query, next);
+    const receipt = consumeReceipt(query, next);
     const state = predictions.get(query);
     if (state !== undefined) {
-      if (receipt?.kind === "read") {
+      if (receipt !== undefined) {
         const refreshed = new Set<Prediction>();
         for (const layer of state.layers) {
-          if (refreshedBy(receipt.receipts, layer)) {
+          if (refreshedBy(receipt, layer)) {
             layer.fresh = true;
             refreshed.add(layer);
           }
@@ -389,10 +346,9 @@ export function taggedStructuralSharing(
             olderPending(state, layer),
         );
       }
-      if (receipt?.kind === "read") {
-        const read = receipt.receipts;
+      if (receipt !== undefined) {
         state.guards = state.guards.filter(
-          (guard) => !refreshedBy(read, guard),
+          (guard) => !refreshedBy(receipt, guard),
         );
         state.base = state.guards.reduce(applyLayer, next);
       } else if (baseWrites.has(query)) {
@@ -478,7 +434,7 @@ export function beginOptimisticMutation(
           for (const update of updates)
             if (
               matchQuery(
-                { queryKey: update.queryKey, exact: update.exact },
+                { queryKey: update.queryKey, exact: true },
                 event.query,
               )
             )
@@ -502,7 +458,7 @@ export function beginOptimisticMutation(
       for (const update of updates)
         for (const query of client.getQueryCache().findAll({
           queryKey: update.queryKey,
-          exact: update.exact,
+          exact: true,
         }))
           attach(query, update);
     });

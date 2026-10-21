@@ -18,10 +18,6 @@ import {
   removeThreadScopedQueries,
 } from "./mutation-cache-effects";
 import {
-  getCachedThreadSnapshots,
-  type CachedThreadSnapshot,
-} from "./thread-archive-cache";
-import {
   beginThreadEntityPrediction,
   findThreadTreeIds,
   getThreadEntity,
@@ -69,7 +65,7 @@ export interface ArchiveThreadsTransaction {
 export interface DeleteThreadTransaction {
   environmentId: string | null | undefined;
   threadIds: string[];
-  previousThreads: CachedThreadSnapshot[];
+  previousThreads: { id: string; thread: ThreadWithRuntime | undefined }[];
   prediction: ThreadEntityPrediction;
 }
 
@@ -435,7 +431,10 @@ export async function beginDeleteThreadTransaction({
     (thread) => thread.id === threadId,
   );
   if (!threadIds.includes(threadId)) threadIds.push(threadId);
-  const previousThreads = getCachedThreadSnapshots({ queryClient, threadIds });
+  const previousThreads = threadIds.map((id) => ({
+    id,
+    thread: queryClient.getQueryData<ThreadWithRuntime>(threadQueryKey(id)),
+  }));
   const environmentId = getThreadEntity(queryClient, threadId)?.thread
     .environmentId;
   const deletedAt = Date.now();
