@@ -58,6 +58,9 @@ interface ThreadUpdateCommandOptions {
 }
 
 interface ThreadArchiveCommandOptions {
+  keepWorktree?: boolean;
+  requireClean?: boolean;
+  commitAndPush?: boolean;
   self?: boolean;
   json?: boolean;
 }
@@ -287,7 +290,16 @@ export function registerActionsCommands(
 
   parent
     .command("archive [id]")
-    .description("Archive a thread")
+    .description("Archive a thread, keeping worktrees with local changes")
+    .option("--keep-worktree", "Keep the worktrees when archiving")
+    .option(
+      "--require-clean",
+      "Archive only if no worktree has uncommitted or unpushed changes",
+    )
+    .option(
+      "--commit-and-push",
+      "Ask the agent to commit and push, then archive",
+    )
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(
@@ -295,9 +307,28 @@ export function registerActionsCommands(
         async (id: string | undefined, opts: ThreadArchiveCommandOptions) => {
           const threadId = requireThreadIdOrSelf(id, opts);
           const sdk = createCliBbSdk(getUrl());
+          if (
+            [opts.keepWorktree, opts.requireClean, opts.commitAndPush].filter(
+              Boolean,
+            ).length > 1
+          )
+            throw new Error(
+              "Choose one of --keep-worktree, --require-clean, or --commit-and-push.",
+            );
+          let preparing = false;
           let archivedThreadIds: string[] = [threadId];
           try {
-            const result = await sdk.threads.archive({ threadId });
+            const result = await sdk.threads.archive({
+              threadId,
+              worktree: opts.keepWorktree
+                ? "keep"
+                : opts.requireClean
+                  ? "require-clean"
+                  : opts.commitAndPush
+                    ? "commit-and-push"
+                    : "auto",
+            });
+            preparing = result.preparing === true;
             archivedThreadIds = result.archivedThreadIds;
           } catch (err: unknown) {
             throw prependErrorContext(
@@ -310,8 +341,15 @@ export function registerActionsCommands(
               ok: true,
               threadId,
               archivedThreadIds,
+              ...(preparing ? { preparing: true } : {}),
             })
           ) {
+            return;
+          }
+          if (preparing) {
+            console.log(
+              "Asked the agent to commit, push, and archive the thread.",
+            );
             return;
           }
           const cascadedCount = archivedThreadIds.filter(

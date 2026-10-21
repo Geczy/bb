@@ -1,4 +1,10 @@
 import {
+  isManagedWorktree,
+  readArchiveWorktreeState,
+  retainArchivedWorktree,
+} from "../environments/archive-safety.js";
+import type { ThreadArchiveWorktree } from "@bb/server-contract";
+import {
   cancelProviderEnvironmentCreation,
   sweepProviderEnvironment,
 } from "../environments/environment-engine.js";
@@ -225,4 +231,35 @@ function listArchiveCandidates(db: AppDeps["db"], roots: Thread[]) {
     }
   }
   return threads;
+}
+
+export async function inspectArchiveWorktrees(
+  deps: AppDeps,
+  thread: Thread,
+): Promise<ThreadArchiveWorktree[]> {
+  const seen = new Set<string>();
+  const result: ThreadArchiveWorktree[] = [];
+  for (const candidate of listArchiveCandidates(deps.db, [thread])) {
+    if (candidate.environmentId === null || seen.has(candidate.environmentId))
+      continue;
+    seen.add(candidate.environmentId);
+    const row = getEnvironment(deps.db, candidate.environmentId);
+    if (row === null || !isManagedWorktree(row)) continue;
+    result.push({
+      environmentId: row.id,
+      threadId: candidate.id,
+      path: row.path,
+      state: await readArchiveWorktreeState(deps, row),
+    });
+  }
+  return result;
+}
+
+export function keepArchiveWorktrees(deps: AppDeps, thread: Thread): void {
+  for (const candidate of listArchiveCandidates(deps.db, [thread])) {
+    if (candidate.environmentId === null) continue;
+    const row = getEnvironment(deps.db, candidate.environmentId);
+    if (row !== null && isManagedWorktree(row))
+      retainArchivedWorktree(deps, row.id);
+  }
 }

@@ -13,3 +13,5 @@ reuse the project's recorded environment on the selected machine before running
 provider creation. Its ownership and cleanup behavior stay intact. When the path
 has no environment, the plugin validates it against Git and adopts it without
 taking ownership; retiring that environment leaves the worktree on disk.
+
+Removal checks for uncommitted files and commits absent from all local remote-tracking refs. If either is present, or the check fails, the worktree is kept. Removal uses `git worktree remove` without force; it never recursively deletes a worktree after Git refuses. Core persists an archive retention choice and checks again before teardown.

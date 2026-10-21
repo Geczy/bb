@@ -1578,20 +1578,30 @@ describe("core environment orchestration", () => {
       fixture.ask();
       await fixture.settled();
       const environmentId = fixture.attach();
-      harness.db.update(environments).set({ isGitRepo: true, isWorktree: true })
-        .where(eq(environments.id, environmentId)).run();
-      updateThread(harness.db, harness.hub, fixture.thread.id, { environmentId, status: "idle" });
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle" })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
       const response = await harness.app.request(
         `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=keep`,
         { method: "POST" },
       );
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, fixture.thread.id)?.archivedAt).not.toBeNull();
+      expect(
+        getThread(harness.db, fixture.thread.id)?.archivedAt,
+      ).not.toBeNull();
       await sweepProviderEnvironment(harness.deps, environmentId);
       await sweepProviderLifecycles(harness.deps);
       expect(removals).toBe(0);
       expect(getEnvironment(harness.db, environmentId)).toMatchObject({
-        status: "ready", teardownStatus: null,
+        status: "ready",
+        teardownStatus: null,
       });
     }));
 

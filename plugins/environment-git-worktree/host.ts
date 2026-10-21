@@ -132,7 +132,6 @@ export function createWorktreeHostEntry() {
                 })
               : [input.path];
           for (const path of paths) {
-            await rm(completionPathForWorktree(path), { force: true });
             await removeWorktree({
               path,
               onProgress: createHostProgress({
@@ -142,6 +141,7 @@ export function createWorktreeHostEntry() {
               }),
               signal: context.signal,
             });
+            await rm(completionPathForWorktree(path), { force: true });
           }
           return { status: "removed" } as const;
         } catch (error) {

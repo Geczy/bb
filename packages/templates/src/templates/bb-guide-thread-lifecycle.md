@@ -52,6 +52,18 @@ Lifecycle:
 
   bb thread archive [id]                   Archive a thread (and children/hidden forks)
     --self                                 Archive current thread
+    --keep-worktree                         Keep managed worktrees when archiving
+    --require-clean                         Refuse archive if a worktree has local work or cannot be checked
+    --commit-and-push                       Ask the agent to commit and push, then archive
+
+  These worktree flags are mutually exclusive. By default, archive succeeds
+  and keeps worktrees with uncommitted or unpushed changes, or whose state
+  cannot be checked. Clean worktrees keep their usual cleanup schedule.
+  `--commit-and-push` leaves the thread open while the agent prepares it; the
+  agent archives with `--require-clean` only after committing and pushing
+  succeeds. A failure leaves the thread open.
+  SDK: `threads.archive({ threadId, worktree?: "auto" | "keep" | "require-clean" | "commit-and-push" })`.
+  Inspect affected worktrees with `threads.childSummary({ threadId, checkWorktrees: true })`.
 
   Archive is not a hard stop: for 30 seconds a running turn and the thread's
   terminals keep going, and unarchiving within that window leaves everything in
@@ -76,8 +88,11 @@ Lifecycle:
   bb thread restore-environment [id]       Restore a destroyed workspace
     --self                                 Restore current thread
 
-  Archiving a thread retires its environment, and a managed workspace is removed
-  from disk once the provider's grace window passes. Sending to a thread whose
+  Archiving a thread retires its environment. A clean managed worktree is
+  removed from disk once the provider's grace window passes; local changes
+  and commits absent from every local remote-tracking ref prevent removal.
+  Repositories without remote-tracking refs are kept. Kept worktrees remain
+  until an explicit cleanup request, which checks their safety again. Sending to a thread whose
   workspace is gone fails; `restore-environment` asks the environment provider
   to build it again and attaches it, leaving the conversation where it was.
   Each provider decides what that means: a worktree is re-created on the branch

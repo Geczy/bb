@@ -1331,6 +1331,8 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Use bb's own API from plugin server code. With this, a plugin can:",
         bullets: [
           "Create threads, send messages, and manage projects and machines",
+          "Archive with threads.archive({ threadId, worktree }): auto keeps local work, keep retains worktrees, require-clean refuses unsafe worktrees, and commit-and-push asks the agent to prepare before archiving",
+          "Inspect archive safety with threads.childSummary({ threadId, checkWorktrees: true }); unavailable checks keep worktrees",
           "Have the threads it creates attributed to the plugin",
           "Start plugin updates in the background and follow their progress or rollback",
           "Read Viewed state for up to 500 file paths; mark and clear return acknowledgements",
@@ -1353,6 +1355,8 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginBbSdk.threads.queuedMessages.experimental_holdForEdit",
           "PluginBbSdk.threads.queuedMessages.experimental_releaseEditHold",
           "PluginBbSdk.threads.experimental_listDescendants",
+          "PluginBbSdk.threads.archive",
+          "PluginBbSdk.threads.childSummary",
         ],
         firstParty: [
           "Account Pooler [Experimental]",

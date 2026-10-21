@@ -58,6 +58,7 @@ async function createSourceRepository(repositoryName = "repo"): Promise<{
   await writeFile(join(sourcePath, "README.md"), "hello\n");
   await git(sourcePath, "add", ".");
   await git(sourcePath, "commit", "-m", "initial");
+  await git(sourcePath, "update-ref", "refs/remotes/origin/main", "HEAD");
   return { root, sourcePath, dataDir };
 }
 
@@ -153,7 +154,9 @@ describe("worktree host entry", () => {
         path: created.path,
       });
       expect(result.status).toBe("failed");
-      expect(await readFile(join(created.path, file), "utf8")).toBe("work to preserve\n");
+      expect(await readFile(join(created.path, file), "utf8")).toBe(
+        "work to preserve\n",
+      );
       await harness.experimental_dispose();
     },
   );
@@ -682,6 +685,7 @@ describe("worktree host entry", () => {
     );
     await git(sourcePath, "add", ".");
     await git(sourcePath, "commit", "-m", "add teardown script");
+    await git(sourcePath, "update-ref", "refs/remotes/origin/main", "HEAD");
     const harness = createHarness(dataDir);
     const created = await harness.experimental_call(
       "create",

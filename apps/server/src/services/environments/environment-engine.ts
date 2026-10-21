@@ -1,3 +1,8 @@
+import {
+  isManagedWorktree,
+  readArchiveWorktreeState,
+  retainArchivedWorktree,
+} from "./archive-safety.js";
 import { emitPluginEnvironmentRemoved } from "../plugins/plugin-thread-events.js";
 import { withHostCleanup } from "../hosts/cleanup-context.js";
 import { findHostDataDir } from "../lib/entity-lookup.js";
@@ -859,6 +864,7 @@ async function sweepProviderEnvironmentInSlot(
     writeEnvironment(deps, environmentId, released);
     row = { ...row, ...released };
   }
+  if (row.archiveRetained && !machineRemoving) return;
   const cancelled = row.ownerThreadId !== null && row.teardownStatus !== null;
   if (!cancelled && row.ownerThreadId !== null) return;
   const record = getEnvironmentProvider(environmentProviderId);
@@ -892,6 +898,17 @@ async function sweepProviderEnvironmentInSlot(
     row = { ...row, retireAt };
   }
   if (row.retireAt !== null && row.retireAt > now) return;
+  if (
+    isManagedWorktree(row) &&
+    row.status === "ready" &&
+    row.teardownStatus === null
+  ) {
+    const state = await readArchiveWorktreeState(deps, row);
+    if (state !== "clean") {
+      retainArchivedWorktree(deps, environmentId);
+      return;
+    }
+  }
   if (!requestEnvironmentRemoval(deps, environmentId)) return;
   if (cancelled && row.providerOwnsPath && row.path !== null) {
     await cancelPendingEnvironmentHook(deps, {
@@ -936,7 +953,10 @@ export function cleanupEnvironment(deps: Deps, environmentId: string): boolean {
   )
     return false;
   if (row.teardownStatus === "removed") return true;
-  writeEnvironment(deps, environmentId, { retireAt: Date.now() });
+  writeEnvironment(deps, environmentId, {
+    archiveRetained: false,
+    retireAt: Date.now(),
+  });
   void sweepProviderEnvironment(deps, environmentId).catch((error) => {
     deps.logger.warn(
       { environmentId, error: errorMessage(error) },
@@ -998,7 +1018,8 @@ export function refreshProviderRetirement(
   if (
     row === null ||
     row.environmentProviderId === null ||
-    row.teardownStatus !== null
+    row.teardownStatus !== null ||
+    row.archiveRetained
   )
     return;
   const provider = getEnvironmentProvider(row.environmentProviderId);
