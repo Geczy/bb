@@ -30,11 +30,7 @@ import type {
   Mark,
 } from "./compare-types";
 import { BrandMark, type BrandLogo } from "./compare-visuals";
-import {
-  PLUGINS_COPY,
-  pluginsSection,
-  type SectionCopy,
-} from "./compare-sections";
+import { pluginsSection, type SectionCopy } from "./compare-sections";
 import figmaLogo from "../assets/company-logos/figma.svg";
 import mapboxLogo from "../assets/company-logos/mapbox.svg";
 import metaLogo from "../assets/company-logos/meta.svg";
@@ -404,11 +400,6 @@ export function ComparePage({ comparison }: { comparison: Comparison }) {
   useInitAnalytics();
   useScrollReveal();
   const { competitor } = comparison;
-  const [lead, ...rest] = withPluginsSlot(
-    comparison.heroVisual,
-    [comparison.tailored, ...comparison.sections],
-    PLUGINS_COPY,
-  );
 
   return (
     <div className="wrap cmp-page">
@@ -434,7 +425,7 @@ export function ComparePage({ comparison }: { comparison: Comparison }) {
         visual={comparison.heroVisual}
       />
 
-      <Highlight highlight={lead} />
+      <Highlight highlight={comparison.tailored} />
 
       <section className="cmp-section" data-reveal>
         <h2 id="cmp-table-title" className="sec-title cmp-table-title">
@@ -453,7 +444,7 @@ export function ComparePage({ comparison }: { comparison: Comparison }) {
         <CompareTable comparison={comparison} />
       </section>
 
-      {rest.map((highlight) => (
+      {comparison.sections.map((highlight) => (
         <Highlight key={highlight.title} highlight={highlight} />
       ))}
 
