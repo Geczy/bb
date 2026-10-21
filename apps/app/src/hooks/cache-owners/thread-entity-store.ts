@@ -827,22 +827,27 @@ export function insertThreadIntoSidebar(
     query === undefined ||
     skeleton === undefined ||
     entity?.list == null ||
-    skeleton.slotsById.has(threadId) ||
     !isRecord(skeleton.data)
   )
     return;
   const personal = skeleton.data.personalProject;
+  const existingSlot = skeleton.slotsById.get(threadId)?.values().next().value;
   const slot =
-    isRecord(personal) && personal.id === entity.thread.projectId
+    existingSlot ??
+    (isRecord(personal) && personal.id === entity.thread.projectId
       ? "personal"
-      : `project:${String(entity.thread.projectId)}`;
+      : `project:${String(entity.thread.projectId)}`);
   const entries = skeleton.slots.get(slot);
   if (entries === undefined) return;
-  const entry = { id: threadId, item: { ...entity.thread, ...entity.list } };
+  const entry = entries.find(({ id }) => id === threadId) ?? {
+    id: threadId,
+    item: { ...entity.thread, ...entity.list },
+  };
   store.insertions.set(query, [
     ...(store.insertions.get(query) ?? []),
     { slot, entry, at: ++store.clock },
   ]);
+  if (existingSlot !== undefined) return;
   const slots = new Map(skeleton.slots);
   slots.set(slot, [...entries, entry]);
   const slotsById = new Map(skeleton.slotsById);

@@ -272,6 +272,46 @@ describe("thread entity store", () => {
     expect(s.sidebarRows().map((row) => row.id)).toEqual(["t2"]);
   });
 
+  it("keeps a thread unarchived from the sidebar it was archived in through an older sidebar read", async () => {
+    const live = [entry("t1"), entry("t2")];
+    const s = setup(live);
+    const archive = await beginArchiveThreadAndChildrenTransaction({
+      queryClient: s.queryClient,
+      threadId: "t1",
+    });
+    settleArchiveThreadsTransaction({
+      queryClient: s.queryClient,
+      response: { ok: true, archivedThreadIds: ["t1"] },
+      transaction: archive,
+    });
+    let releaseStale!: () => void;
+    const stale = s.queryClient.fetchQuery({
+      queryKey: sidebarNavigationQueryKey(),
+      queryFn: async () => {
+        await new Promise<void>((resolve) => {
+          releaseStale = resolve;
+        });
+        return makeSidebarBootstrapResponse({
+          projects: [
+            makeProjectWithThreadsResponse({
+              id: "project-1",
+              threads: [entry("t2")],
+            }),
+          ],
+        });
+      },
+      staleTime: 0,
+    });
+    await beginUnarchiveThreadTransaction({
+      queryClient: s.queryClient,
+      threadId: "t1",
+    });
+    expect(s.sidebarRows().map((row) => row.id)).toEqual(["t1", "t2"]);
+    releaseStale();
+    await stale;
+    expect(s.sidebarRows().map((row) => row.id)).toContain("t1");
+  });
+
   it("drops an entity once no view holds it", async () => {
     const s = setup([]);
     await s.fetchList(s.listKey, () => [entry("t1")]);
