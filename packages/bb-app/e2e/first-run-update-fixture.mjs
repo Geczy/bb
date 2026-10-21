@@ -52,7 +52,7 @@ async function installedVersion(executable, env, cwd) {
   return version;
 }
 
-async function precedingVersion(registry, currentVersion) {
+async function precedingVersion(registry, currentVersion, provider) {
   const response = await fetch(registry, {
     headers: { accept: "application/vnd.npm.install-v1+json" },
     signal: AbortSignal.timeout(30_000),
@@ -70,11 +70,18 @@ async function precedingVersion(registry, currentVersion) {
   ) {
     throw new Error("Agent release registry returned invalid metadata");
   }
+  const ceilings = [currentVersion];
+  if (provider === "claude-code") {
+    for (const tag of ["stable", "latest"]) {
+      const version = metadata["dist-tags"]?.[tag];
+      if (typeof version === "string" && STABLE_VERSION.test(version)) ceilings.push(version);
+    }
+  }
   const versions = Object.keys(metadata.versions)
     .filter(
       (version) =>
         STABLE_VERSION.test(version) &&
-        compareVersions(version, currentVersion) < 0,
+        ceilings.every((ceiling) => compareVersions(version, ceiling) < 0),
     )
     .sort((left, right) => compareVersions(right, left));
   if (versions.length === 0) {
@@ -136,7 +143,7 @@ export async function prepareUpdate({ provider, executable, env, cwd }) {
   const registry = REGISTRIES[provider];
   if (!registry) throw new Error("No native update fixture for this provider");
   const originalVersion = await installedVersion(executable, env, cwd);
-  const version = await precedingVersion(registry, originalVersion);
+  const version = await precedingVersion(registry, originalVersion, provider);
   if (provider === "claude-code") {
     await execute(
       executable,
