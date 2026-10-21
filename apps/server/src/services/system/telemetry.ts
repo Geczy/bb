@@ -13,6 +13,13 @@ const TELEMETRY_ID_FILE_NAME = "telemetry-id";
 
 const telemetryAppSurfaceStorage = new AsyncLocalStorage<RequestAppSurface>();
 
+export type WorkOrigin =
+  | "person"
+  | "agent"
+  | "automation"
+  | "plugin"
+  | "system";
+
 export type TelemetryEvent =
   | { name: "app_started" }
   | { name: "telemetry_disabled" }
@@ -21,6 +28,7 @@ export type TelemetryEvent =
       properties: {
         is_child_thread: boolean;
         provider: string;
+        work_origin?: WorkOrigin;
       };
     }
   | {
@@ -29,6 +37,7 @@ export type TelemetryEvent =
         is_child_thread: boolean;
         message_source: "queued_message" | "thread_create" | "thread_send";
         provider: string;
+        work_origin?: WorkOrigin;
       };
     }
   | {

@@ -77,7 +77,8 @@ import {
   type GroupedPrompt,
   type PromptWithGroups,
 } from "./deferred-first-turn-context.js";
-import type { TelemetryEvent } from "../system/telemetry.js";
+import type { TelemetryEvent, WorkOrigin } from "../system/telemetry.js";
+import { workOriginTelemetryProperty } from "./work-origin.js";
 import { assertThreadHostAcceptsWork } from "./thread-host-admission.js";
 
 type SendThreadMessageMode = SendMessageRequest["mode"];
@@ -380,11 +381,12 @@ type UserMessageSentProperties = Extract<
 >["properties"];
 
 export function captureUserMessageSentTelemetry(
-  deps: Pick<LoggedPendingInteractionWorkSessionDeps, "telemetry">,
+  deps: Pick<LoggedPendingInteractionWorkSessionDeps, "config" | "telemetry">,
   args: {
     isChildThread: boolean;
     messageSource: UserMessageSentProperties["message_source"];
     providerId: string;
+    workOrigin: WorkOrigin;
   },
 ): void {
   deps.telemetry.capture({
@@ -393,6 +395,7 @@ export function captureUserMessageSentTelemetry(
       is_child_thread: args.isChildThread,
       message_source: args.messageSource,
       provider: args.providerId,
+      ...workOriginTelemetryProperty(deps.config.featureFlags, args.workOrigin),
     },
   });
 }
@@ -615,6 +618,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
+        workOrigin: "person",
       });
     }
     return;
@@ -741,6 +745,7 @@ async function sendThreadMessageWithoutContextClear(
         isChildThread: thread.parentThreadId !== null,
         messageSource: "thread_send",
         providerId: thread.providerId,
+        workOrigin: "person",
       });
     }
     return;
@@ -808,6 +813,7 @@ async function sendThreadMessageWithoutContextClear(
       isChildThread: thread.parentThreadId !== null,
       messageSource: "thread_send",
       providerId: thread.providerId,
+      workOrigin: "person",
     });
   }
 }

@@ -102,6 +102,71 @@ describe("thread creation telemetry", () => {
   });
 });
 
+describe("thread creation work_origin telemetry", () => {
+  it("adds work_origin to thread and message events only when the flag is on", async () => {
+    await withTestHarness(async (harness) => {
+      const capture = installTelemetryCaptureSpy(harness);
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-work-origin-telemetry",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/work-origin-telemetry",
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/work-origin-telemetry",
+      });
+      const request = {
+        environment: {
+          type: "host" as const,
+          hostId: host.id,
+          workspace: {
+            type: "unmanaged" as const,
+            path: "/tmp/work-origin-telemetry",
+          },
+        },
+        input: textInput("Start with work origin"),
+        origin: "app" as const,
+        projectId: project.id,
+        providerId: "codex",
+        startedOnBehalfOf: null,
+      };
+
+      await createThreadFromRequest(harness.deps, request);
+      expect(capture).toHaveBeenCalledWith({
+        name: "thread_created",
+        properties: { is_child_thread: false, provider: "codex" },
+      });
+
+      capture.mockClear();
+      harness.deps.config.featureFlags = {
+        ...harness.deps.config.featureFlags,
+        workOriginTelemetry: true,
+      };
+      await createThreadFromRequest(harness.deps, request);
+      expect(capture).toHaveBeenCalledWith({
+        name: "thread_created",
+        properties: {
+          is_child_thread: false,
+          provider: "codex",
+          work_origin: "person",
+        },
+      });
+      expect(capture).toHaveBeenCalledWith({
+        name: "user_message_sent",
+        properties: {
+          is_child_thread: false,
+          message_source: "thread_create",
+          provider: "codex",
+          work_origin: "person",
+        },
+      });
+    });
+  });
+});
+
 describe("thread creation with startedOnBehalfOf (seed-without-run)", () => {
   it("persists an agent fork start while cloning the source provider session", async () => {
     await withTestHarness(async (harness) => {

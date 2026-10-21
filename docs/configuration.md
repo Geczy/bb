@@ -286,6 +286,12 @@ ids, account details, prompts, project or file names, terminal output, error
 messages, or session ids. Sign-in `exited` means the command exited before
 readiness was observed, not that authentication succeeded; `new_thread_submit`
 `accepted` means the thread was created, not that the provider answered.
+With `BB_FF_WORK_ORIGIN_TELEMETRY=true` (off by default until the property clears
+its analytics review), `thread_created` and `user_message_sent` also carry
+`work_origin`: `person`, `agent`, `automation` (started by the automations
+plugin), `plugin` (any other plugin), or `system`. Messages sent into an
+existing thread report `person` for now, because sends carry no plugin
+attribution.
 
 ## AI services
 

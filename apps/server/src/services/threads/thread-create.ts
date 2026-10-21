@@ -60,6 +60,10 @@ import {
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
 import { resolveDispatchAuthor } from "./dispatch-author.js";
+import {
+  resolveWorkOrigin,
+  workOriginTelemetryProperty,
+} from "./work-origin.js";
 import { deriveForkTitle, deriveTitleFallback } from "./title-generation.js";
 import type { ThreadProvisionEnvironmentIntent } from "./thread-startup-store.js";
 import { resolveSystemProviderModels } from "../system/execution-options.js";
@@ -849,23 +853,30 @@ export async function createThreadFromRequest(
     ...createArgs,
     sendAt: request.sendAt,
   });
+  const { initiator } = resolveDispatchAuthor({
+    retrying: false,
+    senderThreadId: null,
+    startedOnBehalfOf: request.startedOnBehalfOf,
+  });
+  const workOrigin = resolveWorkOrigin({
+    origin: request.origin,
+    originPluginId: request.originPluginId ?? null,
+    initiator,
+  });
   deps.telemetry.capture({
     name: "thread_created",
     properties: {
       is_child_thread: parentThread !== null,
       provider: request.providerId,
+      ...workOriginTelemetryProperty(deps.config.featureFlags, workOrigin),
     },
-  });
-  const { initiator } = resolveDispatchAuthor({
-    retrying: false,
-    senderThreadId: null,
-    startedOnBehalfOf: request.startedOnBehalfOf,
   });
   if (initiator === "user" && request.input.length > 0) {
     captureUserMessageSentTelemetry(deps, {
       isChildThread: parentThread !== null,
       messageSource: "thread_create",
       providerId: request.providerId,
+      workOrigin,
     });
   }
   return thread;
