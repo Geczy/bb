@@ -11,20 +11,39 @@ function bareLink(editor: Editor, mark: Mark, parent: Node, index: number) {
     !node.isText ||
     node.text !== mark.attrs.href ||
     mark.attrs.title ||
-    node.marks.length !== 1
+    node.marks.length !== 1 ||
+    mark.isInSet(parent.maybeChild(index - 1)?.marks ?? []) ||
+    mark.isInSet(parent.maybeChild(index + 1)?.marks ?? [])
   )
     return false;
   const before = parent.maybeChild(index - 1)?.textContent ?? "";
   const after = parent.maybeChild(index + 1)?.textContent ?? "";
   const matches: { index: number; lastIndex: number; url: string }[] | null =
     editor.storage.markdown.parser.md.linkify.match(before + node.text + after);
+  const tokens: {
+    children: {
+      type: string;
+      content: string;
+      attrs: [string, string][] | null;
+    }[];
+  }[] = editor.storage.markdown.parser.md.parseInline(node.text, {});
+  const inline = tokens[0]?.children ?? [];
   return (
-    matches?.some(
+    inline.length === 3 &&
+    inline[0]!.type === "link_open" &&
+    inline[0]!.attrs?.some(
+      ([name, value]) => name === "href" && value === node.text,
+    ) &&
+    inline[1]!.type === "text" &&
+    inline[1]!.content === node.text &&
+    inline[2]!.type === "link_close" &&
+    (matches?.some(
       (match) =>
         match.index === before.length &&
         match.lastIndex === before.length + node.text!.length &&
         match.url === mark.attrs.href,
-    ) ?? false
+    ) ??
+      false)
   );
 }
 
@@ -63,7 +82,7 @@ const hardBreakMarkdown: MarkdownNodeSpec = {
   },
 };
 
-export const MarkdownStarterKit = StarterKit.extend({
+export const MarkdownStarterKit = StarterKit.configure({}).extend({
   addExtensions() {
     return this.parent!().map((extension) => {
       const markdown =
