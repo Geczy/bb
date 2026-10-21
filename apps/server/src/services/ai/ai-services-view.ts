@@ -13,7 +13,7 @@ import {
   aiServiceSupportsTask,
   aiServiceTasks,
 } from "./ai-service-registry.js";
-import { orderedAiServices, runTextAiTask } from "./ai-tasks.js";
+import { orderedAiServices, runTextTask } from "./ai-tasks.js";
 import {
   buildCommitMessagePrompt,
   sanitizeGeneratedCommitMessage,
@@ -117,7 +117,7 @@ export async function testAiService(
   args: { task: AiTextTask; signal: AbortSignal },
 ): Promise<TestAiServiceResponse> {
   const sample = sampleFor(args.task);
-  const outcome = await runTextAiTask(deps, {
+  const outcome = await runTextTask(deps, {
     task: args.task,
     label: "AI service test",
     prompt: sample.prompt,

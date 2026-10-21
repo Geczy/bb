@@ -1992,7 +1992,45 @@ export interface PluginAiServiceDeclaration {
   readonly status?: () => Promise<PluginAiServiceStatus>;
 }
 
+export interface ExperimentalAiTextTaskInput {
+  readonly task: "thread-title" | "commit-message";
+  readonly prompt: string;
+  readonly signal?: AbortSignal;
+}
+
+export type ExperimentalAiTextTaskResult =
+  | {
+      readonly ok: true;
+      readonly value: string;
+      readonly service: {
+        readonly pluginId: string;
+        readonly id: string;
+        readonly displayName: string;
+      };
+      readonly durationMs: number;
+    }
+  | {
+      readonly ok: false;
+      readonly reason:
+        | "off"
+        | "unavailable"
+        | "timeout"
+        | "failed"
+        | "cancelled";
+      readonly message: string;
+      readonly durationMs: number;
+    };
+
 export interface PluginAiServices {
+  /**
+   * Run a core text task using its configured AI service, Automatic fallback,
+   * timeout, cancellation, and single-line cleanup. Off and unavailable return
+   * an unsuccessful result. Core title and commit generation use this path.
+   */
+  experimental_runTextTask(
+    input: ExperimentalAiTextTaskInput,
+  ): Promise<ExperimentalAiTextTaskResult>;
+
   /**
    * Register an AI service. Call during the factory; the registration lands
    * when the plugin load commits and is removed on reload or disable. Throws

@@ -13,7 +13,7 @@ import {
   truncateToWidthAtWordBoundary,
 } from "@bb/text-utils";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
-import { runTextAiTask } from "../ai/ai-tasks.js";
+import { runTextTask } from "../ai/ai-tasks.js";
 
 const MIN_TITLE_GENERATION_WORDS = 5;
 const MAX_GENERATED_TITLE_WIDTH = 48;
@@ -211,7 +211,7 @@ export async function generateThreadMetadataWithOutcome(
     return complete(null, "too-short");
   }
 
-  const outcome = await runTextAiTask(deps, {
+  const outcome = await runTextTask(deps, {
     task: "thread-title",
     label: "Thread title generation",
     logContext: { threadId: args.threadId },

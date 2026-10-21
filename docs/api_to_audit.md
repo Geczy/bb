@@ -3255,3 +3255,23 @@ current result as `RenderedSlotInspectionState.experimental_pageTitle`;
 audit test-host lifecycle parity before stabilization.
 Before stabilization, audit focus changes, same-plugin splits, loading,
 back/forward navigation, crash/reload recovery, links and overflow.
+
+## `bb.experimental_aiServices.experimental_runTextTask`
+
+Runs a `thread-title` or `commit-message` prompt through the user's core task
+selection. Off, unavailable, failed, timeout, and cancellation return explicit
+outcomes. Automatic keeps core service ordering and fallback; explicit selection
+never falls through. Text receives core single-line cleanup; callers retain their
+title/commit-specific sanitization. The result exposes service identity, never
+service callbacks. Cancellation uses the optional AbortSignal; timeouts stay core
+policy (8 seconds per service attempt). Voice and plugin-declared task ids are excluded.
+
+Core callers: thread title generation, commit message generation, and the Settings
+AI service test use the same `runTextTask` implementation as this API. The existing
+Settings UI and `bb settings ai-services` control task selection. Plugin Guide:
+AI services.
+
+Before stabilization, audit task ownership once a second plugin needs custom tasks,
+prompt/result limits, plugin cancellation on unload, and whether timeout policy
+needs a supported override. Rename the method/types project-wide and remove this
+entry only after the audit.

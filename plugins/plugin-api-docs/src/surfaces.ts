@@ -1435,14 +1435,18 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         tagline: "Write bb's titles, commit messages, and transcripts",
         title: "AI services",
         summary:
-          "Provide the models that write bb's titles, commit messages, and transcripts. With this, a plugin can:",
+          "Provide AI services, or run prompts through the user's selected service. With this, a plugin can:",
         bullets: [
           "Write thread titles and commit messages with any model",
           "Transcribe voice input from the microphone button",
           "Appear as a choice in Settings → AI services",
+          "Run title or commit prompts through the selected service, with fallback and cancellation",
         ],
         apiSymbols: [
           "PluginAiServices",
+          "PluginAiServices.experimental_runTextTask",
+          "ExperimentalAiTextTaskInput",
+          "ExperimentalAiTextTaskResult",
           "PluginAiServiceDeclaration",
           "PluginAiServiceStatus",
         ],

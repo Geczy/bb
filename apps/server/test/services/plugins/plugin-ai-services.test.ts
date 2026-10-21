@@ -1,3 +1,6 @@
+import { setAiServiceSelection } from "@bb/db";
+import { runTextTask } from "../../../src/services/ai/ai-tasks.js";
+import { registerFakeAiService } from "../../helpers/ai-services.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -321,3 +324,90 @@ describe("bb.experimental_aiServices.register (server)", () => {
     });
   });
 });
+
+describe.each(["core", "plugin"] as const)(
+  "AI text task contract through %s",
+  (surface) => {
+    it.each(["thread-title", "commit-message"] as const)(
+      "honors selection, cleanup, fallback and cancellation for %s",
+      async (task) => {
+        await withPluginHarness(async (harness, workDir) => {
+          const rootDir = await writePlugin(workDir, {
+            name: "bb-plugin-text-runner",
+            withHost: false,
+            serverSource: `export default function plugin(bb) {
+          bb.http.route("POST", "/run", async context => {
+            const input = await context.req.json();
+            const signal = input.cancel ? AbortSignal.abort() : undefined;
+            const result = await bb.experimental_aiServices.experimental_runTextTask({
+              task: input.task, prompt: input.prompt, ...(signal ? { signal } : {}),
+            });
+            return context.json(result);
+          });
+        }`,
+          });
+          expect(
+            (await harness.pluginService.installPath(rootDir)).status,
+          ).toBe("running");
+          const run = async (cancel = false) => {
+            if (surface === "core")
+              return runTextTask(harness.deps, {
+                task,
+                prompt: "  prompt bytes  ",
+                label: "test",
+                ...(cancel ? { signal: AbortSignal.abort() } : {}),
+              });
+            const response = await harness.app.request(
+              "/api/v1/plugins/text-runner/http/run",
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  task,
+                  prompt: "  prompt bytes  ",
+                  cancel,
+                }),
+              },
+            );
+            expect(response.status).toBe(200);
+            return response.json();
+          };
+          const failing = registerFakeAiService(harness.deps.aiServices, {
+            pluginId: "bb-ai",
+            id: "failed",
+            complete: async () => {
+              throw new Error("no quota");
+            },
+          });
+          const fallback = registerFakeAiService(harness.deps.aiServices, {
+            pluginId: "backup",
+            id: "text",
+            complete: async () => 'Title: "Clean reply"',
+          });
+          expect(await run()).toMatchObject({
+            ok: true,
+            value: "Clean reply",
+            service: { pluginId: "backup", id: "text" },
+          });
+          expect(fallback.completeCalls[0]?.prompt).toBe("  prompt bytes  ");
+          setAiServiceSelection(harness.db, task, {
+            mode: "service",
+            pluginId: "bb-ai",
+            serviceId: "failed",
+          });
+          expect(await run()).toMatchObject({ ok: false, reason: "failed" });
+          expect(fallback.completeCalls).toHaveLength(1);
+          setAiServiceSelection(harness.db, task, { mode: "off" });
+          expect(await run()).toMatchObject({ ok: false, reason: "off" });
+          expect(failing.completeCalls).toHaveLength(2);
+          setAiServiceSelection(harness.db, task, { mode: "automatic" });
+          expect(await run(true)).toMatchObject({
+            ok: false,
+            reason: "cancelled",
+          });
+          expect(failing.completeCalls).toHaveLength(2);
+        });
+      },
+    );
+  },
+);

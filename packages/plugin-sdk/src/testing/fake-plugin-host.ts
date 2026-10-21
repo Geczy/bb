@@ -3,6 +3,7 @@ import { rpcInvalidationTags, rpcResponseTags } from "../internal/rpc-tags.js";
 import type { ContractTagDeclarations } from "@bb/domain";
 import {
   environmentCompositionSchema,
+  validateAiTextTaskInput,
   validateServerAccessProviderDeclaration,
   type NormalizedPluginEnvironmentComposition,
 } from "../internal/host-policy.js";
@@ -507,6 +508,7 @@ export interface FakePluginHarness
 }
 
 export interface CreateFakePluginHostOptions {
+  experimental_runAiTextTask?: PluginAiServices["experimental_runTextTask"];
   machineBootstrap?: MachineBootstrapApi;
   machineResource?: (hostId: string) => Promise<JsonValue | null>;
   /** Defaults to "test-plugin". */
@@ -999,6 +1001,13 @@ function createFakePluginHostInternal(
 
   const aiServiceRegistrations: PluginAiServiceDeclaration[] = [];
   const experimental_aiServices: PluginAiServices = {
+    async experimental_runTextTask(input) {
+      assertLive();
+      if (!options.experimental_runAiTextTask) {
+        throw new Error("Stub experimental_runAiTextTask to run AI text tasks");
+      }
+      return options.experimental_runAiTextTask(validateAiTextTaskInput(input));
+    },
     register(declaration) {
       assertLive();
       const normalized = validatePluginAiServiceDeclaration(declaration);

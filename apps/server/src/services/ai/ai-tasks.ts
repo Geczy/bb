@@ -1,3 +1,4 @@
+import type { ExperimentalAiTextTaskResult } from "@get-bb/plugin-sdk";
 import { getAiServiceSelections } from "@bb/db";
 import type {
   AiServiceSelection,
@@ -281,7 +282,7 @@ export async function runAiTask<T>(
   return fail(last.reason, last.message);
 }
 
-export function runTextAiTask(
+export async function runTextTask(
   deps: AiTaskDeps,
   args: {
     task: AiTextTask;
@@ -291,8 +292,8 @@ export function runTextAiTask(
     timeoutMs?: number;
     signal?: AbortSignal;
   },
-): Promise<AiTaskOutcome<string>> {
-  return runAiTask(deps, {
+): Promise<ExperimentalAiTextTaskResult> {
+  const result = await runAiTask(deps, {
     task: args.task,
     label: args.label,
     ...(args.logContext === undefined ? {} : { logContext: args.logContext }),
@@ -306,4 +307,13 @@ export function runTextAiTask(
     },
     accept: (raw) => (typeof raw === "string" ? cleanGeneratedLine(raw) : null),
   });
+  if (!result.ok) return result;
+  return {
+    ...result,
+    service: {
+      pluginId: result.service.pluginId,
+      id: result.service.id,
+      displayName: result.service.displayName,
+    },
+  };
 }

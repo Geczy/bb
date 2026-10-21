@@ -35,7 +35,9 @@ function createFakeWorkspace(path: string, isGitRepo = true) {
     isGitRepo,
     isWorktree: false,
     getDefaultBranch: vi.fn(async () => "main"),
-    getCurrentBranch: vi.fn(async () => "main"),
+    getCurrentBranch: vi.fn<HostWorkspace["getCurrentBranch"]>(
+      async () => "main",
+    ),
     getHeadSha: vi.fn(async () => "commit-1"),
     getLocalStateFingerprint: vi.fn(async () => {
       if (localStateFingerprintError) {
@@ -396,6 +398,106 @@ describe("WatchManager", () => {
     });
     expect(provisionWorkspace).toHaveBeenCalledTimes(1);
     expect(refreshWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports branch changes with coalesced content events, clears detached HEAD, and deduplicates metadata", async () => {
+    let watch: WatchWorkspaceArgs | undefined;
+    const workspace = createFakeWorkspace("/tmp/env-branch");
+    const { hostWatcher } = createFakeHostWatcher({
+      watchWorkspaceImplementation: (args) => {
+        watch = args;
+        return () => undefined;
+      },
+    });
+    const onWorkspaceMetadataChanged = vi.fn();
+    const manager = new WatchManager({
+      hostWatcher,
+      provisionWorkspace: async () => workspace,
+      onWorkspaceMetadataChanged,
+    });
+    await manager.replaceWatchSet({
+      generation: 1,
+      workspaceTargets: [
+        {
+          environmentId: "env-branch",
+          workspaceContext: { workspacePath: workspace.path },
+        },
+      ],
+      threadStorageTargets: [],
+    });
+    watch?.onReady?.();
+    await vi.waitFor(() =>
+      expect(onWorkspaceMetadataChanged).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      onWorkspaceMetadataChanged.mock.calls[0]?.[0].workspace.branchName,
+    ).toBe("main");
+    const change = () =>
+      watch?.onChange({
+        kind: "workspace-status-changed",
+        environmentId: "env-branch",
+        changeKinds: ["workspace-git-changed", "workspace-content-changed"],
+        changedPaths: [
+          workspace.path + "/.git/HEAD",
+          workspace.path + "/file.txt",
+        ],
+      });
+    workspace.getCurrentBranch.mockResolvedValue("feature/new");
+    change();
+    await vi.waitFor(() =>
+      expect(onWorkspaceMetadataChanged).toHaveBeenCalledTimes(2),
+    );
+    expect(
+      onWorkspaceMetadataChanged.mock.calls[1]?.[0].workspace,
+    ).toMatchObject({ branchName: "feature/new", defaultBranch: "main" });
+    change();
+    workspace.getCurrentBranch.mockResolvedValue(null);
+    change();
+    await vi.waitFor(() =>
+      expect(onWorkspaceMetadataChanged).toHaveBeenCalledTimes(3),
+    );
+    expect(
+      onWorkspaceMetadataChanged.mock.calls[2]?.[0].workspace.branchName,
+    ).toBeNull();
+    await manager.shutdown();
+  });
+
+  it("does not publish a branch read after the watch was removed", async () => {
+    let watch: WatchWorkspaceArgs | undefined;
+    const workspace = createFakeWorkspace("/tmp/env-branch");
+    const branch = createDeferredPromise<string | null>();
+    workspace.getCurrentBranch.mockImplementation(() => branch.promise);
+    const { hostWatcher } = createFakeHostWatcher({
+      watchWorkspaceImplementation: (args) => {
+        watch = args;
+        return () => undefined;
+      },
+    });
+    const onWorkspaceMetadataChanged = vi.fn();
+    const manager = new WatchManager({
+      hostWatcher,
+      provisionWorkspace: async () => workspace,
+      onWorkspaceMetadataChanged,
+    });
+    await manager.replaceWatchSet({
+      generation: 1,
+      workspaceTargets: [
+        {
+          environmentId: "env-branch",
+          workspaceContext: { workspacePath: workspace.path },
+        },
+      ],
+      threadStorageTargets: [],
+    });
+    watch?.onReady?.();
+    await vi.waitFor(() =>
+      expect(workspace.getCurrentBranch).toHaveBeenCalled(),
+    );
+    await manager.shutdown();
+    branch.resolve("stale");
+    await branch.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(onWorkspaceMetadataChanged).not.toHaveBeenCalled();
   });
 
   it("suppresses git metadata notifications when the local fingerprint is unchanged", async () => {

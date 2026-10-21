@@ -4,7 +4,7 @@ import { createAiServiceRegistry } from "../../src/services/ai/ai-service-regist
 import {
   isAiTaskAvailable,
   runAiTask,
-  runTextAiTask,
+  runTextTask,
 } from "../../src/services/ai/ai-tasks.js";
 import { registerFakeAiService } from "../helpers/ai-services.js";
 import { withTestHarness } from "../helpers/test-app.js";
@@ -27,7 +27,7 @@ describe("AI task routing", () => {
         complete: async () => "Codex title",
       });
 
-      const outcome = await runTextAiTask(harness.deps, {
+      const outcome = await runTextTask(harness.deps, {
         task: "thread-title",
         label: "test",
         prompt: PROMPT,
@@ -60,7 +60,7 @@ describe("AI task routing", () => {
         serviceId: "codex",
       });
 
-      const failed = await runTextAiTask(harness.deps, {
+      const failed = await runTextTask(harness.deps, {
         task: "commit-message",
         label: "test",
         prompt: PROMPT,
@@ -97,7 +97,7 @@ describe("AI task routing", () => {
       signedIn = true;
 
       await expect(
-        runTextAiTask(deps, {
+        runTextTask(deps, {
           task: "thread-title",
           label: "test",
           prompt: PROMPT,
@@ -107,7 +107,7 @@ describe("AI task routing", () => {
 
       clock += 10_001;
       await expect(
-        runTextAiTask(deps, {
+        runTextTask(deps, {
           task: "thread-title",
           label: "test",
           prompt: PROMPT,
@@ -128,7 +128,7 @@ describe("AI task routing", () => {
       controller.abort();
 
       await expect(
-        runTextAiTask(harness.deps, {
+        runTextTask(harness.deps, {
           task: "thread-title",
           label: "test",
           prompt: PROMPT,
@@ -158,7 +158,7 @@ describe("AI task routing", () => {
       });
 
       await expect(
-        runTextAiTask(harness.deps, {
+        runTextTask(harness.deps, {
           task: "thread-title",
           label: "test",
           prompt: PROMPT,
@@ -252,7 +252,7 @@ describe("AI task routing", () => {
         serviceId: "my-openrouter",
       });
 
-      const outcome = await runTextAiTask(harness.deps, {
+      const outcome = await runTextTask(harness.deps, {
         task: "commit-message",
         label: "test",
         prompt: PROMPT,
@@ -262,7 +262,7 @@ describe("AI task routing", () => {
       expect(mine.completeCalls).toHaveLength(1);
       expect(codex.completeCalls).toEqual([]);
 
-      const title = await runTextAiTask(harness.deps, {
+      const title = await runTextTask(harness.deps, {
         task: "thread-title",
         label: "test",
         prompt: PROMPT,
@@ -284,7 +284,7 @@ describe("AI task routing", () => {
         serviceId: "my-openrouter",
       });
 
-      const outcome = await runTextAiTask(harness.deps, {
+      const outcome = await runTextTask(harness.deps, {
         task: "thread-title",
         label: "test",
         prompt: PROMPT,
@@ -304,7 +304,7 @@ describe("AI task routing", () => {
       });
       setAiServiceSelection(harness.deps.db, "thread-title", { mode: "off" });
 
-      const outcome = await runTextAiTask(harness.deps, {
+      const outcome = await runTextTask(harness.deps, {
         task: "thread-title",
         label: "test",
         prompt: PROMPT,
@@ -330,7 +330,7 @@ describe("AI task routing", () => {
           }),
       });
 
-      const outcome = await runTextAiTask(harness.deps, {
+      const outcome = await runTextTask(harness.deps, {
         task: "thread-title",
         label: "test",
         prompt: PROMPT,
@@ -353,14 +353,14 @@ describe("AI task routing", () => {
       });
 
       await expect(
-        runTextAiTask(harness.deps, {
+        runTextTask(harness.deps, {
           task: "thread-title",
           label: "test",
           prompt: PROMPT,
         }),
       ).resolves.toMatchObject({ ok: false, reason: "failed" });
       await expect(
-        runTextAiTask(harness.deps, {
+        runTextTask(harness.deps, {
           task: "thread-title",
           label: "test",
           prompt: PROMPT,

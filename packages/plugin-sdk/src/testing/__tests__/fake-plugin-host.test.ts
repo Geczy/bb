@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   PLUGIN_CLI_OUTPUT_MAX_BYTES,
@@ -2057,6 +2057,46 @@ describe("providers.experimental_contributeEnv", () => {
     expect(JSON.stringify(harness.inspection.logEntries)).not.toContain(
       "hidden",
     );
+  });
+});
+
+describe("experimental_aiServices.experimental_runTextTask", () => {
+  it("validates inputs before invoking the configured runner and refuses stale plugin handles", async () => {
+    const runner = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          reason: "off",
+          message: "Disabled",
+          durationMs: 0,
+        }) as const,
+    );
+    const { bb, harness } = createFakePluginHost({
+      experimental_runAiTextTask: runner,
+    });
+    const run = bb.experimental_aiServices.experimental_runTextTask;
+    for (const input of [
+      { task: "voice", prompt: "text" },
+      { task: "thread-title", prompt: "  " },
+      { task: "thread-title", prompt: "text", signal: {} },
+    ]) {
+      await expect(Reflect.apply(run, undefined, [input])).rejects.toThrow();
+    }
+    expect(runner).not.toHaveBeenCalled();
+    const signal = new AbortController().signal;
+    await expect(
+      run({ task: "commit-message", prompt: "  preserve bytes  ", signal }),
+    ).resolves.toMatchObject({ ok: false, reason: "off" });
+    expect(runner).toHaveBeenCalledWith({
+      task: "commit-message",
+      prompt: "  preserve bytes  ",
+      signal,
+    });
+    await harness.lifecycle.dispose();
+    await expect(
+      run({ task: "thread-title", prompt: "text" }),
+    ).rejects.toThrow();
+    expect(runner).toHaveBeenCalledTimes(1);
   });
 });
 

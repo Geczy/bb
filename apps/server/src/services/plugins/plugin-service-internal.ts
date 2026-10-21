@@ -76,6 +76,7 @@ export interface PluginServiceDeps {
   providerRegistry?: ProviderRegistryService;
   pluginHostArtifacts?: PluginHostArtifactRegistry;
   aiServices: AiServiceRegistry;
+  runAiTextTask?: import("@get-bb/plugin-sdk").PluginAiServices["experimental_runTextTask"];
   onSettingsChanged?: (pluginId: string) => void;
   /**
    * Fired after a plugin stops being a registered owner — disabled or

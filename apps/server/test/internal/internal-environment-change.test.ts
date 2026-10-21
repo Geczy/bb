@@ -217,6 +217,29 @@ describe("internal environment change websocket hints", () => {
       expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
         "metadata-changed",
       ]);
+
+      for (const branchName of ["feature/checkout", null]) {
+        onDaemonSocketMessage(harness.deps, {
+          hostId: host.id,
+          sessionId: session.id,
+          socket,
+          raw: JSON.stringify({
+            type: "environment-metadata-change",
+            environmentId: environment.id,
+            workspace: {
+              path: environment.path,
+              isGitRepo: true,
+              isWorktree: true,
+              branchName,
+              defaultBranch: "main",
+            },
+          }),
+        });
+        expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+          branchName,
+          defaultBranch: "main",
+        });
+      }
     });
   });
 
