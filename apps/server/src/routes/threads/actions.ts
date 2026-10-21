@@ -556,6 +556,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (strategy === "keep" || strategy === "discard") {
       setArchiveWorktreeChoice(deps, thread, strategy);
     } else {
+      setArchiveWorktreeChoice(deps, thread, "auto");
       const worktrees = await inspectArchiveWorktrees(deps, thread);
       const unsafe = worktrees.filter((worktree) => worktree.state !== "clean");
       if (strategy === "require-clean" && unsafe.length > 0) {

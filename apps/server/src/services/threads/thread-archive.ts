@@ -261,7 +261,7 @@ export async function inspectArchiveWorktrees(
 export function setArchiveWorktreeChoice(
   deps: AppDeps,
   thread: Thread,
-  choice: "keep" | "discard",
+  choice: "keep" | "discard" | "auto",
 ): void {
   deps.db.transaction(() => {
     for (const candidate of listArchiveCandidates(deps.db, [thread])) {
@@ -281,6 +281,12 @@ export function setArchiveWorktreeChoice(
           .where(eq(environments.id, row.id))
           .run();
         deps.hub.notifyEnvironment(row.id, ["metadata-changed"]);
+      } else if (choice === "auto") {
+        deps.db
+          .update(environments)
+          .set({ archiveDiscard: false })
+          .where(eq(environments.id, row.id))
+          .run();
       } else {
         retainArchivedWorktree(deps, row.id);
       }

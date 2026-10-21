@@ -1710,6 +1710,48 @@ describe("core environment orchestration", () => {
       });
     }));
 
+  it("replaces pending discard authorization with a later default archive", async () =>
+    withTestHarness(async (harness) => {
+      const fixture = setup(harness, { policy: { retireGraceMs: 60_000 } });
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle" })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
+      expect(
+        (
+          await harness.app.request(
+            `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=discard`,
+            { method: "POST" },
+          )
+        ).status,
+      ).toBe(200);
+      const archiving = harness.app.request(
+        `/api/v1/threads/${fixture.thread.id}/archive-all`,
+        { method: "POST" },
+      );
+      const inspection = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "workspace.archive_status",
+      );
+      await reportQueuedCommandSuccess(harness, inspection, {
+        hasUncommittedChanges: false,
+        hasUnpushedCommits: false,
+      });
+      expect((await archiving).status).toBe(200);
+      expect(getEnvironment(harness.db, environmentId)?.archiveDiscard).toBe(
+        false,
+      );
+    }));
+
   it("cancels discard authorization when a thread is unarchived", async () =>
     withTestHarness(async (harness) => {
       const fixture = setup(harness, { policy: { retireGraceMs: 60_000 } });
