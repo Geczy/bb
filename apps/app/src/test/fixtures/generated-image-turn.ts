@@ -1,4 +1,4 @@
-import { turnScope } from "@bb/domain";
+import { turnScope, type CompletedTurnDisplay } from "@bb/domain";
 import {
   buildThreadTimelineFromEvents,
   type ThreadEventWithMeta,
@@ -77,7 +77,10 @@ export function generatedImageEvents(completed: boolean): ThreadEventWithMeta[] 
   }));
 }
 
-export function generatedImageTimeline(completed: boolean) {
+export function generatedImageTimeline(
+  completed: boolean,
+  completedTurnDisplay: CompletedTurnDisplay = "collapse",
+) {
   return buildThreadTimelineFromEvents({
     acceptedClientRequestContext: {
       acceptedClientRequestEvents: [],
@@ -86,7 +89,7 @@ export function generatedImageTimeline(completed: boolean) {
     contextWindowEvents: [],
     events: generatedImageEvents(completed),
     options: {
-      completedTurnDisplay: "collapse",
+      completedTurnDisplay,
       includeNestedRows: false,
       includeDiagnosticOperations: false,
       summarizeShellCommands: true,
