@@ -573,6 +573,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
             input: [
               {
                 type: "text",
+                mentions: [],
                 text: `The user chose to commit and push before archiving this thread and the threads under it. Preserve all work. Inspect and commit intended changes, push normally (never force-push), and verify success. Worktrees to check: ${JSON.stringify(worktrees)}. Use their threads on their machines when needed. Only after every affected worktree is clean and pushed, run bb thread archive ${thread.id} --require-clean. If committing or pushing fails, leave this thread unarchived and explain the blocker. Never discard changes or bypass the archive safety check.`,
               },
             ],

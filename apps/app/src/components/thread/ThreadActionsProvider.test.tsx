@@ -276,7 +276,7 @@ describe("ThreadActionsProvider archive confirmation", () => {
       );
       if (worktree === "commit-and-push") {
         await vi.waitFor(() =>
-          expect(appToast.message).toHaveBeenCalledWith(
+          expect(appToast.success).toHaveBeenCalledWith(
             "Asked the agent to commit, push, and archive the thread.",
           ),
         );

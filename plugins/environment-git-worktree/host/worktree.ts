@@ -607,7 +607,9 @@ export async function createWorktree(
   }
 }
 
-async function removeDirectoryIfEmpty(pathToRemove: string): Promise<void> {
+export async function removeDirectoryIfEmpty(
+  pathToRemove: string,
+): Promise<void> {
   try {
     await fs.rmdir(pathToRemove);
   } catch (error) {

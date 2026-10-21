@@ -58,7 +58,6 @@ async function createSourceRepository(repositoryName = "repo"): Promise<{
   await writeFile(join(sourcePath, "README.md"), "hello\n");
   await git(sourcePath, "add", ".");
   await git(sourcePath, "commit", "-m", "initial");
-  await git(sourcePath, "update-ref", "refs/remotes/origin/main", "HEAD");
   return { root, sourcePath, dataDir };
 }
 
@@ -339,6 +338,7 @@ describe("worktree host entry", () => {
     async (_label, repositoryName, expectedLeaf) => {
       const { sourcePath, dataDir } =
         await createSourceRepository(repositoryName);
+      await git(sourcePath, "update-ref", "refs/remotes/origin/main", "HEAD");
       const harness = createHarness(dataDir);
       const pathKey = "special-name";
       const result = await harness.experimental_call(

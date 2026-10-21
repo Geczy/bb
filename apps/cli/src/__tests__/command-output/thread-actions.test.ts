@@ -33,6 +33,7 @@ describe("bb thread action command output", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
+      query: { worktree: "auto" },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-archive-1 archived",
@@ -50,6 +51,7 @@ describe("bb thread action command output", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
+      query: { worktree: "auto" },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-archive-1 archived (1 related thread also archived)",
@@ -68,6 +70,7 @@ describe("bb thread action command output", () => {
 
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-2" },
+      query: { worktree: "auto" },
     });
   });
 
@@ -86,6 +89,7 @@ describe("bb thread action command output", () => {
     );
     expect(archivePost).toHaveBeenCalledWith({
       param: { id: "thread-archive-1" },
+      query: { worktree: "auto" },
     });
   });
 
