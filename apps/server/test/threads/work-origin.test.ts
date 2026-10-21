@@ -22,6 +22,7 @@ describe("resolveWorkOrigin", () => {
     [{ origin: "app", originPluginId: null, initiator: "user" }, "person"],
     [{ origin: "cli", originPluginId: null, initiator: "agent" }, "agent"],
     [{ origin: "sdk", originPluginId: null, initiator: "system" }, "system"],
+    [{ origin: null, originPluginId: null, initiator: "user" }, "person"],
   ] as const)("maps %o to %s", (args, expected) => {
     expect(resolveWorkOrigin(args)).toBe(expected);
   });

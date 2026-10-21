@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const featureFlagsSchema = z.object({
   placeholder: z.boolean(),
-  workOriginTelemetry: z.boolean(),
+  workOriginTelemetry: z.boolean().default(false),
   timelineWindowEventBudget: z.number().int().positive(),
 });
 export type FeatureFlags = z.infer<typeof featureFlagsSchema>;

@@ -8,7 +8,7 @@ import type { WorkOrigin } from "../system/telemetry.js";
 const AUTOMATIONS_PLUGIN_ID = "automations";
 
 export function resolveWorkOrigin(args: {
-  origin: ThreadCreateOrigin;
+  origin: ThreadCreateOrigin | null;
   originPluginId: string | null;
   initiator: ThreadTurnInitiator;
 }): WorkOrigin {
