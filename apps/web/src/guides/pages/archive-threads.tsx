@@ -242,7 +242,7 @@ export const guide: Guide = {
             </li>
             <li>
               {
-                "Stops agents that have been idle for 30 minutes, to free memory."
+                "Stops agents that have been idle for about 30 minutes, to free memory."
               }
             </li>
           </ul>
@@ -364,7 +364,7 @@ export const guide: Guide = {
         <>
           <p>
             {
-              "Archiving stops the thread's running turn, its terminals, and anything running in its worktree. bb also stops agents that have been idle for 30 minutes."
+              "Archiving stops the thread's running turn, its terminals, and anything running in its worktree. bb also stops agents that have been idle for about 30 minutes."
             }
           </p>
         </>
