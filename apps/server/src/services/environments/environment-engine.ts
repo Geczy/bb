@@ -642,6 +642,7 @@ export function requestEnvironmentRemoval(
   const row = getEnvironment(deps.db, environmentId);
   if (row === null) return false;
   const removingMachine = getHost(deps.db, row.hostId)?.phase === "removing";
+  if (!removingMachine && row.archiveRetained) return false;
   if (!removingMachine && environmentHasLiveThreads(deps.db, environmentId))
     return false;
   if (row.ownerThreadId !== null && row.teardownStatus === null) {
@@ -705,6 +706,7 @@ async function runRemove(
     );
   await withHostCleanup(deps, row.hostId, async () => {
     try {
+      if (!requestEnvironmentRemoval(deps, environmentId)) return;
       if (row.providerOwnsPath && row.hostId !== null && row.path !== null) {
         await runEnvironmentHook(deps, {
           projectId: row.projectId,
@@ -727,8 +729,11 @@ async function runRemove(
       const invocation = await invokeEnvironmentProvider(
         record,
         "environment remove",
-        () =>
-          record.provider.remove({
+        () => {
+          if (!requestEnvironmentRemoval(deps, environmentId))
+            throw new Error("Worktree retention changed before removal");
+          const current = getEnvironment(deps.db, environmentId);
+          return record.provider.remove({
             environment:
               row.ownerThreadId !== null
                 ? null
@@ -737,10 +742,12 @@ async function runRemove(
             path: row.path,
             pathKey: row.environmentProviderInstanceKey ?? row.id,
             resource: row.resource,
+            experimental_discardWorktree: current?.archiveDiscard === true,
             attempt,
             report: emptyReporter(),
             signal,
-          }),
+          });
+        },
       );
       if (!invocation.ok) throw new Error(invocation.error);
       if (invocation.value === null)
@@ -900,6 +907,7 @@ async function sweepProviderEnvironmentInSlot(
   if (row.retireAt !== null && row.retireAt > now) return;
   if (
     isManagedWorktree(row) &&
+    !row.archiveDiscard &&
     row.status === "ready" &&
     row.teardownStatus === null
   ) {

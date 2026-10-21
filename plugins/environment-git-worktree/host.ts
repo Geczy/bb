@@ -136,6 +136,7 @@ export function createWorktreeHostEntry() {
           for (const path of paths) {
             await removeWorktree({
               path,
+              discard: input.discard,
               onProgress: createHostProgress({
                 operationId: input.operationId,
                 emit: (payload) =>

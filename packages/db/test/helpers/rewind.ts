@@ -117,6 +117,9 @@ export function dropEnvironmentArchiveRetainedColumn(db: DbConnection): void {
   const columns = db.$client
     .prepare<[], { name: string }>("PRAGMA table_info(environments)")
     .all();
+  if (columns.some((column) => column.name === "archive_discard")) {
+    db.$client.exec("ALTER TABLE environments DROP COLUMN archive_discard");
+  }
   if (columns.some((column) => column.name === "archive_retained")) {
     db.$client.exec("ALTER TABLE environments DROP COLUMN archive_retained");
   }

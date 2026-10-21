@@ -1,5 +1,5 @@
 import { environments, type EnvironmentRow } from "@bb/db";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import type { AppDeps, WorkSessionDeps } from "../../types.js";
 import { callHostRetryableOnlineRpc } from "../hosts/online-rpc.js";
 
@@ -37,11 +37,22 @@ export async function readArchiveWorktreeState(
 export function retainArchivedWorktree(
   deps: Pick<AppDeps, "db" | "hub">,
   environmentId: string,
-): void {
-  deps.db
+): boolean {
+  const written = deps.db
     .update(environments)
-    .set({ archiveRetained: true, retireAt: null })
-    .where(eq(environments.id, environmentId))
-    .run();
+    .set({ archiveRetained: true, archiveDiscard: false, retireAt: null })
+    .where(
+      and(
+        eq(environments.id, environmentId),
+        or(
+          isNull(environments.teardownStatus),
+          ne(environments.teardownStatus, "running"),
+        ),
+      ),
+    )
+    .returning({ id: environments.id })
+    .all();
+  if (written.length === 0) return false;
   deps.hub.notifyEnvironment(environmentId, ["metadata-changed"]);
+  return true;
 }

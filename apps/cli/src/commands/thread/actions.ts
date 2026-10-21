@@ -58,6 +58,7 @@ interface ThreadUpdateCommandOptions {
 }
 
 interface ThreadArchiveCommandOptions {
+  discardWorktree?: boolean;
   keepWorktree?: boolean;
   requireClean?: boolean;
   commitAndPush?: boolean;
@@ -293,6 +294,10 @@ export function registerActionsCommands(
     .description(
       "Archive a thread and the threads under it. Worktrees with uncommitted or unpushed changes are kept.",
     )
+    .option(
+      "--discard-worktree",
+      "Delete the worktrees even if they have uncommitted or unpushed changes",
+    )
     .option("--keep-worktree", "Keep the worktrees when archiving")
     .option(
       "--require-clean",
@@ -310,12 +315,15 @@ export function registerActionsCommands(
           const threadId = requireThreadIdOrSelf(id, opts);
           const sdk = createCliBbSdk(getUrl());
           if (
-            [opts.keepWorktree, opts.requireClean, opts.commitAndPush].filter(
-              Boolean,
-            ).length > 1
+            [
+              opts.keepWorktree,
+              opts.requireClean,
+              opts.commitAndPush,
+              opts.discardWorktree,
+            ].filter(Boolean).length > 1
           )
             throw new Error(
-              "Choose one of --keep-worktree, --require-clean, or --commit-and-push.",
+              "Choose one of --keep-worktree, --require-clean, --commit-and-push, or --discard-worktree.",
             );
           let preparing = false;
           let archivedThreadIds: string[] = [threadId];
@@ -328,7 +336,9 @@ export function registerActionsCommands(
                   ? "require-clean"
                   : opts.commitAndPush
                     ? "commit-and-push"
-                    : "auto",
+                    : opts.discardWorktree
+                      ? "discard"
+                      : "auto",
             });
             preparing = result.preparing === true;
             archivedThreadIds = result.archivedThreadIds;

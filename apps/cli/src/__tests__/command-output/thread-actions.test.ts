@@ -95,6 +95,7 @@ describe("bb thread action command output", () => {
 
   it.each([
     ["--keep-worktree", "keep"],
+    ["--discard-worktree", "discard"],
     ["--require-clean", "require-clean"],
     ["--commit-and-push", "commit-and-push"],
   ])(

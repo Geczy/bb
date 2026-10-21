@@ -58,6 +58,7 @@ interface CreateWorktreeArgs {
 }
 
 interface RemoveWorktreeArgs {
+  discard?: boolean;
   path: string;
   onProgress?: ProgressCallback | undefined;
   signal?: AbortSignal | undefined;
@@ -654,22 +655,42 @@ export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
     workspacePath,
     () =>
       withWorktreeMetadataLock(commonDir, async () => {
-        const status = await readWorktreeArchiveStatus(
-          workspacePath,
-          args.signal,
-        );
-        if (status.hasUncommittedChanges || status.hasUnpushedCommits) {
-          throw new WorkspaceError(
-            "worktree_has_local_changes",
-            `Worktree ${workspacePath} has uncommitted or unpushed changes and was kept.`,
+        if (args.discard !== true) {
+          const status = await readWorktreeArchiveStatus(
+            workspacePath,
+            args.signal,
           );
+          if (status.hasUncommittedChanges || status.hasUnpushedCommits) {
+            throw new WorkspaceError(
+              "worktree_has_local_changes",
+              `Worktree ${workspacePath} has uncommitted or unpushed changes and was kept.`,
+            );
+          }
         }
         await experimental_killProcessesWithCwdUnder({
           directories: [workspacePath],
         });
         throwIfProvisionAborted(args.signal);
+        if (args.discard !== true) {
+          const status = await readWorktreeArchiveStatus(
+            workspacePath,
+            args.signal,
+          );
+          if (status.hasUncommittedChanges || status.hasUnpushedCommits)
+            throw new WorkspaceError(
+              "worktree_has_local_changes",
+              `Worktree ${workspacePath} has uncommitted or unpushed changes and was kept.`,
+            );
+        }
         await runGit(
-          ["--git-dir", commonDir, "worktree", "remove", workspacePath],
+          [
+            "--git-dir",
+            commonDir,
+            "worktree",
+            "remove",
+            ...(args.discard === true ? ["--force"] : []),
+            workspacePath,
+          ],
           {
             cwd: parentPath,
             ...signalOptions(args.signal),

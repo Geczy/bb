@@ -1,3 +1,5 @@
+import { ApiError } from "../../errors.js";
+import { eq } from "drizzle-orm";
 import {
   isManagedWorktree,
   readArchiveWorktreeState,
@@ -17,6 +19,7 @@ import {
   listLifecycleThreadDependents,
   archiveThread,
   getEnvironment,
+  environments,
   listNonDeletedChildThreads,
   listNonDeletedHiddenSourceThreads,
 } from "@bb/db";
@@ -255,11 +258,32 @@ export async function inspectArchiveWorktrees(
   return result;
 }
 
-export function keepArchiveWorktrees(deps: AppDeps, thread: Thread): void {
-  for (const candidate of listArchiveCandidates(deps.db, [thread])) {
-    if (candidate.environmentId === null) continue;
-    const row = getEnvironment(deps.db, candidate.environmentId);
-    if (row !== null && isManagedWorktree(row))
-      retainArchivedWorktree(deps, row.id);
-  }
+export function setArchiveWorktreeChoice(
+  deps: AppDeps,
+  thread: Thread,
+  choice: "keep" | "discard",
+): void {
+  deps.db.transaction(() => {
+    for (const candidate of listArchiveCandidates(deps.db, [thread])) {
+      if (candidate.environmentId === null) continue;
+      const row = getEnvironment(deps.db, candidate.environmentId);
+      if (row === null || !isManagedWorktree(row)) continue;
+      if (row.teardownStatus === "running")
+        throw new ApiError(
+          409,
+          "worktree_removal_started",
+          `Worktree ${row.path ?? row.id} is already being removed, so it can't be kept now.`,
+        );
+      if (choice === "discard") {
+        deps.db
+          .update(environments)
+          .set({ archiveRetained: false, archiveDiscard: true, retireAt: null })
+          .where(eq(environments.id, row.id))
+          .run();
+        deps.hub.notifyEnvironment(row.id, ["metadata-changed"]);
+      } else {
+        retainArchivedWorktree(deps, row.id);
+      }
+    }
+  });
 }

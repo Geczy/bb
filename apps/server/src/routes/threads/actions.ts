@@ -83,7 +83,7 @@ import {
 import {
   archiveThreadAndChildren,
   inspectArchiveWorktrees,
-  keepArchiveWorktrees,
+  setArchiveWorktreeChoice,
 } from "../../services/threads/thread-archive.js";
 import {
   requireThreadCommandEnvironment,
@@ -553,8 +553,8 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   post(routes.archiveAll, async (context, query) => {
     const thread = requirePublicThread(deps.db, context.req.param("id"));
     const strategy = query.worktree ?? "auto";
-    if (strategy === "keep") {
-      keepArchiveWorktrees(deps, thread);
+    if (strategy === "keep" || strategy === "discard") {
+      setArchiveWorktreeChoice(deps, thread, strategy);
     } else {
       const worktrees = await inspectArchiveWorktrees(deps, thread);
       const unsafe = worktrees.filter((worktree) => worktree.state !== "clean");

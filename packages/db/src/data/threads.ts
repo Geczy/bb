@@ -2260,8 +2260,11 @@ export function unarchiveThread(
         .where(and(eq(threads.id, id), isNotNull(threads.archivedAt)))
         .returning()
         .get();
-      if (unarchived)
+      if (unarchived) {
         markThreadPruningPolicyWork(tx, [unarchived.id], "rate-limits");
+        if (unarchived.environmentId !== null)
+          tx.update(environments).set({ archiveDiscard: false }).where(eq(environments.id, unarchived.environmentId)).run();
+      }
       return unarchived;
     },
     { behavior: "immediate" },

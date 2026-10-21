@@ -548,6 +548,9 @@ export const environments = sqliteTable(
       mode: "json",
     }).$type<EnvironmentProviderSelection>(),
     environmentProviderInstanceKey: text("environment_provider_instance_key"),
+    archiveDiscard: integer("archive_discard", { mode: "boolean" })
+      .notNull()
+      .default(false),
     archiveRetained: integer("archive_retained", { mode: "boolean" })
       .notNull()
       .default(false),

@@ -8,7 +8,11 @@ import {
 } from "../../../src/services/threads/thread-environment-placement.js";
 import { withEnvironmentCleanupSlot } from "../../../src/services/environments/cleanup-concurrency.js";
 import { reportEnvironmentHookProgress } from "../../../src/services/environments/environment-hooks.js";
-import { registerTestHostRpcCapture } from "../../helpers/commands.js";
+import {
+  registerTestHostRpcCapture,
+  waitForQueuedCommand,
+  reportQueuedCommandSuccess,
+} from "../../helpers/commands.js";
 import { recordProvisionedEnvironmentWorkspace } from "@bb/db/internal-environment-lifecycle";
 import { createThreadFromRequest } from "../../../src/services/threads/thread-create.js";
 import {
@@ -1602,6 +1606,149 @@ describe("core environment orchestration", () => {
       expect(getEnvironment(harness.db, environmentId)).toMatchObject({
         status: "ready",
         teardownStatus: null,
+      });
+    }));
+
+  it("honors keep while the cleanup safety inspection is in flight", async () =>
+    withTestHarness(async (harness) => {
+      const remove = vi.fn(async () => ({ status: "removed" as const }));
+      const fixture = setup(harness, { policy: { retireGraceMs: 0 }, remove });
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true, retireAt: Date.now() - 1 })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle", archivedAt: Date.now() })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
+      const sweeping = sweepProviderEnvironment(harness.deps, environmentId);
+      const inspection = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "workspace.archive_status",
+      );
+      const response = await harness.app.request(
+        `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=keep`,
+        { method: "POST" },
+      );
+      expect(response.status).toBe(200);
+      await reportQueuedCommandSuccess(harness, inspection, {
+        hasUncommittedChanges: false,
+        hasUnpushedCommits: false,
+      });
+      await sweeping;
+      expect(remove).not.toHaveBeenCalled();
+      expect(getEnvironment(harness.db, environmentId)).toMatchObject({
+        status: "ready",
+        archiveRetained: true,
+        teardownStatus: null,
+        retireAt: null,
+      });
+    }));
+
+  it("does not accept keep after removal has been admitted", async () =>
+    withTestHarness(async (harness) => {
+      const fixture = setup(harness);
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true, teardownStatus: "running" })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle" })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
+      const response = await harness.app.request(
+        `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=keep`,
+        { method: "POST" },
+      );
+      expect(response.status).toBe(409);
+      expect(getThread(harness.db, fixture.thread.id)?.archivedAt).toBeNull();
+      expect(getEnvironment(harness.db, environmentId)?.archiveRetained).toBe(
+        false,
+      );
+    }));
+
+  it("passes explicit discard through the existing archive cleanup path", async () =>
+    withTestHarness(async (harness) => {
+      const remove = vi.fn(async () => ({ status: "removed" as const }));
+      const fixture = setup(harness, { policy: { retireGraceMs: 0 }, remove });
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true, archiveRetained: true })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle" })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
+      const response = await harness.app.request(
+        `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=discard`,
+        { method: "POST" },
+      );
+      expect(response.status).toBe(200);
+      await sweepProviderEnvironment(harness.deps, environmentId);
+      expect(remove).toHaveBeenCalledWith(
+        expect.objectContaining({ experimental_discardWorktree: true }),
+      );
+      expect(getEnvironment(harness.db, environmentId)).toMatchObject({
+        status: "destroyed",
+        archiveRetained: false,
+        archiveDiscard: true,
+      });
+    }));
+
+  it("cancels discard authorization when a thread is unarchived", async () =>
+    withTestHarness(async (harness) => {
+      const fixture = setup(harness, { policy: { retireGraceMs: 60_000 } });
+      fixture.ask();
+      await fixture.settled();
+      const environmentId = fixture.attach();
+      harness.db
+        .update(environments)
+        .set({ isGitRepo: true, isWorktree: true })
+        .where(eq(environments.id, environmentId))
+        .run();
+      harness.db
+        .update(threads)
+        .set({ environmentId, status: "idle" })
+        .where(eq(threads.id, fixture.thread.id))
+        .run();
+      expect(
+        (
+          await harness.app.request(
+            `/api/v1/threads/${fixture.thread.id}/archive-all?worktree=discard`,
+            { method: "POST" },
+          )
+        ).status,
+      ).toBe(200);
+      expect(getEnvironment(harness.db, environmentId)?.archiveDiscard).toBe(
+        true,
+      );
+      expect(
+        (
+          await harness.app.request(
+            `/api/v1/threads/${fixture.thread.id}/unarchive`,
+            { method: "POST" },
+          )
+        ).status,
+      ).toBe(200);
+      expect(getEnvironment(harness.db, environmentId)).toMatchObject({
+        archiveDiscard: false,
+        teardownStatus: null,
+        status: "ready",
       });
     }));
 

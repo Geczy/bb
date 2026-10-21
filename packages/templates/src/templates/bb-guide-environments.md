@@ -223,3 +223,5 @@ Every inspection command accepts an arbitrary environment ID and supports
 `--json`. Non-git status/diff responses are reported explicitly. `diff-file`
 prints UTF-8 content directly and labels base64 binary content; diff and patch
 truncation markers are preserved.
+
+Explicit `bb thread archive <id> --discard-worktree` allows cleanup to delete uncommitted and unpushed work after the usual delay. Unarchiving cancels that authorization.

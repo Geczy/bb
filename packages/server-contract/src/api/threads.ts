@@ -737,7 +737,7 @@ export type ThreadChildSummaryQuery = z.infer<
 >;
 export const threadArchiveQuerySchema = z.object({
   worktree: z
-    .enum(["auto", "keep", "require-clean", "commit-and-push"])
+    .enum(["auto", "keep", "require-clean", "commit-and-push", "discard"])
     .optional(),
 });
 export type ThreadArchiveQuery = z.infer<typeof threadArchiveQuerySchema>;

@@ -50,8 +50,9 @@ Lifecycle:
   is attempted now, and may still queue behind a busy thread or a plugin.
   SDK: `threads.retry({ threadId, turnRequestId?, sendAt?, reason? })`.
 
-  bb thread archive [id]                   Archive a thread (and children/hidden forks)
+  bb thread archive [id]                   Archive a thread and the threads under it
     --self                                 Archive current thread
+    --discard-worktree                      Delete the worktrees even if they have uncommitted or unpushed changes
     --keep-worktree                         Keep the worktrees when archiving
     --require-clean                         Archive only if no worktree has uncommitted or unpushed changes
     --commit-and-push                       Ask the agent to commit and push, then archive
@@ -62,7 +63,13 @@ Lifecycle:
   `--commit-and-push` leaves the thread open while the agent prepares it; the
   agent archives with `--require-clean` only after committing and pushing
   succeeds. A failure leaves the thread open.
-  SDK: `threads.archive({ threadId, worktree?: "auto" | "keep" | "require-clean" | "commit-and-push" })`.
+  `--discard-worktree` deletes the worktree after the usual cleanup delay, even
+  if it has uncommitted or unpushed changes. Use it only when that work can be
+  lost. It matches the old default, for scripts that archive to free disk space.
+  Unarchiving the thread cancels it. Once removal has started, the choice can't
+  be changed: bb returns an error rather than promise to keep a worktree it's
+  already deleting.
+  SDK: `threads.archive({ threadId, worktree?: "auto" | "keep" | "require-clean" | "commit-and-push" | "discard" })`.
   Inspect affected worktrees with `threads.childSummary({ threadId, checkWorktrees: true })`.
 
   Archive is not a hard stop: for 30 seconds a running turn and the thread's
