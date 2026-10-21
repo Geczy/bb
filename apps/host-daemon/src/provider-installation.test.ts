@@ -214,6 +214,27 @@ describe("streamProviderInstallation with node-pty", () => {
   );
 
   it.runIf(process.platform === "win32")(
+    "launches Windows command shims with a quoted command line",
+    async () => {
+      const { root } = await scratchBin();
+      const binDir = path.join(root, "Example&CLI");
+      await fs.mkdir(binDir);
+      for (const extension of ["cmd", "bat"]) {
+        const command = `example-${extension}`;
+        await fs.writeFile(
+          path.join(binDir, `${command}.${extension}`),
+          "@echo off\r\necho example-cli %~1\r\n",
+        );
+
+        const { events, output } = await runPlan(envWithPath(binDir), command);
+
+        expect(output).toContain("example-cli update");
+        expect(events.at(-1)).toMatchObject({ type: "completed", success: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
     "launches a native .exe found on PATH",
     async () => {
       const { root, binDir } = await scratchBin();
