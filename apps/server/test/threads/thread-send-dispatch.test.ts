@@ -311,6 +311,7 @@ describe("user message telemetry", () => {
       expect(capture).toHaveBeenCalledWith({
         name: "user_message_sent",
         properties: {
+          initiator: "user",
           is_child_thread: false,
           message_source: "thread_send",
           provider: "codex",

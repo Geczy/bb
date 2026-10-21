@@ -93,6 +93,7 @@ describe("thread creation telemetry", () => {
       expect(capture).toHaveBeenCalledWith({
         name: "user_message_sent",
         properties: {
+          initiator: "user",
           is_child_thread: false,
           message_source: "thread_create",
           provider: "codex",
@@ -134,6 +135,10 @@ describe("thread creation initiator telemetry", () => {
         startedOnBehalfOf: null,
       };
 
+      harness.deps.config.featureFlags = {
+        ...harness.deps.config.featureFlags,
+        initiatorTelemetry: false,
+      };
       await createThreadFromRequest(harness.deps, request);
       expect(capture).toHaveBeenCalledWith({
         name: "thread_created",

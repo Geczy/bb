@@ -312,7 +312,7 @@ export const BB_FF_PLACEHOLDER_ENV = defineEnvVar<boolean>({
 
 export const BB_FF_INITIATOR_TELEMETRY_ENV = defineEnvVar<boolean>({
   description:
-    "Adds a fixed initiator value (user, agent, automation, plugin or system) to anonymous thread_created and user_message_sent telemetry. Off until the property clears the analytics data model review.",
+    "Adds a fixed initiator value (user, agent, automation, plugin or system) to anonymous thread_created and user_message_sent telemetry. On by default; set false to omit it.",
   name: "BB_FF_INITIATOR_TELEMETRY",
   parse: parseBooleanEnvValue,
 });

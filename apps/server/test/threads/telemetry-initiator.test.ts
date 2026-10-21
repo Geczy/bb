@@ -29,17 +29,18 @@ describe("resolveTelemetryInitiator", () => {
 });
 
 describe("initiatorTelemetryProperty", () => {
-  it("is empty while the flag is off", () => {
-    expect(defaultFeatureFlags.initiatorTelemetry).toBe(false);
-    expect(initiatorTelemetryProperty(defaultFeatureFlags, "user")).toEqual({});
+  it("sends the fixed value by default", () => {
+    expect(
+      initiatorTelemetryProperty(defaultFeatureFlags, "automation"),
+    ).toEqual({ initiator: "automation" });
   });
 
-  it("sends the fixed value when the flag is on", () => {
+  it("is empty when the flag is turned off", () => {
     expect(
       initiatorTelemetryProperty(
-        { ...defaultFeatureFlags, initiatorTelemetry: true },
-        "automation",
+        { ...defaultFeatureFlags, initiatorTelemetry: false },
+        "user",
       ),
-    ).toEqual({ initiator: "automation" });
+    ).toEqual({});
   });
 });
