@@ -323,27 +323,14 @@ export function switchGuide(meta: GuideMeta, tool: SwitchTool): Guide {
               question: "Do my automations come along?",
               answer: (
                 <p>
-                  {tool.id === "claude" || tool.id === "codex-app" ? (
-                    <>
-                      Not on their own. Recreate each one in{" "}
-                      <a href="/guides/run-an-agent-on-a-schedule">
-                        bb automations
-                      </a>
-                      : paste its schedule and prompt, and your agent sets it
-                      up.
-                    </>
-                  ) : (
-                    <>
-                      Not on their own. bb automations run on a schedule or
-                      once, so recreate each scheduled one in{" "}
-                      <a href="/guides/run-an-agent-on-a-schedule">
-                        bb automations
-                      </a>
-                      : paste its schedule and prompt, and your agent sets it
-                      up. Automations that start from GitHub, Slack or webhook
-                      events don’t have a bb equivalent yet.
-                    </>
-                  )}
+                  Not on their own. bb automations run on a schedule or once, so
+                  recreate each scheduled one in{" "}
+                  <a href="/guides/run-an-agent-on-a-schedule">
+                    bb automations
+                  </a>
+                  : paste its schedule and prompt, and your agent sets it up.
+                  Automations that start from GitHub, Slack, or other events
+                  don’t have a bb equivalent.
                 </p>
               ),
             },

@@ -289,10 +289,12 @@ export const FAQ_LAPTOP: CompareFaq = {
       Not on that laptop. Agents run on your machine, and closing the lid puts
       it to sleep. On a Mac, switch on Keep Awake, a built-in bb plugin that
       stops idle sleep while bb runs. For long runs, add an always-on desktop or
-      server to bb, or run threads in the cloud with a{" "}
-      <a href="/marketplace">cloud plugin</a> like Modal Sandbox (Experimental),
-      an official bb plugin you install from the marketplace, which starts each
-      thread in an on-demand sandbox in your own Modal account.
+      server to bb, or run threads in the cloud with{" "}
+      <a href="https://github.com/get-bb/bb/tree/desktop-v0.46.1/plugins/environment-modal-sandbox">
+        Modal Sandbox (Experimental)
+      </a>
+      , an official bb plugin you can install from Plugins in bb, which starts
+      each thread in an on-demand sandbox in your own Modal account.
     </p>
   ),
 };
