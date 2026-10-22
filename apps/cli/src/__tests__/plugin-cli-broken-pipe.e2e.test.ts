@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
-const cliEntry = fileURLToPath(new URL("../index.ts", import.meta.url));
+const cliEntry = fileURLToPath(new URL("../../dist/index.js", import.meta.url));
 const output = "record\n".repeat(100_000);
 
 function shellQuote(value: string): string {
@@ -78,7 +78,7 @@ describe.skipIf(process.platform === "win32")(
             writeError === null
               ? ""
               : ` --import ${shellQuote(`data:text/javascript,${encodeURIComponent(`process.stdout._write = (_chunk, _encoding, callback) => callback(Object.assign(new Error(${JSON.stringify(writeError)}), { code: ${JSON.stringify(writeError)} }));`)}`)}`;
-          const pipeline = `${shellQuote(process.execPath)} --conditions=source --import tsx${injection} ${shellQuote(cliEntry)} ${command} list${channel === "stderr" ? " 2>&1" : ""} | ${earlyClose ? "head -n 1" : "wc -c"}`;
+          const pipeline = `${shellQuote(process.execPath)}${injection} ${shellQuote(cliEntry)} ${command} list${channel === "stderr" ? " 2>&1" : ""} | ${earlyClose ? "head -n 1" : "wc -c"}`;
           const result = await new Promise<{
             code: number | null;
             signal: NodeJS.Signals | null;
