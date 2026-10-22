@@ -122,7 +122,6 @@ export function applyThreadUpdateResult({
       responseMetadataPatch(thread, request),
     );
   else transaction.prediction.succeed(responseMetadataPatch(thread, request));
-  invalidateThreadListQueries({ queryClient });
 }
 
 export function predictThreadPinState(
@@ -283,7 +282,6 @@ export function applyThreadMetadataBatchResult({
     for (const [threadId, patch] of results)
       patchThreadEntity(queryClient, threadId, patch);
   else transaction.prediction.succeed(results);
-  invalidateThreadListQueries({ queryClient });
 }
 
 export function invalidateThreadMetadataBatch({
@@ -411,13 +409,14 @@ export function settleArchiveThreadsTransaction({
   response: ThreadArchiveAllResponse | undefined;
   transaction: ArchiveThreadsTransaction | undefined;
 }): void {
-  if (response !== undefined) transaction?.prediction.succeed();
+  if (response !== undefined) {
+    transaction?.prediction.succeed();
+    return;
+  }
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
   queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
   queryClient.invalidateQueries({ queryKey: threadSearchQueryKeyPrefix() });
-  for (const threadId of response?.archivedThreadIds ??
-    transaction?.archivedThreadIds ??
-    []) {
+  for (const threadId of transaction?.archivedThreadIds ?? []) {
     queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   }
 }
@@ -463,10 +462,12 @@ export function rollbackDeleteThreadTransaction({
 }
 
 export function settleDeleteThreadTransaction({
+  deleted,
   queryClient,
   threadId,
   transaction,
 }: ThreadIdCacheArgs & {
+  deleted: boolean;
   transaction: DeleteThreadTransaction | undefined;
 }): void {
   for (const id of transaction?.threadIds ?? [threadId])
@@ -475,7 +476,7 @@ export function settleDeleteThreadTransaction({
     environmentId: transaction?.environmentId,
     queryClient,
   });
-  invalidateThreadDeleteQueries({ queryClient });
+  if (!deleted) invalidateThreadDeleteQueries({ queryClient });
 }
 
 export function applyThreadReadStateResult({

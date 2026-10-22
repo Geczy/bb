@@ -226,15 +226,13 @@ export function useUnarchiveThread() {
         threadId: variables.id,
         transaction: context,
       });
-    },
-    onSuccess: (_data, _variables, context) => {
-      succeedThreadListMutationTransaction(context);
-    },
-    onSettled: (_data, _error, variables) => {
       settleThreadListMembershipMutation({
         queryClient,
         threadId: variables.id,
       });
+    },
+    onSuccess: (_data, _variables, context) => {
+      succeedThreadListMutationTransaction(context);
     },
   });
 }
@@ -275,8 +273,9 @@ export function useDeleteThread() {
         transaction: context,
       });
     },
-    onSettled: (_data, _error, variables, context) => {
+    onSettled: (_data, error, variables, context) => {
       settleDeleteThreadTransaction({
+        deleted: error === null,
         queryClient,
         threadId: variables.id,
         transaction: context,

@@ -410,7 +410,9 @@ describe("bindSdkToPlugin", () => {
         pending.resolve({ ok: true });
         await restore;
       }
-      expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(
+        outcome === "failure",
+      );
       queryClient.clear();
     },
   );
@@ -731,8 +733,12 @@ describe("bindSdkToPlugin", () => {
           .getQueryData<typeof entries>(listKey)
           ?.find((thread) => thread.id === "thr_other")?.title,
       ).toBe("Concurrent rename");
-      expect(queryClient.getQueryState(sidebarKey)?.isInvalidated).toBe(true);
-      expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(sidebarKey)?.isInvalidated).toBe(
+        outcome === "failure",
+      );
+      expect(queryClient.getQueryState(listKey)?.isInvalidated).toBe(
+        outcome === "failure",
+      );
       queryClient.clear();
     },
   );

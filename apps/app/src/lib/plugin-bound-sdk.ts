@@ -239,12 +239,11 @@ export function bindSdkToPlugin(
             threadId: args.threadId,
             transaction,
           });
-          throw error;
-        } finally {
           settleThreadListMembershipMutation({
             queryClient,
             threadId: args.threadId,
           });
+          throw error;
         }
       },
       getPluginMetadata(
