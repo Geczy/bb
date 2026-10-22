@@ -399,3 +399,62 @@ describe("Markdown serializer safeguards", () => {
     }
   });
 });
+
+describe("legacy trailing-break cleanup", () => {
+  it.each(["\n", "\r\n"])(
+    "cleans the artifact on load with %j line endings and saves only after an edit",
+    (newline) => {
+      const source =
+        "- First item\n\nLet me know what you think.\\\n\\\n\nKeep this paragraph.\n".replaceAll(
+          "\n",
+          newline,
+        );
+      const { editor, save } = open(source);
+      try {
+        expect(editor.getHTML()).toContain(
+          "<p>Let me know what you think.</p>",
+        );
+        expect(editor.state.doc.textContent).not.toContain("\\");
+        expect(save()).toBe(source);
+        editor.view.dispatch(
+          editor.state.tr.insertText("New ", textPosition(editor, "Keep")),
+        );
+        expect(save()).toBe(
+          "- First item\n\nLet me know what you think.\n\nNew Keep this paragraph.\n"
+            .replaceAll("\n", newline)
+            .replace(
+              "New Keep this paragraph." + newline,
+              "New Keep this paragraph." + newline,
+            ),
+        );
+        editor.commands.undo();
+        expect(save()).toBe(source);
+      } finally {
+        editor.destroy();
+      }
+    },
+  );
+
+  it.each([
+    "Text\n\\",
+    "Text\\\\\n\\",
+    "Text  \n\\",
+    "Text\\\n\\\nFollowing text",
+    "`Text\\\n\\`",
+    "```text\nText\\\n\\\n```",
+    "    Text\\\n    \\",
+  ])("keeps literal content in %j", (literal) => {
+    const source = literal + "\n\nOther paragraph.\n";
+    const { editor, save } = open(source);
+    try {
+      expect(editor.state.doc.textContent).toContain("\\");
+      expect(save()).toBe(source);
+      editor.view.dispatch(
+        editor.state.tr.insertText("New ", textPosition(editor, "Other")),
+      );
+      expect(save()).toBe(literal + "\n\nNew Other paragraph.\n");
+    } finally {
+      editor.destroy();
+    }
+  });
+});
