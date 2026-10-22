@@ -42,14 +42,14 @@ An empty test matrix skips its runners before dependency installation. This
 reduces routine PR work; broad changes and cold builds do not have a guaranteed
 two-minute completion time.
 
-Before the matrix starts, dependency changes run a full frozen install with
+Alongside the matrix, dependency changes run a full frozen install with
 lifecycle scripts disabled. This catches missing lockfile snapshots as well as
 outdated manifest entries; `--lockfile-only --frozen-lockfile` does not catch
 missing snapshots. The check covers manifests, the lockfile, workspace and pnpm
 configuration, and patches. PRs compare with the resolved comparison base; pushes
 compare with the event's previous SHA. Manual runs and unavailable history always
 validate. Source-only changes skip the extra install. The install has a
-five-minute limit inside the planning job's ten-minute budget.
+five-minute limit inside the separate validation job's ten-minute budget.
 
 The plugin SDK version check in `version-lockstep.yml` checks out with
 `filter: blob:none`, keeping commit history without historical file contents. PR
@@ -404,3 +404,22 @@ files matched. Median paired improvement was only 0.17 seconds on Linux and
 0.43 seconds on Windows; two of six pairs on each platform regressed. The
 native resolver filter was not retained because the measured benefit was too
 small and variable.
+
+## Rejected declaration-bundler cache experiment
+
+[Benchmark run 39845431047](https://github.com/get-bb/bb/actions/runs/39845431047)
+tried passing Rollup's module cache between the SDK's declaration bundles. Four
+Linux before/after pairs saved a median 4.4 seconds, with one regression. The
+first two Windows pairs both regressed by about eight seconds (48 to 56 seconds
+and 52 to 60 seconds, rounded from Actions step timings). The remaining Windows
+rounds were canceled after those regressions, and the candidate was discarded.
+Every completed pair produced identical declarations; all 396 SDK tests also
+passed locally. Correctness alone did not justify retaining this optimization.
+
+## Verification of retained changes
+
+[Full CI run 39844633490](https://github.com/get-bb/bb/actions/runs/39844633490)
+passed all 45 jobs with compiler caching and parallel validation retained, and
+no shard or coverage changes. Workflow creation to last completion was six
+minutes. This is an integration result, not a controlled end-to-end speedup
+measurement, and the three-minute target remains unmet.
