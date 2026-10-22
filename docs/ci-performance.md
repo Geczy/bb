@@ -1,6 +1,6 @@
 # CI performance
 
-The main CI workflow keeps build, lint/typecheck, two server test shards, eight app test
+The main CI workflow keeps build, lint/typecheck, three server test shards, eight app test
 shards, integration tests, three package test groups, a separate demo-server job, plugin tests, three fork
 check shards, and package smokes independent. Node 24/26 compatibility smokes run on
 main and manual runs. Windows runs the nine host packages, an app smoke, a desktop
@@ -36,8 +36,13 @@ allowlist: API documentation and lifecycle diagrams are consumed by tests, and
 other documentation, mixed changes, main pushes, and manual runs retain normal
 selection or full coverage. Planning guards still run.
 
-Root configuration, CI changes, unknown paths, missing Git history, and invalid
-query results fall back to the full matrix. The source NUL guard always runs.
+Root configuration other than the lockfile, CI changes, unknown paths, missing
+Git history, and invalid query results fall back to the full matrix. Lockfile
+changes use Turbo's affected dependency graph; affected packaging builds and
+provider packages retain their smoke and live-provider checks. Frozen dependency
+validation remains required. Root lockfile inputs declared by individual tasks
+can still select broad builds; this does not promise narrow work for every
+dependency edit. The source NUL guard always runs.
 An empty test matrix skips its runners before dependency installation. This
 reduces routine PR work; broad changes and cold builds do not have a guaranteed
 two-minute completion time.
@@ -159,7 +164,7 @@ outside their declared closures.
 
 ## Test balancing and timing artifacts
 
-Server tests split by file into two Vitest shards and app tests into eight. App
+Server tests split by file into three Vitest shards and app tests into eight. App
 shards keep app-only PR latency low and preserve cache reuse between PRs and
 main. Shard selection uses the `BB_CI_TEST_SHARD` variable, which Turbo hashes
 only for those test tasks, so one shard's result cannot satisfy another; see
@@ -361,16 +366,18 @@ its complete namespace and each file's content before reuse. Missing or failed
 restores fall back to compilation. This does not reuse test results or omit any
 selected check.
 
-Windows jobs additionally cache the installed dependency tree, keyed
-by the exact Node runtime, OS/architecture, install scope, lockfile, workspace
-manifests, package-manager configuration, patches, and install implementation.
-There is no fallback to a different dependency graph. The frozen install still
-runs after restoration; a failed restore discards the partial dependency tree.
-This is distinct from the previously removed pnpm store archive: it restores
-both package contents and workspace links rather than unpacking a store and
-then linking the workspace again. Cold-cache population and archive transfer
-must be included when comparing end-to-end timings.
-
 The shared-UI Vite resolver uses a native hook filter so only the two imports
 it redirects cross into its JavaScript handler. Filtering leaves the built
 app unchanged while avoiding a callback for every unrelated import.
+
+Linux tarball and AppImage checks use separate matrix jobs, so building the
+AppImage and checking its mount lifecycle overlap with the tarball's npm
+installation and boot tests. Both jobs retain their full build prerequisites.
+The Linux server suite uses three disjoint Vitest shards to reduce its longest
+uncached test step.
+
+An installed-dependency archive was measured and rejected on Windows. Warm
+restores took 38–57 seconds, followed by a 2–4-second frozen install, but the
+restored pnpm dependency links produced `Access is denied` errors in esbuild.
+The experiment is not enabled; Windows still uses fresh frozen installs and
+caches only build outputs and portable compiler transforms.

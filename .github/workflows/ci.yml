@@ -120,19 +120,6 @@ jobs:
           turbo-cache: "true"
           turbo-cache-max-size-mb: "256"
 
-      - name: Restore installed dependencies
-        id: installed-cache
-        timeout-minutes: 1
-        continue-on-error: true
-        uses: ./.github/actions/cache-installed-dependencies
-        with:
-          scope: foundation
-
-      - name: Discard a timed-out dependency restore
-        if: steps.installed-cache.outcome != 'success'
-        shell: bash
-        run: node scripts/clear-installed-dependencies.mjs
-
       - name: Install foundation dependencies
         timeout-minutes: 5
         shell: bash
@@ -191,19 +178,6 @@ jobs:
         timeout-minutes: 1
         continue-on-error: true
         uses: ./.github/actions/cache-pnpm
-
-      - name: Restore installed dependencies
-        id: installed-cache
-        timeout-minutes: 1
-        continue-on-error: true
-        uses: ./.github/actions/cache-installed-dependencies
-        with:
-          scope: nonmobile
-
-      - name: Discard a timed-out dependency restore
-        if: steps.installed-cache.outcome != 'success'
-        shell: bash
-        run: node scripts/clear-installed-dependencies.mjs
 
       - name: Install dependencies
         timeout-minutes: 5
@@ -267,19 +241,6 @@ jobs:
         timeout-minutes: 1
         continue-on-error: true
         uses: ./.github/actions/cache-pnpm
-
-      - name: Restore installed dependencies
-        id: installed-cache
-        timeout-minutes: 1
-        continue-on-error: true
-        uses: ./.github/actions/cache-installed-dependencies
-        with:
-          scope: nonmobile
-
-      - name: Discard a timed-out dependency restore
-        if: steps.installed-cache.outcome != 'success'
-        shell: bash
-        run: node scripts/clear-installed-dependencies.mjs
 
       - name: Install dependencies
         timeout-minutes: 5
@@ -351,19 +312,6 @@ jobs:
         timeout-minutes: 1
         continue-on-error: true
         uses: ./.github/actions/cache-pnpm
-
-      - name: Restore installed dependencies
-        id: installed-cache
-        timeout-minutes: 1
-        continue-on-error: true
-        uses: ./.github/actions/cache-installed-dependencies
-        with:
-          scope: ${{ startsWith(matrix.shard, 'app-') && 'app' || matrix.filter == '--filter=@bb/demo-server' && 'demo-server' || startsWith(matrix.shard, 'server-') && 'server' || matrix.mobile && 'full' || 'nonmobile' }}
-
-      - name: Discard a timed-out dependency restore
-        if: steps.installed-cache.outcome != 'success'
-        shell: bash
-        run: node scripts/clear-installed-dependencies.mjs
 
       - name: Install dependencies
         timeout-minutes: 5
@@ -846,7 +794,7 @@ jobs:
   package-smoke:
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection).packaging }}
-    name: Package Smoke (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    name: ${{ matrix.smoke == 'appimage' && 'Linux AppImage Smoke' || 'Package Smoke' }} (${{ matrix.os }}, Node ${{ matrix.node-version }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
 
@@ -856,8 +804,13 @@ jobs:
         include:
           - os: blacksmith-4vcpu-ubuntu-2404
             node-version: "22.x"
+            smoke: tarball
           - os: blacksmith-6vcpu-macos-15
             node-version: "22.x"
+            smoke: tarball
+          - os: blacksmith-4vcpu-ubuntu-2404
+            node-version: "22.x"
+            smoke: appimage
 
     steps:
       - name: Checkout repository
@@ -899,21 +852,22 @@ jobs:
         run: bash .github/actions/setup-workspace/install-dependencies.sh --filter '!@bb/mobile'
 
       - name: Smoke bb-app tarball
+        if: matrix.smoke == 'tarball'
         run: pnpm exec turbo run smoke:tarball --filter=bb-app --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only --summarize --concurrency=4
 
       - name: Install AppImage FUSE runtime
-        if: ${{ runner.os == 'Linux' }}
+        if: matrix.smoke == 'appimage'
         uses: ./.github/actions/install-appimage-fuse
         timeout-minutes: 5
         with:
           package: libfuse2t64
 
       - name: Package Linux AppImage
-        if: ${{ runner.os == 'Linux' }}
+        if: matrix.smoke == 'appimage'
         run: pnpm exec turbo run desktop:build:linux --filter=@bb/desktop --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only --summarize
 
       - name: Smoke Linux AppImage mount lifecycle
-        if: ${{ runner.os == 'Linux' }}
+        if: matrix.smoke == 'appimage'
         run: xvfb-run -a pnpm exec turbo run smoke:appimage-lifecycle --filter=@bb/desktop --force --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only
 
       - name: Bound saved Turbo cache

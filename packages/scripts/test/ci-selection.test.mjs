@@ -35,6 +35,7 @@ function fixture() {
       packageManager: "pnpm@9.15.0",
     }),
   );
+  put(".gitignore", "affected.json\n");
   put("pnpm-workspace.yaml", "packages:\n  - apps/*\n  - packages/*\n");
   put(
     "pnpm-lock.yaml",
@@ -95,8 +96,8 @@ function fixture() {
     put,
     git,
     base,
-    plan(path) {
-      put(path, "export const value = 2;\n");
+    plan(path, contents = "export const value = 2;\n", comparisonBase = base) {
+      put(path, contents);
       git("add", ".");
       git("commit", "-m", "change");
       const affected = execFileSync(
@@ -106,7 +107,7 @@ function fixture() {
           "query",
           "affected",
           "--base",
-          base,
+          comparisonBase,
           "--head",
           "HEAD",
         ],
@@ -124,7 +125,7 @@ function fixture() {
           [
             join(root, "scripts/plan-ci.mjs"),
             "--base",
-            base,
+            comparisonBase,
             "--affected",
             "affected.json",
           ],
@@ -239,6 +240,62 @@ it("retains Windows and package smokes for frontend build configuration", () => 
     plan["windows-tests"].include.some((entry) => entry.shard === "app-4"),
   ).toBe(true);
 }, 30_000);
+
+it.each([
+  ["text-utils", false],
+  ["config", true],
+])(
+  "selects the affected graph for a %s dependency change",
+  (pkg, affectsApp) => {
+    const f = fixture();
+    const manifestPath = `packages/${pkg}/package.json`;
+    const manifest = JSON.parse(
+      readFileSync(join(f.cwd, manifestPath), "utf8"),
+    );
+    f.put(
+      manifestPath,
+      JSON.stringify({
+        ...manifest,
+        dependencies: { "is-number": ">=6.0.0" },
+      }),
+    );
+    const lock =
+      readFileSync(join(f.cwd, "pnpm-lock.yaml"), "utf8").replace(
+        `  packages/${pkg}: {}`,
+        `  packages/${pkg}:
+    dependencies:
+      is-number:
+        specifier: ">=6.0.0"
+        version: 7.0.0`,
+      ) +
+      "packages:\n  is-number@7.0.0:\n    resolution: {integrity: sha512-ZmFrZQ==}\nsnapshots:\n  is-number@7.0.0: {}\n";
+    const added = f.plan("pnpm-lock.yaml", lock);
+    const dependencyBase = f.git("rev-parse", "HEAD");
+    const updated = f.plan(
+      "pnpm-lock.yaml",
+      lock.replaceAll("7.0.0", "6.0.0"),
+      dependencyBase,
+    );
+    for (const plan of [added, updated]) {
+      expect(plan.reason).not.toBe("Full cross-platform coverage");
+      expect(plan.foundation).toBe(affectsApp);
+      expect(plan.packaging).toBe(affectsApp);
+      expect(plan.providers).toBe(false);
+      for (const platform of ["tests", "windows-tests"]) {
+        const filters = plan[platform].include.map((entry) => entry.filter);
+        if (affectsApp) {
+          expect(filters).toContain("--filter=@bb/app");
+          expect(
+            filters.some((filter) => filter.includes("@bb/text-utils")),
+          ).toBe(false);
+        } else {
+          expect(filters).toEqual(["--filter=@bb/text-utils"]);
+        }
+      }
+    }
+  },
+  30_000,
+);
 
 it("falls back to full coverage for unknown paths", () => {
   const plan = fixture().plan("new-tooling/settings.json");

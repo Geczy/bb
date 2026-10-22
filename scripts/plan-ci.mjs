@@ -93,7 +93,9 @@ function select() {
     };
   }
   const known = /^(?:apps|packages|plugins|examples\/plugins|tests)\//u;
-  if (paths.some((path) => !known.test(path))) return full;
+  const lockfileChanged = paths.includes("pnpm-lock.yaml");
+  if (paths.some((path) => path !== "pnpm-lock.yaml" && !known.test(path)))
+    return full;
   const result = JSON.parse(readFileSync(values.affected, "utf8"));
   const items = result?.data?.affectedTasks?.items;
   if (!Array.isArray(items) || result.errors?.length)
@@ -136,11 +138,18 @@ function select() {
   const appOnly = paths.every((path) =>
     /^apps\/(?:app|web)\/(?:src|public)\//u.test(path),
   );
-  const packaging = paths.some((path) =>
-    /^(?:apps\/(?:desktop\/|app\/(?:vite\.config|scripts\/|package\.json))|packages\/(?:bb-app|server-archive|plugin-build|bundled-plugins|plugin-sdk|sdk|templates)\/)/u.test(
-      path,
-    ),
-  );
+  const packaging =
+    paths.some((path) =>
+      /^(?:apps\/(?:desktop\/|app\/(?:vite\.config|scripts\/|package\.json))|packages\/(?:bb-app|server-archive|plugin-build|bundled-plugins|plugin-sdk|sdk|templates)\/)/u.test(
+        path,
+      ),
+    ) ||
+    (lockfileChanged &&
+      buildPackages.some((name) =>
+        /^(?:bb-app|@get-bb\/plugin-sdk|@bb\/(?:app|desktop|server-archive|plugin-build|bundled-plugins|sdk|templates))$/u.test(
+          name,
+        ),
+      ));
   const matrix = (entries) => ({
     include: entries.flatMap((entry) => {
       const selected = [...tests].filter((name) =>
@@ -169,11 +178,18 @@ function select() {
         tasks.some((task) => task.package === name),
       ),
     packaging,
-    providers: paths.some((path) =>
-      /^(?:plugins\/provider-|packages\/(?:agent-runtime|provider-bridge-))/u.test(
-        path,
-      ),
-    ),
+    providers:
+      paths.some((path) =>
+        /^(?:plugins\/provider-|packages\/(?:agent-runtime|provider-bridge-))/u.test(
+          path,
+        ),
+      ) ||
+      (lockfileChanged &&
+        tasks.some((task) =>
+          /^(?:bb-plugin-provider-|@bb\/(?:agent-runtime$|provider-bridge-))/u.test(
+            task.package,
+          ),
+        )),
     forks:
       !appOnly && tasks.some((task) => task.package.startsWith("bb-plugin-")),
     buildNeeded: buildPackages.length > 0,

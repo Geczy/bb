@@ -193,14 +193,3 @@ Native Windows is an alpha host (see [platform-support.md](platform-support.md))
   process-heavy suite; the cause is unexplained.
 - Windows 11 installation, interactive terminals, updates, and real provider
   sessions still need verification beyond Windows Server CI.
-
-## Installed dependency cache
-
-Windows jobs restore an exact installed tree before their frozen install. App,
-server, demo-server, foundation, full-workspace, and non-mobile installs use
-separate cache scopes, so a narrower tree never satisfies a broader install.
-Jobs with identical filters share a scope. The key includes the exact Node
-runtime and all dependency inputs, including the workflow that defines the
-filters. There are no fallback keys. A failed restore clears partial installed
-dependencies before pnpm runs. Both cold population and warm extraction costs
-count toward the three-minute end-to-end target.
