@@ -369,3 +369,38 @@ measurements on one runner per platform, not total CI savings. They represent
 reuse of all compiler transforms; source or toolchain changes can reduce hits.
 A first build has no reuse, and a full Turbo build-cache hit already avoids
 compilation. Shard counts and selected coverage are unchanged by this fix.
+
+## Dependency validation measurements
+
+Frozen dependency validation runs as a separate `Validate dependencies` job
+alongside the matrix when dependency inputs change or the comparison is
+unavailable. Planning still determines affected checks, checks source integrity,
+and runs the provider-literal ratchet. The install command, frozen-lockfile
+requirement, and dependency-change detector are unchanged.
+
+[Benchmark run 39844281314](https://github.com/get-bb/bb/actions/runs/39844281314)
+ran three copies of each arrangement against identical source on four-vCPU
+Linux runners:
+
+| Replica | Serial planning and validation | Parallel planning | Earlier release |
+| --- | --- | --- | --- |
+| 1 | 39s | 13s | 26s |
+| 2 | 35s | 12s | 23s |
+| 3 | 40s | 13s | 27s |
+
+Every frozen install passed, including the three separate validation jobs
+(34–46 seconds each, including their setup). Median planning time fell from
+39 seconds to 13 seconds. These durations start when the job starts; they
+exclude runner queue time and do not establish an equal end-to-end CI saving.
+The separate job adds runner setup and can itself gate completion. Runs that
+already skip dependency validation do not gain this time.
+
+## Rejected resolver filter experiment
+
+[Benchmark run 39843306967](https://github.com/get-bb/bb/actions/runs/39843306967)
+compared six alternating before/after pairs per platform with both compiler
+cache namespaces warmed and every app build forced through Turbo. All output
+files matched. Median paired improvement was only 0.17 seconds on Linux and
+0.43 seconds on Windows; two of six pairs on each platform regressed. The
+native resolver filter was not retained because the measured benefit was too
+small and variable.
