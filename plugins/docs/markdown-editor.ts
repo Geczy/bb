@@ -92,18 +92,8 @@ const textMarkdown: MarkdownNodeSpec = {
 };
 
 const hardBreakMarkdown: MarkdownNodeSpec = {
-  serialize(state, node, parent, index) {
-    const adjacentBreak =
-      parent.maybeChild(index - 1)?.type === node.type ||
-      parent.maybeChild(index + 1)?.type === node.type;
-    state.write(
-      ("inTable" in state && state.inTable) ||
-        adjacentBreak ||
-        index === 0 ||
-        index === parent.childCount - 1
-        ? "<br>"
-        : "  \n",
-    );
+  serialize(state) {
+    state.write("<br>");
   },
 };
 
