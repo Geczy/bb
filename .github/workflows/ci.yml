@@ -121,9 +121,17 @@ jobs:
           turbo-cache-max-size-mb: "256"
 
       - name: Restore installed dependencies
+        id: installed-cache
+        timeout-minutes: 1
+        continue-on-error: true
         uses: ./.github/actions/cache-installed-dependencies
         with:
           scope: foundation
+
+      - name: Discard a timed-out dependency restore
+        if: steps.installed-cache.outcome != 'success'
+        shell: bash
+        run: node scripts/clear-installed-dependencies.mjs
 
       - name: Install foundation dependencies
         timeout-minutes: 5
@@ -185,9 +193,17 @@ jobs:
         uses: ./.github/actions/cache-pnpm
 
       - name: Restore installed dependencies
+        id: installed-cache
+        timeout-minutes: 1
+        continue-on-error: true
         uses: ./.github/actions/cache-installed-dependencies
         with:
           scope: nonmobile
+
+      - name: Discard a timed-out dependency restore
+        if: steps.installed-cache.outcome != 'success'
+        shell: bash
+        run: node scripts/clear-installed-dependencies.mjs
 
       - name: Install dependencies
         timeout-minutes: 5
@@ -253,9 +269,17 @@ jobs:
         uses: ./.github/actions/cache-pnpm
 
       - name: Restore installed dependencies
+        id: installed-cache
+        timeout-minutes: 1
+        continue-on-error: true
         uses: ./.github/actions/cache-installed-dependencies
         with:
           scope: nonmobile
+
+      - name: Discard a timed-out dependency restore
+        if: steps.installed-cache.outcome != 'success'
+        shell: bash
+        run: node scripts/clear-installed-dependencies.mjs
 
       - name: Install dependencies
         timeout-minutes: 5
@@ -329,9 +353,17 @@ jobs:
         uses: ./.github/actions/cache-pnpm
 
       - name: Restore installed dependencies
+        id: installed-cache
+        timeout-minutes: 1
+        continue-on-error: true
         uses: ./.github/actions/cache-installed-dependencies
         with:
           scope: ${{ startsWith(matrix.shard, 'app-') && 'app' || matrix.filter == '--filter=@bb/demo-server' && 'demo-server' || startsWith(matrix.shard, 'server-') && 'server' || matrix.mobile && 'full' || 'nonmobile' }}
+
+      - name: Discard a timed-out dependency restore
+        if: steps.installed-cache.outcome != 'success'
+        shell: bash
+        run: node scripts/clear-installed-dependencies.mjs
 
       - name: Install dependencies
         timeout-minutes: 5
