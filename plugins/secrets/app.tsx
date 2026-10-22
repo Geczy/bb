@@ -145,7 +145,7 @@ function SecretRequestInteraction({
           </span>
         ) : (
           <>
-            <span className="min-w-[1.5ch] truncate font-medium text-foreground">
+            <span className="min-w-[1.5ch] shrink-[10] truncate font-medium text-foreground">
               {destination.stem}
             </span>
             {destination.extension ? (
@@ -156,7 +156,7 @@ function SecretRequestInteraction({
             {destinationFolder === null ? null : (
               <>
                 <span className="mx-1.5 shrink-0">in</span>
-                <span className="min-w-0 max-w-[40%] shrink-[0.25] truncate">
+                <span className="min-w-0 max-w-[40%] truncate">
                   {destinationFolder}
                 </span>
               </>
