@@ -3,6 +3,7 @@ import { DOMParser, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 interface Block {
   source: string;
+  cleaned: string;
   after: string;
   nodes: ProseMirrorNode[];
 }
@@ -14,6 +15,8 @@ export interface MarkdownBlocks {
 }
 
 interface BlockToken {
+  type: string;
+  children: { type: string; content: string }[] | null;
   level: number;
   nesting: number;
   map: [number, number] | null;
@@ -60,11 +63,12 @@ function parseMarkdownBlocks(
     if (content)
       blocks.push({
         source: content,
+        cleaned: content,
         after: text.slice(start + content.length),
         nodes: [],
       });
   };
-  for (const token of tokens) {
+  for (const [position, token] of tokens.entries()) {
     if (token.level !== 0 || token.nesting === -1 || !token.map) continue;
     const from = lineStart(token.map[0]);
     addGap(markdown.slice(cursor, from));
@@ -72,7 +76,16 @@ function parseMarkdownBlocks(
       .slice(from, lineStart(token.map[1]))
       .replace(/[\r\n]+$/, "");
     starts.push(blocks.length);
-    blocks.push({ source, after: "", nodes: [] });
+    const inline = tokens[position + 1];
+    const children = inline?.type === "inline" ? inline.children : null;
+    const cleaned =
+      token.type === "paragraph_open" &&
+      children?.at(-2)?.type === "hardbreak" &&
+      children.at(-1)?.type === "text" &&
+      children.at(-1)?.content === "\\"
+        ? source.replace(/\\(?:\r\n|\n)\\$/, "")
+        : source;
+    blocks.push({ source, cleaned, after: "", nodes: [] });
     cursor = from + source.length;
   }
   addGap(markdown.slice(cursor));
@@ -85,7 +98,7 @@ function parseMarkdownBlocks(
         .slice(index + 1, next ?? blocks.length)
         .map((hidden) => hidden.source + hidden.after)
         .join("");
-      return block.source + block.after + gap;
+      return block.cleaned + block.after + gap;
     })
     .join(`\n<!--${marker}-->\n\n`);
   const html: string = editor.storage.markdown.parser.parse(
@@ -106,6 +119,7 @@ function parseMarkdownBlocks(
       blocks: [
         {
           source: markdown,
+          cleaned: markdown,
           after: "",
           nodes: topLevelNodes(editor, body.ownerDocument, groups.flat()),
         },
@@ -163,6 +177,10 @@ export function saveMarkdownBlocks(
   });
   const children: ProseMirrorNode[] = [];
   editor.state.doc.forEach((node) => children.push(node));
+  const original = blocks.flatMap((block) => block.nodes);
+  const unchanged =
+    children.length === original.length &&
+    children.every((node, index) => node === original[index]);
   const parts: { text: string; block?: number }[] = [];
   let edited: ProseMirrorNode[] = [];
   const flush = () => {
@@ -178,7 +196,10 @@ export function saveMarkdownBlocks(
       nodes.every((node, offset) => children[index + offset] === node)
     ) {
       flush();
-      parts.push({ text: blocks[block]!.source, block });
+      parts.push({
+        text: unchanged ? blocks[block]!.source : blocks[block]!.cleaned,
+        block,
+      });
       index += nodes.length;
     } else edited.push(children[index++]!);
   }

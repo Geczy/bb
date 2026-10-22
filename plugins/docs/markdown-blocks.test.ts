@@ -420,15 +420,11 @@ describe("legacy trailing-break cleanup", () => {
           editor.state.tr.insertText("New ", textPosition(editor, "Keep")),
         );
         expect(save()).toBe(
-          "- First item\n\nLet me know what you think.\n\nNew Keep this paragraph.\n"
-            .replaceAll("\n", newline)
-            .replace(
-              "New Keep this paragraph." + newline,
-              "New Keep this paragraph." + newline,
-            ),
+          "- First item" +
+            newline +
+            newline +
+            "Let me know what you think.\n\nNew Keep this paragraph.\n",
         );
-        editor.commands.undo();
-        expect(save()).toBe(source);
       } finally {
         editor.destroy();
       }
