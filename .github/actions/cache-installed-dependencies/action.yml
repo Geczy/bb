@@ -1,0 +1,32 @@
+name: Cache installed dependencies
+description: Restore an exact Windows dependency tree while retaining frozen install validation.
+inputs:
+  scope:
+    required: true
+    description: Identity of the pnpm install filters used by this job.
+runs:
+  using: composite
+  steps:
+    - name: Identify Node runtime
+      id: node
+      shell: bash
+      run: node -p '"version=" + process.version' >> "$GITHUB_OUTPUT"
+    - name: Restore installed dependencies
+      id: cache
+      continue-on-error: true
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      env:
+        SEGMENT_DOWNLOAD_TIMEOUT_MINS: "1"
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          plugins/*/node_modules
+          tests/*/node_modules
+          examples/plugins/*/node_modules
+        key: installed-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.version }}-${{ inputs.scope }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '**/package.json', '**/.npmrc', '.pnpmfile.cjs', 'patches/**', '.github/actions/setup-workspace/install-dependencies.sh', '.github/actions/cache-installed-dependencies/action.yml') }}
+    - name: Discard an incomplete dependency restore
+      if: steps.cache.outcome == 'failure'
+      shell: bash
+      run: node scripts/clear-installed-dependencies.mjs

@@ -179,6 +179,11 @@ jobs:
         continue-on-error: true
         uses: ./.github/actions/cache-pnpm
 
+      - name: Restore installed dependencies
+        uses: ./.github/actions/cache-installed-dependencies
+        with:
+          scope: nonmobile
+
       - name: Install dependencies
         timeout-minutes: 5
         shell: bash
@@ -241,6 +246,11 @@ jobs:
         timeout-minutes: 1
         continue-on-error: true
         uses: ./.github/actions/cache-pnpm
+
+      - name: Restore installed dependencies
+        uses: ./.github/actions/cache-installed-dependencies
+        with:
+          scope: nonmobile
 
       - name: Install dependencies
         timeout-minutes: 5

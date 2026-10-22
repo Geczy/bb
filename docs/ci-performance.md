@@ -360,3 +360,17 @@ architecture, lockfile, and Vite configuration; the compiler additionally checks
 its complete namespace and each file's content before reuse. Missing or failed
 restores fall back to compilation. This does not reuse test results or omit any
 selected check.
+
+Windows packaging jobs additionally cache the installed dependency tree, keyed
+by the exact Node runtime, OS/architecture, install scope, lockfile, workspace
+manifests, package-manager configuration, patches, and install implementation.
+There is no fallback to a different dependency graph. The frozen install still
+runs after restoration; a failed restore discards the partial dependency tree.
+This is distinct from the previously removed pnpm store archive: it restores
+both package contents and workspace links rather than unpacking a store and
+then linking the workspace again. Cold-cache population and archive transfer
+must be included when comparing end-to-end timings.
+
+The shared-UI Vite resolver uses a native hook filter so only the two imports
+it redirects cross into its JavaScript handler. Filtering leaves the built
+app unchanged while avoiding a callback for every unrelated import.
