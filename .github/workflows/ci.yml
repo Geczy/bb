@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025]
+        runner: [blacksmith-4vcpu-windows-2025]
     defaults:
       run:
         shell: bash
@@ -16,10 +16,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 10
-      - uses: ./.github/actions/setup-workspace-tools
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: "22.x"
-          pnpm-version: "9.15.0"
+          package-manager-cache: false
+      - name: Setup pnpm
+        run: npm install --global pnpm@9.15.0 --ignore-scripts
       - name: Install dependencies
         run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
       - name: Prepare prerequisites
