@@ -57,6 +57,11 @@ function fixture() {
     ["packages/config", "@bb/config", {}],
     ["packages/text-utils", "@bb/text-utils", {}],
     ["apps/mobile", "@bb/mobile", {}],
+    ["apps/demo-server", "@bb/demo-server", {}],
+    ["apps/desktop", "@bb/desktop", {}],
+    ["packages/templates", "@bb/templates", {}],
+    ["packages/bb-app", "bb-app", {}],
+    ["packages/plugin-build", "@bb/plugin-build", {}],
   ]) {
     put(
       `${path}/package.json`,
@@ -189,6 +194,25 @@ it("omits mobile installs only when the selected tests do not include mobile", (
     ).toBe(true);
   }
 }, 30_000);
+
+it.each([
+  ["apps/demo-server", "@bb/demo-server"],
+  ["apps/desktop", "@bb/desktop"],
+  ["packages/templates", "@bb/templates"],
+  ["packages/bb-app", "bb-app"],
+  ["packages/plugin-build", "@bb/plugin-build"],
+])(
+  "runs %s exactly once per platform",
+  (path, name) => {
+    const selected = fixture().plan(`${path}/src/index.ts`);
+    for (const platform of ["tests", "windows-tests"]) {
+      expect(selected[platform].include.map((entry) => entry.filter)).toEqual([
+        `--filter=${name}`,
+      ]);
+    }
+  },
+  30_000,
+);
 
 it("keeps dependent app tests and Windows foundation checks for shared configuration changes", () => {
   const plan = fixture().plan("packages/config/src/index.ts");

@@ -1,10 +1,10 @@
 # CI performance
 
 The main CI workflow keeps build, lint/typecheck, two server test shards, eight app test
-shards, integration tests, three package test groups, plugin tests, three fork
+shards, integration tests, three package test groups, a separate demo-server job, plugin tests, three fork
 check shards, and package smokes independent. Node 24/26 compatibility smokes run on
 main and manual runs. Windows runs the nine host packages, an app smoke, a desktop
-smoke, and thirteen test shards that cover the remaining suites; see
+smoke, and fourteen test shards that cover the remaining suites; see
 [windows-ci.md](windows-ci.md).
 
 ## PR selection
@@ -42,14 +42,16 @@ An empty test matrix skips its runners before dependency installation. This
 reduces routine PR work; broad changes and cold builds do not have a guaranteed
 two-minute completion time.
 
-Before the matrix starts, dependency changes run a full frozen install with
+Alongside the matrix, dependency changes run a separate blocking full frozen install with
 lifecycle scripts disabled. This catches missing lockfile snapshots as well as
 outdated manifest entries; `--lockfile-only --frozen-lockfile` does not catch
 missing snapshots. The check covers manifests, the lockfile, workspace and pnpm
 configuration, and patches. PRs compare with the resolved comparison base; pushes
 compare with the event's previous SHA. Manual runs and unavailable history always
 validate. Source-only changes skip the extra install. The install has a
-five-minute limit inside the planning job's ten-minute budget.
+five-minute limit inside its own job's ten-minute budget. Planning only detects
+whether validation is needed; runners can start while the frozen install runs.
+Every matrix job still validates its own frozen install.
 
 The plugin SDK version check in `version-lockstep.yml` checks out with
 `filter: blob:none`, keeping commit history without historical file contents. PR
@@ -88,7 +90,6 @@ has a four-minute limit. Cache restore failures fall back to downloading. Archiv
 checksums come from official release metadata, with portable baseline builds on
 x64 runners. These changes reduce exposure to bootstrap download stalls; they do
 not establish a reduction in total successful CI time.
-
 
 CI installs Node and the checksum-verified pnpm executable before restoring
 caches. Turbo restores have a one-minute step budget. Linux and Windows skip
@@ -169,7 +170,9 @@ Package tests split by package, because some packages use Bun or Node test
 runners that do not accept Vitest's shard arguments:
 
 - `packages-host`: host daemon, CLI, agent runtime, provider parity, and database.
-- `packages-build`: templates, bb-app, demo server, desktop, and plugin build.
+- `packages-build`: templates, bb-app, desktop, and plugin build.
+- `demo-server`: demo server and its app build prerequisite, isolated from the
+  SDK declaration and scaffold tests in `packages-build`.
 - `packages-other`: every remaining non-plugin package outside app, server, and
   integration. Negative filters automatically include new packages.
 
@@ -193,9 +196,10 @@ of a job rather than one against one.
 ## Windows test shards
 
 [windows-ci.md](windows-ci.md#full-test-suite) owns the Windows shard
-composition, install filters, and concurrency rules. The thirteen shards are
-sized so each test step takes about 100 seconds on a four-vCPU runner and
-finishes with the slowest Linux job rather than after it. Windows setup takes
+composition, install filters, and concurrency rules. The fourteen shards separate the demo server's full app build from the
+SDK declaration and scaffold tests. Recent broad changes exceeded the original
+100-second test-step target, so successful end-to-end timings must be measured
+from Actions rather than inferred from the shard count. Windows setup takes
 roughly twice as long as Linux, and test files run about half as fast.
 
 Windows server and other-package shards build SDK declarations
@@ -341,3 +345,18 @@ jsdom itself, not by the tests. Two alternatives were rejected:
 Merging small files removes only the per-file environment cost. Reusing jsdom
 workers across files would remove it for every file, but reverses the rule that
 DOM tests run isolated.
+
+## Three-minute target
+
+The target is 180 seconds from workflow creation to the last required job's
+completion, including planning and runner startup. Report cold and warm runs
+separately; a successful rerun or a narrow docs-only change is not proof of
+three-minute broad CI.
+
+App-building jobs also restore `.git/bb-cache/react-compiler` independently of
+Turbo. A changed app build can reuse unchanged per-file transforms even when
+its complete Turbo output is invalidated. The archive is separated by OS,
+architecture, lockfile, and Vite configuration; the compiler additionally checks
+its complete namespace and each file's content before reuse. Missing or failed
+restores fall back to compilation. This does not reuse test results or omit any
+selected check.

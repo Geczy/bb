@@ -37,7 +37,7 @@ product; Turbo runs the required generators and native-module preparation.
 
 The `Windows tests (<shard>, Node 22.x)` jobs run the test suite of every
 package outside the nine above, on the same runner image. A failure fails the
-job. The thirteen shards cover each
+job. The fourteen shards cover each
 suite exactly once:
 
 - `server-1` to `server-3`: `@bb/server`, split by file into three Vitest
@@ -50,19 +50,21 @@ suite exactly once:
   `plugins-1`, so a new plugin lands here without a workflow change.
 - `packages-host`: host daemon and CLI, one suite at a time.
 - `integration`: the integration tests, alone.
-- `packages-build`: templates, bb-app, demo server, desktop, and plugin build,
+- `packages-build`: templates, bb-app, desktop, and plugin build,
   the same group as the Linux `packages-build` shard.
+- `demo-server`: demo server and its full app-build prerequisite, on a separate
+  runner so it does not wait behind SDK declarations and scaffold tests.
 - `packages-other`: every remaining package, including provider parity. Its
   negative filters exclude the groups above and the nine host packages, so a
   new package lands here without a workflow change.
 
-The shards are sized so that each finishes with the slowest Linux job instead
-of after it; see [ci-performance.md](ci-performance.md#windows-test-shards).
+The target is for each shard to finish with the slowest Linux job; broad
+changes still need end-to-end measurement; see [ci-performance.md](ci-performance.md#windows-test-shards).
 
 App shards install the app and database dependency closures. Server shards
 install the server, host daemon, app, and plugin dependency closures, including
-the plugins loaded dynamically by the server test harness. Plugin, host, build,
-and integration shards omit the mobile toolchain. The catch-all `packages-other`
+the plugins loaded dynamically by the server test harness. Demo-server shards install the demo server and database dependency closures.
+Plugin, host, build, and integration shards omit the mobile toolchain. The catch-all `packages-other`
 shard retains the full install when its selected tests include mobile; other
 affected PRs omit the mobile toolchain. Full main and manual runs keep mobile
 coverage. All use
