@@ -2065,6 +2065,26 @@ export function listUnclaimedQueuedSystemNotices(
     .all();
 }
 
+export function hasUnclaimedQueuedSystemNotice(
+  db: DbQueryConnection,
+  args: { kind: SystemMessageKind; threadId: string },
+): boolean {
+  return (
+    db
+      .select({ id: queuedThreadMessages.id })
+      .from(queuedThreadMessages)
+      .where(
+        and(
+          eq(queuedThreadMessages.threadId, args.threadId),
+          sql`json_extract(${queuedThreadMessages.systemNotice}, '$.kind') = ${args.kind}`,
+          isNull(queuedThreadMessages.claimToken),
+        ),
+      )
+      .limit(1)
+      .get() !== undefined
+  );
+}
+
 export function rescheduleQueuedThreadMessage(
   db: DbConnection,
   notifier: DbNotifier,

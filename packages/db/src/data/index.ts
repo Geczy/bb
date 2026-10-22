@@ -457,6 +457,7 @@ export {
   isOrdinaryTurnEndQueuedMessage,
   isThreadQueueAutoSendPaused,
   listDueScheduledQueuedThreadMessages,
+  hasUnclaimedQueuedSystemNotice,
   listUnclaimedQueuedSystemNotices,
   rescheduleQueuedThreadMessage,
   listIdleThreadsWithQueuedMessages,
