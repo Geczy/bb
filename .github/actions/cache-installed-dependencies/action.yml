@@ -25,7 +25,7 @@ runs:
           plugins/*/node_modules
           tests/*/node_modules
           examples/plugins/*/node_modules
-        key: installed-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.version }}-${{ inputs.scope }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '**/package.json', '**/.npmrc', '.pnpmfile.cjs', 'patches/**', '.github/actions/setup-workspace/install-dependencies.sh', '.github/actions/cache-installed-dependencies/action.yml') }}
+        key: installed-dependencies-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.version }}-${{ inputs.scope }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '**/package.json', '**/.npmrc', '.pnpmfile.cjs', 'patches/**', '.github/workflows/ci.yml', '.github/actions/setup-workspace/install-dependencies.sh', '.github/actions/cache-installed-dependencies/action.yml') }}
     - name: Discard an incomplete dependency restore
       if: steps.cache.outcome == 'failure'
       shell: bash

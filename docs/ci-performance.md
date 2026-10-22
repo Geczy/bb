@@ -361,7 +361,7 @@ its complete namespace and each file's content before reuse. Missing or failed
 restores fall back to compilation. This does not reuse test results or omit any
 selected check.
 
-Windows packaging jobs additionally cache the installed dependency tree, keyed
+Windows jobs additionally cache the installed dependency tree, keyed
 by the exact Node runtime, OS/architecture, install scope, lockfile, workspace
 manifests, package-manager configuration, patches, and install implementation.
 There is no fallback to a different dependency graph. The frozen install still
