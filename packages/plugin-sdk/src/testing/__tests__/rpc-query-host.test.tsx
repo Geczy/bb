@@ -339,10 +339,8 @@ it("retains plain and keyed watched reads until their consumers disable them", a
     queryClient: client,
     subscribe: () => () => {},
     watch,
-    call: async (_plugin: string, method: string) => ({
-      result: method === "rows" ? { a: 1, b: 2 } : { ready: true },
-      whileWatched: true,
-    }),
+    call: async (_plugin: string, method: string) =>
+      method === "rows" ? { a: 1, b: 2 } : { ready: true },
   };
   const contract = defineRpcContract({
     read: {
