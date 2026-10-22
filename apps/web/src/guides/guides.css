@@ -748,7 +748,7 @@
 }
 
 .gd-hero > .gd-shot {
-  margin-inline: auto;
+  translate: -50% 0;
   transform: none;
 }
 
