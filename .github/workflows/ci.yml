@@ -18,8 +18,6 @@ jobs:
         shell: bash
     env:
       VITEST_MAX_WORKERS: "2"
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -34,12 +32,17 @@ jobs:
         run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
       - name: Prepare prerequisites
         continue-on-error: true
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: |
           git show 93d1fc0c86a8476cb91411880a5d21e44b465908:.github/workflows/ci.yml > .github/workflows/ci.yml
           pnpm exec turbo run test --filter=@bb/server --output-logs=errors-only -- test/threads/system-message-taxonomy-stamping.test.ts test/services/plugins/plugin-install-hook.test.ts test/app/install-machine-script.test.ts test/services/plugins/plugin-native-server-loading.test.ts
       - name: Compare server tests
         env:
           SCOPE: ${{ matrix.scope }}
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: |
           mkdir -p measurements
           files="apps/server/test/threads/system-message-taxonomy-stamping.test.ts apps/server/test/services/plugins/plugin-install-hook.test.ts apps/server/test/app/install-machine-script.test.ts apps/server/test/services/plugins/plugin-native-server-loading.test.ts"
