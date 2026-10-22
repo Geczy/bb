@@ -4,8 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { COMPARISONS } from "./comparisons";
-import { ComparePage, withPluginsSlot } from "./compare-page";
-import { PLUGINS_COPY } from "./compare-sections";
+import { ComparePage } from "./compare-page";
 
 const pagesDirectory = fileURLToPath(new URL("./pages/", import.meta.url));
 
@@ -33,35 +32,32 @@ describe("comparison template", () => {
     expect(new Set(COMPARISONS.map((c) => c.slug)).size).toBe(pages.length);
   });
 
-  it.each(COMPARISONS)(
-    "$slug renders the shared section order",
-    (comparison) => {
-      const html = renderToStaticMarkup(
-        createElement(ComparePage, { comparison }),
-      );
-      const [lead, ...rest] = withPluginsSlot(
-        comparison.heroVisual,
-        [comparison.tailored, ...comparison.sections],
-        PLUGINS_COPY,
-      );
-      const expected = [
-        comparison.headline,
-        lead.title,
-        `bbvs${comparison.competitor.name}`,
-        ...rest.map((section) => section.title),
-        comparison.faqTitle,
-        comparison.closer.title,
-      ].map(text);
-      expect(headings(html).slice(0, expected.length)).toEqual(expected);
-    },
-  );
+  it.each(COMPARISONS)("$slug renders the shared slot order", (comparison) => {
+    const html = renderToStaticMarkup(
+      createElement(ComparePage, { comparison }),
+    );
+    const slots = [
+      ...html.matchAll(
+        /<(?:header|section) class="(hero cmp-hero|band[^"]*|cmp-section cmp-faq|cmp-section|closer)"/g,
+      ),
+    ]
+      .map(([, className]) => {
+        if (className === "hero cmp-hero") return "hero";
+        if (className.startsWith("band")) return "highlight";
+        if (className === "cmp-section cmp-faq") return "faq";
+        if (className === "closer") return "closer";
+        return "table";
+      })
+      .join(" ");
+    expect(slots).toMatch(/^hero highlight table( highlight)+ faq closer$/);
+    expect(html).toContain('id="cmp-table-title"');
+  });
 
   it.each(COMPARISONS)("$slug has no repeated section", (comparison) => {
-    const titles = withPluginsSlot(
-      comparison.heroVisual,
-      [comparison.tailored, ...comparison.sections],
-      PLUGINS_COPY,
-    ).map((section) => section.title);
+    const html = renderToStaticMarkup(
+      createElement(ComparePage, { comparison }),
+    );
+    const titles = headings(html);
     expect(new Set(titles).size).toBe(titles.length);
   });
 
