@@ -72,10 +72,19 @@ const textMarkdown: MarkdownNodeSpec = {
             : run,
         );
     try {
-      state.text(
-        node.text!.replace(/</g, "&lt;").replace(/>/g, "&gt;"),
-        !("inAutolink" in state && state.inAutolink),
-      );
+      const autolink = "inAutolink" in state && state.inAutolink;
+      const text = autolink
+        ? node.text!
+        : node.text!.replace(
+            /&(?:#(?:x[0-9a-f]+|[0-9]+)|[a-z][a-z0-9]+);/gi,
+            (entity) =>
+              this.editor.storage.markdown.parser.md.utils.unescapeAll(
+                entity,
+              ) === entity
+                ? entity
+                : "&amp;" + entity.slice(1),
+          );
+      state.text(text.replace(/</g, "&lt;").replace(/>/g, "&gt;"), !autolink);
     } finally {
       state.esc = escape;
     }

@@ -459,6 +459,34 @@ describe("legacy trailing-break cleanup", () => {
     },
   );
 
+  it.each([
+    "&amp;copy;",
+    "\\&copy;",
+    "&amp;lt;tag&amp;gt;",
+    "&amp;#35;",
+    "&amp;#x23;",
+    "&unknown;",
+  ])("preserves literal entity text in %j during cleanup", (text) => {
+    const source = text + "\\\n\\\n\nOther paragraph.\n";
+    const { editor, save } = open(source);
+    try {
+      expect(save()).toBe(source);
+      editor.view.dispatch(
+        editor.state.tr.insertText("New ", textPosition(editor, "Other")),
+      );
+      const reopened = open(save());
+      try {
+        expect(reopened.editor.state.doc.toJSON()).toEqual(
+          editor.state.doc.toJSON(),
+        );
+      } finally {
+        reopened.editor.destroy();
+      }
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it("keeps hard breaks before a following line", () => {
     const source = "Text\\\n\\\nFollowing text\n\nOther paragraph.\n";
     const { editor, save } = open(source);
