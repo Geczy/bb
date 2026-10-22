@@ -381,3 +381,7 @@ restores took 38–57 seconds, followed by a 2–4-second frozen install, but th
 restored pnpm dependency links produced `Access is denied` errors in esbuild.
 The experiment is not enabled; Windows still uses fresh frozen installs and
 caches only build outputs and portable compiler transforms.
+
+Windows installs allow 64 concurrent registry requests. The frozen lockfile,
+fetch timeouts, and retry bounds are unchanged. This targets the registry
+transfer portion of installation without restoring NTFS dependency links.

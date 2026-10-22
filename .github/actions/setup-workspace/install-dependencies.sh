@@ -15,6 +15,10 @@ if [[ "${TURBO_CACHE_RESTORE_OUTCOME:-success}" != "success" && "${TURBO_CACHE_R
   rm -rf .turbo/cache
 fi
 
+if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+  export npm_config_network_concurrency=64
+fi
+
 started=$SECONDS
 pnpm install --frozen-lockfile --prefer-offline \
   --fetch-timeout=30000 --fetch-retries=2 \
