@@ -27,7 +27,7 @@ import {
   PiIcon,
 } from "./icons";
 import type { CtaPlacement, DesktopPlatform } from "./site";
-import { CLI_COMMAND, DESKTOP_DOWNLOADS, HOMEBREW_COMMAND } from "./site";
+import { CLI_COMMAND, DESKTOP_DOWNLOADS } from "./site";
 
 export function InstallOptions({ placement }: { placement: CtaPlacement }) {
   const platform = useDesktopPlatform();
@@ -59,22 +59,6 @@ export function InstallOptions({ placement }: { placement: CtaPlacement }) {
             bb runs on macOS, Windows, and Linux
           </span>
         </span>
-        {platform === "macos" && (
-          <span className="install-choice install-homebrew">
-            <CommandButton
-              command={HOMEBREW_COMMAND}
-              label={`Copy Homebrew install command: ${HOMEBREW_COMMAND}`}
-              size="hero"
-              onCopy={() =>
-                trackLandingEvent({
-                  name: "landing_cli_command_copied",
-                  properties: { placement, command: HOMEBREW_COMMAND },
-                })
-              }
-            />
-            <span className="install-note">Apple Silicon · Homebrew</span>
-          </span>
-        )}
         <span className="install-choice install-browser-command">
           <CommandButton
             command={CLI_COMMAND}

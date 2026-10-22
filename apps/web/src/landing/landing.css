@@ -604,7 +604,6 @@ body {
 @media (hover: none) and (pointer: coarse) and (max-width: 600px) {
   .install-choice .install-download,
   .install-choice .install-note-desktop,
-  .install-homebrew,
   .install-browser-command {
     display: none;
   }
