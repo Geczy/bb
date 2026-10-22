@@ -3,7 +3,7 @@ import { DOMParser, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 interface Block {
   source: string;
-  cleaned: string;
+  cleanup: boolean;
   after: string;
   nodes: ProseMirrorNode[];
 }
@@ -63,7 +63,7 @@ function parseMarkdownBlocks(
     if (content)
       blocks.push({
         source: content,
-        cleaned: content,
+        cleanup: false,
         after: text.slice(start + content.length),
         nodes: [],
       });
@@ -78,14 +78,13 @@ function parseMarkdownBlocks(
     starts.push(blocks.length);
     const inline = tokens[position + 1];
     const children = inline?.type === "inline" ? inline.children : null;
-    const cleaned =
+    const cleanup =
       token.type === "paragraph_open" &&
       children?.at(-2)?.type === "hardbreak" &&
       children.at(-1)?.type === "text" &&
-      children.at(-1)?.content === "\\"
-        ? source.replace(/\\(?:\r\n|\n)\\$/, "")
-        : source;
-    blocks.push({ source, cleaned, after: "", nodes: [] });
+      children.at(-1)?.content === "\\" &&
+      /\\(?:\r\n|\n)\\$/.test(source);
+    blocks.push({ source, cleanup, after: "", nodes: [] });
     cursor = from + source.length;
   }
   addGap(markdown.slice(cursor));
@@ -98,7 +97,7 @@ function parseMarkdownBlocks(
         .slice(index + 1, next ?? blocks.length)
         .map((hidden) => hidden.source + hidden.after)
         .join("");
-      return block.cleaned + block.after + gap;
+      return block.source + block.after + gap;
     })
     .join(`\n<!--${marker}-->\n\n`);
   const html: string = editor.storage.markdown.parser.parse(
@@ -119,7 +118,7 @@ function parseMarkdownBlocks(
       blocks: [
         {
           source: markdown,
-          cleaned: markdown,
+          cleanup: false,
           after: "",
           nodes: topLevelNodes(editor, body.ownerDocument, groups.flat()),
         },
@@ -127,11 +126,20 @@ function parseMarkdownBlocks(
       newline: false,
     };
   starts.forEach((index, position) => {
-    blocks[index]!.nodes = topLevelNodes(
-      editor,
-      body.ownerDocument,
-      groups[position]!,
-    );
+    const block = blocks[index]!;
+    block.nodes = topLevelNodes(editor, body.ownerDocument, groups[position]!);
+    const paragraph = block.nodes[0];
+    if (
+      block.cleanup &&
+      block.nodes.length === 1 &&
+      paragraph?.type.name === "paragraph" &&
+      paragraph.lastChild?.text === "\\" &&
+      paragraph.maybeChild(paragraph.childCount - 2)?.type.name === "hardBreak"
+    )
+      block.nodes = [
+        paragraph.copy(paragraph.content.cut(0, paragraph.content.size - 2)),
+      ];
+    else block.cleanup = false;
   });
   return { leading, blocks, newline: markdown.endsWith("\n") };
 }
@@ -197,7 +205,10 @@ export function saveMarkdownBlocks(
     ) {
       flush();
       parts.push({
-        text: unchanged ? blocks[block]!.source : blocks[block]!.cleaned,
+        text:
+          !unchanged && blocks[block]!.cleanup
+            ? serialize(nodes).replace(/\n+$/, "")
+            : blocks[block]!.source,
         block,
       });
       index += nodes.length;
