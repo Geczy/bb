@@ -748,7 +748,7 @@
 }
 
 .gd-hero > .gd-shot {
-  translate: -50% 0;
+  margin-left: calc(50% - min(520px, 50vw - 24px));
   transform: none;
 }
 
