@@ -68,7 +68,7 @@ function seedCommand(
     scope: turnScope("turn-1"),
     providerThreadId: `provider-${args.threadId}`,
     itemId: args.itemId,
-    itemKind: "commandExecution",
+    itemKind: "commandExecution" as const,
   };
   seedStoredEvent(harness.deps, {
     ...base,
@@ -144,6 +144,12 @@ describe("app update resumer", () => {
         "while these background jobs were running: `pnpm dev`, `vite build`. They stopped at the restart.",
       );
 
+      await resumer.parkResumes({
+        result: interruptResult([{ threadId: first.id, command: "pnpm test" }]),
+        targetVersion: "1.1.0",
+      });
+      expect(listQueuedThreadMessages(harness.db, first.id)).toHaveLength(1);
+
       clock = 2_000_000;
       expect(resumer.releaseResumes()).toBe(4);
       expect(resumer.resumedThreadCount()).toBe(4);
@@ -194,26 +200,49 @@ describe("app update resumer", () => {
       });
       const thinking = seedThreadOnHost(harness, host.id, "active");
       const idle = seedThreadOnHost(harness, host.id, "idle");
-      seedStoredEvent(harness.deps, {
+      const backgroundItem = {
+        id: "task:dev",
+        type: "backgroundTask",
+        taskType: "local_bash",
+        description: "pnpm dev",
+        status: "pending",
+        taskStatus: "running",
+        skipTranscript: false,
+        foreground: false,
+      };
+      const idleEvent = {
         threadId: idle.thread.id,
         environmentId: idle.environment.id,
-        sequence: 1,
-        type: "item/started",
-        scope: threadScope(),
+        scope: turnScope("turn-idle"),
         providerThreadId: `provider-${idle.thread.id}`,
-        itemId: "task:dev",
+      };
+      seedStoredEvent(harness.deps, {
+        ...idleEvent,
+        sequence: 1,
+        type: "turn/started",
+        data: { providerThreadId: `provider-${idle.thread.id}` },
+      });
+      seedStoredEvent(harness.deps, {
+        ...idleEvent,
+        sequence: 2,
+        type: "item/started",
+        itemId: backgroundItem.id,
         itemKind: "backgroundTask",
         data: {
-          item: {
-            id: "task:dev",
-            type: "backgroundTask",
-            taskType: "local_bash",
-            description: "pnpm dev",
-            status: "pending",
-            taskStatus: "running",
-            skipTranscript: false,
-            foreground: false,
-          },
+          providerThreadId: `provider-${idle.thread.id}`,
+          item: backgroundItem,
+        },
+      });
+      seedStoredEvent(harness.deps, {
+        ...idleEvent,
+        sequence: 3,
+        type: "item/backgroundTask/progress",
+        scope: threadScope(),
+        itemId: backgroundItem.id,
+        itemKind: "backgroundTask",
+        data: {
+          providerThreadId: `provider-${idle.thread.id}`,
+          item: backgroundItem,
         },
       });
 

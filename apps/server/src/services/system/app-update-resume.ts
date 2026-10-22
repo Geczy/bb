@@ -204,7 +204,14 @@ export function createAppUpdateResumer(args: {
           text: resumeTextForJobs(entry.jobs),
         })),
       ];
+      const parked = new Set(
+        listUnclaimedQueuedSystemNotices(deps.db, "app-update-resume").map(
+          (row) => row.threadId,
+        ),
+      );
       for (const resume of resumes) {
+        if (parked.has(resume.threadId)) continue;
+        parked.add(resume.threadId);
         try {
           await parkResume(
             resume.threadId,
