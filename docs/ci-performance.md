@@ -341,3 +341,31 @@ jsdom itself, not by the tests. Two alternatives were rejected:
 Merging small files removes only the per-file environment cost. Reusing jsdom
 workers across files would remove it for every file, but reverses the rule that
 DOM tests run isolated.
+
+## React Compiler cache measurements
+
+App-building jobs preserve `.git/bb-cache/react-compiler` independently of
+Turbo task outputs. A changed app build can reuse content-addressed transforms
+for unchanged modules. The compiler validates source, configuration, toolchain,
+and environment identity and rebuilds corrupt entries. Cache restoration is
+optional and bounded to one minute.
+
+[Benchmark run 39842305719](https://github.com/get-bb/bb/actions/runs/39842305719)
+used the same source, Node 22, pnpm 9.15, and four-vCPU runners for three
+cold/warm pairs per platform, alternating order. Prerequisites were prepared
+once; every timed app build ran through Turbo with `--only --force` to prevent
+a task-output cache hit. Cold samples cleared compiler entries; warm samples
+restored them through Actions cache. All output files matched byte-for-byte
+within each platform: 1,751 on Linux and 1,752 on Windows.
+
+| Platform | Cold build seconds | Warm build seconds | Restore seconds | Cache save seconds |
+| --- | --- | --- | --- | --- |
+| Linux | 43.0, 36.0, 28.8 | 5.5, 5.6, 4.7 | 1, 1, 0 | 2 |
+| Windows | 39.6, 35.1, 40.7 | 6.3, 6.8, 7.0 | 2, 1, 2 | 2 |
+
+Charging each warm sample the measured cache-save cost gives median paired
+savings of 27 seconds on Linux and 29 seconds on Windows. These are app-rebuild
+measurements on one runner per platform, not total CI savings. They represent
+reuse of all compiler transforms; source or toolchain changes can reduce hits.
+A first build has no reuse, and a full Turbo build-cache hit already avoids
+compilation. Shard counts and selected coverage are unchanged by this fix.
