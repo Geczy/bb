@@ -431,11 +431,26 @@ describe("legacy trailing-break cleanup", () => {
     },
   );
 
+  it("keeps hard breaks before a following line", () => {
+    const source = "Text\\\n\\\nFollowing text\n\nOther paragraph.\n";
+    const { editor, save } = open(source);
+    try {
+      expect(editor.getHTML()).toContain("<p>Text<br><br>Following text</p>");
+      editor.view.dispatch(
+        editor.state.tr.insertText("New ", textPosition(editor, "Other")),
+      );
+      expect(save()).toBe(
+        source.replace("Other paragraph.", "New Other paragraph."),
+      );
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it.each([
     "Text\n\\",
     "Text\\\\\n\\",
     "Text  \n\\",
-    "Text\\\n\\\nFollowing text",
     "`Text\\\n\\`",
     "```text\nText\\\n\\\n```",
     "    Text\\\n    \\",
