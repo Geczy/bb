@@ -47,7 +47,7 @@ it("shares the public page and campaign tags without click IDs or private parame
   await click("Get bb on your computer");
   expect(share).toHaveBeenCalledWith(
     expect.objectContaining({
-      url: "https://getbb.app/claude-code-parallel-agents?utm_source=community&utm_campaign=desktop-intro&utm_medium=referral",
+      url: "https://getbb.app/claude-code-parallel-agents?utm_source=community&utm_campaign=desktop-intro&utm_medium=referral&utm_content=send-to-computer",
     }),
   );
   expect(writeText).not.toHaveBeenCalled();
@@ -58,11 +58,30 @@ it("lets the reader copy a tagged link even when native sharing is available", a
   await click("Copy link");
   expect(share).not.toHaveBeenCalled();
   expect(writeText).toHaveBeenCalledWith(
-    "https://getbb.app/?utm_source=share&utm_medium=referral&utm_campaign=send-to-computer",
+    "https://getbb.app/?utm_source=share&utm_medium=referral&utm_campaign=send-to-computer&utm_content=send-to-computer",
   );
   expect(container.querySelector('[role="status"]')?.textContent).toBe(
     "Link copied",
   );
+});
+
+it.each([
+  ["", "send-to-computer"],
+  ["&utm_content=ad-123", "ad-123"],
+])("keeps incoming campaign tags with content %s", async (incoming, expected) => {
+  history.replaceState(
+    null,
+    "",
+    `/claude-code-parallel-agents?utm_source=ads&utm_medium=cpc&utm_campaign=desktop-intro${incoming}`,
+  );
+  await click("Copy link");
+  const copied = new URL(writeText.mock.calls[0]?.[0] ?? "");
+  expect(Object.fromEntries(copied.searchParams)).toEqual({
+    utm_source: "ads",
+    utm_medium: "cpc",
+    utm_campaign: "desktop-intro",
+    utm_content: expected,
+  });
 });
 
 it("does not copy unexpectedly when the reader cancels sharing", async () => {

@@ -26,6 +26,8 @@ export function SendToComputerButton({
       url.searchParams.set("utm_medium", "referral");
     if (!url.searchParams.has("utm_campaign"))
       url.searchParams.set("utm_campaign", "send-to-computer");
+    if (!url.searchParams.has("utm_content"))
+      url.searchParams.set("utm_content", "send-to-computer");
     return url.href;
   };
   const recordClick = () => {
