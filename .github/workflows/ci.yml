@@ -21,7 +21,7 @@ jobs:
           node-version: "22.x"
           pnpm-version: "9.15.0"
       - name: Install dependencies
-        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter bb --filter '@get-bb/plugin-sdk...'
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
       - name: Prepare prerequisites
         run: pnpm exec turbo run build:types ensure-native-modules --filter=@get-bb/plugin-sdk --filter=bb --output-logs=errors-only
       - name: Compare retry backoff
