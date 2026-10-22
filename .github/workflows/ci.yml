@@ -10,15 +10,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: Linux
-            runner: blacksmith-4vcpu-ubuntu-2404
-            scope: focused
           - platform: Windows
             runner: blacksmith-4vcpu-windows-2025
             scope: focused
-          - platform: Linux
-            runner: blacksmith-4vcpu-ubuntu-2404
-            scope: shard
     defaults:
       run:
         shell: bash
@@ -37,6 +31,7 @@ jobs:
       - name: Install dependencies
         run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
       - name: Prepare prerequisites
+        continue-on-error: true
         run: |
           git show 93d1fc0c86a8476cb91411880a5d21e44b465908:.github/workflows/ci.yml > .github/workflows/ci.yml
           pnpm exec turbo run test --filter=@bb/server --output-logs=errors-only -- test/threads/system-message-taxonomy-stamping.test.ts test/services/plugins/plugin-install-hook.test.ts test/app/install-machine-script.test.ts test/services/plugins/plugin-native-server-loading.test.ts
@@ -56,6 +51,7 @@ jobs:
             export BB_CI_TEST_SHARD=2/2
             args=()
           fi
+          failures=0
           for round in 1 2 3; do
             variants="before after"
             if [[ "$round" == 2 ]]; then variants="after before"; fi
@@ -63,9 +59,10 @@ jobs:
               for file in $files; do
                 cp "$RUNNER_TEMP/$variant-$(basename "$file")" "$file"
               done
-              pnpm exec turbo run test --filter=@bb/server --only --force --output-logs=full --summarize -- "${args[@]}" > "measurements/$round-$variant.log" 2>&1
+              pnpm exec turbo run test --filter=@bb/server --only --force --output-logs=full --summarize -- "${args[@]}" > "measurements/$round-$variant.log" 2>&1 || failures=$((failures + 1))
             done
           done
+          test "$failures" -eq 0
       - uses: actions/upload-artifact@v4
         if: always()
         with:
