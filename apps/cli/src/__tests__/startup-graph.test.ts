@@ -11,6 +11,7 @@ import { readBbAppVersion } from "./bb-app-version.js";
 
 const execFileAsync = promisify(execFile);
 const cliRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const workspaceRoot = resolve(cliRoot, "..", "..");
 
 const RESOLVE_HOOKS_SOURCE = `
 import { appendFileSync } from "node:fs";
@@ -55,7 +56,7 @@ describe("bb startup module graph", () => {
     await mkdir(packageTmpDir, { recursive: true });
     tempDir = await mkdtemp(join(packageTmpDir, "startup-graph-"));
     registerHooksPath = join(tempDir, "register-hooks.mjs");
-    distEntry = join(cliRoot, "dist", "index.js");
+    distEntry = join(tempDir, "dist", "index.js");
     await writeFile(join(tempDir, "resolve-hooks.mjs"), RESOLVE_HOOKS_SOURCE);
     await writeFile(registerHooksPath, REGISTER_HOOKS_SOURCE);
   });
@@ -176,9 +177,19 @@ describe("bb startup module graph", () => {
   describe("split dist/index.js", () => {
     let chunkDirUrl: string;
 
-    beforeAll(() => {
-      chunkDirUrl = `${pathToFileURL(join(cliRoot, "dist", "index-chunks")).href}/`;
-    });
+    beforeAll(async () => {
+      chunkDirUrl = `${pathToFileURL(join(tempDir, "dist", "index-chunks")).href}/`;
+      await execFileAsync(
+        process.execPath,
+        [
+          resolve(workspaceRoot, "scripts", "build-node-entry.mjs"),
+          "src/index.ts",
+          distEntry,
+          "--split",
+        ],
+        { cwd: cliRoot },
+      );
+    }, 60_000);
 
     it("is how @bb/cli#build builds the shipped CLI", async () => {
       const packageJson = cliPackageJsonSchema.parse(

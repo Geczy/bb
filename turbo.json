@@ -575,7 +575,7 @@
     },
     "@bb/cli#test": {
       "env": ["VITEST_MAX_WORKERS"],
-      "dependsOn": ["//#ensure-native-modules", "@bb/cli#build", "topo"],
+      "dependsOn": ["//#ensure-native-modules", "topo"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/plugins/bb-guide/skills/bb-cli/**",

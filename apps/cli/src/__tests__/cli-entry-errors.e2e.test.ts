@@ -140,7 +140,7 @@ describe.skipIf(process.platform === "win32")("bb entrypoint errors", () => {
     return new Promise((resolve) => {
       execFile(
         process.execPath,
-        ["dist/index.js", ...args],
+        ["--conditions=source", "--import", "tsx", "src/index.ts", ...args],
         { cwd: cliRoot, env },
         (error, stdout, stderr) => {
           const exitCode =
