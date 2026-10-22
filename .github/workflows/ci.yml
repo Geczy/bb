@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [blacksmith-4vcpu-windows-2025]
+        runner: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025]
     defaults:
       run:
         shell: bash
@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
       - name: Prepare prerequisites
-        run: pnpm exec turbo run build:types ensure-native-modules --filter=@get-bb/plugin-sdk --filter=bb --output-logs=errors-only
+        run: pnpm exec turbo run test --filter=@get-bb/plugin-sdk --output-logs=errors-only -- src/testing/__tests__/rpc-query-host.test.tsx
       - name: Compare retry backoff
         run: |
           mkdir -p measurements
