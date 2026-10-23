@@ -10,6 +10,7 @@ on:
 env:
   PRIMARY_NODE_VERSION: "22.x"
   PNPM_VERSION: "9.15.0"
+  TURBO_FORCE: "true"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'latest' }}
