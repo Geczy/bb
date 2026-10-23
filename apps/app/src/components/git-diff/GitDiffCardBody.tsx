@@ -27,7 +27,7 @@ import {
   isSvgGitDiffFile,
   normalizeGitDiffPath,
   type ParsedGitDiffFile,
-} from "./git-diff-parsing";
+} from "@bb/shared-ui/git-diff/parsing";
 import type { GitDiffFileChangeKind } from "bb-git-contract";
 
 export type DiffFileContentsResult =

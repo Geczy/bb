@@ -10,8 +10,8 @@ import {
   buildFileDiffPatchText,
   buildDiffDomSelectionText,
   buildDiffLineSelectionText,
-} from "@/components/git-diff/git-diff-patch-text";
-import { enrichGitDiffFileForContext } from "@/components/git-diff/git-diff-parsing";
+} from "@bb/shared-ui/git-diff/patch-text";
+import { enrichGitDiffFileForContext } from "@bb/shared-ui/git-diff/parsing";
 import { useResolvedCodeThemePair } from "@/lib/code-theme";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { cn } from "@bb/shared-ui/lib/utils";

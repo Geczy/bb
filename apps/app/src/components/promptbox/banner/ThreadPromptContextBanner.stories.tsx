@@ -11,7 +11,7 @@ import {
 import {
   selectWorkspaceChangedFilesSection,
   type WorkspaceChangedFilesSection,
-} from "@/components/workspace/workspace-change-summary";
+} from "@bb/shared-ui/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 import type { WorkspaceFileStatus, WorkspaceStatus } from "bb-git-contract";
 

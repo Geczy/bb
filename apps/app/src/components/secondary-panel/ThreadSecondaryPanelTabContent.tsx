@@ -46,7 +46,7 @@ import {
   buildMarkdownFileImageRouting,
   buildMarkdownHostFileImageRouting,
 } from "@/components/ui/markdown-file-image-routing";
-import { getAbsoluteDirname } from "@/lib/absolute-file-path";
+import { getAbsoluteDirname } from "@bb/shared-ui/lib/absolute-file-path";
 import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 const GIT_DIFF_SKELETON_FILE_COUNT = 3;

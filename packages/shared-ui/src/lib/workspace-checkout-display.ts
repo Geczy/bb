@@ -1,6 +1,5 @@
 import type { GitCheckoutRef } from "bb-git-contract";
 
-
 const SHORT_SHA_LENGTH = 7;
 
 export interface WorkspaceCheckoutDisplay {

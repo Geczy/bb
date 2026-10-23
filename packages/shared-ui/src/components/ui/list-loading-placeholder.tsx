@@ -1,4 +1,4 @@
-import { Skeleton } from "@bb/shared-ui/skeleton";
+import { Skeleton } from "./skeleton";
 
 export function ListLoadingPlaceholder({ label }: { label: string }) {
   return (

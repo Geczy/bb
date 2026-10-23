@@ -1,12 +1,11 @@
-
-import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
-import { EmptyState } from "@bb/shared-ui/empty-state";
-import { FilePathLink } from "@/components/ui/file-path-link.js";
-import { cn } from "@bb/shared-ui/lib/utils";
+import { DiffStatsTally } from "./diff-stats-tally";
+import { EmptyState } from "./empty-state";
+import { FilePathLink } from "./file-path-link";
+import { cn } from "../../lib/utils";
 import {
   formatOmittedChangedFilesLabel,
   formatWorkspaceFileStatus,
-} from "@/components/workspace/workspace-change-summary";
+} from "./workspace-change-summary";
 import type { WorkspaceStatus } from "bb-git-contract";
 
 export type WorkspaceChangedFile =

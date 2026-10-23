@@ -56,7 +56,7 @@ import {
   activityRowClass,
   activityTextClass,
 } from "@bb/shared-ui/activity-row-styles";
-import { WorkspaceChangesList } from "@/components/thread/WorkspaceChangesList";
+import { WorkspaceChangesList } from "@bb/shared-ui/workspace-changes-list";
 import { formatPendingInteractionSummary } from "@bb/core-ui";
 import { InlinePendingInteractionContext } from "@/components/thread/pending-interactions/PendingInteractionShell";
 import { ThreadPendingInteractionBanners } from "@/components/thread/pending-interactions/ThreadPendingInteractionBanner";
@@ -66,7 +66,7 @@ import {
   toChangeTally,
   type WorkspaceChangedFileSelection,
   type WorkspaceChangedFilesSection,
-} from "@/components/workspace/workspace-change-summary";
+} from "@bb/shared-ui/workspace-change-summary";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
 import {

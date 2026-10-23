@@ -6,7 +6,7 @@ import { OptionPicker } from "../pickers/OptionPicker";
 import {
   WorkspaceChangesList,
   type WorkspaceChangedFile,
-} from "../thread/WorkspaceChangesList";
+} from "@bb/shared-ui/workspace-changes-list";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { Icon } from "@bb/shared-ui/icon";
 

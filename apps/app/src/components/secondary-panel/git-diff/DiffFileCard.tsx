@@ -26,10 +26,10 @@ import {
   isSvgGitDiffFile,
   parseGitDiffFiles,
   type ParsedGitDiffFile,
-} from "@/components/git-diff/git-diff-parsing";
+} from "@bb/shared-ui/git-diff/parsing";
 import { Button } from "@bb/shared-ui/button";
 import { Checkbox } from "@bb/shared-ui/checkbox";
-import { FilePathLink } from "@/components/ui/file-path-link.js";
+import { FilePathLink } from "@bb/shared-ui/file-path-link";
 import type { DiffPatchState } from "@/hooks/queries/use-environment-diff-patches";
 import { cn } from "@bb/shared-ui/lib/utils";
 

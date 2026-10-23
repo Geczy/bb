@@ -1,6 +1,6 @@
 import { forwardRef, type ComponentPropsWithoutRef } from "react";
-import { Icon } from "@bb/shared-ui/icon";
-import { cn } from "@bb/shared-ui/lib/utils";
+import { Icon } from "./icon";
+import { cn } from "../../lib/utils";
 
 interface OpenInEditorButtonProps extends Omit<
   ComponentPropsWithoutRef<"button">,

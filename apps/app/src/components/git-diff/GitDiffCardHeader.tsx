@@ -1,13 +1,13 @@
 import { useMemo, type ReactNode } from "react";
 
 import { CopyButton } from "@/components/ui/copy-button.js";
-import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
-import { FilePathLink } from "@/components/ui/file-path-link.js";
+import { DiffStatsTally } from "@bb/shared-ui/diff-stats-tally";
+import { FilePathLink } from "@bb/shared-ui/file-path-link";
 import { Icon } from "@bb/shared-ui/icon";
-import { OpenInEditorButton } from "@/components/ui/open-in-editor-button.js";
+import { OpenInEditorButton } from "@bb/shared-ui/open-in-editor-button";
 import { TruncateStart } from "@bb/shared-ui/truncate-start";
-import { resolveAbsoluteFilePath } from "@/lib/absolute-file-path";
-import { formatByteSize } from "@/lib/format-byte-size";
+import { resolveAbsoluteFilePath } from "@bb/shared-ui/lib/absolute-file-path";
+import { formatByteSize } from "@bb/shared-ui/lib/format-byte-size";
 import { cn } from "@bb/shared-ui/lib/utils";
 import type { DiffImageSizeStat } from "./GitDiffCardBody";
 import type { GitDiffFileChangeKind } from "bb-git-contract";

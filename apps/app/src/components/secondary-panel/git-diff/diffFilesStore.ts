@@ -3,7 +3,7 @@ import { atom, useAtomValue } from "jotai";
 import { useAtomCallback } from "jotai/utils";
 import { atomFamily } from "jotai-family";
 import type { DiffFileEntry } from "@bb/server-contract";
-import type { GitDiffStats } from "../../git-diff/git-diff-parsing";
+import type { GitDiffStats } from "@bb/shared-ui/git-diff/parsing";
 import { GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD } from "./gitDiffPanelHelpers";
 
 export function summarizeDiffFileEntries(

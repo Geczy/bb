@@ -2,7 +2,7 @@
 import {
   type WorkspaceChangedFileSelection,
   selectWorkspaceAheadCommits,
-} from "@/components/workspace/workspace-change-summary";
+} from "@bb/shared-ui/workspace-change-summary";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import {
   ChangedFilesList,

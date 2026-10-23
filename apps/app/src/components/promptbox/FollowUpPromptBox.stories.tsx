@@ -44,9 +44,9 @@ import type { CompactBeforeSendOffer } from "@/components/promptbox/CompactBefor
 import {
   formatWorkspaceCheckoutDisplay,
   type WorkspaceCheckoutDisplay,
-} from "@/lib/workspace-checkout-display";
+} from "@bb/shared-ui/lib/workspace-checkout-display";
 import type { PickerOption } from "@/components/pickers/OptionPicker";
-import { selectWorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
+import { selectWorkspaceChangedFilesSection } from "@bb/shared-ui/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { ModelPickerStoryQueryProvider } from "../../../.ladle/model-picker-query-provider";
 import {

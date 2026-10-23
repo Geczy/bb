@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-
 import { formatDiffStatsText } from "@bb/thread-view";
-import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
+import { DiffStatsTally } from "./diff-stats-tally";
 import type {
   WorkspaceChangeStats,
   WorkspaceCommitSummary,
@@ -86,6 +85,15 @@ type WorkspaceChangedFilesSectionKind =
   | "uncommitted"
   | "untracked"
   | "committed";
+
+export const CHANGED_FILES_KIND_PREFIX: Record<
+  WorkspaceChangedFilesSectionKind,
+  string
+> = {
+  uncommitted: "Uncommitted",
+  untracked: "Untracked",
+  committed: "Committed",
+};
 
 export interface WorkspaceChangedFilesSection {
   kind: WorkspaceChangedFilesSectionKind;

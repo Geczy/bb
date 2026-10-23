@@ -15,7 +15,7 @@ import {
   normalizeGitDiffPath,
   summarizeGitDiffFile,
   type ParsedGitDiffFile,
-} from "./git-diff-parsing";
+} from "@bb/shared-ui/git-diff/parsing";
 
 interface GitDiffCardProps {
   fileDiff: ParsedGitDiffFile;

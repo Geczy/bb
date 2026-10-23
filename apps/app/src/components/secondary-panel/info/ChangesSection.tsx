@@ -2,17 +2,14 @@
 import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { directoryFromPath } from "@bb/thread-view";
-import {
-  DiffSizeBar,
-  DiffStatsTally,
-} from "@/components/ui/diff-stats-tally.js";
+import { DiffSizeBar, DiffStatsTally } from "@bb/shared-ui/diff-stats-tally";
 import {
   formatOmittedChangedFilesLabel,
   selectWorkspaceChangedFilesSections,
   toChangeTally,
   type WorkspaceChangedFileSelection,
   type WorkspaceChangedFilesSection,
-} from "@/components/workspace/workspace-change-summary";
+} from "@bb/shared-ui/workspace-change-summary";
 import { getFileNameFromPath } from "../rightPanelFileVisuals";
 import { FILE_STATUS_GLYPHS } from "./file-status-glyphs";
 import { InfoList, InfoListRow, InfoSection } from "./info-list";

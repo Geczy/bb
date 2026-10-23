@@ -1,5 +1,5 @@
-import { ListLoadingPlaceholder } from "@/components/ui/ListLoadingPlaceholder";
-import { PICKER_MOBILE_CLASS_NAME } from "./picker-layout";
+import { ListLoadingPlaceholder } from "@bb/shared-ui/list-loading-placeholder";
+import { PICKER_MOBILE_CLASS_NAME } from "@bb/shared-ui/picker-layout";
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   BRANCH_PICKER_CONTENT_CLASS_NAME,
@@ -25,8 +25,8 @@ import {
 } from "@bb/shared-ui/option-display";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-import { searchPickerOptions } from "./picker-search";
-import { useResetPickerScroll } from "./useResetPickerScroll";
+import { searchPickerOptions } from "@bb/shared-ui/picker-search";
+import { useResetPickerScroll } from "@bb/shared-ui/hooks/use-reset-picker-scroll";
 import type { GitBranchRefClassification } from "bb-git-contract";
 
 interface GetMergeBaseBranchCandidatesArgs {

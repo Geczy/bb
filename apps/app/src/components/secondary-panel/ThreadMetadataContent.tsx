@@ -51,7 +51,7 @@ import { useSystemMachineProviders } from "@/hooks/queries/machine-provider-quer
 import { useHosts } from "@/hooks/queries/host-queries";
 import { useProjectDisplayName } from "@/hooks/queries/sidebar-navigation-query";
 import { MachineIcon } from "@/components/machines/MachineLabel";
-import { formatWorkspaceCheckoutDisplay } from "@/lib/workspace-checkout-display";
+import { formatWorkspaceCheckoutDisplay } from "@bb/shared-ui/lib/workspace-checkout-display";
 import { Button } from "@bb/shared-ui/button";
 import { COARSE_POINTER_TEXT_SM_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
 import { CopyableInlineLabel } from "@/components/ui/copy-button.js";
@@ -72,7 +72,7 @@ import { ThreadUnarchiveButton } from "@/components/thread/ThreadUnarchiveButton
 import {
   selectWorkspaceChangedFilesSections,
   type WorkspaceChangedFileSelection,
-} from "@/components/workspace/workspace-change-summary";
+} from "@bb/shared-ui/workspace-change-summary";
 import {
   getGitStatusDisplay,
   SquashMergeInfo,
