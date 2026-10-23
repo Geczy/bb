@@ -24,7 +24,7 @@ The request's `Origin` must match the page origin. A 16 KiB body limit and six s
 
 ## Sticker pool and privacy
 
-A successful survey save atomically allocates a random one-use sticker code while stock remains. The database caps slots at 250, and a duplicate submission UUID cannot allocate another code. The confirmation links to `/community/merch?c=CODE`; exhausted stock uses the sold-out line. Reposting a saved submission shows a received-response message; it cannot recover its code because no response-to-code mapping exists. Save the original claim link.
+A successful survey save atomically allocates a random one-use sticker code while stock remains. Allocation picks a random unused slot so slot order cannot reveal response order. The database caps slots at 250, and a duplicate submission UUID cannot allocate another code. The confirmation links to `/community/merch?c=CODE`; exhausted stock uses the sold-out line. Reposting a saved submission shows a received-response message; it cannot recover its code because no response-to-code mapping exists. Save the original claim link.
 
 Survey responses contain only a random submission ID, creation time and answers. `community_sticker_code` contains only a pool slot, code hash and shipped flag: no survey ID, answer, contact detail or timestamp. Raw codes are never persisted. Do not add request-body logging, analytics, or a join between these datasets. Infrastructure may still handle request metadata; review logging before launch. IP addresses are used by the short-lived rate limiter, not stored with answers.
 

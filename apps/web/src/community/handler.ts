@@ -187,7 +187,7 @@ export async function handleCommunityForm(
         "INSERT INTO community_survey_response (id, created_at, answers) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING",
       ).bind(id, Date.now(), JSON.stringify(surveyAnswers(values))),
       env.DB.prepare(
-        "INSERT INTO community_sticker_code (slot, code_hash) SELECT COALESCE(MAX(slot), 0) + 1, ? FROM community_sticker_code HAVING COALESCE(MAX(slot), 0) < 250 AND changes() = 1",
+        "WITH RECURSIVE slots(slot) AS (SELECT 1 UNION ALL SELECT slot + 1 FROM slots WHERE slot < 250) INSERT INTO community_sticker_code (slot, code_hash) SELECT slot, ? FROM slots WHERE changes() = 1 AND slot NOT IN (SELECT slot FROM community_sticker_code) ORDER BY random() LIMIT 1",
       ).bind(hash),
     ]);
     if (!response?.meta.changes)

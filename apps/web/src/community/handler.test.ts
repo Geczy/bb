@@ -133,6 +133,21 @@ describe("private community forms", () => {
         .first("n"),
     ).toBe(4);
   });
+  it("uses free random pool slots even when the highest slot is occupied", async () => {
+    await db
+      .prepare(
+        "INSERT INTO community_sticker_code (slot, code_hash) VALUES (250, 'occupied')",
+      )
+      .run();
+    const code = codeFrom(await (await submit()).text())!;
+    expect(code).toMatch(/^[a-f0-9]{32}$/);
+    const slot = await db
+      .prepare("SELECT slot FROM community_sticker_code WHERE code_hash = ?")
+      .bind(await sha256Hex(code))
+      .first<number>("slot");
+    expect(slot).toBeGreaterThanOrEqual(1);
+    expect(slot).toBeLessThan(250);
+  });
   it("rolls back answers when allocating a code fails", async () => {
     await db
       .prepare(
