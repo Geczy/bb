@@ -35,7 +35,7 @@ export function splitDestination(path: string): DestinationParts {
 
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-function graphemes(text: string): string[] {
+export function graphemes(text: string): string[] {
   return Array.from(GRAPHEMES.segment(text), ({ segment }) => segment);
 }
 
@@ -43,8 +43,19 @@ export function graphemeCount(text: string): number {
   return graphemes(text).length;
 }
 
-export function folderTail(folder: string): string {
-  return `…${graphemes(folder).slice(-2).join("")}`;
+export function rightmostSpan(
+  boxes: readonly { left: number; right: number }[],
+  count: number,
+): number | null {
+  const rightmost = boxes
+    .filter((box) => box.right > box.left)
+    .sort((a, b) => b.right - a.right)
+    .slice(0, count);
+  if (rightmost.length === 0) return null;
+  return (
+    Math.max(...rightmost.map((box) => box.right)) -
+    Math.min(...rightmost.map((box) => box.left))
+  );
 }
 
 export function fitStem(

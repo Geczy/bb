@@ -22,8 +22,9 @@ import { reconcileDotenv } from "./src/dotenv.js";
 import {
   displayPath,
   fitStem,
-  folderTail,
   graphemeCount,
+  graphemes,
+  rightmostSpan,
   splitDestination,
 } from "./src/destination-label.js";
 
@@ -76,10 +77,20 @@ function SecretDestination({
         const margins =
           parseFloat(style.marginLeft) + parseFloat(style.marginRight);
         if (child === folderRef.current && folder !== null) {
-          if (graphemeCount(folder) > 3) {
-            tailWidth = Math.ceil(
-              textWidth(folderTail(folder), style.fontWeight),
-            );
+          const text = child.firstElementChild?.firstChild;
+          if (graphemeCount(folder) > 3 && text instanceof Text) {
+            const range = document.createRange();
+            let offset = 0;
+            const boxes = graphemes(text.data).map((grapheme) => {
+              range.setStart(text, offset);
+              offset += grapheme.length;
+              range.setEnd(text, offset);
+              return range.getBoundingClientRect();
+            });
+            const tail = rightmostSpan(boxes, 2);
+            if (tail !== null) {
+              tailWidth = Math.ceil(textWidth("…", style.fontWeight) + tail);
+            }
           }
           used += margins + (tailWidth ?? child.getBoundingClientRect().width);
         } else {

@@ -3,7 +3,7 @@ import {
   displayPath,
   splitDestination,
   fitStem,
-  folderTail,
+  rightmostSpan,
 } from "./destination-label.js";
 
 describe("splitDestination", () => {
@@ -80,11 +80,33 @@ describe("fitStem", () => {
   });
 });
 
-describe("folderTail", () => {
-  it("keeps the folder's last two graphemes after an ellipsis", () => {
-    const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
-    expect(folderTail("~/services/credentials")).toBe("…ls");
-    expect(folderTail(`~/team-${family}${family}`)).toBe(`…${family}${family}`);
+describe("rightmostSpan", () => {
+  it("spans the visually rightmost glyphs whatever their text order", () => {
+    expect(
+      rightmostSpan(
+        [
+          { left: 0, right: 8 },
+          { left: 8, right: 12 },
+          { left: 12, right: 20 },
+        ],
+        2,
+      ),
+    ).toBe(12);
+    expect(
+      rightmostSpan(
+        [
+          { left: 30, right: 40 },
+          { left: 20, right: 30 },
+          { left: 10, right: 20 },
+          { left: 40, right: 40 },
+        ],
+        2,
+      ),
+    ).toBe(20);
+  });
+
+  it("returns null when nothing has width", () => {
+    expect(rightmostSpan([{ left: 4, right: 4 }], 2)).toBeNull();
   });
 });
 
