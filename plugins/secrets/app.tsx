@@ -19,7 +19,7 @@ import {
   secretRequestResponseSchema,
 } from "./src/secret-request.js";
 import { reconcileDotenv } from "./src/dotenv.js";
-import { lastFolderLabel, splitDestination } from "./src/destination-label.js";
+import { splitDestination } from "./src/destination-label.js";
 
 function SecretRequestInteraction({
   interaction,
@@ -99,7 +99,7 @@ function SecretRequestInteraction({
   const destinationFolder =
     destination.folder === null
       ? null
-      : lastFolderLabel(formatHomePathForDisplay(destination.folder));
+      : formatHomePathForDisplay(destination.folder);
 
   return (
     <form
@@ -145,7 +145,7 @@ function SecretRequestInteraction({
           </span>
         ) : (
           <>
-            <span className="min-w-[1.5ch] shrink-[10] truncate font-medium text-foreground">
+            <span className="min-w-[1.5ch] truncate font-medium text-foreground">
               {destination.stem}
             </span>
             {destination.extension ? (
@@ -156,8 +156,10 @@ function SecretRequestInteraction({
             {destinationFolder === null ? null : (
               <>
                 <span className="mx-1.5 shrink-0">in</span>
-                <span className="min-w-0 max-w-[40%] truncate">
-                  {destinationFolder}
+                <span className="flex min-w-0 flex-1 overflow-hidden">
+                  <span dir="rtl" className="block w-min max-w-full truncate">
+                    {`\u200e${destinationFolder}\u200e`}
+                  </span>
                 </span>
               </>
             )}

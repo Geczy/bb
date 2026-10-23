@@ -27,14 +27,3 @@ export function splitDestination(path: string): DestinationParts {
     folder: DRIVE.test(folder) ? `${folder}${path[separator]}` : folder,
   };
 }
-
-export function lastFolderLabel(folder: string): string {
-  const trimmed = folder.length > 1 ? folder.replace(/[\\/]+$/, "") : folder;
-  const separator = lastSeparator(trimmed);
-  if (separator < 0) return folder;
-  const last = trimmed.slice(separator + 1);
-  if (!last) return folder;
-  const parent = trimmed.slice(0, separator);
-  if (!parent || DRIVE.test(parent)) return trimmed;
-  return `…${trimmed[separator]}${last}`;
-}

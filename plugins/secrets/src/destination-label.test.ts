@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lastFolderLabel, splitDestination } from "./destination-label.js";
+import { splitDestination } from "./destination-label.js";
 
 describe("splitDestination", () => {
   it.each([
@@ -27,20 +27,5 @@ describe("splitDestination", () => {
     ],
   ])("splits %s", (path, parts) => {
     expect(splitDestination(path)).toEqual(parts);
-  });
-});
-
-describe("lastFolderLabel", () => {
-  it.each([
-    ["~/projects/app/credentials", "…/credentials"],
-    ["/srv/app/credentials/", "…/credentials"],
-    ["C:\\Users\\dev\\app", "…\\app"],
-    ["/srv", "/srv"],
-    ["C:\\app", "C:\\app"],
-    ["C:\\", "C:\\"],
-    ["/", "/"],
-    ["~", "~"],
-  ])("labels %s as %s", (folder, label) => {
-    expect(lastFolderLabel(folder)).toBe(label);
   });
 });
