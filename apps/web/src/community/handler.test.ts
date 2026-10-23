@@ -104,15 +104,11 @@ describe("private community forms", () => {
     ).toBe(1);
   });
   it("caps concurrent allocations at 250 and still accepts answers when sold out", async () => {
-    await db.batch(
-      Array.from({ length: 249 }, (_, index) =>
-        db
-          .prepare(
-            "INSERT INTO community_sticker_code (slot, code_hash) VALUES (?, ?)",
-          )
-          .bind(index + 1, `seed-${index}`),
-      ),
-    );
+    await db
+      .prepare(
+        "WITH RECURSIVE slots(slot) AS (SELECT 1 UNION ALL SELECT slot + 1 FROM slots WHERE slot < 249) INSERT INTO community_sticker_code (slot, code_hash) SELECT slot, printf('%064x', slot) FROM slots",
+      )
+      .run();
     const responses = await Promise.all(
       Array.from({ length: 4 }, async () => (await submit()).text()),
     );
@@ -182,7 +178,7 @@ describe("private community forms", () => {
       expect(await response.text()).toContain(
         `https://form.jotform.com/123456?code=${code}`,
       );
-      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(response.headers.get("referrer-policy")).toBe("same-origin");
     }
     const off = await handleCommunityForm(
       request(),

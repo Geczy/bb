@@ -182,7 +182,7 @@ export function formPage({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title}</title>
         <meta name="robots" content="noindex, nofollow" />
-        <meta name="referrer" content="no-referrer" />
+        <meta name="referrer" content="same-origin" />
         <link rel="icon" href="/favicon-32x32.png" />
         {siteHeadLinks(css).map((link, index) => (
           <link key={index} {...link} />
@@ -345,7 +345,7 @@ export function formPage({
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
-      "referrer-policy": "no-referrer",
+      "referrer-policy": "same-origin",
       "x-robots-tag": "noindex, nofollow",
       "x-content-type-options": "nosniff",
       "content-security-policy": `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; frame-src ${frameSource}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,

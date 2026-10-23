@@ -1,6 +1,6 @@
 # Community forms
 
-`/community/survey` serves eight optional questions. `/community/merch?c=CODE` validates an issued code and opens an encrypted Jotform form. Both are standalone documents with the bb wordmark, no analytics or hydration client, `noindex, nofollow`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, and a restrictive Content Security Policy. Neither appears in navigation or the sitemap.
+`/community/survey` serves eight optional questions. `/community/merch?c=CODE` validates an issued code and opens an encrypted Jotform form. Both are standalone documents with the bb wordmark, no analytics or hydration client, `noindex, nofollow`, `Cache-Control: no-store`, `Referrer-Policy: same-origin`, and a restrictive Content Security Policy. External form links and embeds suppress referrers. Neither appears in navigation or the sitemap.
 
 ## Configuration and launch
 
