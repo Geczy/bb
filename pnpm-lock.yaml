@@ -2550,9 +2550,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.62.0
         version: 5.90.20(react@19.2.4)
-      bb-git-contract:
-        specifier: workspace:*
-        version: link:../git-contract
       cross-spawn:
         specifier: ^7.0.6
         version: 7.0.6
@@ -2596,6 +2593,9 @@ importers:
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.13
+      bb-git-contract:
+        specifier: workspace:*
+        version: link:../git-contract
       better-sqlite3:
         specifier: 12.10.0
         version: 12.10.0
