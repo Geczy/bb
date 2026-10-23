@@ -1,22 +1,22 @@
-import { execFile, type ExecFileException } from "node:child_process";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { promisify } from "node:util";
-import type {
-  DefaultBranchRelation,
-  GitCheckoutRef,
-  WorkspaceGitOperation,
-} from "@bb/domain";
 import {
+  execHostFile,
   execPortableFile,
   runVcsProcess,
   spawnManagedProcess,
   pathExists,
   sanitizeInheritedChildProcessEnv,
 } from "@bb/process-utils";
+import type { ExecFileException } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import type {
+  DefaultBranchRelation,
+  GitCheckoutRef,
+  WorkspaceGitOperation,
+} from "@bb/domain";
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = execHostFile;
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
 
 export class WorkspaceError extends Error {
