@@ -33,30 +33,30 @@ export function splitDestination(path: string): DestinationParts {
   };
 }
 
-const STEM_TAIL_LENGTH = 6;
-
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
-export function graphemeCount(text: string): number {
-  return Array.from(GRAPHEMES.segment(text)).length;
+function graphemes(text: string): string[] {
+  return Array.from(GRAPHEMES.segment(text), ({ segment }) => segment);
 }
 
-export function splitStem(stem: string): { head: string; tail: string } {
-  const characters = Array.from(
-    GRAPHEMES.segment(stem),
-    ({ segment }) => segment,
-  );
-  if (characters.length <= STEM_TAIL_LENGTH) {
-    return { head: stem, tail: "" };
+export function graphemeCount(text: string): number {
+  return graphemes(text).length;
+}
+
+export function fitStem(
+  stem: string,
+  available: number,
+  width: (text: string) => number,
+): string {
+  if (width(stem) <= available) return stem;
+  const characters = graphemes(stem);
+  if (characters.length < 3) return stem;
+  for (let kept = characters.length - 1; kept > 2; kept -= 1) {
+    const head = Math.ceil(kept / 2);
+    const text = `${characters.slice(0, head).join("")}…${characters.slice(head - kept).join("")}`;
+    if (width(text) <= available) return text;
   }
-  const tailLength = Math.min(
-    STEM_TAIL_LENGTH,
-    Math.floor(characters.length / 2),
-  );
-  return {
-    head: characters.slice(0, -tailLength).join(""),
-    tail: characters.slice(-tailLength).join(""),
-  };
+  return `${characters[0]}…${characters[characters.length - 1]}`;
 }
 
 export function displayPath(path: string): string {

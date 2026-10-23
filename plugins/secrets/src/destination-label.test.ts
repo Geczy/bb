@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  displayPath,
-  splitDestination,
-  splitStem,
-} from "./destination-label.js";
+import { displayPath, splitDestination, fitStem } from "./destination-label.js";
 
 describe("splitDestination", () => {
   it.each([
@@ -42,32 +38,39 @@ describe("splitDestination", () => {
   });
 });
 
-describe("splitStem", () => {
+describe("fitStem", () => {
+  const width = (text: string) => Array.from(text).length;
+
+  it("keeps a name that fits whole", () => {
+    expect(fitStem("credentials", 11, width)).toBe("credentials");
+  });
+
   it.each([
-    [".env", { head: ".env", tail: "" }],
-    ["api", { head: "api", tail: "" }],
-    ["secrets", { head: "secr", tail: "ets" }],
-    ["credentials", { head: "creden", tail: "tials" }],
-    ["service-acct", { head: "servic", tail: "e-acct" }],
-    [
-      "droplet-monitor-production-service",
-      { head: "droplet-monitor-production-s", tail: "ervice" },
-    ],
-    ["credenciales-producción", { head: "credenciales-prod", tail: "ucción" }],
-    [
-      "my-production-cafe\u0301-key1",
-      { head: "my-production-caf", tail: "e\u0301-key1" },
-    ],
-    [
-      "team-credentials-\u{1F468}\u200D\u{1F469}\u200D\u{1F467}-ok",
-      {
-        head: "team-credential",
-        tail: "s-\u{1F468}\u200D\u{1F469}\u200D\u{1F467}-ok",
-      },
-    ],
-  ])("keeps the end of %s whole", (stem, parts) => {
-    expect(splitStem(stem)).toEqual(parts);
-    expect(parts.head + parts.tail).toBe(stem);
+    ["droplet-monitor-production-service", 12, "drople…rvice"],
+    ["droplet-monitor-production-service", 4, "dr…e"],
+    ["credentials", 8, "cred…als"],
+    ["credentials", 1, "c…s"],
+    ["api", 2, "a…i"],
+    ["ab", 1, "ab"],
+  ])("shortens %s in the middle to fit %s", (stem, available, text) => {
+    expect(fitStem(stem, available, width)).toBe(text);
+  });
+
+  it("keeps graphemes whole while shortening", () => {
+    const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+    const fitted = fitStem(
+      `team-${family}-credentials-ok`,
+      10,
+      (text) => Array.from(new Intl.Segmenter().segment(text)).length,
+    );
+    expect(fitted).toBe(`team-…s-ok`);
+    expect(
+      fitStem(
+        `${family}${family}${family}`,
+        2,
+        (text) => Array.from(new Intl.Segmenter().segment(text)).length,
+      ),
+    ).toBe(`${family}…${family}`);
   });
 });
 

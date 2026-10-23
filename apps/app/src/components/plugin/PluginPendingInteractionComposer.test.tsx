@@ -702,31 +702,25 @@ describe("PluginPendingInteractionComposer", () => {
       expect(cancel).not.toHaveBeenCalled();
     });
 
-    it("shortens a long file name in the middle and keeps its extension and a folder tail", async () => {
+    it("keeps a long file name's extension apart and reserves a folder tail", async () => {
       const path =
         "/home/agent/projects/droplet-monitor/credentials/droplet-monitor-production-service.env.local";
       await renderSecretsForm(vi.fn(), path);
       const destination = screen.getByRole("button", {
         name: `Saves to ${path}`,
       });
-      const [head, tail, extension] = [
-        "droplet-monitor-production-s",
-        "ervice",
+      const [stem, extension] = [
+        "droplet-monitor-production-service",
         ".env.local",
       ].map((text) => screen.getByText(text));
-      expect(head.className.split(" ")).toContain("truncate");
-      expect(tail.className.split(" ")).toContain("shrink-0");
-      expect(extension.className.split(" ")).toContain("shrink-0");
-      for (const part of [head, tail, extension]) {
+      for (const part of [stem, extension]) {
+        expect(part.className.split(" ")).toContain("shrink-0");
         expect(part.parentElement).toBe(destination);
       }
       const folder = folderText("~/projects/droplet-monitor/credentials");
       expect(folder.dir).toBe("rtl");
       expect(folder.parentElement?.className.split(" ")).toEqual(
         expect.arrayContaining(["basis-0", "max-w-max", "min-w-[3ch]"]),
-      );
-      expect(head.className.split(" ")).toEqual(
-        expect.arrayContaining(["min-w-[4ch]", "truncate"]),
       );
     });
 

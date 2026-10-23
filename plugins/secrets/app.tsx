@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   definePluginApp,
   type PluginPendingInteractionProps,
@@ -21,10 +21,141 @@ import {
 import { reconcileDotenv } from "./src/dotenv.js";
 import {
   displayPath,
+  fitStem,
   graphemeCount,
   splitDestination,
-  splitStem,
 } from "./src/destination-label.js";
+
+function SecretDestination({
+  path,
+  className,
+}: {
+  path: string;
+  className: string | undefined;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [fittedStem, setFittedStem] = useState<string | null>(null);
+  const rowRef = useRef<HTMLButtonElement>(null);
+  const stemRef = useRef<HTMLSpanElement>(null);
+  const folderRef = useRef<HTMLSpanElement>(null);
+  const measureRef = useRef<HTMLSpanElement>(null);
+  const destination = splitDestination(path);
+  const folder =
+    destination.folder === null
+      ? null
+      : formatHomePathForDisplay(destination.folder);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const stem = stemRef.current;
+    const measure = measureRef.current;
+    if (expanded || !row || !stem || !measure) return;
+    const fit = () => {
+      if (row.clientWidth === 0) {
+        setFittedStem(null);
+        return;
+      }
+      const rowStyle = getComputedStyle(row);
+      let used =
+        parseFloat(rowStyle.paddingLeft) + parseFloat(rowStyle.paddingRight);
+      for (const child of Array.from(row.children)) {
+        if (child === stem || child === measure) continue;
+        const style = getComputedStyle(child);
+        const margins =
+          parseFloat(style.marginLeft) + parseFloat(style.marginRight);
+        if (child === folderRef.current) {
+          const minimum = parseFloat(style.minWidth);
+          used +=
+            margins +
+            (Number.isNaN(minimum)
+              ? child.getBoundingClientRect().width
+              : minimum);
+        } else {
+          used += margins + child.getBoundingClientRect().width;
+        }
+      }
+      const available = row.clientWidth - used;
+      if (!Number.isFinite(available)) {
+        setFittedStem(null);
+        return;
+      }
+      setFittedStem(
+        fitStem(destination.stem, available, (text) => {
+          measure.textContent = text;
+          return measure.getBoundingClientRect().width;
+        }),
+      );
+    };
+    fit();
+    void document.fonts?.ready.then(fit);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [destination.stem, expanded, folder]);
+
+  return (
+    <button
+      ref={rowRef}
+      type="button"
+      aria-expanded={expanded}
+      aria-label={`Saves to ${path}`}
+      title={path}
+      onClick={() => setExpanded((value) => !value)}
+      className={cn(
+        "relative flex w-full min-w-0 items-center rounded text-left text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        className,
+      )}
+    >
+      <HugeiconsIcon
+        icon={File01Icon}
+        className="mr-1.5 size-3.5 shrink-0"
+        aria-hidden="true"
+      />
+      <span className="mr-1.5 shrink-0">Saves to</span>
+      {expanded ? (
+        <span className="max-h-12 min-w-0 overflow-y-auto break-all text-foreground">
+          {displayPath(path)}
+        </span>
+      ) : (
+        <>
+          <span
+            ref={stemRef}
+            className="shrink-0 whitespace-pre font-medium text-foreground"
+          >
+            {fittedStem ?? destination.stem}
+          </span>
+          {destination.extension ? (
+            <span className="shrink-0 whitespace-pre font-medium text-foreground">
+              {destination.extension}
+            </span>
+          ) : null}
+          {folder === null ? null : (
+            <>
+              <span className="mx-1.5 shrink-0">in</span>
+              <span
+                ref={folderRef}
+                className={cn(
+                  "flex max-w-max grow basis-0 overflow-hidden",
+                  graphemeCount(folder) > 3 ? "min-w-[3ch]" : "min-w-max",
+                )}
+              >
+                <span dir="rtl" className="block w-min max-w-full truncate">
+                  {displayPath(folder)}
+                </span>
+              </span>
+            </>
+          )}
+          <span
+            ref={measureRef}
+            aria-hidden="true"
+            className="pointer-events-none invisible absolute left-0 top-0 whitespace-pre font-medium"
+          />
+        </>
+      )}
+    </button>
+  );
+}
 
 function SecretRequestInteraction({
   interaction,
@@ -37,7 +168,6 @@ function SecretRequestInteraction({
   );
   const [values, setValues] = useState<Record<string, string>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
-  const [pathExpanded, setPathExpanded] = useState(false);
   const [pendingAction, setPendingAction] = useState<
     "submit" | "cancel" | null
   >(null);
@@ -100,12 +230,6 @@ function SecretRequestInteraction({
   };
 
   const textInset = compact ? "px-2.5" : undefined;
-  const destination = splitDestination(payload.destination.path);
-  const destinationStem = splitStem(destination.stem);
-  const destinationFolder =
-    destination.folder === null
-      ? null
-      : formatHomePathForDisplay(destination.folder);
 
   return (
     <form
@@ -127,68 +251,13 @@ function SecretRequestInteraction({
           {payload.purpose}
         </p>
       ) : null}
-      <button
-        type="button"
-        aria-expanded={pathExpanded}
-        aria-label={`Saves to ${payload.destination.path}`}
-        title={payload.destination.path}
-        onClick={() => setPathExpanded((expanded) => !expanded)}
+      <SecretDestination
+        path={payload.destination.path}
         className={cn(
-          "flex w-full min-w-0 items-center rounded text-left text-xs text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           textInset,
           payload.purpose && (compact ? "mt-2" : "mt-3"),
         )}
-      >
-        <HugeiconsIcon
-          icon={File01Icon}
-          className="mr-1.5 size-3.5 shrink-0"
-          aria-hidden="true"
-        />
-        <span className="mr-1.5 shrink-0">Saves to</span>
-        {pathExpanded ? (
-          <span className="max-h-12 min-w-0 overflow-y-auto break-all text-foreground">
-            {displayPath(payload.destination.path)}
-          </span>
-        ) : (
-          <>
-            <span
-              className={cn(
-                "font-medium text-foreground",
-                destinationStem.tail ? "min-w-[4ch] truncate" : "shrink-0",
-              )}
-            >
-              {destinationStem.head}
-            </span>
-            {destinationStem.tail ? (
-              <span className="shrink-0 font-medium text-foreground">
-                {destinationStem.tail}
-              </span>
-            ) : null}
-            {destination.extension ? (
-              <span className="shrink-0 font-medium text-foreground">
-                {destination.extension}
-              </span>
-            ) : null}
-            {destinationFolder === null ? null : (
-              <>
-                <span className="mx-1.5 shrink-0">in</span>
-                <span
-                  className={cn(
-                    "flex max-w-max grow basis-0 overflow-hidden",
-                    graphemeCount(destinationFolder) > 3
-                      ? "min-w-[3ch]"
-                      : "min-w-max",
-                  )}
-                >
-                  <span dir="rtl" className="block w-min max-w-full truncate">
-                    {displayPath(destinationFolder)}
-                  </span>
-                </span>
-              </>
-            )}
-          </>
-        )}
-      </button>
+      />
 
       <div
         className={cn(
