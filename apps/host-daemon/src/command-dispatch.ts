@@ -18,7 +18,6 @@ import {
   type HostDaemonOnlineRpcResult,
   type HostDaemonSettledCommandType,
   type ProviderCliInstallEvent,
-  type WorkspaceResolutionFailure,
 } from "@bb/host-daemon-contract";
 import type { AgentRuntimeBridgeLaunch } from "@bb/agent-runtime";
 import semver from "semver";
@@ -94,6 +93,7 @@ import {
 import { userExecutableProcessOptions } from "./user-executable-env.js";
 import type { ServerMoveService } from "./server-move/service.js";
 import { readWorkspaceAgentContext } from "./command-handlers/workspace-agent-context.js";
+import type { WorkspaceResolutionFailure } from "bb-git-contract";
 
 const THREAD_STOP_ACTIVE_TURN_WAIT_MS = 5_000;
 

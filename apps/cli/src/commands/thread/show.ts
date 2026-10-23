@@ -9,9 +9,7 @@ import {
   type Environment,
   type Thread,
   type ThreadEventRow,
-  type ThreadGitDiffResponse,
   type ThreadTimelinePendingTodos,
-  type WorkspaceStatus,
 } from "@bb/domain";
 import { BbHttpError, type BbSdk } from "@bb/sdk";
 import {
@@ -20,12 +18,10 @@ import {
   type PullRequest,
 } from "bb-plugin-bb--github-pr-status/contract";
 import { z } from "zod";
-import type {
-  EnvironmentDiffQuery,
-  ThreadTimelineResponse,
-  TimelineConversationRow,
-} from "@bb/server-contract";
 import {
+  type EnvironmentDiffQuery,
+  type ThreadTimelineResponse,
+  type TimelineConversationRow,
   THREAD_EVENT_LIST_PAGE_SIZE,
   THREAD_MESSAGE_CONTEXT_LIMIT,
 } from "@bb/server-contract";
@@ -42,6 +38,7 @@ import {
   printEnvironmentInfo,
 } from "../environment-helpers.js";
 import { fetchThreadPendingTodos, printPendingTodos } from "./pending-todos.js";
+import type { ThreadGitDiffResponse, WorkspaceStatus } from "bb-git-contract";
 
 interface ThreadShowCommandOptions {
   self?: boolean;

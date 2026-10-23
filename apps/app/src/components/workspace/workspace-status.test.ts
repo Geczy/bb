@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkspaceStatus } from "@bb/domain";
+
 import {
   makeWorkspaceMergeBase,
   makeWorkspaceStatus,
@@ -7,6 +7,7 @@ import {
 } from "@bb/test-helpers";
 import { BbHttpError } from "@bb/sdk/browser";
 import { getGitStatusDisplay } from "./workspace-status";
+import type { WorkspaceStatus } from "bb-git-contract";
 
 interface MakeStatusOptions {
   aheadCount?: number;

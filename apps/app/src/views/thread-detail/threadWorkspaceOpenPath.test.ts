@@ -1,8 +1,4 @@
-import type {
-  Environment,
-  WorkspaceFileStatus,
-  WorkspaceFileStatusKind,
-} from "@bb/domain";
+import type { Environment } from "@bb/domain";
 import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { makeEnvironment } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";
@@ -11,6 +7,10 @@ import {
   resolveEnvironmentOpenContext,
   resolveThreadWorkspaceOpenPath,
 } from "./threadWorkspaceOpenPath";
+import type {
+  WorkspaceFileStatus,
+  WorkspaceFileStatusKind,
+} from "bb-git-contract";
 
 function makeWorkspaceEnvironment(
   overrides: Partial<Environment> = {},

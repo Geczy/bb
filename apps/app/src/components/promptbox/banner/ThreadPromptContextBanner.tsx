@@ -37,7 +37,6 @@ import { NavLink } from "react-router-dom";
 import type {
   EnvironmentStatus,
   PendingInteraction,
-  GitBranchRefClassification,
   ThreadRuntimeDisplayStatus,
 } from "@bb/domain";
 import {
@@ -91,6 +90,7 @@ import {
 } from "@/components/thread/ThreadTitleMentions";
 import { childThreadNoun } from "@/lib/child-thread-copy";
 import { SIDEBAR_WORKING_STATUS_COLOR_CLASS } from "@bb/shared-ui/sidebar-row-classes";
+import type { GitBranchRefClassification } from "bb-git-contract";
 
 export interface ContextBannerMergeBaseConfig {
   branch: string;

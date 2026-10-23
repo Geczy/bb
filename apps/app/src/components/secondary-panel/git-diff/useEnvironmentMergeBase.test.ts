@@ -1,4 +1,4 @@
-import type { Environment, WorkspaceStatus } from "@bb/domain";
+import type { Environment } from "@bb/domain";
 import { makeWorkspaceStatus as makeSharedWorkspaceStatus } from "@bb/test-helpers";
 import { makeEnvironment } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import {
   resolvePersistedMergeBaseBranch,
   shouldSyncSelectedMergeBaseBranch,
 } from "./useEnvironmentMergeBase";
+import type { WorkspaceStatus } from "bb-git-contract";
 
 type EnvironmentOverrides = Partial<Environment>;
 

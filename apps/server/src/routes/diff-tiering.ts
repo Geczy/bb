@@ -1,10 +1,11 @@
-import type { RawDiffFileStat } from "@bb/domain";
+
 import { type DiffFileEntry, letterToChangeKind } from "@bb/server-contract";
 import {
   DIFF_FILE_AUTO_LOAD_MAX_CHANGED_LINES,
   DIFF_FILE_TOO_LARGE_CHANGED_LINES,
   DIFF_FILES_INLINE_PATCH_MAX_FILES,
 } from "../constants.js";
+import type { RawDiffFileStat } from "bb-git-contract";
 
 export function rawDiffFileStatToEntry(stat: RawDiffFileStat): DiffFileEntry {
   const changedLines = stat.additions + stat.deletions;

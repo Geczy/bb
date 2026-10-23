@@ -1,9 +1,11 @@
-import type { ThreadGitDiffResponse, WorkspaceStatus } from "@bb/domain";
-import type {
-  HostDaemonOnlineRpcResult,
-  WorkspaceResolutionFailure,
-} from "@bb/host-daemon-contract";
+
+import type { HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
+import type {
+  ThreadGitDiffResponse,
+  WorkspaceResolutionFailure,
+  WorkspaceStatus,
+} from "bb-git-contract";
 
 type WorkspaceStatusCommandResult =
   HostDaemonOnlineRpcResult<"workspace.status">;

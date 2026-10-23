@@ -12,26 +12,17 @@ import {
   availableModelSchema,
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
-  gitBranchOptionsSchema,
-  gitSourceInspectionSchema,
   instructionModeSchema,
   pendingInteractionResolutionSchema,
   permissionModeSchema,
   promptInputSchema,
   providerForkSchema,
-  threadGitDiffResponseSchema,
   runtimeThreadExecutionOptionsSchema,
-  rawDiffFileStatSchema,
-  workspaceDiffTargetSchema,
-  workspaceStatusSchema,
   clientTurnRequestIdSchema,
-  gitBranchNameSchema,
   jsonObjectSchema,
   jsonValueSchema,
   providerNativeRootSetSchema,
   providerNativeRootsSchema,
-  BRANCH_LIST_LIMIT_MAX,
-  BRANCH_LIST_QUERY_MAX_LENGTH,
   FILE_LIST_EXCLUDE_NAME_MAX_LENGTH,
   FILE_LIST_EXCLUDE_NAMES_MAX,
   FILE_LIST_LIMIT_MAX,
@@ -46,7 +37,7 @@ import {
   providerCliInstallEventSchema,
   providerCliInstallActionKindSchema,
 } from "./local.js";
-import { workspaceResolutionFailureSchema } from "./workspace.js";
+
 import { HOST_ARTIFACT_MAX_BYTES } from "./protocol.js";
 import {
   commandListResultSchema as providerCommandListResultSchema,
@@ -56,7 +47,25 @@ import {
   providerUsageSchema,
   providerUsageWindowSchema,
 } from "@bb/provider-bridge-protocol";
-
+import {
+  BRANCH_LIST_LIMIT_MAX,
+  BRANCH_LIST_QUERY_MAX_LENGTH,
+  gitBranchNameSchema,
+  gitBranchOptionsSchema,
+  gitSourceInspectionSchema,
+  rawDiffFileStatSchema,
+  threadGitDiffResponseSchema,
+  workspaceDiffTargetSchema,
+  workspaceResolutionFailureSchema,
+  workspaceStatusSchema,
+} from "bb-git-contract";
+export {
+  workspaceResolutionFailureCodeSchema,
+} from "bb-git-contract";
+export type {
+  WorkspaceResolutionFailure,
+  WorkspaceResolutionFailureCode,
+} from "bb-git-contract";
 export {
   HOST_ARTIFACT_MAX_BYTES,
   HOST_DAEMON_COMPATIBLE_PROTOCOL_VERSIONS,
@@ -69,11 +78,6 @@ export {
   hostDaemonSupportsEnvironmentCleanupInspection,
   isCompatibleHostDaemonProtocolVersion,
 } from "./protocol.js";
-export {
-  workspaceResolutionFailureCodeSchema,
-  type WorkspaceResolutionFailure,
-  type WorkspaceResolutionFailureCode,
-} from "./workspace.js";
 
 export {
   FILE_LIST_EXCLUDE_NAMES_MAX,

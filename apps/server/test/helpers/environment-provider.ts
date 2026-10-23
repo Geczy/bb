@@ -3,7 +3,7 @@ import {
   type TestEnvironmentProviderContext,
   type TestProviderDecision,
 } from "./provider-decisions.js";
-import { gitBranchSelectionSchema } from "@bb/domain";
+
 import type { PluginEnvironmentValidateDecision } from "@get-bb/plugin-sdk";
 import type {
   PluginEnvironmentProviderAvailability,
@@ -22,6 +22,7 @@ import {
 import { DEFAULT_ENVIRONMENT_PROVIDER_ID } from "../../src/services/environments/environment-provider-ids.js";
 import { invokePluginInline } from "../../src/services/plugins/plugin-hook-registry.js";
 import { clearAllThreadProvisionSchedules } from "../../src/services/threads/thread-startup-store.js";
+import { gitBranchSelectionSchema } from "bb-git-contract";
 
 export interface FakeEnvironmentProvider {
   contexts: TestEnvironmentProviderContext[];

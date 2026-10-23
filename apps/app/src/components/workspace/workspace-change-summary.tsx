@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
+
+import { formatDiffStatsText } from "@bb/thread-view";
+import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
 import type {
   WorkspaceChangeStats,
   WorkspaceCommitSummary,
   WorkspaceFileStatus,
   WorkspaceStatus,
-} from "@bb/domain";
-import { formatDiffStatsText } from "@bb/thread-view";
-import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
+} from "bb-git-contract";
 
 interface ChangeTally {
   filesCount: number;

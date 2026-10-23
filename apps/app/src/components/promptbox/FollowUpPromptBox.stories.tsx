@@ -7,7 +7,6 @@ import type {
   PromptMentionResource,
   PromptTextMention,
   ThreadQueuedMessage,
-  WorkspaceStatus,
 } from "@bb/domain";
 import { makeThreadQueuedMessage } from "@bb/test-helpers/domain-fixtures";
 import {
@@ -64,8 +63,12 @@ import type {
   ExecutionPermissionConfig,
 } from "@/components/promptbox/ExecutionControls";
 import { PageShell } from "@/components/ui/page-shell.js";
-import { promptDraftToInput, type PromptDraftState } from "@bb/client-core";
-import { queuedInputToDraft } from "@bb/client-core";
+import {
+  promptDraftToInput,
+  type PromptDraftState,
+  queuedInputToDraft,
+} from "@bb/client-core";
+import type { WorkspaceStatus } from "bb-git-contract";
 
 export default {
   title: "promptbox/Follow Up Prompt Box",

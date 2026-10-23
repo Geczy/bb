@@ -1,6 +1,6 @@
 import { updateHost } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import type { WorkspaceWorkingTree } from "@bb/domain";
+
 import type { HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
 import {
   listQueuedCommands,
@@ -15,6 +15,7 @@ import {
   seedProjectWithSource,
 } from "../helpers/seed.js";
 import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
+import type { WorkspaceWorkingTree } from "bb-git-contract";
 
 function workspaceStatus(
   currentBranch: string,

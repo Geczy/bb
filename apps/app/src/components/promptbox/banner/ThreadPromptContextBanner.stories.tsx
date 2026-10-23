@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { WorkspaceFileStatus, WorkspaceStatus } from "@bb/domain";
+
 import {
   ThreadPromptContextBanner,
   type ContextBannerMergeBaseConfig,
@@ -13,6 +13,7 @@ import {
   type WorkspaceChangedFilesSection,
 } from "@/components/workspace/workspace-change-summary";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
+import type { WorkspaceFileStatus, WorkspaceStatus } from "bb-git-contract";
 
 export default {
   title: "promptbox/banner/Context Banner",

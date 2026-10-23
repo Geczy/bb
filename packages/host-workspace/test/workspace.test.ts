@@ -1,16 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { WorkspaceChangeStats } from "@bb/domain";
+
 import { createDeferredPromise, initRepo, makeTempDir } from "@bb/test-helpers";
 import {
   ProcessLocalQueuedLockTimeoutError,
   withProcessLocalQueuedLocks,
 } from "bb-environment-provider-host/process-local-lock";
 import { Workspace } from "../src/workspace.js";
-import { WorkspaceError } from "../src/git.js";
-import { runGit } from "../src/git.js";
+import { WorkspaceError, runGit } from "../src/git.js";
 import { withCheckoutMutationLock } from "../src/checkout-mutation-lock.js";
+import type { WorkspaceChangeStats } from "bb-git-contract";
 
 type DiffStats = {
   filesCount: number;

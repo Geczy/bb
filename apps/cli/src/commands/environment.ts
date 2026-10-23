@@ -13,12 +13,12 @@ import {
   environmentStatusSchema,
   environmentStatusValues,
   type EnvironmentStatus,
-  type WorkspaceDiffTarget,
 } from "@bb/domain";
 import { action } from "../action.js";
 import { createCliBbSdk } from "../client.js";
 import { resolveMachineHostId, resolveMachineTargetOption } from "./machine.js";
 import { collectOption, outputJson, prependErrorContext } from "./helpers.js";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 interface EnvironmentCommitCommandOptions {
   json?: boolean;

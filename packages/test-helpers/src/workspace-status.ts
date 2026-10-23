@@ -2,7 +2,8 @@ import type {
   WorkspaceMergeBase,
   WorkspaceStatus,
   WorkspaceWorkingTree,
-} from "@bb/domain";
+} from "bb-git-contract";
+
 
 export function makeWorkspaceWorkingTree(
   overrides: Partial<WorkspaceWorkingTree> = {},

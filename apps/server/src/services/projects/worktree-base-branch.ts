@@ -1,4 +1,5 @@
-import type { GitSourceInspection } from "@bb/domain";
+import type { GitSourceInspection } from "bb-git-contract";
+
 
 interface ResolveDefaultWorktreeBaseBranchArgs {
   defaultBranch: GitSourceInspection["defaultBranch"];

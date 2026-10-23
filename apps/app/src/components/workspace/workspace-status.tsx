@@ -2,10 +2,13 @@ import { useState } from "react";
 import { Icon } from "@bb/shared-ui/icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import { assertNever } from "@bb/core-ui";
-import type { WorkspaceStatus } from "@bb/domain";
-import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
+
 import { BbHttpError } from "@bb/sdk/browser";
 import { describeLifecycleError } from "@/lib/lifecycle-errors";
+import type {
+  WorkspaceResolutionFailure,
+  WorkspaceStatus,
+} from "bb-git-contract";
 
 export const INCOMPLETE_SQUASH_MERGE_MESSAGE =
   "Squash-merge check incomplete; counts may include already-merged commits.";

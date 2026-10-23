@@ -1,4 +1,4 @@
-import type { RawDiffFileStat } from "@bb/domain";
+
 import type { DiffFileEntry } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   rawDiffFileStatToEntry,
   selectInitialPatchPaths,
 } from "./diff-tiering.js";
+import type { RawDiffFileStat } from "bb-git-contract";
 
 function makeEntry(overrides: Partial<DiffFileEntry>): DiffFileEntry {
   return {

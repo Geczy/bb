@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadListEntry, WorkspaceStatus } from "@bb/domain";
+import type { ThreadListEntry } from "@bb/domain";
 import {
   makeWorkspaceMergeBase,
   makeWorkspaceStatus,
@@ -45,6 +45,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { HttpError } from "@/lib/api";
 import { BbHttpError } from "@/lib/sdk";
 import { isTransientReadError, requireEnabledQueryArg } from "./query-helpers";
+import type { WorkspaceStatus } from "bb-git-contract";
 
 describe("requireEnabledQueryArg", () => {
   it("keeps a numeric zero rather than treating it as missing", () => {

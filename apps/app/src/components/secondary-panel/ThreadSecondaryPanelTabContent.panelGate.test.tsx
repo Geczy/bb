@@ -2,7 +2,7 @@
 
 import { DEFAULT_DIFF_FILE_FILTERS } from "./git-diff/diff-file-filters";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import type { WorkspaceDiffTarget } from "@bb/domain";
+
 import type { EnvironmentDiffFilesResponse } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -17,6 +17,7 @@ import {
   HostScopedFilePreviewTabContent,
   WorkspaceFilePreviewTabContent,
 } from "./ThreadSecondaryPanelTabContent";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 vi.mock("@/lib/sdk", () => ({
   sdk: {

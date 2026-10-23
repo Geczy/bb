@@ -2,6 +2,7 @@ import { joinHostPathSegments } from "../services/lib/host-path.js";
 import {
   cleanupEnvironment,
   recoverEnvironmentCleanup,
+  requestEnvironmentRemoval,
 } from "../services/environments/environment-engine.js";
 import { parsePaginationQuery } from "../services/lib/validation.js";
 import {
@@ -13,11 +14,7 @@ import {
   updateEnvironmentMetadata,
   type DiffViewedFileScope,
 } from "@bb/db";
-import {
-  environmentStatusValues,
-  type EnvironmentStatus,
-  type WorkspaceDiffTarget,
-} from "@bb/domain";
+import { environmentStatusValues, type EnvironmentStatus } from "@bb/domain";
 import {
   publicApiRoutes,
   typedRoutes,
@@ -36,7 +33,6 @@ import {
   WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
 } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { requestEnvironmentRemoval } from "../services/environments/environment-engine.js";
 import {
   toEnvironmentResponse,
   toEnvironmentResponses,
@@ -83,6 +79,7 @@ import {
   rawDiffFileStatToEntry,
   selectInitialPatchPaths,
 } from "./diff-tiering.js";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 const LISTED_ENVIRONMENT_STATUSES: readonly EnvironmentStatus[] =
   environmentStatusValues.filter((status) => status !== "destroyed");

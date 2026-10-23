@@ -1,14 +1,11 @@
-import type {
-  AvailableModel,
-  Environment,
-  Host,
-  PendingInteraction,
-  Thread,
-  ThreadExecutionOptions,
-  ThreadEventRow,
-  ThreadGitDiffResponse,
-} from "@bb/domain";
 import {
+  type AvailableModel,
+  type Environment,
+  type Host,
+  type PendingInteraction,
+  type Thread,
+  type ThreadExecutionOptions,
+  type ThreadEventRow,
   environmentSchema,
   hostSchema,
   pendingInteractionSchema,
@@ -17,26 +14,24 @@ import {
   threadSchema,
 } from "@bb/domain";
 import { listPreferredTestModels } from "@bb/test-helpers";
-import type {
-  CreateProjectRequest,
-  CreateThreadRequest,
-  EnvironmentActionRequest,
-  EnvironmentActionResponse,
-  EnvironmentDiffBranchesResponse,
-  EnvironmentDiffFilesResponse,
-  EnvironmentDiffPatchResponse,
-  EnvironmentStatusResponse,
-  ProjectResponse,
-  ResolvePendingInteractionRequest,
-  SendMessageRequest,
-  ThreadPendingInteractionsResponse,
-  ThreadTimelineResponse,
-  ThreadResponse,
-  UnmanagedBranchSpec,
-  UpdateThreadRequest,
-  WorkspaceArgs,
-} from "@bb/server-contract";
 import {
+  type CreateProjectRequest,
+  type CreateThreadRequest,
+  type EnvironmentActionRequest,
+  type EnvironmentActionResponse,
+  type EnvironmentDiffBranchesResponse,
+  type EnvironmentDiffFilesResponse,
+  type EnvironmentDiffPatchResponse,
+  type EnvironmentStatusResponse,
+  type ProjectResponse,
+  type ResolvePendingInteractionRequest,
+  type SendMessageRequest,
+  type ThreadPendingInteractionsResponse,
+  type ThreadTimelineResponse,
+  type ThreadResponse,
+  type UnmanagedBranchSpec,
+  type UpdateThreadRequest,
+  type WorkspaceArgs,
   createPublicApiClient,
   environmentActionResponseSchema,
   environmentDiffBranchesResponseSchema,
@@ -51,6 +46,7 @@ import {
   threadTimelineResponseSchema,
   THREAD_EVENT_LIST_PAGE_SIZE,
 } from "@bb/server-contract";
+import type { ThreadGitDiffResponse } from "bb-git-contract";
 
 export interface CreateHostThreadOptions {
   execution?: ThreadExecutionRequestOptions;

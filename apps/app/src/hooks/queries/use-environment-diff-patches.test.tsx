@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { WorkspaceDiffTarget } from "@bb/domain";
+
 import type {
   DiffPatchEntry,
   EnvironmentDiffPatchResponse,
@@ -18,6 +18,7 @@ import {
 import { environmentDiffPatchQueryKey } from "./query-keys";
 import { HEAVY_PAYLOAD_GC_TIME_MS } from "./query-policies";
 import { useEnvironmentDiffPatches } from "./use-environment-diff-patches";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 vi.mock("@/lib/sdk", () => ({
   sdk: { environments: { diffPatch: vi.fn() } },

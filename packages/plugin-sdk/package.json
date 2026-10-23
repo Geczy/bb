@@ -153,6 +153,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
+    "bb-git-contract": "workspace:*",
     "cross-spawn": "^7.0.6",
     "zod": "^4.6.5"
   },

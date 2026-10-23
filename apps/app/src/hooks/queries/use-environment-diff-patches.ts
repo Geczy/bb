@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { WorkspaceDiffTarget } from "@bb/domain";
+
 import {
   DIFF_PATCH_MAX_PATHS_PER_REQUEST,
   type DiffPatchEntry,
@@ -19,6 +19,7 @@ import {
   writeDiffPatchEntry,
 } from "../cache-owners/environment-diff-patch-cache-owner";
 import { environmentDiffTargetKey } from "./query-keys";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 const PATCH_REQUEST_DEBOUNCE_MS = 80;
 

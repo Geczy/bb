@@ -1,9 +1,11 @@
 export type {
+  GitBranchSelection,
+} from "bb-git-contract";
+export type {
   CallerExecutionInputSource,
   ContextSnapshot,
   ContextCategory,
   ContextEntry,
-  GitBranchSelection,
   JsonValue,
   PermissionMode,
   PromptInput,

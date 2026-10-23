@@ -24,9 +24,10 @@ import {
   OPTION_TRIGGER_CONTENT_CLASS_NAME,
 } from "@bb/shared-ui/option-display";
 import { cn } from "@bb/shared-ui/lib/utils";
-import type { GitBranchRefClassification } from "@bb/domain";
+
 import { searchPickerOptions } from "./picker-search";
 import { useResetPickerScroll } from "./useResetPickerScroll";
+import type { GitBranchRefClassification } from "bb-git-contract";
 
 interface GetMergeBaseBranchCandidatesArgs {
   mergeBaseBranch?: string;

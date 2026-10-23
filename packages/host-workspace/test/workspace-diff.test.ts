@@ -4,7 +4,7 @@ import { initRepo, makeTempDir } from "@bb/test-helpers";
 import { describe, expect, it, vi } from "vitest";
 import { Workspace } from "../src/workspace.js";
 import { runGit } from "../src/git.js";
-import type { RawDiffFileStat, WorkspaceDiffTarget } from "@bb/domain";
+import type { RawDiffFileStat, WorkspaceDiffTarget } from "bb-git-contract";
 
 async function write(
   repoPath: string,

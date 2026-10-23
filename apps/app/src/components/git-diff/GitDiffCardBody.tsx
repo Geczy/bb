@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import type { FileContents } from "@pierre/diffs";
-import type { GitDiffFileChangeKind } from "@bb/server-contract";
+
 import type { ExperimentalDiffFullFileContents } from "@get-bb/plugin-sdk";
 import { useIntersectionObserver } from "usehooks-ts";
 import { Button } from "@bb/shared-ui/button";
@@ -28,6 +28,7 @@ import {
   normalizeGitDiffPath,
   type ParsedGitDiffFile,
 } from "./git-diff-parsing";
+import type { GitDiffFileChangeKind } from "bb-git-contract";
 
 export type DiffFileContentsResult =
   | { kind: "text"; file: FileContents }

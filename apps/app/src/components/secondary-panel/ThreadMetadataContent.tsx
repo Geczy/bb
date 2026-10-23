@@ -32,13 +32,11 @@ import {
 import { Link } from "react-router-dom";
 import type {
   Environment,
-  GitBranchRefClassification,
   Thread,
   ThreadListEntry,
   ThreadParentNotifications,
-  WorkspaceStatus,
 } from "@bb/domain";
-import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
+
 import {
   formatEnvironmentDisplay,
   type EnvironmentDisplayHostContext,
@@ -91,6 +89,11 @@ import { buildParentSelectorOptions } from "@/views/thread-detail/threadParentSe
 import { getThreadRoutePath } from "@/lib/route-paths";
 import { ThreadTitle } from "@/components/thread/ThreadTitleMentions";
 import { ParentThreadPicker } from "@/components/pickers/ParentThreadPicker";
+import type {
+  GitBranchRefClassification,
+  WorkspaceResolutionFailure,
+  WorkspaceStatus,
+} from "bb-git-contract";
 
 interface ParentSelectorRowProps {
   thread: Thread;

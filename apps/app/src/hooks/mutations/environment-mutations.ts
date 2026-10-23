@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Environment, WorkspaceDiffTarget } from "@bb/domain";
+import type { Environment } from "@bb/domain";
 import type {
   EnvironmentActionResponse,
   UpdateEnvironmentRequest,
@@ -17,6 +17,8 @@ import {
   rollbackEnvironmentNameUpdateTransaction,
   type EnvironmentNameUpdateTransaction,
 } from "../cache-owners/environment-workspace-cache-owner";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
+
 type UpdateEnvironmentMutationRequest = {
   id: string;
 } & UpdateEnvironmentRequest;

@@ -1,15 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import type { WorkspaceStatus } from "@bb/domain";
+
 import {
   setupCommandOutputTestEnvironment,
   collectLogLines,
   getHelpOutput,
   runCommand,
   stubServerApi,
+  type CommandRegistrar,
 } from "../helpers/command-output-harness.js";
-import type { CommandRegistrar } from "../helpers/command-output-harness.js";
 import * as fixtures from "../helpers/command-output-fixtures.js";
 import { registerEnvironmentCommands } from "../../commands/environment.js";
+import type { WorkspaceStatus } from "bb-git-contract";
 
 describe("bb environment command output", () => {
   setupCommandOutputTestEnvironment();

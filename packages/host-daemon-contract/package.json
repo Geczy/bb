@@ -35,6 +35,7 @@
     "@bb/domain": "workspace:*",
     "@bb/hono-typed-routes": "workspace:*",
     "@bb/provider-bridge-protocol": "workspace:*",
+    "bb-git-contract": "workspace:*",
     "hono": "^4.7.0",
     "zod": "^4.3.6"
   },

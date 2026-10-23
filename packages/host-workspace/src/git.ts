@@ -3,11 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import type {
-  DefaultBranchRelation,
-  GitCheckoutRef,
-  WorkspaceGitOperation,
-} from "@bb/domain";
+
 import {
   execPortableFile,
   runVcsProcess,
@@ -15,6 +11,11 @@ import {
   pathExists,
   sanitizeInheritedChildProcessEnv,
 } from "@bb/process-utils";
+import type {
+  DefaultBranchRelation,
+  GitCheckoutRef,
+  WorkspaceGitOperation,
+} from "bb-git-contract";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;

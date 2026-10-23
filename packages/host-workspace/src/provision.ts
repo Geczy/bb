@@ -1,18 +1,18 @@
-import type { ProvisioningTranscriptEntry, WorkspaceStatus } from "@bb/domain";
+import type { ProvisioningTranscriptEntry } from "@bb/domain";
 import { pathExists } from "@bb/process-utils";
-import type {
-  CommitOptions,
-  LocalStateSnapshot,
-  CommitResult,
-  DiffOptions,
-  DiffResult,
-  DiffFilesArgs,
-  DiffFilesResult,
-  DiffPatchArgs,
-  DiffPatchEntry,
-  StatusOptions,
+import {
+  type CommitOptions,
+  type LocalStateSnapshot,
+  type CommitResult,
+  type DiffOptions,
+  type DiffResult,
+  type DiffFilesArgs,
+  type DiffFilesResult,
+  type DiffPatchArgs,
+  type DiffPatchEntry,
+  type StatusOptions,
+  Workspace,
 } from "./workspace.js";
-import { Workspace } from "./workspace.js";
 import {
   inspectGitRepository,
   readDefaultBranch,
@@ -21,6 +21,7 @@ import {
   type GitProcessOptions,
 } from "./git.js";
 import { resolveAdditionalWorkspaceWriteRoots } from "./workspace-write-roots.js";
+import type { WorkspaceStatus } from "bb-git-contract";
 
 type ProvisionProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
 

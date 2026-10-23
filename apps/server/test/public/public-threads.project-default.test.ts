@@ -4,11 +4,13 @@ import {
   getThread,
   updateHost,
 } from "@bb/db";
-import { threadSchema, type GitSourceInspection } from "@bb/domain";
+import { threadSchema } from "@bb/domain";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { setPluginMachineProviderBridge } from "../../src/services/plugins/plugin-machine-provider-registry.js";
-import { getThreadProvisionContext } from "../../src/services/threads/thread-startup-store.js";
-import type { ThreadProvisionEnvironmentIntent } from "../../src/services/threads/thread-startup-store.js";
+import {
+  getThreadProvisionContext,
+  type ThreadProvisionEnvironmentIntent,
+} from "../../src/services/threads/thread-startup-store.js";
 import { registerHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import { installMachineProvider } from "../helpers/machine-provider.js";
@@ -21,6 +23,7 @@ import {
 } from "../helpers/seed.js";
 import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
 import { installFakeGitWorktreeProvider } from "../helpers/environment-provider.js";
+import type { GitSourceInspection } from "bb-git-contract";
 
 interface CreateThreadBodyOverrides {
   environment: unknown;

@@ -1,8 +1,5 @@
 import path from "node:path";
-import type {
-  GitBranchRefClassification,
-  WorkspaceGitOperation,
-} from "@bb/domain";
+
 import {
   detectGitRepoKind,
   detectLinkedWorktree,
@@ -17,12 +14,16 @@ import {
   withGitRefMutationLock,
 } from "@bb/host-workspace";
 import type { HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
-import { CommandDispatchError } from "../command-dispatch-support.js";
-import type {
-  CommandDispatchOptions,
-  CommandOf,
+import {
+  CommandDispatchError,
+  type CommandDispatchOptions,
+  type CommandOf,
 } from "../command-dispatch-support.js";
 import { userExecutableProcessOptions } from "../user-executable-env.js";
+import type {
+  GitBranchRefClassification,
+  WorkspaceGitOperation,
+} from "bb-git-contract";
 
 interface LimitBranchListArgs {
   branches: readonly string[];

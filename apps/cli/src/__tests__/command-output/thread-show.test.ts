@@ -1,3 +1,4 @@
+import type { ThreadGitDiffResponse } from "bb-git-contract";
 import { describe, expect, it, vi } from "vitest";
 import * as domain from "@bb/domain";
 import type * as serverContract from "@bb/server-contract";
@@ -11,8 +12,8 @@ import {
   createClientMock,
   runCommand,
   stubServerApi,
+  type CommandRegistrar,
 } from "../helpers/command-output-harness.js";
-import type { CommandRegistrar } from "../helpers/command-output-harness.js";
 import * as fixtures from "../helpers/command-output-fixtures.js";
 import { registerThreadCommands } from "../../commands/thread/index.js";
 
@@ -220,7 +221,7 @@ describe("bb thread show command output", () => {
       createdAt: 1,
       updatedAt: 2,
     });
-    const gitDiff: domain.ThreadGitDiffResponse = {
+    const gitDiff: ThreadGitDiffResponse = {
       diff: "",
       files: "M\tsrc/file.ts\n",
       mergeBaseRef: "abc1234",

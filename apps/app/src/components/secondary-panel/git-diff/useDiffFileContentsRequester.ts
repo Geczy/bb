@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { WorkspaceDiffTarget } from "@bb/domain";
+
 import type { EnvironmentDiffFileResponse } from "@bb/server-contract";
 import type { EnvironmentDiffFileArgs } from "@bb/sdk/browser";
 import { environmentDiffFileQueryKey } from "@/hooks/queries/query-keys";
@@ -9,6 +9,7 @@ import type {
   DiffFileContentsResult,
   RequestDiffFileContents,
 } from "@/components/git-diff/GitDiffCardBody";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 interface UseDiffFileContentsRequesterArgs {
   environmentId?: string;

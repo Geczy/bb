@@ -1,14 +1,21 @@
-import { z } from "zod";
 import {
-  environmentStatusSchema,
-  FILE_LIST_QUERY_MAX_LENGTH,
+  diffViewedFileSchema,
+  gitDiffFileChangeKindSchema,
+  gitObjectIdSchema,
+  type GitDiffFileChangeKind,
   gitBranchNameSchema,
   gitBranchOptionsSchema,
   threadGitDiffResponseSchema,
   workspaceDiffTargetSchema,
+  workspaceResolutionFailureSchema,
   workspaceStatusSchema,
+} from "bb-git-contract";
+import { z } from "zod";
+import {
+  environmentStatusSchema,
+  FILE_LIST_QUERY_MAX_LENGTH,
 } from "@bb/domain";
-import { workspaceResolutionFailureSchema } from "@bb/host-daemon-contract/workspace";
+
 import { apiErrorSchema } from "../errors.js";
 import {
   branchListQuerySchema,
@@ -96,7 +103,7 @@ export const environmentDiffQuerySchema = z.discriminatedUnion("target", [
   }),
   z.object({
     target: z.literal("commit"),
-    sha: z.string().regex(/^[0-9a-f]{4,40}$/iu),
+    sha: gitObjectIdSchema,
   }),
 ]);
 export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
@@ -112,7 +119,7 @@ export type EnvironmentDiffFilesQuery = z.infer<
 
 const diffFileSideSchema = z.enum(["old", "new"]);
 
-const mergeBaseRefQuerySchema = z.string().regex(/^[0-9a-f]{4,40}$/iu);
+const mergeBaseRefQuerySchema = gitObjectIdSchema;
 
 export const environmentDiffFileQuerySchema = z.discriminatedUnion("target", [
   z.object({
@@ -134,7 +141,7 @@ export const environmentDiffFileQuerySchema = z.discriminatedUnion("target", [
   }),
   z.object({
     target: z.literal("commit"),
-    sha: z.string().regex(/^[0-9a-f]{4,40}$/iu),
+    sha: gitObjectIdSchema,
     path: z.string().min(1),
     side: diffFileSideSchema,
   }),
@@ -248,16 +255,6 @@ export type EnvironmentDiffResponse = z.infer<
   typeof environmentDiffResponseSchema
 >;
 
-export const gitDiffFileChangeKindSchema = z.enum([
-  "added",
-  "modified",
-  "deleted",
-  "renamed",
-  "copied",
-  "type_changed",
-]);
-export type GitDiffFileChangeKind = z.infer<typeof gitDiffFileChangeKindSchema>;
-
 export function letterToChangeKind({
   letter,
 }: {
@@ -364,14 +361,6 @@ export const environmentDiffPatchRequestSchema = z
 export type EnvironmentDiffPatchRequest = z.infer<
   typeof environmentDiffPatchRequestSchema
 >;
-
-export const diffViewedFileSchema = z
-  .object({
-    path: z.string().min(1),
-    revision: z.string().min(1),
-  })
-  .strict();
-export type DiffViewedFile = z.infer<typeof diffViewedFileSchema>;
 
 export const environmentDiffViewedResponseSchema = z
   .object({

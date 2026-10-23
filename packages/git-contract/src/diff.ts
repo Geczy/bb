@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const gitObjectIdSchema = z.string().regex(/^[0-9a-f]{4,40}$/iu);
+
+export const diffViewedFileSchema = z
+  .object({ path: z.string().min(1), revision: z.string().min(1) })
+  .strict();
+export type DiffViewedFile = z.infer<typeof diffViewedFileSchema>;
+
 export const workspaceDiffTargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("uncommitted"),
@@ -14,7 +21,7 @@ export const workspaceDiffTargetSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("commit"),
-    sha: z.string().regex(/^[0-9a-f]{4,40}$/iu),
+    sha: gitObjectIdSchema,
   }),
 ]);
 export type WorkspaceDiffTarget = z.infer<typeof workspaceDiffTargetSchema>;
@@ -39,3 +46,13 @@ export const threadGitDiffResponseSchema = z.object({
   mergeBaseRef: z.string().nullable(),
 });
 export type ThreadGitDiffResponse = z.infer<typeof threadGitDiffResponseSchema>;
+
+export const gitDiffFileChangeKindSchema = z.enum([
+  "added",
+  "modified",
+  "deleted",
+  "renamed",
+  "copied",
+  "type_changed",
+]);
+export type GitDiffFileChangeKind = z.infer<typeof gitDiffFileChangeKindSchema>;

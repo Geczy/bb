@@ -7,7 +7,7 @@ import type { DiffFileEntry, DiffPatchEntry } from "@bb/server-contract";
 import { useEnvironmentDiffViewed } from "@/hooks/queries/environment-queries";
 import { useSetDiffFileViewed } from "@/hooks/mutations/environment-mutations";
 import type { DiffPresentation } from "@/components/code/code-rendering";
-import type { WorkspaceDiffTarget } from "@bb/domain";
+
 import type { RequestDiffFileContents } from "@/components/git-diff/GitDiffCardBody";
 import {
   type DiffPatchState,
@@ -24,6 +24,7 @@ import {
   resolveCardCollapsed,
   resolveDiffFileCardInitialState,
 } from "./diffFilesStore";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 const DIFF_FILES_OVERSCAN = 4;
 const DIFF_FILES_GAP_PX = 8;

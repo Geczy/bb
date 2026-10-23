@@ -2,12 +2,11 @@ import {
   collectOptionalFieldPaths,
   makeWorkspaceStatus,
 } from "@bb/test-helpers";
-import type { WorkspaceResolutionFailure } from "@bb/host-daemon-contract";
+
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
-  gitBranchSelectionSchema,
   TERMINAL_COLS_MAX,
   TERMINAL_DATA_MAX_BASE64_LENGTH,
   TERMINAL_DATA_MAX_BYTES,
@@ -43,6 +42,10 @@ import {
   updateEnvironmentRequestSchema,
   unmanagedBranchSpecSchema,
 } from "../src/index.js";
+import {
+  gitBranchSelectionSchema,
+  type WorkspaceResolutionFailure,
+} from "bb-git-contract";
 
 interface OptionalServerFieldGroup {
   fields: readonly string[];

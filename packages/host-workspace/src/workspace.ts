@@ -1,13 +1,4 @@
-import type {
-  GitCheckoutRef,
-  RawDiffFileStat,
-  ThreadGitDiffResponse,
-  WorkspaceCommitSummary,
-  WorkspaceDiffTarget,
-  WorkspaceFileStatus,
-  WorkspaceFileStatusKind,
-  WorkspaceStatus,
-} from "@bb/domain";
+
 import path from "node:path";
 import { pathExists } from "@bb/process-utils";
 import {
@@ -46,6 +37,16 @@ import {
 } from "./commit-cache.js";
 import fs from "node:fs/promises";
 import { withCheckoutMutationLock } from "./checkout-mutation-lock.js";
+import type {
+  GitCheckoutRef,
+  RawDiffFileStat,
+  ThreadGitDiffResponse,
+  WorkspaceCommitSummary,
+  WorkspaceDiffTarget,
+  WorkspaceFileStatus,
+  WorkspaceFileStatusKind,
+  WorkspaceStatus,
+} from "bb-git-contract";
 
 export interface LocalStateSnapshot {
   fingerprint: string;

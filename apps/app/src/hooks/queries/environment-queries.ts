@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Environment, WorkspaceDiffTarget } from "@bb/domain";
+import type { Environment } from "@bb/domain";
 import type {
   EnvironmentDiffBranchesResponse,
   EnvironmentDiffFilesResponse,
@@ -39,6 +39,7 @@ import {
   REALTIME_OWNED_NO_FOCUS_QUERY_POLICY,
   TYPEAHEAD_QUERY_POLICY,
 } from "./query-policies";
+import type { WorkspaceDiffTarget } from "bb-git-contract";
 
 interface EnvironmentQueryOptions extends QueryOptions {
   staleTime?: number;
