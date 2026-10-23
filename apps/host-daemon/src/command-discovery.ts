@@ -109,6 +109,7 @@ function sortDirentsByName(left: Dirent, right: Dirent): number {
 async function readDirEntries(
   dirPath: string,
   budget?: ScanBudget,
+  includeEntry: (entry: Dirent) => boolean = () => true,
 ): Promise<Dirent[] | null> {
   try {
     const directory = await fs.opendir(dirPath);
@@ -116,6 +117,9 @@ async function readDirEntries(
     for await (const entry of directory) {
       if (budget?.remainingEntries === 0) {
         break;
+      }
+      if (!includeEntry(entry)) {
+        continue;
       }
       if (budget !== undefined) {
         budget.remainingEntries -= 1;
@@ -384,14 +388,18 @@ async function walkSkillTree(args: WalkSkillTreeArgs): Promise<void> {
       name: path.basename(args.logicalPath),
     });
   }
-  const entries = await readDirEntries(args.physicalPath, args.budget);
+  const entries = await readDirEntries(
+    args.physicalPath,
+    args.budget,
+    (entry) =>
+      !isSkippedSkillTreeEntry(entry) &&
+      (entry.isDirectory() ||
+        (entry.isSymbolicLink() && canFollowSkillSymlink(args.root))),
+  );
   if (entries === null) {
     return;
   }
   for (const entry of entries) {
-    if (isSkippedSkillTreeEntry(entry)) {
-      continue;
-    }
     const physicalPath = await skillTreeChildPhysicalPath(args, entry);
     if (physicalPath === null) {
       continue;
@@ -408,7 +416,6 @@ async function walkSkillTree(args: WalkSkillTreeArgs): Promise<void> {
 
 async function scanRecursiveSkillRootFiles(
   root: CommandScanDirectoryRoot,
-  budget: ScanBudget,
 ): Promise<SkillFileMatch[]> {
   const rootPath = await resolveRecursiveRootPath(root);
   if (rootPath === null) {
@@ -416,7 +423,7 @@ async function scanRecursiveSkillRootFiles(
   }
   const matches: SkillFileMatch[] = [];
   await walkSkillTree({
-    budget,
+    budget: { remainingEntries: MAX_SCAN_ENTRY_COUNT },
     depth: 0,
     linked: await isSymbolicLinkPath(root.rootPath),
     logicalPath: root.rootPath,
@@ -470,7 +477,7 @@ async function scanSkillFiles(args: ScanRootArgs): Promise<SkillFileMatch[]> {
     case "skill":
       return scanSkillRootFiles(root);
     case "skill-recursive":
-      return scanRecursiveSkillRootFiles(root, args.budget);
+      return scanRecursiveSkillRootFiles(root);
     case "skill-directory":
       return scanSingleSkillDirectoryFiles(root);
     case "skill-file":

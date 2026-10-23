@@ -409,18 +409,20 @@ describe("discoverProviderCommands over declared roots", () => {
     expect(byName(commands, "linked-dir:secret")).toBeUndefined();
   });
 
-  it("shares the entry-count cap across recursive roots", async () => {
+  it("enforces the candidate-directory cap for a recursive skill root", async () => {
     const fixture = await makeWorkspaceFixture();
     const fullRoot = path.join(fixture.cwd, "full-root");
-    const secondRoot = path.join(fixture.cwd, "second-root");
-    await Promise.all(
-      Array.from({ length: 1_000 }, (_, index) =>
-        writeFileEnsuringDir(path.join(fullRoot, `entry-${index}.txt`), ""),
-      ),
-    );
     await writeFileEnsuringDir(
-      path.join(secondRoot, "late", "SKILL.md"),
-      skillFile("late"),
+      path.join(fullRoot, "SKILL.md"),
+      skillFile("full-root"),
+    );
+    await Promise.all(
+      Array.from({ length: 1_050 }, (_, index) =>
+        writeFileEnsuringDir(
+          path.join(fullRoot, `entry-${index}`, "SKILL.md"),
+          skillFile(`entry-${index}`),
+        ),
+      ),
     );
 
     const commands = await discover(
@@ -428,15 +430,13 @@ describe("discoverProviderCommands over declared roots", () => {
       fixture.cwd,
       nativeRoots({
         skills: {
-          project: [
-            declared("full-root", { recursive: true }),
-            declared("second-root", { recursive: true }),
-          ],
+          project: [declared("full-root", { recursive: true })],
         },
       }),
     );
 
-    expect(byName(commands, "late")).toBeUndefined();
+    expect(byName(commands, "full-root")).toBeDefined();
+    expect(commands.length).toBeLessThanOrEqual(1_000);
   });
 
   it("rejects a recursive project root linked outside the workspace", async () => {
