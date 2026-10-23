@@ -50,7 +50,10 @@ import {
   type ProjectMachineSetupDialogTarget,
 } from "@/components/dialogs/ProjectMachineSetupDialog";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
-import { RIGHT_PANEL_TOGGLE_ICON_NAME } from "@/components/secondary-panel/panelToggleControlState";
+import {
+  RIGHT_PANEL_TOGGLE_ICON_NAME,
+  RIGHT_PANEL_TOGGLE_SHORTCUT_HINT_CLASS,
+} from "@/components/secondary-panel/panelToggleControlState";
 import { AppCommandShortcutHint } from "@/components/commands/AppCommandShortcutHint";
 import type {
   SecondaryPanelPaneRenderContext,
@@ -92,7 +95,7 @@ import {
   type OpenAttachmentRequest,
 } from "@/components/secondary-panel/AttachmentOpenerContext";
 import { PluginComposerHostProvider } from "@/components/plugin/plugin-composer-host";
-import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
+import type { PromptMentionLinkResolver } from "@bb/client-core";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { useNavigateToThreadAfterCreatePreference } from "@/lib/root-compose-create-preference";
 import {
@@ -105,15 +108,7 @@ import {
   getRootComposeRoutePath,
 } from "@/lib/route-paths";
 import { getBrowserUrlHost } from "@/lib/browser-url";
-import {
-  getBbDesktopInfo,
-  isDesktopBrowserAvailable,
-  MACOS_CHROME_CONTROL_AXIS_CLASS,
-  MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
-  MACOS_TITLE_BAR_PINNED_TOGGLE_CLASS,
-  shouldUseMacosDesktopChrome,
-} from "@/lib/bb-desktop";
-import { useIsSidebarFramed } from "@/components/ui/sidebar.js";
+import { isDesktopBrowserAvailable } from "@/lib/bb-desktop";
 import {
   useFixedPanelTabsState,
   useFixedPanelTabsStorageMaintenance,
@@ -129,8 +124,8 @@ import {
 import { openAppFixedTabFromDestinations } from "@/lib/app-fixed-tab-navigation";
 import { useRootComposeProjectId } from "@/lib/root-compose-selection";
 import {
-  ROOT_COMPOSE_PINNED_PANEL_TOGGLE_POSITION_CLASS,
   RootComposeSecondaryContent,
+  useRootComposePinnedPanelToggleBoxClassName,
 } from "./RootComposeSecondaryContent";
 import { RootComposeMobileRecents } from "./RootComposeMobileRecents";
 import {
@@ -147,6 +142,7 @@ import {
   buildTerminalSyncedSecondaryFileTabs,
   syncTerminalTabsInFixedPanelState,
 } from "@/components/secondary-panel/terminalPanelTabs";
+import { usePendingTerminalIds } from "@/components/thread/terminal/pending-terminals";
 import {
   getActiveFixedSecondaryTab,
   useSetThreadSecondaryPanelSelection,
@@ -254,7 +250,7 @@ export function RootComposeRightPanelToggle({
       type="button"
       variant="ghost"
       size="icon"
-      className={`${HEADER_ICON_BUTTON_CLASS} relative`}
+      className={cn(HEADER_ICON_BUTTON_CLASS, "relative")}
       aria-label={
         shortcut ? `${rightPanelLabel} (${shortcut.label})` : rightPanelLabel
       }
@@ -268,7 +264,7 @@ export function RootComposeRightPanelToggle({
       <Icon name={rightPanelIconName} />
       <AppCommandShortcutHint
         shortcut={shortcut}
-        className="absolute right-full mr-1"
+        className={RIGHT_PANEL_TOGGLE_SHORTCUT_HINT_CLASS}
       />
     </Button>
   );
@@ -880,15 +876,17 @@ function RootComposeSurface({
     openPluginPanel,
     projectId: isProjectless ? null : projectId,
   });
+  const pendingTerminalIds = usePendingTerminalIds();
   const syncedOrderedSecondaryFileTabs = useMemo(
     () =>
       loadedTerminalSessions === undefined
         ? orderedSecondaryFileTabs
         : buildTerminalSyncedSecondaryFileTabs({
             orderedTabs: orderedSecondaryFileTabs,
+            pendingTerminalIds,
             terminalSessions: loadedTerminalSessions,
           }),
-    [loadedTerminalSessions, orderedSecondaryFileTabs],
+    [loadedTerminalSessions, orderedSecondaryFileTabs, pendingTerminalIds],
   );
   useEffect(() => {
     if (!terminalsListLoaded) {
@@ -896,11 +894,17 @@ function RootComposeSurface({
     }
     updateFixedPanelTabsState((state) =>
       syncTerminalTabsInFixedPanelState({
+        pendingTerminalIds,
         state,
         terminalSessions,
       }),
     );
-  }, [terminalSessions, terminalsListLoaded, updateFixedPanelTabsState]);
+  }, [
+    pendingTerminalIds,
+    terminalSessions,
+    terminalsListLoaded,
+    updateFixedPanelTabsState,
+  ]);
   const canCreateRootTerminal = canCreateRootComposeTerminal({
     connectedHostIds,
     environmentHostId: rootPanelEnvironment?.hostId,
@@ -1047,6 +1051,7 @@ function RootComposeSurface({
           onNativeFocus={onNativeFocus}
           threadId={ROOT_COMPOSE_FIXED_PANEL_STATE_ID}
           onUpdate={updateBrowserTab}
+          onOpenInNewTab={panelBrowser.open}
         />
       );
     },
@@ -1054,6 +1059,7 @@ function RootComposeSurface({
       panelBrowser.addressFocusRequest,
       browserTabs,
       panelBrowser.handleAddressFocusRequestConsumed,
+      panelBrowser.open,
       updateBrowserTab,
     ],
   );
@@ -1180,8 +1186,10 @@ function RootComposeSurface({
         onActivateTab={activateTab}
         onAutoFocusNewTabHandled={handleNewTabAutoFocusHandled}
         onAutoFocusTerminalHandled={terminals.handleAutoFocusHandled}
+        onCloseTerminal={terminals.close}
         onOpenBrowser={openBrowser}
         onOpenPanelLink={handleOpenPanelLink}
+        onRetryTerminalStart={terminals.retryStart}
         onSelectFileSearchResult={handleSelectFileSearchResult}
         onSelectionAddToChat={handleRootPanelSelectionAddToChat}
         onStartTerminal={terminals.start}
@@ -1222,7 +1230,9 @@ function RootComposeSurface({
       rootProjectHostId,
       shouldAutoFocusNewTab,
       terminals.autoFocusTerminalId,
+      terminals.close,
       terminals.handleAutoFocusHandled,
+      terminals.retryStart,
       terminals.start,
     ],
   );
@@ -1381,23 +1391,16 @@ function RootComposeSurface({
     },
     [openWorkspaceFile],
   );
-  const [desktopInfo] = useState(getBbDesktopInfo);
-  const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-  const isSidebarFramed = useIsSidebarFramed();
+  const pinnedPanelToggleBoxClassName =
+    useRootComposePinnedPanelToggleBoxClassName();
   const showPinnedToggle =
     (paneContext?.secondaryPanelHost ?? null) === null &&
     (!isSecondaryPanelOpen || isCompactViewport);
   const rootPanelToggle = showPinnedToggle ? (
     <div
       className={cn(
-        "fixed z-40 mr-(--bb-window-frame-lip)",
-        ROOT_COMPOSE_PINNED_PANEL_TOGGLE_POSITION_CLASS,
-        usesDesktopChrome && MACOS_CHROME_CONTROL_AXIS_CLASS,
-        usesDesktopChrome && [
-          "flex h-7 items-center",
-          MACOS_TITLE_BAR_CONTROL_SIZE_CLASS,
-        ],
-        isSidebarFramed && MACOS_TITLE_BAR_PINNED_TOGGLE_CLASS,
+        "z-40",
+        pinnedPanelToggleBoxClassName,
         isSecondaryPanelOpen && "pointer-events-none invisible",
       )}
     >

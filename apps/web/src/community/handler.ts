@@ -1,38 +1,63 @@
+import { sha256Hex } from "@bb/connect-db";
 import { z } from "zod";
 import type { Env } from "../server/env";
 import { formPage, type FormKind } from "./form-page";
 import {
   surveyQuestions,
+  surveyAnswers,
   validateSurvey,
-  type FormErrors,
   type FormValues,
 } from "./survey";
 
-const addressSchema = z.object({
-  name: z.string().trim().min(1).max(250),
-  address: z.string().trim().min(1).max(1000),
-  country: z.string().trim().min(1).max(250),
-  hat: z.enum(["Yes", "No"]).optional(),
-});
+type CommunityEnv = Pick<
+  Env,
+  | "DB"
+  | "COMMUNITY_FORMS_ENABLED"
+  | "COMMUNITY_MERCH_INVITE_HASHES"
+  | "COMMUNITY_JOTFORM_URL"
+  | "COMMUNITY_FORM_RATE_LIMITER"
+>;
 
-const invitationSchema = z.record(
-  z.string().regex(/^[a-zA-Z0-9_-]{3,64}$/),
-  z.object({ hat: z.boolean() }),
-);
+const inviteHashesSchema = z.array(z.string().regex(/^[a-f0-9]{64}$/));
 
-function getInvitation(
+async function getInvitation(
   request: Request,
-  env: Env,
-): { code: string; hat: boolean } | null {
+  env: CommunityEnv,
+): Promise<string | null> {
   const codes = new URL(request.url).searchParams.getAll("c");
   const code = codes.length === 1 ? codes[0] : undefined;
-  if (!code || !env.COMMUNITY_MERCH_INVITES) return null;
+  if (!code || !/^[a-zA-Z0-9_-]{16,128}$/.test(code)) return null;
+  const hash = await sha256Hex(code);
+  const issued = await env.DB.prepare(
+    "SELECT code_hash FROM community_sticker_code WHERE code_hash = ? AND shipped = 0",
+  )
+    .bind(hash)
+    .first();
+  if (issued) return code;
   try {
-    const parsed = invitationSchema.safeParse(
-      JSON.parse(env.COMMUNITY_MERCH_INVITES),
+    const hashes = inviteHashesSchema.safeParse(
+      JSON.parse(env.COMMUNITY_MERCH_INVITE_HASHES ?? "[]"),
     );
-    if (!parsed.success || !Object.hasOwn(parsed.data, code)) return null;
-    return { code, hat: parsed.data[code]!.hat };
+    return hashes.success && hashes.data.includes(hash) ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+function jotformUrl(config: string | undefined, code: string): string | null {
+  if (!config) return null;
+  try {
+    const url = new URL(config);
+    if (
+      url.protocol !== "https:" ||
+      !["form.jotform.com", "form.jotformeu.com"].includes(url.hostname) ||
+      url.username ||
+      url.password ||
+      url.port
+    )
+      return null;
+    url.searchParams.set("code", code);
+    return url.href;
   } catch {
     return null;
   }
@@ -75,17 +100,32 @@ async function readValues(request: Request): Promise<FormValues | null> {
 
 export async function handleCommunityForm(
   request: Request,
-  env: Env,
+  env: CommunityEnv,
   kind: FormKind,
 ): Promise<Response> {
   const enabled = env.COMMUNITY_FORMS_ENABLED === "true";
   let id: string = crypto.randomUUID();
-  const invitation = kind === "merch" ? getInvitation(request, env) : null;
   const page = (extra: Partial<Parameters<typeof formPage>[0]> = {}) =>
-    formPage({ kind, enabled, id, invitation, ...extra });
-  if (kind === "merch" && !invitation)
-    return page({ status: 404, unavailable: true });
+    formPage({ kind, enabled, id, ...extra });
+  if (kind === "merch") {
+    if (request.method !== "GET")
+      return new Response(null, { status: 405, headers: { Allow: "GET" } });
+    try {
+      const code = await getInvitation(request, env);
+      if (!code) return page({ status: 404, unavailable: true });
+      return page({
+        jotform: enabled ? jotformUrl(env.COMMUNITY_JOTFORM_URL, code) : null,
+      });
+    } catch {
+      return page({
+        status: 503,
+        message: "The form is temporarily unavailable. Please try again later.",
+      });
+    }
+  }
   if (request.method === "GET") return page();
+  if (request.method !== "POST")
+    return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });
   if (!enabled)
     return page({
       status: 503,
@@ -112,30 +152,19 @@ export async function handleCommunityForm(
         "Too many submissions just now. Please wait a minute and try again.",
     });
   const values = await readValues(request);
-  const allowed = new Set(
-    kind === "survey"
-      ? [
-          "submission_id",
-          ...surveyQuestions.flatMap((question) =>
-            question.other
-              ? [question.name, `${question.name}_other`]
-              : [question.name],
-          ),
-        ]
-      : [
-          "submission_id",
-          "name",
-          "address",
-          "country",
-          ...(invitation?.hat ? ["hat"] : []),
-        ],
-  );
-  if (!values || Object.keys(values).some((key) => !allowed.has(key)))
+  const allowed = new Set([
+    "submission_id",
+    "discord",
+    "company",
+    ...surveyQuestions.map((question) => question.name),
+  ]);
+  if (!values || Object.keys(values).some((key) => !allowed.has(key))) {
     return page({
       status: 400,
       message:
         "We couldn't read that response. Please fill out the form again.",
     });
+  }
   const parsedId = z
     .uuid()
     .safeParse(
@@ -148,60 +177,25 @@ export async function handleCommunityForm(
       message: "This form needs a fresh submission. Please try again.",
     });
   id = parsedId.data;
-  let errors: FormErrors = {};
-  let statement: D1PreparedStatement;
-  if (kind === "survey") {
-    errors = validateSurvey(values);
-    if (Object.keys(errors).length)
-      return page({ status: 400, values, errors });
-    const answers: FormValues = {};
-    for (const question of surveyQuestions) {
-      const selected = values[question.name]?.filter(Boolean) ?? [];
-      if (selected.length) answers[question.name] = selected;
-      if (question.other && selected.includes("Other"))
-        answers[`${question.name}_other`] =
-          values[`${question.name}_other`] ?? [];
-    }
-    statement = env.DB.prepare(
-      "INSERT INTO community_survey_response (id, created_at, answers) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING",
-    ).bind(id, Date.now(), JSON.stringify(answers));
-  } else {
-    const fields = Object.fromEntries(
-      ["name", "address", "country", "hat"].map((name) => [
-        name,
-        values[name]?.length === 1 ? values[name][0] : undefined,
-      ]),
-    );
-    const parsed = (
-      invitation?.hat
-        ? addressSchema.extend({ hat: z.enum(["Yes", "No"]) })
-        : addressSchema
-    ).safeParse(fields);
-    if (!parsed.success) {
-      for (const issue of parsed.error.issues) {
-        const name = String(issue.path[0]);
-        errors[name] =
-          name === "hat"
-            ? "Please choose Yes or No."
-            : "Please fill in this field and keep it within the length limit.";
-      }
-      return page({ status: 400, values, errors });
-    }
-    const address = parsed.data;
-    statement = env.DB.prepare(
-      "INSERT INTO community_merch_address (id, created_at, recipient_code, name, address, country, hat) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
-    ).bind(
-      id,
-      Date.now(),
-      invitation!.code,
-      address.name,
-      address.address,
-      address.country,
-      invitation?.hat ? (address.hat === "Yes" ? 1 : 0) : null,
-    );
-  }
+  const errors = validateSurvey(values);
+  if (Object.keys(errors).length) return page({ status: 400, values, errors });
+  const code = crypto.randomUUID().replaceAll("-", "");
+  const hash = await sha256Hex(code);
   try {
-    await statement.run();
+    const [response, allocation] = await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO community_survey_response (id, created_at, answers) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING",
+      ).bind(id, Date.now(), JSON.stringify(surveyAnswers(values))),
+      env.DB.prepare(
+        "INSERT INTO community_sticker_code (slot, code_hash) SELECT COALESCE(MAX(slot), 0) + 1, ? FROM community_sticker_code HAVING COALESCE(MAX(slot), 0) < 250 AND changes() = 1",
+      ).bind(hash),
+    ]);
+    if (!response?.meta.changes)
+      return page({ complete: true, duplicate: true });
+    return page({
+      complete: true,
+      stickerCode: allocation?.meta.changes ? code : null,
+    });
   } catch {
     return page({
       status: 503,
@@ -210,5 +204,4 @@ export async function handleCommunityForm(
         "We couldn't save your response. Your answers are still here; please try again.",
     });
   }
-  return page({ complete: true });
 }

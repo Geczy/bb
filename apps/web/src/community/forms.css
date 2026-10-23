@@ -220,3 +220,24 @@
     padding: 28px 0;
   }
 }
+
+.community-wordmark {
+  display: block;
+  width: 76px;
+  height: 44px;
+  background: url("/brand/bb-logo-flat-black.svg") center / contain no-repeat;
+}
+.dark .community-wordmark {
+  background-image: url("/brand/bb-logo-flat-white.svg");
+}
+.community-page [hidden] {
+  display: none;
+}
+.community-merch iframe {
+  width: 100%;
+  min-height: 720px;
+  border: 0;
+}
+.community-thanks code {
+  overflow-wrap: anywhere;
+}

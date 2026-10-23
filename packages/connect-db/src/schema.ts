@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   primaryKey,
@@ -112,6 +113,9 @@ export const server = sqliteTable(
     credentialHash: text("credential_hash"),
     version: text("version"),
     lastSeenAt: timestampMs("last_seen_at"),
+    nextTunnelGate: text("next_tunnel_gate"),
+    nextTunnelRegion: text("next_tunnel_region"),
+    nextTunnelAt: timestampMs("next_tunnel_at"),
     createdAt: timestampMs("created_at").notNull(),
     revokedAt: timestampMs("revoked_at"),
   },
@@ -158,6 +162,9 @@ export const machine = sqliteTable(
     subdomain: text("subdomain").unique(),
     credentialHash: text("credential_hash").notNull(),
     lastSeenAt: timestampMs("last_seen_at"),
+    nextTunnelGate: text("next_tunnel_gate"),
+    nextTunnelRegion: text("next_tunnel_region"),
+    nextTunnelAt: timestampMs("next_tunnel_at"),
     createdAt: timestampMs("created_at").notNull(),
     revokedAt: timestampMs("revoked_at"),
   },
@@ -307,19 +314,21 @@ export const communitySurveyResponse = sqliteTable(
   },
 );
 
-export const communityMerchAddress = sqliteTable("community_merch_address", {
-  id: text("id").primaryKey(),
-  createdAt: integer("created_at").notNull(),
-  recipientCode: text("recipient_code").notNull(),
-  name: text("name").notNull(),
-  address: text("address").notNull(),
-  country: text("country").notNull(),
-  hat: integer("hat", { mode: "boolean" }),
-});
+export const communityStickerCode = sqliteTable(
+  "community_sticker_code",
+  {
+    slot: integer("slot").primaryKey(),
+    codeHash: text("code_hash").notNull().unique(),
+    shipped: integer("shipped", { mode: "boolean" }).notNull().default(false),
+  },
+  (table) => [
+    check("community_sticker_pool_cap", sql`${table.slot} BETWEEN 1 AND 250`),
+  ],
+);
 
 export const schema = {
   communitySurveyResponse,
-  communityMerchAddress,
+  communityStickerCode,
   user,
   session,
   account,
