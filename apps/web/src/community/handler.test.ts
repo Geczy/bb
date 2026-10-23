@@ -178,7 +178,7 @@ describe("private community forms", () => {
       expect(await response.text()).toContain(
         `https://form.jotform.com/123456?code=${code}`,
       );
-      expect(response.headers.get("referrer-policy")).toBe("same-origin");
+      expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     }
     const off = await handleCommunityForm(
       request(),

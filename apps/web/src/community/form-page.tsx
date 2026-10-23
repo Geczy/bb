@@ -174,6 +174,7 @@ export function formPage({
   jotform?: string | null;
 }): Response {
   const nonce = crypto.randomUUID();
+  const referrerPolicy = kind === "survey" ? "same-origin" : "no-referrer";
   const title = kind === "survey" ? SURVEY_TITLE : "thank you 🧡";
   const html = renderToStaticMarkup(
     <html lang="en">
@@ -182,7 +183,7 @@ export function formPage({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{title}</title>
         <meta name="robots" content="noindex, nofollow" />
-        <meta name="referrer" content="same-origin" />
+        <meta name="referrer" content={referrerPolicy} />
         <link rel="icon" href="/favicon-32x32.png" />
         {siteHeadLinks(css).map((link, index) => (
           <link key={index} {...link} />
@@ -345,7 +346,7 @@ export function formPage({
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
-      "referrer-policy": "same-origin",
+      "referrer-policy": referrerPolicy,
       "x-robots-tag": "noindex, nofollow",
       "x-content-type-options": "nosniff",
       "content-security-policy": `default-src 'self'; script-src 'nonce-${nonce}'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'none'; frame-src ${frameSource}; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
