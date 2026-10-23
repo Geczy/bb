@@ -1,3 +1,5 @@
+import { buildAbsoluteFilePath } from "@/lib/absolute-file-path";
+import { resolveEnvironmentPreviewRoot } from "@bb/client-core";
 import type { AppTabOpenIntent } from "@/lib/app-navigation-host";
 import { openAppTabFromDestinations } from "@/lib/app-fixed-tab-navigation";
 import { createPanelActionDestination } from "@/components/plugin/PluginPanelActions";
@@ -1585,6 +1587,19 @@ function ThreadDetailViewInternal(
     (selection: WorkspaceChangedFileSelection) => {
       const openTarget = resolveWorkspaceChangedFileOpenTarget(selection);
       if (openTarget.kind === "preview") {
+        if (
+          openTarget.source.kind === "working-tree" &&
+          environment?.repoRoot
+        ) {
+          openHostFile({
+            lineRange: null,
+            path: buildAbsoluteFilePath({
+              rootPath: environment.repoRoot,
+              path: selection.file.path,
+            }),
+          });
+          return;
+        }
         openWorkspaceFile({
           lineRange: null,
           path: selection.file.path,
@@ -1595,7 +1610,12 @@ function ThreadDetailViewInternal(
       }
       openSecondaryPanelDiffFile(selection.file.path);
     },
-    [openSecondaryPanelDiffFile, openWorkspaceFile],
+    [
+      environment?.repoRoot,
+      openHostFile,
+      openSecondaryPanelDiffFile,
+      openWorkspaceFile,
+    ],
   );
   const workStatusQuery = useEnvironmentWorkStatus(
     thread?.environmentId,
@@ -1951,6 +1971,20 @@ function ThreadDetailViewInternal(
       workspacePreviewRootPath,
     ],
   );
+  const handleOpenRepositoryFileInEditor = useMemo(
+    () =>
+      buildOpenInEditorHandler({
+        rootPath: environment?.repoRoot ?? environment?.path ?? null,
+        canOpenPreferredTarget: canOpenPreferredFileTarget,
+        openInPreferredTarget: openPathInPreferredFileTarget,
+      }),
+    [
+      environment?.repoRoot,
+      environment?.path,
+      canOpenPreferredFileTarget,
+      openPathInPreferredFileTarget,
+    ],
+  );
   const handleOpenStorageFileInEditor = useMemo(
     () =>
       buildOpenInEditorHandler({
@@ -1993,7 +2027,12 @@ function ThreadDetailViewInternal(
   useAppCommandHandler("workspace.openPreferred", () => {
     if (!isFocused) return false;
     if (activeWorkspaceFilePath && handleOpenFileInEditor) {
-      handleOpenFileInEditor(activeWorkspaceFilePath);
+      const openFile =
+        activeFixedSecondaryTab?.kind === "workspace-file-preview" &&
+        activeFixedSecondaryTab.source.kind !== "working-tree"
+          ? handleOpenRepositoryFileInEditor
+          : handleOpenFileInEditor;
+      openFile?.(activeWorkspaceFilePath);
       return true;
     }
     if (activeHostFilePath && handleOpenHostFileInEditor) {
@@ -2445,9 +2484,13 @@ function ThreadDetailViewInternal(
           />
         );
       case "workspace-file-preview": {
+        const previewRoot = resolveEnvironmentPreviewRoot(
+          environment,
+          tab.source,
+        );
         const copyPath = resolveAbsoluteFilePath({
           path: tab.path,
-          rootPath: workspacePreviewRootPath,
+          rootPath: previewRoot,
         });
         return (
           <LazyWorkspaceFilePreviewTabContent
@@ -2462,9 +2505,13 @@ function ThreadDetailViewInternal(
                 : undefined,
               onOpenLink: handleOpenTimelineLink,
               onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
-              rootPath: workspacePreviewRootPath,
+              rootPath: previewRoot,
             })}
-            onOpenInEditor={handleOpenFileInEditor}
+            onOpenInEditor={
+              tab.source.kind === "working-tree"
+                ? handleOpenFileInEditor
+                : handleOpenRepositoryFileInEditor
+            }
             onSelectionAddToChat={handleSelectionAddToChat}
             source={tab.source}
             statusLabel={tab.statusLabel}
@@ -2773,7 +2820,7 @@ function ThreadDetailViewInternal(
               onClose: closeSecondaryPanel,
               onCollapse: closeSecondaryPanel,
               onClearPendingGitDiffIntent: clearPendingGitDiffIntent,
-              onOpenFileInEditor: handleOpenFileInEditor,
+              onOpenFileInEditor: handleOpenRepositoryFileInEditor,
               onTabReorder: reorderTab,
               onOpenNewTab: handleOpenNewTab,
               onRetryGitDiffEligibility: () => {
