@@ -661,11 +661,11 @@ describe("PluginPendingInteractionComposer", () => {
       expect(destination.getAttribute("aria-expanded")).toBe("false");
       const fileName = screen.getByText(".env");
       expect(fileName.className.split(" ")).toEqual(
-        expect.arrayContaining(["truncate", "font-medium"]),
+        expect.arrayContaining(["shrink-0", "font-medium"]),
       );
       expect(fileName.parentElement).toBe(destination);
       expect(fileName.className.split(" ")).toEqual(
-        expect.arrayContaining(["min-w-[3ch]", "shrink-[1000]"]),
+        expect.arrayContaining(["shrink-0"]),
       );
       expect(
         destination.textContent?.replace(/[\u200e\u2066\u2069]/g, ""),
@@ -715,9 +715,7 @@ describe("PluginPendingInteractionComposer", () => {
         ".env.local",
       ].map((text) => screen.getByText(text));
       expect(head.className.split(" ")).toContain("truncate");
-      expect(tail.className.split(" ")).toEqual(
-        expect.arrayContaining(["min-w-0", "truncate"]),
-      );
+      expect(tail.className.split(" ")).toContain("shrink-0");
       expect(extension.className.split(" ")).toContain("shrink-0");
       for (const part of [head, tail, extension]) {
         expect(part.parentElement).toBe(destination);
@@ -725,14 +723,11 @@ describe("PluginPendingInteractionComposer", () => {
       const folder = folderText("~/projects/droplet-monitor/credentials");
       expect(folder.dir).toBe("rtl");
       expect(folder.parentElement?.className.split(" ")).toEqual(
-        expect.arrayContaining([
-          "basis-[min(8ch,30%)]",
-          "max-w-max",
-          "min-w-[3ch]",
-          "shrink-[1000000]",
-        ]),
+        expect.arrayContaining(["basis-0", "max-w-max", "min-w-[3ch]"]),
       );
-      expect(head.className.split(" ")).toContain("shrink-[1000]");
+      expect(head.className.split(" ")).toEqual(
+        expect.arrayContaining(["min-w-[4ch]", "truncate"]),
+      );
     });
 
     it("keeps the thread's own page on the question card scale and cancels there", async () => {
