@@ -16,6 +16,14 @@ describe("splitDestination", () => {
       },
     ],
     ["/srv/app/.env", { stem: ".env", extension: "", folder: "/srv/app" }],
+    [
+      "/srv/app/.env.production.local",
+      { stem: ".env", extension: ".production.local", folder: "/srv/app" },
+    ],
+    [
+      "/srv/app/api.env.production.local",
+      { stem: "api", extension: ".env.production.local", folder: "/srv/app" },
+    ],
     ["/.env", { stem: ".env", extension: "", folder: "/" }],
     ["C:\\app\\.env", { stem: ".env", extension: "", folder: "C:\\app" }],
     ["C:\\.env", { stem: ".env", extension: "", folder: "C:\\" }],

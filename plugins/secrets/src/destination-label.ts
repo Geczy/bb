@@ -5,7 +5,7 @@ export interface DestinationParts {
 }
 
 const DRIVE = /^[A-Za-z]:$/;
-const DOTENV_SUFFIX = /\.env(\.[^.]+)?$/;
+const DOTENV_SUFFIX = /\.env(\.[^.]+){0,2}$/;
 
 function lastSeparator(path: string): number {
   return Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
@@ -16,7 +16,12 @@ export function splitDestination(path: string): DestinationParts {
   const name = path.slice(separator + 1);
   if (!name) return { stem: path, extension: "", folder: null };
   const dotenv = DOTENV_SUFFIX.exec(name);
-  const dot = dotenv && dotenv.index > 0 ? dotenv.index : name.lastIndexOf(".");
+  const dot =
+    dotenv === null
+      ? name.lastIndexOf(".")
+      : dotenv.index > 0
+        ? dotenv.index
+        : ".env".length;
   const stem = dot > 0 ? name.slice(0, dot) : name;
   const extension = dot > 0 ? name.slice(dot) : "";
   if (separator < 0) return { stem, extension, folder: null };

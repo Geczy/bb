@@ -604,6 +604,14 @@ describe("PluginPendingInteractionComposer", () => {
       }
     }
 
+    function folderText(folder: string): HTMLElement {
+      return screen.getByText(
+        (_, element) =>
+          element?.getAttribute("dir") === "rtl" &&
+          element.textContent?.replace(/[\u200e\u2066\u2069]/g, "") === folder,
+      );
+    }
+
     async function renderSecretsForm(
       close: (() => void) | null,
       path = secretRequest.data.destination.path,
@@ -656,13 +664,11 @@ describe("PluginPendingInteractionComposer", () => {
         expect.arrayContaining(["truncate", "font-medium"]),
       );
       expect(fileName.parentElement).toBe(destination);
-      expect(fileName.className.split(" ")).toContain("shrink-0");
-      expect(destination.textContent?.replace(/[\u2066\u2069]/g, "")).toBe(
-        "Saves to.envin~/projects/droplet-monitor",
-      );
+      expect(fileName.className.split(" ")).toContain("shrink");
       expect(
-        screen.getByText("~/projects/droplet-monitor", { exact: false }).dir,
-      ).toBe("rtl");
+        destination.textContent?.replace(/[\u200e\u2066\u2069]/g, ""),
+      ).toBe("Saves to.envin~/projects/droplet-monitor");
+      expect(folderText("~/projects/droplet-monitor").dir).toBe("rtl");
       expect(screen.queryByText(/Writes to/)).toBeNull();
       fireEvent.click(destination);
       expect(destination.getAttribute("aria-expanded")).toBe("true");
@@ -711,12 +717,7 @@ describe("PluginPendingInteractionComposer", () => {
         expect(fixed.className.split(" ")).toContain("shrink-0");
         expect(fixed.parentElement).toBe(destination);
       }
-      const folder = screen.getByText(
-        "~/projects/droplet-monitor/credentials",
-        {
-          exact: false,
-        },
-      );
+      const folder = folderText("~/projects/droplet-monitor/credentials");
       expect(folder.dir).toBe("rtl");
       expect(folder.parentElement?.className.split(" ")).toEqual(
         expect.arrayContaining(["basis-[min(8ch,30%)]", "max-w-max"]),
@@ -736,12 +737,10 @@ describe("PluginPendingInteractionComposer", () => {
         name: `Saves to ${secretRequest.data.destination.path}`,
       });
       expect(destination.textContent).toContain(".env");
-      expect(destination.textContent?.replace(/[\u2066\u2069]/g, "")).toBe(
-        "Saves to.envin~/projects/droplet-monitor",
-      );
       expect(
-        screen.getByText("~/projects/droplet-monitor", { exact: false }).dir,
-      ).toBe("rtl");
+        destination.textContent?.replace(/[\u200e\u2066\u2069]/g, ""),
+      ).toBe("Saves to.envin~/projects/droplet-monitor");
+      expect(folderText("~/projects/droplet-monitor").dir).toBe("rtl");
       const inputClasses = screen
         .getByLabelText("OPENROUTER_API_KEY")
         .className.split(" ");
