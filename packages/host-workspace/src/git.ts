@@ -1,5 +1,5 @@
 import {
-  execHostFile,
+  execHostFileBuffer,
   execPortableFile,
   runVcsProcess,
   spawnManagedProcess,
@@ -16,7 +16,6 @@ import type {
   WorkspaceGitOperation,
 } from "@bb/domain";
 
-const execFileAsync = execHostFile;
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
 
 export class WorkspaceError extends Error {
@@ -1640,9 +1639,8 @@ export async function readGitBlob(
   try {
     const blobArgs = ["cat-file", "blob", target];
     const result = await runVcsProcess("git", blobArgs, () =>
-      execFileAsync("git", blobArgs, {
+      execHostFileBuffer("git", blobArgs, {
         cwd,
-        encoding: "buffer",
         env: resolveGitProcessEnv({
           env: undefined,
           shellPath: options.shellPath,
