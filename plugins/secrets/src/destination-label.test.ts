@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitDestination } from "./destination-label.js";
+import { splitDestination, splitStem } from "./destination-label.js";
 
 describe("splitDestination", () => {
   it.each([
@@ -27,5 +27,20 @@ describe("splitDestination", () => {
     ],
   ])("splits %s", (path, parts) => {
     expect(splitDestination(path)).toEqual(parts);
+  });
+});
+
+describe("splitStem", () => {
+  it.each([
+    [".env", { head: ".env", tail: "" }],
+    ["service-acct", { head: "service-acct", tail: "" }],
+    [
+      "droplet-monitor-production-service",
+      { head: "droplet-monitor-production-s", tail: "ervice" },
+    ],
+    ["credenciales-producción", { head: "credenciales-prod", tail: "ucción" }],
+  ])("keeps the end of %s whole", (stem, parts) => {
+    expect(splitStem(stem)).toEqual(parts);
+    expect(parts.head + parts.tail).toBe(stem);
   });
 });

@@ -27,3 +27,16 @@ export function splitDestination(path: string): DestinationParts {
     folder: DRIVE.test(folder) ? `${folder}${path[separator]}` : folder,
   };
 }
+
+const STEM_TAIL_LENGTH = 6;
+
+export function splitStem(stem: string): { head: string; tail: string } {
+  const characters = Array.from(stem);
+  if (characters.length <= STEM_TAIL_LENGTH * 2) {
+    return { head: stem, tail: "" };
+  }
+  return {
+    head: characters.slice(0, -STEM_TAIL_LENGTH).join(""),
+    tail: characters.slice(-STEM_TAIL_LENGTH).join(""),
+  };
+}

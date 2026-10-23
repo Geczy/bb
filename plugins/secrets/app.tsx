@@ -19,7 +19,7 @@ import {
   secretRequestResponseSchema,
 } from "./src/secret-request.js";
 import { reconcileDotenv } from "./src/dotenv.js";
-import { splitDestination } from "./src/destination-label.js";
+import { splitDestination, splitStem } from "./src/destination-label.js";
 
 function SecretRequestInteraction({
   interaction,
@@ -96,6 +96,7 @@ function SecretRequestInteraction({
 
   const textInset = compact ? "px-2.5" : undefined;
   const destination = splitDestination(payload.destination.path);
+  const destinationStem = splitStem(destination.stem);
   const destinationFolder =
     destination.folder === null
       ? null
@@ -146,8 +147,13 @@ function SecretRequestInteraction({
         ) : (
           <>
             <span className="min-w-[1.5ch] truncate font-medium text-foreground">
-              {destination.stem}
+              {destinationStem.head}
             </span>
+            {destinationStem.tail ? (
+              <span className="shrink-0 font-medium text-foreground">
+                {destinationStem.tail}
+              </span>
+            ) : null}
             {destination.extension ? (
               <span className="shrink-0 font-medium text-foreground">
                 {destination.extension}
@@ -156,7 +162,7 @@ function SecretRequestInteraction({
             {destinationFolder === null ? null : (
               <>
                 <span className="mx-1.5 shrink-0">in</span>
-                <span className="flex min-w-0 flex-1 overflow-hidden">
+                <span className="flex min-w-[min(8ch,30%)] flex-1 overflow-hidden">
                   <span dir="rtl" className="block w-min max-w-full truncate">
                     {`\u200e${destinationFolder}\u200e`}
                   </span>

@@ -604,7 +604,10 @@ describe("PluginPendingInteractionComposer", () => {
       }
     }
 
-    async function renderSecretsForm(close: (() => void) | null) {
+    async function renderSecretsForm(
+      close: (() => void) | null,
+      path = secretRequest.data.destination.path,
+    ) {
       setPluginSlotRegistrations(
         "secrets",
         registrations(await loadPendingInteractions("secrets")),
@@ -614,7 +617,13 @@ describe("PluginPendingInteractionComposer", () => {
         <PluginPendingInteractionComposer
           collapsedByDefault={false}
           interaction={interaction}
-          request={secretRequest}
+          request={{
+            ...secretRequest,
+            data: {
+              ...secretRequest.data,
+              destination: { kind: "dotenv", path },
+            },
+          }}
           origin="plugin"
         />
       );
@@ -682,6 +691,35 @@ describe("PluginPendingInteractionComposer", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(close).toHaveBeenCalledOnce();
       expect(cancel).not.toHaveBeenCalled();
+    });
+
+    it("shortens a long file name in the middle and keeps its extension and a folder tail", async () => {
+      const path =
+        "/home/agent/projects/droplet-monitor/credentials/droplet-monitor-production-service.env.local";
+      await renderSecretsForm(vi.fn(), path);
+      const destination = screen.getByRole("button", {
+        name: `Saves to ${path}`,
+      });
+      const [head, tail, extension] = [
+        "droplet-monitor-production-s",
+        "ervice",
+        ".env.local",
+      ].map((text) => screen.getByText(text));
+      expect(head.className.split(" ")).toContain("truncate");
+      for (const fixed of [tail, extension]) {
+        expect(fixed.className.split(" ")).toContain("shrink-0");
+        expect(fixed.parentElement).toBe(destination);
+      }
+      const folder = screen.getByText(
+        "~/projects/droplet-monitor/credentials",
+        {
+          exact: false,
+        },
+      );
+      expect(folder.dir).toBe("rtl");
+      expect(folder.parentElement?.className.split(" ")).toContain(
+        "min-w-[min(8ch,30%)]",
+      );
     });
 
     it("keeps the thread's own page on the question card scale and cancels there", async () => {
