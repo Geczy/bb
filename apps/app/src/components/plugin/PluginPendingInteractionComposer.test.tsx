@@ -656,7 +656,8 @@ describe("PluginPendingInteractionComposer", () => {
         expect.arrayContaining(["truncate", "font-medium"]),
       );
       expect(fileName.parentElement).toBe(destination);
-      expect(destination.textContent?.replaceAll("\u200e", "")).toBe(
+      expect(fileName.className.split(" ")).toContain("shrink-0");
+      expect(destination.textContent?.replace(/[\u2066\u2069]/g, "")).toBe(
         "Saves to.envin~/projects/droplet-monitor",
       );
       expect(
@@ -717,9 +718,10 @@ describe("PluginPendingInteractionComposer", () => {
         },
       );
       expect(folder.dir).toBe("rtl");
-      expect(folder.parentElement?.className.split(" ")).toContain(
-        "min-w-[min(8ch,30%)]",
+      expect(folder.parentElement?.className.split(" ")).toEqual(
+        expect.arrayContaining(["basis-[min(8ch,30%)]", "max-w-max"]),
       );
+      expect(head.className.split(" ")).toContain("shrink-[1000]");
     });
 
     it("keeps the thread's own page on the question card scale and cancels there", async () => {
@@ -734,7 +736,7 @@ describe("PluginPendingInteractionComposer", () => {
         name: `Saves to ${secretRequest.data.destination.path}`,
       });
       expect(destination.textContent).toContain(".env");
-      expect(destination.textContent?.replaceAll("\u200e", "")).toBe(
+      expect(destination.textContent?.replace(/[\u2066\u2069]/g, "")).toBe(
         "Saves to.envin~/projects/droplet-monitor",
       );
       expect(

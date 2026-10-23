@@ -39,6 +39,17 @@ describe("splitStem", () => {
       { head: "droplet-monitor-production-s", tail: "ervice" },
     ],
     ["credenciales-producción", { head: "credenciales-prod", tail: "ucción" }],
+    [
+      "my-production-cafe\u0301-key1",
+      { head: "my-production-caf", tail: "e\u0301-key1" },
+    ],
+    [
+      "team-credentials-\u{1F468}\u200D\u{1F469}\u200D\u{1F467}-ok",
+      {
+        head: "team-credential",
+        tail: "s-\u{1F468}\u200D\u{1F469}\u200D\u{1F467}-ok",
+      },
+    ],
   ])("keeps the end of %s whole", (stem, parts) => {
     expect(splitStem(stem)).toEqual(parts);
     expect(parts.head + parts.tail).toBe(stem);

@@ -30,8 +30,13 @@ export function splitDestination(path: string): DestinationParts {
 
 const STEM_TAIL_LENGTH = 6;
 
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 export function splitStem(stem: string): { head: string; tail: string } {
-  const characters = Array.from(stem);
+  const characters = Array.from(
+    GRAPHEMES.segment(stem),
+    ({ segment }) => segment,
+  );
   if (characters.length <= STEM_TAIL_LENGTH * 2) {
     return { head: stem, tail: "" };
   }
