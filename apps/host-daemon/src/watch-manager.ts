@@ -1,4 +1,4 @@
-import type { WorkspaceDescriptor } from "@bb/domain";
+import type { DiscoveredWorkspaceProperties } from "@bb/domain";
 import {
   provisionWorkspace,
   type HostWorkspace,
@@ -73,7 +73,7 @@ export interface WatchManagerOptions {
   }) => void;
   onWorkspaceMetadataChanged?: (args: {
     environmentId: string;
-    workspace: WorkspaceDescriptor;
+    workspace: DiscoveredWorkspaceProperties;
   }) => void;
   onWorkspaceStatusWatchError?: (args: { error: WorkspaceWatchError }) => void;
 }
@@ -226,7 +226,6 @@ export class WatchManager {
     try {
       const workspace = await this.provisionWorkspace({
         path: target.workspaceContext.workspacePath,
-        descriptor: target.workspaceContext.descriptor,
       });
       const entry: WorkspaceWatchEntry = {
         stopWatchingStatus: STOP_WATCHING,
@@ -435,7 +434,9 @@ export class WatchManager {
     this.options.onWorkspaceMetadataChanged?.({
       environmentId: entry.target.environmentId,
       workspace: {
-        ...entry.workspace.descriptor,
+        path: entry.workspace.path,
+        isGitRepo: true,
+        isWorktree: entry.workspace.isWorktree,
         branchName,
         defaultBranch,
       },
@@ -490,7 +491,9 @@ export class WatchManager {
     this.options.onWorkspaceMetadataChanged?.({
       environmentId: entry.target.environmentId,
       workspace: {
-        ...workspace.descriptor,
+        path: workspace.path,
+        isGitRepo: true,
+        isWorktree: workspace.isWorktree,
         branchName,
         defaultBranch: resolvedDefaultBranch ?? branchName,
       },
