@@ -3631,8 +3631,12 @@ provider catalogs. Then rename project-wide and remove this entry.
 ## Host process toolchain (`@get-bb/plugin-sdk/process`)
 
 `experimental_hostToolchain` supplies `resolve`, `command`, `environment`,
-`node`, `npmCli` (an `{ node, cli }` pair), `bundledNpmCli`, an asynchronous
-`refresh`, and `invalidateFailure`. `bundledNpmCli` throws where the `npm`
+`node`, `npmCli`, `bundledNpmCli`, an asynchronous `refresh`, and
+`invalidateFailure`. `command` runs what PATH resolves, `npm` included; an
+explicit caller PATH is passed through unchanged and is the only PATH searched.
+`npmCli` returns a `{ node, cli }` pair: the running Node's own npm, else the
+PATH npm with the Node that owns it, else the bundled npm; self-update uses it.
+`bundledNpmCli` throws where the `npm`
 package cannot be resolved next to the calling bundle. `experimental_spawnHostProcess`,
 `experimental_forkHostProcess`, `experimental_execHostFile`, and
 `experimental_execHostFileCallback` use it to launch processes and never wait for
