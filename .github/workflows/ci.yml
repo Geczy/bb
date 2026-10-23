@@ -10,6 +10,8 @@ on:
 env:
   PRIMARY_NODE_VERSION: "22.x"
   PNPM_VERSION: "9.15.0"
+  TURBO_FORCE: "true"
+  VITEST_MAX_WORKERS: "4"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'latest' }}
@@ -18,7 +20,7 @@ concurrency:
 jobs:
   plan:
     name: Select CI checks
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions:
       contents: read
@@ -73,7 +75,7 @@ jobs:
     name: Validate dependencies
     needs: plan
     if: ${{ needs.plan.outputs.dependencies == 'true' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 10
     permissions:
       contents: read
@@ -91,7 +93,7 @@ jobs:
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection).foundation }}
     name: Windows host packages (Node 22.x)
-    runs-on: blacksmith-4vcpu-windows-2025
+    runs-on: blacksmith-8vcpu-windows-2025
     timeout-minutes: 15
     permissions:
       contents: read
@@ -138,7 +140,7 @@ jobs:
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection).packaging }}
     name: Windows app smoke (Node 22.x)
-    runs-on: blacksmith-4vcpu-windows-2025
+    runs-on: blacksmith-8vcpu-windows-2025
     timeout-minutes: 40
     permissions:
       contents: read
@@ -201,7 +203,7 @@ jobs:
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection).packaging }}
     name: Windows desktop smoke (Node 22.x)
-    runs-on: blacksmith-4vcpu-windows-2025
+    runs-on: blacksmith-8vcpu-windows-2025
     timeout-minutes: 40
     permissions:
       contents: read
@@ -267,7 +269,7 @@ jobs:
     name: Windows tests (${{ matrix.shard }}, Node 22.x)
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection)['windows-tests'].include[0] != null }}
-    runs-on: blacksmith-4vcpu-windows-2025
+    runs-on: blacksmith-8vcpu-windows-2025
     timeout-minutes: 30
     permissions:
       contents: read
@@ -369,7 +371,7 @@ jobs:
     name: Lint and typecheck (ubuntu-latest, Node 22.x)
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection).staticNeeded }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 20
     permissions:
       contents: read
@@ -418,7 +420,7 @@ jobs:
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection).buildNeeded }}
     name: Checks (ubuntu-latest, Node 22.x)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
 
     # `actions: read` is what lets the cache-usage check call the Actions API;
@@ -522,7 +524,7 @@ jobs:
     name: Tests (${{ matrix.shard }}, ubuntu-latest, Node 22.x)
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection)['tests'].include[0] != null }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
 
     strategy:
@@ -597,7 +599,7 @@ jobs:
       - name: Test
         env:
           BB_CI_TEST_SHARD: ${{ matrix.vitestShard }}
-          VITEST_MAX_WORKERS: "2"
+          VITEST_MAX_WORKERS: "4"
         run: ${{ contains(matrix.filter, '--filter=@bb/desktop') && 'xvfb-run -a' || '' }} pnpm exec turbo run test ${{ matrix.filter }} --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only --summarize --concurrency=4
 
       - name: Test native browser address interactions
@@ -627,7 +629,7 @@ jobs:
     needs: plan
     if: ${{ fromJSON(needs.plan.outputs.selection).forks }}
     name: Plugin Fork Check (${{ matrix.shard }}, ubuntu-latest, Node 22.x)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 20
 
     strategy:
@@ -717,7 +719,7 @@ jobs:
   provider-model-listing:
     needs: plan
     name: Provider Model Listing
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 20
 
     # Fork pull requests cannot read secrets, so the probe would fail
@@ -799,7 +801,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: blacksmith-4vcpu-ubuntu-2404
+          - os: blacksmith-8vcpu-ubuntu-2404
             node-version: "22.x"
           - os: blacksmith-6vcpu-macos-15
             node-version: "22.x"
@@ -873,9 +875,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: blacksmith-4vcpu-ubuntu-2404
+          - os: blacksmith-8vcpu-ubuntu-2404
             node-version: "24.x"
-          - os: blacksmith-4vcpu-ubuntu-2404
+          - os: blacksmith-8vcpu-ubuntu-2404
             node-version: "26.x"
           - os: blacksmith-6vcpu-macos-15
             node-version: "24.x"
