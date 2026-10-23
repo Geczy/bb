@@ -1,7 +1,5 @@
-import {
-  readDefaultBranchRefs,
-  type DefaultBranchRelation,
-} from "bb-environment-provider-host/git";
+import { readDefaultBranchRefs } from "bb-environment-provider-host/git";
+import type { DefaultBranchRelation } from "bb-git-contract";
 import type { WorktreeBaseBranch } from "../contract.js";
 
 interface ResolveDefaultWorktreeBaseBranchArgs {
