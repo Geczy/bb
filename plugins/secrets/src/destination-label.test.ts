@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { displayPath, splitDestination, fitStem } from "./destination-label.js";
+import {
+  displayPath,
+  splitDestination,
+  fitStem,
+  folderTail,
+} from "./destination-label.js";
 
 describe("splitDestination", () => {
   it.each([
@@ -72,6 +77,14 @@ describe("fitStem", () => {
         (text) => Array.from(new Intl.Segmenter().segment(text)).length,
       ),
     ).toBe(`${family}…${family}`);
+  });
+});
+
+describe("folderTail", () => {
+  it("keeps the folder's last two graphemes after an ellipsis", () => {
+    const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+    expect(folderTail("~/services/credentials")).toBe("…ls");
+    expect(folderTail(`~/team-${family}${family}`)).toBe(`…${family}${family}`);
   });
 });
 

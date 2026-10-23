@@ -22,6 +22,7 @@ import { reconcileDotenv } from "./src/dotenv.js";
 import {
   displayPath,
   fitStem,
+  folderTail,
   graphemeCount,
   splitDestination,
 } from "./src/destination-label.js";
@@ -35,6 +36,7 @@ function SecretDestination({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [fittedStem, setFittedStem] = useState<string | null>(null);
+  const [folderMinimum, setFolderMinimum] = useState<number | null>(null);
   const rowRef = useRef<HTMLButtonElement>(null);
   const stemRef = useRef<HTMLSpanElement>(null);
   const folderRef = useRef<HTMLSpanElement>(null);
@@ -51,39 +53,50 @@ function SecretDestination({
     const measure = measureRef.current;
     if (expanded || !row || !stem || !measure) return;
     const fit = () => {
-      if (row.clientWidth === 0) {
+      const rowWidth = row.getBoundingClientRect().width;
+      if (rowWidth === 0) {
         setFittedStem(null);
         return;
       }
+      const textWidth = (text: string, weight: string) => {
+        measure.style.fontWeight = weight;
+        measure.textContent = text;
+        return measure.getBoundingClientRect().width;
+      };
       const rowStyle = getComputedStyle(row);
       let used =
-        parseFloat(rowStyle.paddingLeft) + parseFloat(rowStyle.paddingRight);
+        parseFloat(rowStyle.paddingLeft) +
+        parseFloat(rowStyle.paddingRight) +
+        parseFloat(rowStyle.borderLeftWidth) +
+        parseFloat(rowStyle.borderRightWidth);
+      let tailWidth: number | null = null;
       for (const child of Array.from(row.children)) {
         if (child === stem || child === measure) continue;
         const style = getComputedStyle(child);
         const margins =
           parseFloat(style.marginLeft) + parseFloat(style.marginRight);
-        if (child === folderRef.current) {
-          const minimum = parseFloat(style.minWidth);
-          used +=
-            margins +
-            (Number.isNaN(minimum)
-              ? child.getBoundingClientRect().width
-              : minimum);
+        if (child === folderRef.current && folder !== null) {
+          if (graphemeCount(folder) > 3) {
+            tailWidth = Math.ceil(
+              textWidth(folderTail(folder), style.fontWeight),
+            );
+          }
+          used += margins + (tailWidth ?? child.getBoundingClientRect().width);
         } else {
           used += margins + child.getBoundingClientRect().width;
         }
       }
-      const available = row.clientWidth - used;
+      const available = rowWidth - used;
       if (!Number.isFinite(available)) {
         setFittedStem(null);
         return;
       }
+      setFolderMinimum(tailWidth);
+      const stemWeight = getComputedStyle(stem).fontWeight;
       setFittedStem(
-        fitStem(destination.stem, available, (text) => {
-          measure.textContent = text;
-          return measure.getBoundingClientRect().width;
-        }),
+        fitStem(destination.stem, available, (text) =>
+          textWidth(text, stemWeight),
+        ),
       );
     };
     fit();
@@ -135,6 +148,11 @@ function SecretDestination({
               <span className="mx-1.5 shrink-0">in</span>
               <span
                 ref={folderRef}
+                style={
+                  folderMinimum === null
+                    ? undefined
+                    : { minWidth: folderMinimum }
+                }
                 className={cn(
                   "flex max-w-max grow basis-0 overflow-hidden",
                   graphemeCount(folder) > 3 ? "min-w-[3ch]" : "min-w-max",
@@ -149,7 +167,7 @@ function SecretDestination({
           <span
             ref={measureRef}
             aria-hidden="true"
-            className="pointer-events-none invisible absolute left-0 top-0 whitespace-pre font-medium"
+            className="pointer-events-none invisible absolute left-0 top-0 whitespace-pre"
           />
         </>
       )}

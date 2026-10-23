@@ -43,6 +43,10 @@ export function graphemeCount(text: string): number {
   return graphemes(text).length;
 }
 
+export function folderTail(folder: string): string {
+  return `…${graphemes(folder).slice(-2).join("")}`;
+}
+
 export function fitStem(
   stem: string,
   available: number,
