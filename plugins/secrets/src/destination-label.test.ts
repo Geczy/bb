@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { splitDestination, splitStem } from "./destination-label.js";
+import {
+  displayPath,
+  splitDestination,
+  splitStem,
+} from "./destination-label.js";
 
 describe("splitDestination", () => {
   it.each([
@@ -41,7 +45,10 @@ describe("splitDestination", () => {
 describe("splitStem", () => {
   it.each([
     [".env", { head: ".env", tail: "" }],
-    ["service-acct", { head: "service-acct", tail: "" }],
+    ["api", { head: "api", tail: "" }],
+    ["secrets", { head: "secr", tail: "ets" }],
+    ["credentials", { head: "creden", tail: "tials" }],
+    ["service-acct", { head: "servic", tail: "e-acct" }],
     [
       "droplet-monitor-production-service",
       { head: "droplet-monitor-production-s", tail: "ervice" },
@@ -61,5 +68,15 @@ describe("splitStem", () => {
   ])("keeps the end of %s whole", (stem, parts) => {
     expect(splitStem(stem)).toEqual(parts);
     expect(parts.head + parts.tail).toBe(stem);
+  });
+});
+
+describe("displayPath", () => {
+  it.each([
+    ["~/projects/app", "\u2066~/\u200eprojects/\u200eapp\u2069"],
+    ["C:\\Users\\dev", "\u2066C:\\\u200eUsers\\\u200edev\u2069"],
+    ["~", "\u2066~\u2069"],
+  ])("isolates %s and marks each separator left-to-right", (path, label) => {
+    expect(displayPath(path)).toBe(label);
   });
 });

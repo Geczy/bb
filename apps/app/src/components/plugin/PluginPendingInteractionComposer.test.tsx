@@ -664,7 +664,9 @@ describe("PluginPendingInteractionComposer", () => {
         expect.arrayContaining(["truncate", "font-medium"]),
       );
       expect(fileName.parentElement).toBe(destination);
-      expect(fileName.className.split(" ")).toContain("shrink");
+      expect(fileName.className.split(" ")).toEqual(
+        expect.arrayContaining(["min-w-[3ch]", "shrink-[1000]"]),
+      );
       expect(
         destination.textContent?.replace(/[\u200e\u2066\u2069]/g, ""),
       ).toBe("Saves to.envin~/projects/droplet-monitor");
@@ -672,9 +674,9 @@ describe("PluginPendingInteractionComposer", () => {
       expect(screen.queryByText(/Writes to/)).toBeNull();
       fireEvent.click(destination);
       expect(destination.getAttribute("aria-expanded")).toBe("true");
-      expect(destination.textContent).toBe(
-        `Saves to${secretRequest.data.destination.path}`,
-      );
+      expect(
+        destination.textContent?.replace(/[\u200e\u2066\u2069]/g, ""),
+      ).toBe(`Saves to${secretRequest.data.destination.path}`);
       const input = screen.getByLabelText("OPENROUTER_API_KEY");
       expect(input.className.split(" ")).toEqual(
         expect.arrayContaining([
@@ -713,14 +715,22 @@ describe("PluginPendingInteractionComposer", () => {
         ".env.local",
       ].map((text) => screen.getByText(text));
       expect(head.className.split(" ")).toContain("truncate");
-      for (const fixed of [tail, extension]) {
-        expect(fixed.className.split(" ")).toContain("shrink-0");
-        expect(fixed.parentElement).toBe(destination);
+      expect(tail.className.split(" ")).toEqual(
+        expect.arrayContaining(["min-w-0", "truncate"]),
+      );
+      expect(extension.className.split(" ")).toContain("shrink-0");
+      for (const part of [head, tail, extension]) {
+        expect(part.parentElement).toBe(destination);
       }
       const folder = folderText("~/projects/droplet-monitor/credentials");
       expect(folder.dir).toBe("rtl");
       expect(folder.parentElement?.className.split(" ")).toEqual(
-        expect.arrayContaining(["basis-[min(8ch,30%)]", "max-w-max"]),
+        expect.arrayContaining([
+          "basis-[min(8ch,30%)]",
+          "max-w-max",
+          "min-w-[3ch]",
+          "shrink-[1000000]",
+        ]),
       );
       expect(head.className.split(" ")).toContain("shrink-[1000]");
     });

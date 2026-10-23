@@ -37,16 +37,28 @@ const STEM_TAIL_LENGTH = 6;
 
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
+export function graphemeCount(text: string): number {
+  return Array.from(GRAPHEMES.segment(text)).length;
+}
+
 export function splitStem(stem: string): { head: string; tail: string } {
   const characters = Array.from(
     GRAPHEMES.segment(stem),
     ({ segment }) => segment,
   );
-  if (characters.length <= STEM_TAIL_LENGTH * 2) {
+  if (characters.length <= STEM_TAIL_LENGTH) {
     return { head: stem, tail: "" };
   }
+  const tailLength = Math.min(
+    STEM_TAIL_LENGTH,
+    Math.floor(characters.length / 2),
+  );
   return {
-    head: characters.slice(0, -STEM_TAIL_LENGTH).join(""),
-    tail: characters.slice(-STEM_TAIL_LENGTH).join(""),
+    head: characters.slice(0, -tailLength).join(""),
+    tail: characters.slice(-tailLength).join(""),
   };
+}
+
+export function displayPath(path: string): string {
+  return `\u2066${path.replace(/[\\/]/g, "$&\u200e")}\u2069`;
 }

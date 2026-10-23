@@ -19,7 +19,12 @@ import {
   secretRequestResponseSchema,
 } from "./src/secret-request.js";
 import { reconcileDotenv } from "./src/dotenv.js";
-import { splitDestination, splitStem } from "./src/destination-label.js";
+import {
+  displayPath,
+  graphemeCount,
+  splitDestination,
+  splitStem,
+} from "./src/destination-label.js";
 
 function SecretRequestInteraction({
   interaction,
@@ -142,22 +147,15 @@ function SecretRequestInteraction({
         <span className="mr-1.5 shrink-0">Saves to</span>
         {pathExpanded ? (
           <span className="max-h-12 min-w-0 overflow-y-auto break-all text-foreground">
-            {payload.destination.path}
+            {displayPath(payload.destination.path)}
           </span>
         ) : (
           <>
-            <span
-              className={cn(
-                "truncate font-medium text-foreground",
-                destinationStem.tail
-                  ? "min-w-[3ch] shrink-[1000]"
-                  : "min-w-0 shrink",
-              )}
-            >
+            <span className="min-w-[3ch] shrink-[1000] truncate font-medium text-foreground">
               {destinationStem.head}
             </span>
             {destinationStem.tail ? (
-              <span className="shrink-0 font-medium text-foreground">
+              <span className="min-w-0 truncate font-medium text-foreground">
                 {destinationStem.tail}
               </span>
             ) : null}
@@ -171,12 +169,14 @@ function SecretRequestInteraction({
                 <span className="mx-1.5 shrink-0">in</span>
                 <span
                   className={cn(
-                    "flex min-w-[2ch] max-w-max grow basis-[min(8ch,30%)] overflow-hidden",
-                    destinationStem.tail ? "shrink" : "shrink-[1000]",
+                    "flex max-w-max shrink-[1000000] grow basis-[min(8ch,30%)] overflow-hidden",
+                    graphemeCount(destinationFolder) > 3
+                      ? "min-w-[3ch]"
+                      : "min-w-0",
                   )}
                 >
                   <span dir="rtl" className="block w-min max-w-full truncate">
-                    {`\u2066${destinationFolder.replace(/[\\/]/g, "$&\u200e")}\u2069`}
+                    {displayPath(destinationFolder)}
                   </span>
                 </span>
               </>
