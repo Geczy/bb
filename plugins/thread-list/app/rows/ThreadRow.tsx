@@ -594,7 +594,12 @@ function ThreadRowComponent({
     (event) => {
       if (event.target !== event.currentTarget) {
         if (!(event.target instanceof Element)) return;
-        if (!event.target.closest("[data-sidebar-thread-trailing]")) return;
+        if (
+          !event.target.closest(
+            "[data-sidebar-thread-trailing], [data-thread-row-items]",
+          )
+        )
+          return;
         if (event.target.closest("a, button")) return;
       }
       if (selectionStore.handleClick(thread.id, event, event.currentTarget)) {
@@ -603,20 +608,6 @@ function ThreadRowComponent({
       rowLinkRef.current?.click();
     },
     [selectionStore, thread.id],
-  );
-  const handleRowItemClick = useCallback<MouseEventHandler<HTMLSpanElement>>(
-    (event) => {
-      if (
-        !(event.target instanceof Element) ||
-        event.target.closest("[data-thread-row-items]") === null ||
-        event.target.closest("a, button")
-      )
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      rowLinkRef.current?.click();
-    },
-    [],
   );
   const handleActionsMenuCloseAutoFocus = (event: Event) => {
     const begin = pendingMenuCustomize.current;
@@ -651,7 +642,6 @@ function ThreadRowComponent({
               : SIDEBAR_HOVER_ACTIONS_INSET_CLASS),
         )}
         style={getHoverActionsInsetStyle(quickActions.length)}
-        onClick={handleRowItemClick}
       >
         <a
           ref={rowLinkRef}
