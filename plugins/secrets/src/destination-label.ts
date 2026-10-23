@@ -48,7 +48,8 @@ export function fitStem(
   available: number,
   width: (text: string) => number,
 ): string {
-  if (width(stem) <= available) return stem;
+  const whole = width(stem);
+  if (whole <= available) return stem;
   const characters = graphemes(stem);
   if (characters.length < 3) return stem;
   for (let kept = characters.length - 1; kept > 2; kept -= 1) {
@@ -56,7 +57,8 @@ export function fitStem(
     const text = `${characters.slice(0, head).join("")}…${characters.slice(head - kept).join("")}`;
     if (width(text) <= available) return text;
   }
-  return `${characters[0]}…${characters[characters.length - 1]}`;
+  const shortest = `${characters[0]}…${characters[characters.length - 1]}`;
+  return width(shortest) < whole ? shortest : stem;
 }
 
 export function displayPath(path: string): string {

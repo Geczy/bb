@@ -50,7 +50,8 @@ describe("fitStem", () => {
     ["droplet-monitor-production-service", 4, "dr…e"],
     ["credentials", 8, "cred…als"],
     ["credentials", 1, "c…s"],
-    ["api", 2, "a…i"],
+    ["envs", 2, "e…s"],
+    ["api", 2, "api"],
     ["ab", 1, "ab"],
   ])("shortens %s in the middle to fit %s", (stem, available, text) => {
     expect(fitStem(stem, available, width)).toBe(text);
@@ -66,7 +67,7 @@ describe("fitStem", () => {
     expect(fitted).toBe(`team-…s-ok`);
     expect(
       fitStem(
-        `${family}${family}${family}`,
+        `${family}${family}${family}${family}`,
         2,
         (text) => Array.from(new Intl.Segmenter().segment(text)).length,
       ),
