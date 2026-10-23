@@ -1,7 +1,7 @@
 import {
   createAsyncTtlMemo,
   type AsyncTtlMemo,
-} from "../lib/async-ttl-memo.js";
+} from "@bb/query-tags/async-ttl-memo";
 import type { EnvironmentChangeKind } from "@bb/domain";
 import type { HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
 import type { ServerChangedMessage } from "../../ws/hub.js";

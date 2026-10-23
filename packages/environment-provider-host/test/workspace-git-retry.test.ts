@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runGit, WorkspaceError } from "../src/git.js";
+import { runGit, WorkspaceError } from "../src/workspace-git.js";
 
 const execPortableFileMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@bb/process-utils", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@bb/process-utils")>();
-  return { ...actual, execPortableFile: execPortableFileMock };
+vi.mock("@get-bb/plugin-sdk/host", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@get-bb/plugin-sdk/host")>();
+  return { ...actual, internal_DO_NOT_USE_execPortableFile: execPortableFileMock };
 });
 
 const STATUS_DLL_INIT_FAILED = 0xc0000142;

@@ -3,7 +3,7 @@ import path from "node:path";
 import { initRepo, makeTempDir } from "@bb/test-helpers";
 import { describe, expect, it, vi } from "vitest";
 import { Workspace } from "../src/workspace.js";
-import { runGit } from "../src/git.js";
+import { runGit } from "bb-environment-provider-host/workspace-git";
 import type { RawDiffFileStat, WorkspaceDiffTarget } from "bb-git-contract";
 
 async function write(

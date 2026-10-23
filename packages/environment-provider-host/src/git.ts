@@ -4,26 +4,21 @@ import {
   experimental_spawnPortableOutputProcess as spawnPortableOutputProcess,
 } from "@get-bb/plugin-sdk/host";
 import path from "node:path";
+import {
+  WorkspaceError,
+  type GitCommandResult,
+  type GitProcessOptions,
+  type GitTimeoutOptions,
+  type GitRepoKind,
+  type DefaultBranchRefs,
+  trimOutput,
+  resolvePreferredLocalDefaultBranch,
+} from "./workspace-git.js";
+export { WorkspaceError };
+export type { GitCommandResult, GitProcessOptions, DefaultBranchRefs };
 
 const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 const USES_PROCESS_GROUPS = process.platform !== "win32";
-
-export class WorkspaceError extends Error {
-  readonly code: string;
-  constructor(code: string, message: string, options?: { cause?: unknown }) {
-    super(message, options);
-    this.code = code;
-    this.name = "WorkspaceError";
-  }
-}
-
-export interface GitProcessOptions {
-  shellPath?: string;
-}
-
-interface GitTimeoutOptions extends GitProcessOptions {
-  timeoutMs?: number;
-}
 
 export interface RunGitOptions extends GitProcessOptions {
   cwd: string;
@@ -31,12 +26,6 @@ export interface RunGitOptions extends GitProcessOptions {
   allowFailure?: boolean;
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
-}
-
-export interface GitCommandResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
 }
 
 export type GitRepositoryState = "not_git" | "no_commits" | "has_commits";
@@ -48,21 +37,9 @@ export type DefaultBranchRelation =
   | "diverged"
   | "unknown";
 
-export interface DefaultBranchRefs {
-  defaultBranch: string | undefined;
-  defaultBranchRelation: DefaultBranchRelation | undefined;
-  originDefaultBranch: string | undefined;
-}
-
-type GitRepoKind = "work-tree" | "bare" | "none";
-
 interface GitOutputBuffer {
   append: (chunk: Buffer) => boolean;
   read: () => string;
-}
-
-function trimOutput(value: string): string {
-  return value.trim().replace(/\n+$/u, "");
 }
 
 function describeCommand(args: string[]): string {
@@ -439,25 +416,6 @@ export async function findWorktreeForBranch(
     }
   }
   return null;
-}
-
-function resolvePreferredLocalDefaultBranch(
-  localBranches: readonly string[],
-  originDefaultBranchName: string | undefined,
-): string | undefined {
-  if (
-    originDefaultBranchName &&
-    localBranches.includes(originDefaultBranchName)
-  ) {
-    return originDefaultBranchName;
-  }
-  if (localBranches.includes("main")) {
-    return "main";
-  }
-  if (localBranches.includes("master")) {
-    return "master";
-  }
-  return localBranches[0];
 }
 
 async function readOriginHeadBranchName(

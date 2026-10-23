@@ -3,7 +3,6 @@ import type {
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
 
-import { WorkspaceError } from "@bb/host-workspace";
 import type { RuntimeEntry, RuntimeManager } from "./runtime-manager.js";
 import {
   CommandDispatchError,
@@ -15,7 +14,7 @@ import {
   type WorkspaceResolutionFailure,
   type WorkspaceResolutionFailureCode,
 } from "bb-git-contract";
-
+import { WorkspaceError } from "bb-environment-provider-host/workspace-git";
 const WORKSPACE_RESOLUTION_FAILURE_CODES: readonly WorkspaceResolutionFailureCode[] =
   workspaceResolutionFailureCodeSchema.options;
 

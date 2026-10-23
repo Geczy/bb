@@ -3,7 +3,6 @@ import {
   provisionWorkspace,
   type HostWorkspace,
   type LocalStateSnapshot,
-  type SharedGitRefsSnapshot,
   type ProvisionWorkspaceArgs,
 } from "@bb/host-workspace";
 import type {
@@ -19,7 +18,9 @@ import type {
   WorkspaceWatchError,
 } from "@bb/host-watcher";
 import { userExecutableProcessOptions } from "./user-executable-env.js";
-
+import type {
+  SharedGitRefsSnapshot,
+} from "bb-environment-provider-host/workspace-git";
 type StopWatching = () => void | Promise<void>;
 
 const STOP_WATCHING: StopWatching = () => undefined;

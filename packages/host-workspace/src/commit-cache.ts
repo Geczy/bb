@@ -4,7 +4,7 @@ import {
   parseRawDiffEntriesZ,
   type GitCommandResult,
   type RawDiffEntry,
-} from "./git.js";
+} from "bb-environment-provider-host/workspace-git";
 
 export type CommitGitRunner = (
   args: string[],

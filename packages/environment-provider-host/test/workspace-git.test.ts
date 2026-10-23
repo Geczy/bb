@@ -18,7 +18,7 @@ import {
   runGit,
   runGitWithNullRecordLimit,
   summarizeNumstat,
-} from "../src/git.js";
+} from "../src/workspace-git.js";
 
 const tempDirs: string[] = [];
 
@@ -181,6 +181,33 @@ describe("runGitWithNullRecordLimit", () => {
     expect(result.recordLimitReached).toBe(true);
     expect(result.recordCount).toBe(3);
     expect(result.stdout.split("\0").filter(Boolean)).toHaveLength(3);
+  });
+
+  it("counts only raw records of a combined raw and numstat diff", async () => {
+    const repoPath = await initReadGitBlobRepo();
+    await runGit(["mv", "README.md", "RENAMED.md"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "docs", "index.md"), "changed\n");
+    const args = ["diff", "--raw", "--numstat", "--no-abbrev", "-M", "-z", "HEAD"];
+
+    const complete = await runGitWithNullRecordLimit(
+      args,
+      { cwd: repoPath },
+      "raw-numstat",
+      3,
+    );
+    expect(complete.recordLimitReached).toBe(false);
+    expect(complete.stdout).toBe(
+      (await runGit(args, { cwd: repoPath })).stdout,
+    );
+
+    const limited = await runGitWithNullRecordLimit(
+      args,
+      { cwd: repoPath },
+      "raw-numstat",
+      1,
+    );
+    expect(limited.recordLimitReached).toBe(true);
+    expect(limited.recordCount).toBe(1);
   });
 
   it("keeps rename records complete when stopping name-status output", async () => {

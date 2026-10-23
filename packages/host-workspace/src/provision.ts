@@ -19,7 +19,7 @@ import {
   WorkspaceError,
   type SharedGitRefsSnapshot,
   type GitProcessOptions,
-} from "./git.js";
+} from "bb-environment-provider-host/workspace-git";
 import { resolveAdditionalWorkspaceWriteRoots } from "./workspace-write-roots.js";
 import type { WorkspaceStatus } from "bb-git-contract";
 

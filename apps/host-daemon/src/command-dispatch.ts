@@ -79,7 +79,7 @@ import {
   startThread,
   submitTurn,
 } from "./command-handlers/thread.js";
-import { WorkspaceError, type HostWorkspace } from "@bb/host-workspace";
+import type { HostWorkspace } from "@bb/host-workspace";
 import {
   cloneProject,
   inspectProjectPath,
@@ -94,7 +94,7 @@ import { userExecutableProcessOptions } from "./user-executable-env.js";
 import type { ServerMoveService } from "./server-move/service.js";
 import { readWorkspaceAgentContext } from "./command-handlers/workspace-agent-context.js";
 import type { WorkspaceResolutionFailure } from "bb-git-contract";
-
+import { WorkspaceError } from "bb-environment-provider-host/workspace-git";
 const THREAD_STOP_ACTIVE_TURN_WAIT_MS = 5_000;
 
 type RuntimeStopCommand =

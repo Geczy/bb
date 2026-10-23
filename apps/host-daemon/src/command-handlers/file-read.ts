@@ -7,11 +7,7 @@ import type {
   HostReadFileIfNoneMatch,
   HostReadFileRelativeDotfilePolicy,
 } from "@bb/host-daemon-contract";
-import {
-  readGitBlob,
-  WorkspaceError,
-  type GitProcessOptions,
-} from "@bb/host-workspace";
+
 import { isPathWithinDirectory } from "@bb/process-utils";
 import {
   CommandDispatchError,
@@ -20,7 +16,11 @@ import {
 import { isFsErrorWithCode } from "../fs-errors.js";
 import { sha256Hex } from "../sha256-hex.js";
 import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
-
+import {
+  WorkspaceError,
+  readGitBlob,
+  type GitProcessOptions,
+} from "bb-environment-provider-host/workspace-git";
 const IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 export const NON_IMAGE_FILE_SIZE_LIMIT_BYTES = 25 * 1024 * 1024;
 

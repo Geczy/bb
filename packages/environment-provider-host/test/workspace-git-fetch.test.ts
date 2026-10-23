@@ -3,7 +3,7 @@ import http from "node:http";
 import path from "node:path";
 import { initRepo, makeTempDir } from "@bb/test-helpers";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchRemoteBranches, runGit } from "../src/git.js";
+import { fetchRemoteBranches, runGit } from "../src/workspace-git.js";
 
 function quote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;

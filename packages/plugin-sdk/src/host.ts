@@ -55,6 +55,15 @@ export {
 export type { SanitizeInheritedChildProcessEnvArgs as ExperimentalSanitizeInheritedChildProcessEnvArgs } from "@bb/process-utils";
 
 export { runVcsProcess as experimental_runVcsProcess } from "@bb/process-utils";
+
+/**
+ * Daemon-grade process primitives for bb's first-party git code. Not public
+ * API: see docs/api_to_audit.md.
+ */
+export {
+  execPortableFile as internal_DO_NOT_USE_execPortableFile,
+  spawnManagedProcess as internal_DO_NOT_USE_spawnManagedProcess,
+} from "@bb/process-utils";
 export type {
   VcsProcessOptions as ExperimentalVcsProcessOptions,
   VcsProcessPriority as ExperimentalVcsProcessPriority,

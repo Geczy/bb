@@ -1021,6 +1021,16 @@ Docs: `backend-foundation.md`.
 connect URL should supply this value when `BB_APP_URL` is empty. Confirm that
 one public URL has clear behavior when a server has several access paths.
 
+## `internal_DO_NOT_USE_execPortableFile`, `internal_DO_NOT_USE_spawnManagedProcess` (`@get-bb/plugin-sdk/host`)
+
+Internal to bb's own git code: the `internal_DO_NOT_USE_` prefix marks members that are not part of the plugin API, are not offered to third-party plugins, and may change or disappear in any release.
+
+They are `@bb/process-utils`' `execPortableFile` and `spawnManagedProcess`, the process primitives the daemon's git reads use: buffered runs with a byte cap and optional truncated stdout, and streamed runs that stop after a record limit. `bb-environment-provider-host/workspace-git` holds the daemon's git primitives (moved from `@bb/host-workspace/src/git.ts`) so a plugin host bundle can share them, and plugin host bundles may not import private `@bb/*` packages, so it reaches the primitives through the SDK host entry together with `experimental_runVcsProcess` and `experimental_sanitizeInheritedChildProcessEnv`.
+
+Core callers: `bb-environment-provider-host/workspace-git`, used by `@bb/host-workspace` and `apps/host-daemon`.
+
+**Audit before stabilizing.** Decide whether `bb-environment-provider-host/workspace-git` and the environment providers' `bb-environment-provider-host/git` merge into one host-safe git runner, which would retire these exports or make one runner public. They differ today: provider git always runs at background VCS priority and reports a queued cancellation as `provision_cancelled`.
+
 ## `bb.server.internal_DO_NOT_USE_openTunnelIngress`
 
 Internal to bb's own connect plugins (`connect`, `bb--connect-next`): the `internal_DO_NOT_USE_` prefix marks members that are not part of the plugin API, are not offered to third-party plugins, and may change or disappear in any release.
@@ -1373,6 +1383,29 @@ Docs: `backend-foundation.md`, `testing.md`.
     should continue simulating validation, cancellation, lifecycle, JSON, and
     size limits without pretending to model process startup, crashes, native
     watcher recovery, or reconnect behavior.
+
+## `PluginRpcMethodContract.experimental_retryable` (host contracts)
+
+A host contract method can declare `experimental_retryable: true`. When the
+daemon's response to such a call has not arrived within half of its transport
+timeout, the server cancels that call and sends it once more with a new call
+id. This is core's own retry: `callPluginHostRpc` goes through
+`callHostRetryablePluginHostCall`, which runs the same
+`callHostOnlineRpcWithRetry` path core uses for daemon commands marked
+`retryable: true` in `hostDaemonCommandRegistry`, and differs only in giving
+the second attempt a fresh `callId`, because the daemon rejects a duplicate id
+while the first call is pending. No daemon wire change. Client RPC
+registrations ignore the field.
+
+Callers: the GitHub PR Status plugin's `view` (core marked
+`workspace.pull_request` retryable; `act` is not).
+
+Docs: `backend-foundation.md`.
+
+**Audit before stabilizing.** Decide whether retryability belongs on the
+contract or should be inferred from a read/write method kind, whether one
+retry is enough for plugin calls with long timeouts, and whether the
+cancelled first attempt should count against worker lifetime.
 
 ## Fixed-tab targets (`experimental_target`, `experimental_useAppPanel`, and `experimental_useFixedTabTarget`)
 

@@ -8,7 +8,10 @@ import {
   withProcessLocalQueuedLocks,
 } from "bb-environment-provider-host/process-local-lock";
 import { Workspace } from "../src/workspace.js";
-import { WorkspaceError, runGit } from "../src/git.js";
+import {
+  WorkspaceError,
+  runGit,
+} from "bb-environment-provider-host/workspace-git";
 import { withCheckoutMutationLock } from "../src/checkout-mutation-lock.js";
 import type { WorkspaceChangeStats } from "bb-git-contract";
 

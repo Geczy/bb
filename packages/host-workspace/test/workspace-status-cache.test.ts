@@ -2,11 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { initRepo, makeTempDir } from "@bb/test-helpers";
-import { runGit } from "../src/git.js";
+import { runGit } from "bb-environment-provider-host/workspace-git";
 import { Workspace } from "../src/workspace.js";
 
-vi.mock("../src/git.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/git.js")>();
+vi.mock("bb-environment-provider-host/workspace-git", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("bb-environment-provider-host/workspace-git")>();
   return { ...actual, runGit: vi.fn(actual.runGit) };
 });
 
@@ -70,7 +70,7 @@ it("returns degraded comparisons on Git failures without caching them", async ()
   await runGit(["add", "."], { cwd: repo });
   await runGit(["commit", "-m", "Feature"], { cwd: repo });
   const actual =
-    await vi.importActual<typeof import("../src/git.js")>("../src/git.js");
+    await vi.importActual<typeof import("bb-environment-provider-host/workspace-git")>("bb-environment-provider-host/workspace-git");
   let fail = true;
   vi.mocked(runGit).mockImplementation(async (args, options) => {
     if (
@@ -184,7 +184,7 @@ it("filters irrelevant history beyond 200 commits and reports incomplete only at
 it("cancels an over-budget squash command and returns basic comparison data", async () => {
   const repo = await createDivergedRepo({ basePath: "feature.txt" });
   const actual =
-    await vi.importActual<typeof import("../src/git.js")>("../src/git.js");
+    await vi.importActual<typeof import("bb-environment-provider-host/workspace-git")>("bb-environment-provider-host/workspace-git");
   let canceled = false;
   vi.mocked(runGit).mockImplementation((args, options) => {
     if (options.cwd === repo && args[0] === "patch-id" && options.signal) {
@@ -334,7 +334,7 @@ it("finishes a timed-out squash check on the next refresh without rehashing comm
   await runGit(["commit", "-m", "Later main change"], { cwd: repo });
   await runGit(["checkout", "feature"], { cwd: repo });
   const actual =
-    await vi.importActual<typeof import("../src/git.js")>("../src/git.js");
+    await vi.importActual<typeof import("bb-environment-provider-host/workspace-git")>("bb-environment-provider-host/workspace-git");
   let interrupted = false;
   vi.mocked(runGit).mockImplementation((args, options) => {
     if (

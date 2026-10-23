@@ -3,21 +3,30 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-
 import {
-  execPortableFile,
-  runVcsProcess,
-  spawnManagedProcess,
-  pathExists,
-  sanitizeInheritedChildProcessEnv,
-} from "@bb/process-utils";
-import type {
-  DefaultBranchRelation,
-  GitCheckoutRef,
-  WorkspaceGitOperation,
+  internal_DO_NOT_USE_execPortableFile as execPortableFile,
+  experimental_runVcsProcess as runVcsProcess,
+  internal_DO_NOT_USE_spawnManagedProcess as spawnManagedProcess,
+  experimental_sanitizeInheritedChildProcessEnv as sanitizeInheritedChildProcessEnv,
+} from "@get-bb/plugin-sdk/host";
+import {
+  workspaceResolutionFailureCodeSchema,
+  type DefaultBranchRelation,
+  type GitCheckoutRef,
+  type WorkspaceGitOperation,
+  type WorkspaceResolutionFailure,
 } from "bb-git-contract";
 
 const execFileAsync = promisify(execFile);
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
 
 export class WorkspaceError extends Error {
@@ -27,6 +36,43 @@ export class WorkspaceError extends Error {
     this.code = code;
     this.name = "WorkspaceError";
   }
+}
+
+export const WORKSPACE_STATUS_GIT_TIMEOUT_MS = 15_000;
+
+export function isMissingHeadRevisionError(stderr: string): boolean {
+  return (
+    stderr.includes("ambiguous argument 'HEAD'") ||
+    stderr.includes("bad revision 'HEAD'") ||
+    stderr.includes("unknown revision or path not in the working tree") ||
+    stderr.includes("Needed a single revision")
+  );
+}
+
+export function workspaceResolutionFailureFromError(
+  error: unknown,
+  workspacePath: string,
+): WorkspaceResolutionFailure {
+  const code =
+    error instanceof Error && "code" in error && typeof error.code === "string"
+      ? error.code
+      : null;
+  if (code === "EACCES" || code === "EPERM") {
+    return {
+      code: "permission_denied",
+      message: error instanceof Error ? error.message : String(error),
+      workspacePath,
+    };
+  }
+  const known = workspaceResolutionFailureCodeSchema.safeParse(code);
+  return {
+    code: known.success ? known.data : "unknown",
+    message:
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : "Unknown workspace resolution failure",
+    workspacePath,
+  };
 }
 
 export interface GitProcessOptions {
@@ -50,7 +96,7 @@ interface ResolveGitProcessEnvArgs {
   shellPath: string | undefined;
 }
 
-interface GitTimeoutOptions extends GitProcessOptions {
+export interface GitTimeoutOptions extends GitProcessOptions {
   timeoutMs?: number;
 }
 
@@ -62,7 +108,7 @@ interface FetchRemoteBranchesOptions extends GitTimeoutOptions {
   interactive: boolean;
 }
 
-interface DefaultBranchRefs {
+export interface DefaultBranchRefs {
   defaultBranch: string | undefined;
   defaultBranchRelation: DefaultBranchRelation | undefined;
   originDefaultBranch: string | undefined;
@@ -81,7 +127,12 @@ export interface GitCommandResult {
   exitCode: number;
 }
 
-export type GitNullRecordFormat = "single" | "name-status" | "numstat" | "raw";
+export type GitNullRecordFormat =
+  | "single"
+  | "name-status"
+  | "numstat"
+  | "raw"
+  | "raw-numstat";
 
 export interface GitNullRecordLimitResult extends GitCommandResult {
   recordCount: number;
@@ -146,7 +197,7 @@ function toExecError(error: unknown): ExecFileException | undefined {
   return undefined;
 }
 
-function trimOutput(value: string): string {
+export function trimOutput(value: string): string {
   return value.trim().replace(/\n+$/u, "");
 }
 
@@ -395,6 +446,7 @@ function runGitWithNullRecordLimitAdmitted(
     let pending = Buffer.alloc(0);
     let currentRecord: Buffer[] = [];
     let expectedTokens = recordFormat === "single" ? 1 : 0;
+    let currentRecordCounts = true;
     let recordCount = 0;
     let recordLimitReached = false;
     let aborted = false;
@@ -446,13 +498,21 @@ function runGitWithNullRecordLimitAdmitted(
           if (recordFormat === "name-status") {
             const statusLetter = token[0];
             expectedTokens = statusLetter === 82 || statusLetter === 67 ? 3 : 2;
-          } else if (recordFormat === "raw") {
+          } else if (
+            recordFormat === "raw" ||
+            (recordFormat === "raw-numstat" && token[0] === 58)
+          ) {
             const statusLetter = token[token.lastIndexOf(32) + 1];
             expectedTokens = statusLetter === 82 || statusLetter === 67 ? 3 : 2;
-          } else if (recordFormat === "numstat") {
+            currentRecordCounts = true;
+          } else if (
+            recordFormat === "numstat" ||
+            recordFormat === "raw-numstat"
+          ) {
             const firstTab = token.indexOf(9);
             const secondTab = token.indexOf(9, firstTab + 1);
             expectedTokens = secondTab === token.length - 1 ? 3 : 1;
+            currentRecordCounts = recordFormat === "numstat";
           }
         }
 
@@ -462,6 +522,11 @@ function runGitWithNullRecordLimitAdmitted(
           }
           currentRecord = [];
           expectedTokens = recordFormat === "single" ? 1 : 0;
+          if (!currentRecordCounts) {
+            currentRecordCounts = true;
+            tokenStart = index + 1;
+            continue;
+          }
           recordCount += 1;
           if (recordCount === maxRecords) {
             recordLimitReached = true;
@@ -1267,7 +1332,7 @@ async function readLocalBranches(
     .filter(Boolean);
 }
 
-function resolvePreferredLocalDefaultBranch(
+export function resolvePreferredLocalDefaultBranch(
   localBranches: readonly string[],
   originDefaultBranchName: string | undefined,
 ): string | undefined {
@@ -1534,7 +1599,6 @@ export async function readMergeBaseRef(
   ref: string,
   options: GitTimeoutOptions = {},
 ): Promise<string | undefined> {
-  await ensureGitRepo(cwd, options);
   const result = await runGit(["merge-base", ref, "HEAD"], {
     cwd,
     ...options,
@@ -1672,19 +1736,10 @@ export async function readGitBlob(
   }
 }
 
-export async function listBranches(
+async function readRemoteBranches(
   cwd: string,
-  options: GitProcessOptions = {},
+  options: GitProcessOptions,
 ): Promise<string[]> {
-  await ensureGitRepo(cwd, options);
-  return readLocalBranches(cwd, options);
-}
-
-export async function listRemoteBranches(
-  cwd: string,
-  options: GitProcessOptions = {},
-): Promise<string[]> {
-  await ensureGitRepo(cwd, options);
   const result = await runGit(
     ["for-each-ref", "--format=%(refname:short)%09%(symref)", "refs/remotes"],
     { cwd, ...options },
@@ -1702,10 +1757,12 @@ export async function listRemoteBranches(
 export async function listBranchRefsWithDefaults(
   cwd: string,
   options: GitProcessOptions = {},
+  repositoryKnown = false,
 ): Promise<BranchRefsWithDefaults> {
+  if (!repositoryKnown) await ensureGitRepo(cwd, options);
   const [branches, remoteBranches, originHeadBranch] = await Promise.all([
-    listBranches(cwd, options),
-    listRemoteBranches(cwd, options),
+    readLocalBranches(cwd, options),
+    readRemoteBranches(cwd, options),
     readOriginHeadBranchName(cwd, options),
   ]);
   const defaultBranch = resolvePreferredLocalDefaultBranch(

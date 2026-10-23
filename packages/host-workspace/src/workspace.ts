@@ -26,7 +26,7 @@ import {
   type RunGitOptions,
   summarizeNumstat,
   WorkspaceError,
-} from "./git.js";
+} from "bb-environment-provider-host/workspace-git";
 import { ByteBudgetCache } from "./byte-budget-cache.js";
 import {
   readCommitChanges,

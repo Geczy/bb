@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAsyncTtlMemo } from "../../src/services/lib/async-ttl-memo.js";
-import { createDeferredPromise } from "@bb/test-helpers";
+import { createAsyncTtlMemo } from "../src/async-ttl-memo.js";
+
+function createDeferredPromise<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((settle, fail) => {
+    resolve = settle;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
 
 describe("createAsyncTtlMemo", () => {
   it("starts TTL at completion and shares cold and refresh bursts", async () => {

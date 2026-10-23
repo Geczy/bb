@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
-import { runVcsProcess } from "@bb/process-utils";
-import { runGitWithNullRecordLimit } from "../src/git.js";
-import { runGit as runProvisioningGit } from "bb-environment-provider-host/git";
+import { experimental_runVcsProcess as runVcsProcess } from "@get-bb/plugin-sdk/host";
+import { runGitWithNullRecordLimit } from "../src/workspace-git.js";
+import { runGit as runProvisioningGit } from "../src/git.js";
 
 it.each([
   [
