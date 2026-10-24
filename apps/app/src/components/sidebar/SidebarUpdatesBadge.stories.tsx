@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { defaultExperiments } from "@bb/domain";
 import type { ProviderCliInstallAction } from "@bb/host-daemon-contract";
+import type {
+  SystemAppUpdateStatus,
+  SystemConfigResponse,
+  SystemVersionResponse,
+} from "@bb/server-contract";
 import { SettingsStoryFixtures } from "../../../.ladle/settings-story-fixtures";
 import {
   HOST_IDS,
@@ -17,6 +24,16 @@ import {
 import { useLocation } from "react-router-dom";
 import { Button } from "@bb/shared-ui/button";
 import { MachinesSettingsSection } from "@/components/settings/MachinesSettingsSection";
+import { UpdatesSettingsSection } from "@/components/settings/UpdatesSettingsSection";
+import {
+  CHANGELOG_ENTRIES,
+  changelogEntriesQueryOptions,
+} from "@/components/settings/changelog-preview";
+import {
+  systemAppUpdateQueryKey,
+  systemConfigQueryKey,
+  systemVersionQueryKey,
+} from "@/hooks/queries/query-keys";
 import { SettingsStoryChrome } from "../../../.ladle/story-settings-chrome";
 import { AppLayoutSidebar } from "@/components/layout/AppLayoutSidebar";
 import { sdk } from "@/lib/sdk";
@@ -165,6 +182,131 @@ export function MachineNotices() {
           </SidebarInset>
         </SidebarProvider>
       )}
+    </SettingsStoryFixtures>
+  );
+}
+
+const RELEASE_WIDGET_APP_UPDATE: SystemAppUpdateStatus = {
+  activity: { phase: "idle" },
+  available: {
+    channel: "latest",
+    commit: null,
+    commitCount: null,
+    subjects: [],
+    version: "0.47.0",
+  },
+  blocked: null,
+  current: { commit: null, version: "0.46.1" },
+  lastResult: null,
+  runningThreadCount: 0,
+  support: { kind: "supported", mode: "npm" },
+};
+
+const RELEASE_WIDGET_SYSTEM_VERSION = {
+  currentVersion: "0.46.1",
+  latestVersion: "0.47.0",
+  currentCommit: null,
+  installKind: "npm",
+  source: "npm",
+  updateAvailable: true,
+  isDevelopment: false,
+  upgradeCommand: "npx bb-app@latest",
+} satisfies SystemVersionResponse;
+
+const releaseWidgetStorySdk: Pick<
+  typeof sdk.system,
+  "appUpdate" | "experimental_recordTelemetryEvent" | "version"
+> = {
+  appUpdate: async () => RELEASE_WIDGET_APP_UPDATE,
+  experimental_recordTelemetryEvent: async (event) => {
+    console.info("Telemetry event", event);
+    return { ok: true };
+  },
+  version: async () => RELEASE_WIDGET_SYSTEM_VERSION,
+};
+
+function SeedReleaseWidgetQueries({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
+  const [originalSdk] = useState(() => {
+    const original = {
+      appUpdate: sdk.system.appUpdate,
+      experimental_recordTelemetryEvent:
+        sdk.system.experimental_recordTelemetryEvent,
+      version: sdk.system.version,
+    };
+    Object.assign(sdk.system, releaseWidgetStorySdk);
+    queryClient.setQueryData<SystemConfigResponse>(
+      systemConfigQueryKey(),
+      (config) =>
+        config === undefined
+          ? config
+          : {
+              ...config,
+              experiments: { ...defaultExperiments, releaseWidget: true },
+            },
+    );
+    queryClient.setQueryData(
+      systemVersionQueryKey(),
+      RELEASE_WIDGET_SYSTEM_VERSION,
+    );
+    queryClient.setQueryData(
+      systemAppUpdateQueryKey(),
+      RELEASE_WIDGET_APP_UPDATE,
+    );
+    queryClient.setQueryData(
+      changelogEntriesQueryOptions().queryKey,
+      CHANGELOG_ENTRIES,
+    );
+    return original;
+  });
+  useEffect(
+    () => () => {
+      if (
+        originalSdk.appUpdate !== releaseWidgetStorySdk.appUpdate &&
+        originalSdk.version !== releaseWidgetStorySdk.version
+      ) {
+        Object.assign(sdk.system, originalSdk);
+      }
+    },
+    [originalSdk],
+  );
+  return children;
+}
+
+export function ReleaseWidget() {
+  const { pathname } = useLocation();
+
+  return (
+    <SettingsStoryFixtures>
+      <SeedReleaseWidgetQueries>
+        {pathname === "/settings/updates" ? (
+          <SettingsStoryChrome activeSection="updates">
+            <UpdatesSettingsSection />
+          </SettingsStoryChrome>
+        ) : (
+          <SidebarProvider className="h-screen bg-background">
+            <AppLayoutSidebar
+              routeSidebar={null}
+              isSettingsActive={false}
+              isResizing={false}
+              onResizeMouseDown={() => {}}
+              settingsRoutePath="/settings/updates"
+              backToAppRoutePath={null}
+            />
+            <SidebarInset>
+              <main className="space-y-6 p-6">
+                <SidebarTrigger />
+                <h1 className="text-lg font-semibold">Release widget</h1>
+                <p className="max-w-lg text-sm text-muted-foreground">
+                  bb 0.47.0 is available, so the footer shows the bb chip and
+                  the release widget above it. Open the widget to land on
+                  Settings → Updates, or dismiss it with ✕: the chip stays.
+                </p>
+              </main>
+            </SidebarInset>
+          </SidebarProvider>
+        )}
+      </SeedReleaseWidgetQueries>
     </SettingsStoryFixtures>
   );
 }
