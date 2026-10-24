@@ -222,6 +222,12 @@ const onboardingStepTelemetryPropertiesSchema = z
   })
   .strict();
 
+// A bb release version such as "0.47.0": digits and dots only, never free text.
+const releaseVersionTelemetrySchema = z
+  .string()
+  .max(32)
+  .regex(/^\d+(\.\d+){1,3}$/);
+
 export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
   z
     .object({
@@ -294,6 +300,37 @@ export const recordTelemetryEventRequestSchema = z.discriminatedUnion("name", [
           outcome: z.enum(["completed", "skipped"]),
           entry: onboardingEntryTelemetrySchema,
           last_step: onboardingStepTelemetrySchema,
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("release_widget_shown"),
+      properties: z
+        .object({ release_version: releaseVersionTelemetrySchema })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("release_widget_action"),
+      properties: z
+        .object({
+          release_version: releaseVersionTelemetrySchema,
+          action: z.enum(["open", "dismiss"]),
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      name: z.literal("release_notes_opened"),
+      properties: z
+        .object({
+          release_version: releaseVersionTelemetrySchema,
+          entry_point: z.enum(["widget_auto", "updates_link"]),
+          destination: z.enum(["browser_panel", "external_browser"]),
         })
         .strict(),
     })

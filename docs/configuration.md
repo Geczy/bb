@@ -281,10 +281,14 @@ first-send events through `POST /api/v1/system/telemetry/events`
 (`sdk.system.experimental_recordTelemetryEvent`): `onboarding_started`,
 `onboarding_step_reached`, `onboarding_step_completed`,
 `onboarding_step_skipped`, `onboarding_finished`, `onboarding_agent_state`,
-`onboarding_sign_in`, and `new_thread_submit` (started, accepted, or failed).
-The route accepts only these events with fixed enums and booleans: no provider
-ids, account details, prompts, project or file names, terminal output, error
-messages, or session ids. Sign-in `exited` means the command exited before
+`onboarding_sign_in`, and `new_thread_submit` (started, accepted, or failed),
+and release widget events: `release_widget_shown`, `release_widget_action`
+(`open` or `dismiss`), and `release_notes_opened` (`entry_point` `widget_auto`
+or `updates_link`; `destination` `browser_panel` or `external_browser`).
+The route accepts only these events with fixed enums and booleans, plus a
+`release_version` of digits and dots (such as `0.47.0`): no provider ids,
+account details, prompts, release-note text, project or file names, terminal
+output, error messages, or session ids. Sign-in `exited` means the command exited before
 readiness was observed, not that authentication succeeded; `new_thread_submit`
 `accepted` means the thread was created, not that the provider answered.
 By default (`BB_FF_INITIATOR_TELEMETRY=false` turns it off), `thread_created` and `user_message_sent` also carry
@@ -732,15 +736,16 @@ ui_preference_conflict`. Read and write them with `bb settings ui
 list|get|set|reset` or `sdk.system.uiPreferences` (see
 `bb guide customization`).
 
-| Key                           | Value                                                                                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sidebar.threadListProvider`  | Plugin key or `__automatic__` (default): the first installed thread list plugin other than the bundled `thread-list/thread-list`, else the bundled one |
-| `sidebar.navigationProvider`  | Plugin key or `__automatic__` (default): the first navigation from a plugin other than the bundled Navigation plugin, else its `navigation/rail`       |
-| `sidebar.pluginPanelOrder`    | Navigation destination order                                                                                                                           |
-| `sidebar.visiblePluginPanels` | Navigation destinations shown, or `null` for every destination                                                                                         |
-| `sidebar.footerOrder`         | Footer action order                                                                                                                                    |
-| `sidebar.hiddenFooterItems`   | Footer actions moved into More                                                                                                                         |
-| `infoPanel.collapsedSections` | Collapsed thread Info panel sections (`commits`, `uncommittedChanges`, `childThreads`, `forks`, `threadStorage`, or `<pluginId>/<sectionId>`)          |
+| Key                               | Value                                                                                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sidebar.threadListProvider`      | Plugin key or `__automatic__` (default): the first installed thread list plugin other than the bundled `thread-list/thread-list`, else the bundled one |
+| `sidebar.navigationProvider`      | Plugin key or `__automatic__` (default): the first navigation from a plugin other than the bundled Navigation plugin, else its `navigation/rail`       |
+| `sidebar.pluginPanelOrder`        | Navigation destination order                                                                                                                           |
+| `sidebar.visiblePluginPanels`     | Navigation destinations shown, or `null` for every destination                                                                                         |
+| `sidebar.footerOrder`             | Footer action order                                                                                                                                    |
+| `sidebar.hiddenFooterItems`       | Footer actions moved into More                                                                                                                         |
+| `infoPanel.collapsedSections`     | Collapsed thread Info panel sections (`commits`, `uncommittedChanges`, `childThreads`, `forks`, `threadStorage`, or `<pluginId>/<sectionId>`)          |
+| `updates.dismissedReleaseVersion` | The bb release whose sidebar release widget was dismissed, or `null` (default)                                                                         |
 
 A legacy `__builtin__` thread list selection resolves to the bundled plugin.
 Footer IDs are `builtin:settings` (top list layout only), `builtin:mobile`,
@@ -824,6 +829,9 @@ off. An experiment you set yourself keeps your value either way.
   collection. The experiment itself applies live; turning it off restores
   normal logging and flushes the in-flight profile, keeping saved files. See
   [diagnostics](debugging-and-qa.md#opt-in-server-performance-diagnostics).
+- `releaseWidget` shows each new bb release's highlights in the sidebar while
+  an update is available. Dismissing it stores the release in the
+  `updates.dismissedReleaseVersion` UI preference.
 - `sidebarMultiSelect` (on for early adopters) lets the built-in thread list
   select several threads: Cmd/Ctrl-click toggles a row (starting from the open
   thread), Shift-click selects the visible range from the last clicked row, and

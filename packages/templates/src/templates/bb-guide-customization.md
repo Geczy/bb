@@ -183,6 +183,8 @@ connection as row deltas instead of reloading the latest window after each
 update. `compactExpiredCache` offers a Compact chip in the composer when an idle
 thread's prompt cache has expired and its context holds at least 100k tokens;
 see `bb guide thread-messaging` for `--compact-first`.
+`releaseWidget` shows each new bb release's highlights in the sidebar while an
+update is available.
 `sidebarMultiSelect` lets the built-in thread list sidebar select several threads with
 Cmd/Ctrl-click and Shift-click for bulk actions and drag; while it is off,
 Cmd/Ctrl-click opens a thread in a split.
@@ -253,7 +255,8 @@ Sidebar preferences
 
 `bb settings ui` reads and writes server-side sidebar preferences shared by
 every window, device, and the CLI. The same registry stores which thread Info
-panel sections are collapsed (`infoPanel.collapsedSections`).
+panel sections are collapsed (`infoPanel.collapsedSections`) and which release's
+sidebar release widget was dismissed (`updates.dismissedReleaseVersion`).
 
 bb settings ui list [--json]
 bb settings ui get <key> [--json]

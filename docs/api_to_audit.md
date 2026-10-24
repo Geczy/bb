@@ -3422,7 +3422,7 @@ rollback delivery, missing jobs after restart, and CLI/SDK parity.
 Posts one anonymous product event to `POST /api/v1/system/telemetry/events`,
 which forwards it to usage telemetry under the install's anonymous id and
 drops it when usage data sharing is off. The schema is a strict allow-list of
-setup-guide and new-thread-submit events; anything else is a 400. Core
+setup-guide, new-thread-submit, and release widget events; anything else is a 400. Core
 callers, all through `recordTelemetryEvent` in
 `apps/app/src/components/onboarding/onboarding-telemetry.ts`: the setup guide
 (`OnboardingFlow`) and `NewThreadComposer`'s `new_thread_submit` outcomes.

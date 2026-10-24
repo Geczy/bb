@@ -1150,6 +1150,11 @@ const EXPERIMENT_DEFINITIONS: Record<
     description:
       "Collect CPU profiles and detailed performance logs while the server was launched with --perf-diagnostics. Turning this off stops collection; saved profiles remain.",
   },
+  releaseWidget: {
+    label: "Release widget",
+    description:
+      "Show each new bb release's highlights in the sidebar while an update is available.",
+  },
   serverMove: {
     label: "Server move",
     description:

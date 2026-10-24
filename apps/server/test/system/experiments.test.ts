@@ -42,6 +42,7 @@ describe("experiments settings", () => {
         compactExpiredCache: false,
         serverMove: false,
         performanceDiagnostics: false,
+        releaseWidget: false,
         sidebarMultiSelect: false,
         timelinePush: false,
       });
@@ -72,6 +73,7 @@ describe("experiments settings", () => {
           compactExpiredCache: true,
           serverMove: true,
           performanceDiagnostics: true,
+          releaseWidget: true,
           sidebarMultiSelect: true,
           timelinePush: true,
         }),
@@ -82,6 +84,7 @@ describe("experiments settings", () => {
         compactExpiredCache: true,
         serverMove: true,
         performanceDiagnostics: true,
+        releaseWidget: true,
         sidebarMultiSelect: true,
         timelinePush: true,
       });
@@ -90,6 +93,7 @@ describe("experiments settings", () => {
         compactExpiredCache: true,
         serverMove: true,
         performanceDiagnostics: true,
+        releaseWidget: true,
         sidebarMultiSelect: true,
         timelinePush: true,
       });
@@ -102,6 +106,7 @@ describe("experiments settings", () => {
         compactExpiredCache: true,
         serverMove: true,
         performanceDiagnostics: true,
+        releaseWidget: true,
         sidebarMultiSelect: true,
         timelinePush: true,
       });
@@ -118,6 +123,7 @@ describe("experiments settings", () => {
         compactExpiredCache: false,
         serverMove: true,
         performanceDiagnostics: false,
+        releaseWidget: false,
         sidebarMultiSelect: false,
         timelinePush: false,
       });
