@@ -1,4 +1,4 @@
-name: Verify deterministic account deadlines and faster skill scans
+name: Compare worker counts in the slow Windows package group
 on:
   push:
     branches:
@@ -13,21 +13,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows
-            mode: original
+          - mode: workers-2
+            workers: 2
             replica: 1
+            os: windows
             runner: blacksmith-4vcpu-windows-2025
-          - os: windows
-            mode: original
+          - mode: workers-2
+            workers: 2
             replica: 2
+            os: windows
             runner: blacksmith-4vcpu-windows-2025
-          - os: windows
-            mode: optimized
+          - mode: workers-3
+            workers: 3
             replica: 1
+            os: windows
             runner: blacksmith-4vcpu-windows-2025
-          - os: windows
-            mode: optimized
+          - mode: workers-3
+            workers: 3
             replica: 2
+            os: windows
             runner: blacksmith-4vcpu-windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -52,36 +56,33 @@ jobs:
         run: throw 'Dependency image missing; do not mix cold setup into this
           comparison'
       - name: Apply timing fixes
-        if: matrix.mode == 'optimized'
         shell: bash
         run: git apply .github/benchmarks/timing-failures.patch
       - name: Install dependencies
         shell: bash
         run: bash .github/actions/setup-workspace/install-dependencies.sh
           --ignore-scripts --filter '!@bb/mobile'
-      - name: Test Skill-index
-        shell: bash
+      - name: Test package group
+        shell: cmd
         env:
-          VITEST_MAX_WORKERS: "2"
+          VITEST_MAX_WORKERS: ${{ matrix.workers }}
           TMP: ${{ runner.temp }}
           TEMP: ${{ runner.temp }}
-        run: pnpm exec turbo run test --filter=@bb/skill-index --force
-          --output-logs=errors-only --concurrency=2 --summarize --
-          --reporter=json --outputFile="$RUNNER_TEMP/Skill-index.json"
-      - name: Test Connect-next
-        shell: bash
-        env:
-          VITEST_MAX_WORKERS: "2"
-          TMP: ${{ runner.temp }}
-          TEMP: ${{ runner.temp }}
-        run: pnpm exec turbo run test --filter=@bb/connect-next --force
-          --output-logs=errors-only --concurrency=2 --summarize --
-          --reporter=json --outputFile="$RUNNER_TEMP/Connect-next.json"
+        run: pnpm exec turbo run test --filter=!@bb/server --filter=!@bb/app
+          --filter=!bb-plugin-* --filter=!@bb/host-daemon --filter=!@bb/cli
+          --filter=!@bb/integration-tests --filter=!@bb/templates
+          --filter=!bb-app --filter=!@bb/demo-server --filter=!@bb/desktop
+          --filter=!@bb/plugin-build --filter=!@bb/process-utils
+          --filter=!@bb/host-workspace --filter=!@bb/host-watcher
+          --filter=!@bb/agent-runtime --filter=!@bb/provider-bridge-protocol
+          --filter=!@bb/provider-bridge-acp --filter=!@bb/host-daemon-contract
+          --filter=!@bb/config --filter=!@bb/db --force --continue
+          --output-logs=errors-only --concurrency=2 --summarize
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: timing-${{ matrix.mode }}-${{ matrix.replica }}
+          name: package-workers-${{ matrix.workers }}-${{ matrix.replica }}
           path: |-
             .turbo/runs/*.json
             ${{ runner.temp }}/*.json
