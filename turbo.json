@@ -441,6 +441,19 @@
     "topo": {
       "dependsOn": ["^topo"]
     },
+    "@bb/domain#topo": {
+      "dependsOn": ["^topo"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts"]
+    },
+    "@get-bb/plugin-sdk#topo": {
+      "dependsOn": ["^topo"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.test.mjs"
+      ]
+    },
     // ---- Source generators --------------------------------------------------
     // Generated modules are never committed (see .gitignore). Each generator
     // is a turbo task with explicit inputs/outputs, so staleness is
@@ -530,6 +543,8 @@
         "$TURBO_ROOT$/apps/app/package.json",
         "$TURBO_ROOT$/apps/app/src/components/ui/theme.css",
         "$TURBO_ROOT$/packages/plugin-sdk/src/**",
+        "!$TURBO_ROOT$/packages/plugin-sdk/src/**/*.test.ts",
+        "!$TURBO_ROOT$/packages/plugin-sdk/src/**/*.test.tsx",
         "$TURBO_ROOT$/packages/shared-ui/src/**",
         "$TURBO_ROOT$/pnpm-lock.yaml"
       ],
@@ -927,6 +942,9 @@
       "dependsOn": ["topo"],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.test.mjs",
         "$TURBO_ROOT$/scripts/build-utils.mjs",
         "$TURBO_ROOT$/packages/plugin-build/src/zod-locale-stub.mjs"
       ],
@@ -936,6 +954,9 @@
       "dependsOn": ["topo"],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.test.mjs",
         "$TURBO_ROOT$/scripts/build-utils.mjs",
         "$TURBO_ROOT$/packages/plugin-build/src/zod-locale-stub.mjs"
       ],
@@ -957,6 +978,9 @@
     "@get-bb/plugin-sdk#build:runtime": {
       "inputs": [
         "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!**/*.test.mjs",
         "$TURBO_ROOT$/scripts/build-utils.mjs",
         "$TURBO_ROOT$/packages/plugin-build/src/zod-locale-stub.mjs"
       ],
