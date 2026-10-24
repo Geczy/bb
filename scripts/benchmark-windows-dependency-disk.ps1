@@ -14,7 +14,7 @@ if ($Operation -eq 'detach') {
   $commands += 'attach vdisk'
   if ($Operation -eq 'create') {
     $commands += 'create partition primary'
-    $commands += 'format fs=ntfs quick label=bb-dependencies'
+    $commands += 'format fs=refs quick label=bb-dependencies'
   } else {
     $commands += 'select partition 1'
   }

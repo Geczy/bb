@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [fresh, refs, host-cpu, refs-host-cpu]
+        mode: [fresh, refs]
         repetition: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -22,16 +22,7 @@ jobs:
       - run: npm install --global pnpm@9.15.0 --ignore-scripts
       - name: Create fresh Dev Drive
         if: startsWith(matrix.mode, 'refs')
-        uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0
-        with:
-          drive-size: 12GB
-          env-mapping: |
-            npm_config_store_dir,{{ DEV_DRIVE }}/store
-            npm_config_virtual_store_dir,{{ DEV_DRIVE }}/virtual-store
-      - name: Select current CPU
-        if: contains(matrix.mode, 'host-cpu')
-        shell: bash
-        run: node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json")); p.pnpm.supportedArchitectures.cpu=["current"]; fs.writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")'
+        run: ./scripts/benchmark-windows-dependency-disk.ps1 create
       - name: Measure frozen install
         shell: bash
         run: |
