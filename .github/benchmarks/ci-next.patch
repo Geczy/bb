@@ -1,0 +1,146 @@
+diff --git a/packages/plugin-sdk/scripts/shared-declaration-emit.mjs b/packages/plugin-sdk/scripts/shared-declaration-emit.mjs
+index b4a4a0041c..980c9dd52a 100644
+--- a/packages/plugin-sdk/scripts/shared-declaration-emit.mjs
++++ b/packages/plugin-sdk/scripts/shared-declaration-emit.mjs
+@@ -74,6 +74,7 @@ export function sharedDeclarationEmit(entries, workspaceDir, resolveSource) {
+     [...entries, ...initialConfig.ambientFiles],
+     initialConfig.options,
+   );
++  programs.set(initialConfig.key, discovery);
+   const roots = discovery
+     .getSourceFiles()
+     .map((source) => path.resolve(source.fileName))
+@@ -87,10 +88,7 @@ export function sharedDeclarationEmit(entries, workspaceDir, resolveSource) {
+   function programFor(file) {
+     const config = compilerConfig(file);
+     const previous = programs.get(config.key);
+-    if (
+-      !previous ||
+-      !previous.getRootFileNames().some((root) => path.resolve(root) === file)
+-    ) {
++    if (!previous || !previous.getSourceFile(file)) {
+       programs.set(
+         config.key,
+         ts.createProgram(
+diff --git a/packages/provider-parity/src/parity.self.test.ts b/packages/provider-parity/src/parity.self.test.ts
+index a8231cd4ae..21f09e7efe 100644
+--- a/packages/provider-parity/src/parity.self.test.ts
++++ b/packages/provider-parity/src/parity.self.test.ts
+@@ -10,6 +10,10 @@ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ import { fileURLToPath } from "node:url";
+ import { afterEach, describe, expect, it } from "vitest";
++import {
++  checkRecordedCellReplay,
++  RECORDED_CONFORMANCE_CELLS,
++} from "@bb/provider-bridge-protocol/conformance";
+ import {
+   compareParity,
+   type ParityAllowlistEntry,
+@@ -268,6 +272,38 @@ describe("replay through the current bridge", () => {
+       readBridgeRecording(cell.dir).manifest?.scope !== "process",
+   );
+ 
++  const conformanceNames = new Set<string>(RECORDED_CONFORMANCE_CELLS);
++  const conformanceCells = replayable.filter(
++    (cell) =>
++      ["claude-code", "codex", "pi"].includes(cell.provider) &&
++      conformanceNames.has(cell.cell),
++  );
++
++  it.each(["claude-code", "codex"])(
++    "%s has recorded conformance cells",
++    (provider) => {
++      expect(
++        conformanceCells.filter((cell) => cell.provider === provider).length,
++      ).toBeGreaterThan(0);
++    },
++  );
++
++  it("has every recorded pi conformance cell", () => {
++    expect(
++      conformanceCells
++        .filter((cell) => cell.provider === "pi")
++        .map((cell) => cell.cell)
++        .sort(),
++    ).toEqual([
++      "fork",
++      "resume",
++      "steer",
++      "stop-interrupt",
++      "turn-tools",
++      "user-question",
++    ]);
++  });
++
+   it.concurrent.each(replayable.map((cell) => [cellKey(cell), cell] as const))(
+     "%s reproduces its recording",
+     async (_key, cell) => {
+@@ -277,6 +313,20 @@ describe("replay through the current bridge", () => {
+         timeoutMs: 60_000,
+         planFromCurrentLane: true,
+       });
++      if (conformanceCells.includes(cell)) {
++        const checks = checkRecordedCellReplay({
++          provider: cell.provider,
++          cell: cell.cell,
++          events: replayed.events,
++          recordedEvents: recorded.events,
++          stalls: replayed.run.stalls,
++        });
++        expect(
++          checks
++            .filter((check) => check.status !== "pass")
++            .map((check) => `${check.id}: ${check.detail}`),
++        ).toEqual([]);
++      }
+       expect(replayed.run.stalls).toEqual([]);
+       const comparison = compareCell(cell, recorded, replayed, []);
+       expect({
+diff --git a/packages/provider-parity/src/pi-recorded-conformance.test.ts b/packages/provider-parity/src/pi-recorded-conformance.test.ts
+deleted file mode 100644
+index f766cc06de..0000000000
+--- a/packages/provider-parity/src/pi-recorded-conformance.test.ts
++++ /dev/null
+@@ -1,19 +0,0 @@
+-import { expect, it } from "vitest";
+-import { runFirstPartyRecordedConformance } from "@bb/provider-bridge-protocol/testing";
+-
+-it("reproduces every recorded pi matrix cell through the provider-pi bridge", async () => {
+-  const run = await runFirstPartyRecordedConformance({
+-    servesProvider: (providerId) => providerId === "pi",
+-    label: "pi",
+-  });
+-  expect(run.cells).toEqual([
+-    "fork",
+-    "resume",
+-    "steer",
+-    "stop-interrupt",
+-    "turn-tools",
+-    "user-question",
+-  ]);
+-  console.info(run.report);
+-  expect(run.failures).toEqual([]);
+-}, 240_000);
+diff --git a/packages/provider-parity/src/recorded-conformance.test.ts b/packages/provider-parity/src/recorded-conformance.test.ts
+deleted file mode 100644
+index d3fb98e4fa..0000000000
+--- a/packages/provider-parity/src/recorded-conformance.test.ts
++++ /dev/null
+@@ -1,16 +0,0 @@
+-import { expect, it } from "vitest";
+-import { runFirstPartyRecordedConformance } from "@bb/provider-bridge-protocol/testing";
+-
+-it.concurrent.each(["claude-code", "codex"])(
+-  "%s reproduces every recorded matrix cell",
+-  async (providerId) => {
+-    const run = await runFirstPartyRecordedConformance({
+-      servesProvider: (candidate) => candidate === providerId,
+-      label: providerId,
+-    });
+-    expect(run.cells.length).toBeGreaterThan(0);
+-    console.info(run.report);
+-    expect(run.failures).toEqual([]);
+-  },
+-  240_000,
+-);

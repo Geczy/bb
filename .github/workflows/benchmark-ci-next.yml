@@ -1,0 +1,58 @@
+name: Compare CI replay and declaration costs
+on:
+  push:
+    branches: [bb/benchmark-ci-next-20261024]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025]
+        mode: [baseline, optimized]
+        replica: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/setup-workspace-tools
+        with:
+          node-version: 22.x
+          pnpm-version: 9.15.0
+      - name: Report resources
+        shell: bash
+        run: node -e 'const os=require("node:os"); console.log(JSON.stringify({cpus:os.availableParallelism(),model:os.cpus()[0].model}))'
+      - uses: ./.github/actions/windows-dependency-cache
+        if: runner.os == 'Windows'
+        timeout-minutes: 1
+      - name: Install dependencies
+        shell: bash
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
+      - name: Apply candidate
+        if: matrix.mode == 'optimized'
+        shell: bash
+        run: git apply .github/benchmarks/ci-next.patch
+      - name: Build SDK declarations
+        shell: bash
+        run: pnpm exec turbo run build:types --filter=@get-bb/plugin-sdk --force --summarize --output-logs=errors-only
+      - name: Hash declaration outputs
+        shell: bash
+        run: node -e 'const fs=require("node:fs"),c=require("node:crypto"),p="packages/plugin-sdk/bundled-types/"; fs.writeFileSync("sdk-hashes.json",JSON.stringify(Object.fromEntries(fs.readdirSync(p).sort().map(f=>[f,c.createHash("sha256").update(fs.readFileSync(p+f)).digest("hex")]))));'
+      - name: Test provider parity
+        shell: bash
+        env:
+          VITEST_MAX_WORKERS: 3
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          PARITY_REPORT: ${{ runner.temp }}/parity.json
+        run: pnpm exec turbo run test --filter=@bb/provider-parity --force --summarize --output-logs=errors-only -- --reporter=json --outputFile="$PARITY_REPORT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: next-${{ matrix.runner }}-${{ matrix.mode }}-${{ matrix.replica }}
+          include-hidden-files: true
+          path: |
+            sdk-hashes.json
+            .turbo/runs/*.json
+            ${{ runner.temp }}/parity.json
