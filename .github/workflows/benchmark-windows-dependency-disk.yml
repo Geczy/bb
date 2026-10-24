@@ -116,7 +116,7 @@ jobs:
           --filter=@bb/provider-bridge-acp --filter=@bb/host-daemon-contract
           --filter=@bb/config --filter=@bb/db
           --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --continue
-          --concurrency=2 --output-logs=new-only --summarize
+          --concurrency=2 --output-logs=new-only --summarize --force
       - name: Bound saved Turbo cache
         run: node scripts/prune-turbo-cache.mjs --dir .turbo/cache --max-size-mb 256
           --keep-run-summaries .turbo/runs
@@ -176,8 +176,10 @@ jobs:
         shell: bash
         run: pnpm exec turbo run smoke:boot --filter=bb-app
           --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only
+          --force
       - name: Smoke test the bb-app tarball
         run: pnpm exec turbo run smoke:tarball --filter=bb-app --output-logs=new-only
+          --force
       - name: Bound saved Turbo cache
         run: node scripts/prune-turbo-cache.mjs --dir .turbo/cache --max-size-mb 256
   windows-desktop-smoke:
@@ -238,6 +240,7 @@ jobs:
         shell: bash
         run: pnpm exec turbo run package:win --filter=@bb/desktop
           --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only
+          --force
       - name: Smoke test the packaged desktop app
         shell: bash
         run: pnpm exec turbo run smoke:packaged --filter=@bb/desktop --force
@@ -332,7 +335,7 @@ jobs:
 
           pnpm exec turbo run test ${{ matrix.filter }}
           --cache-dir="%TURBO_CACHE_DIR%" --continue --output-logs=new-only
-          --summarize --concurrency=${{ matrix.concurrency }}
+          --summarize --concurrency=${{ matrix.concurrency }} --force
       - name: Upload test timings
         if: ${{ !cancelled() }}
         continue-on-error: true
