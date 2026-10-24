@@ -1,0 +1,70 @@
+name: Measure npm download reuse in package smokes
+on:
+  push:
+    branches: [bb/benchmark-npm-downloads-20261024]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025]
+        replica: [1, 2]
+    defaults:
+      run:
+        shell: bash
+    env:
+      npm_config_cache: ${{ runner.temp }}/npm-download-benchmark
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Report resources
+        run: node -e 'const os=require("node:os"); console.log(JSON.stringify({cpus:os.availableParallelism(),model:os.cpus()[0].model}))'
+      - uses: ./.github/actions/windows-dependency-cache
+        if: runner.os == 'Windows'
+        timeout-minutes: 1
+      - uses: ./.github/actions/cache-workspace
+        continue-on-error: true
+        timeout-minutes: 1
+        with:
+          node-version: 22.x
+          cache-prefix: npm-download-benchmark
+          turbo-cache-max-size-mb: '512'
+      - name: Install workspace
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --filter '!@bb/mobile'
+      - name: Prepare built package
+        run: pnpm exec turbo run build --filter=bb-app --output-logs=errors-only
+      - name: Clear download cache
+        run: node -e 'require("node:fs").rmSync(process.env.npm_config_cache,{recursive:true,force:true})'
+      - name: Cold package smoke
+        run: pnpm exec turbo run smoke:tarball --filter=bb-app --env-mode=loose --output-logs=new-only > "$RUNNER_TEMP/npm-cold.log" 2>&1
+      - name: Retain only package downloads
+        run: node -e 'const f=require("node:fs"),p=require("node:path"),r=process.env.npm_config_cache; for(const n of f.readdirSync(r)) if(!["_cacache","_prebuilds"].includes(n)) f.rmSync(p.join(r,n),{recursive:true,force:true});'
+      - name: Archive download cache
+        run: tar -czf "$RUNNER_TEMP/npm-downloads.tgz" -C "$npm_config_cache" .
+      - name: Restore archived downloads
+        run: |
+          node -e 'const f=require("node:fs"),r=process.env.npm_config_cache;f.rmSync(r,{recursive:true,force:true});f.mkdirSync(r,{recursive:true});'
+          tar -xzf "$RUNNER_TEMP/npm-downloads.tgz" -C "$npm_config_cache"
+      - name: Warm package smoke
+        run: pnpm exec turbo run smoke:tarball --filter=bb-app --env-mode=loose --output-logs=new-only > "$RUNNER_TEMP/npm-warm.log" 2>&1
+      - name: Clear downloads again
+        run: node -e 'require("node:fs").rmSync(process.env.npm_config_cache,{recursive:true,force:true})'
+      - name: Repeat cold package smoke
+        run: pnpm exec turbo run smoke:tarball --filter=bb-app --env-mode=loose --output-logs=new-only > "$RUNNER_TEMP/npm-cold-repeat.log" 2>&1
+      - name: Report archive size
+        if: always()
+        run: node -e 'const f=require("node:fs"),p=require("node:path");console.log(f.statSync(p.join(process.env.RUNNER_TEMP,"npm-downloads.tgz")).size)'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: npm-downloads-${{ matrix.runner }}-${{ matrix.replica }}
+          path: ${{ runner.temp }}/npm-*.log
