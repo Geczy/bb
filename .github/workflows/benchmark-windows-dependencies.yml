@@ -1,7 +1,7 @@
 name: Benchmark Windows dependencies
 on:
   push:
-    branches: [bb/benchmark-windows-dependencies-20261024]
+    branches: [bb/benchmark-windows-dependencies-archive-only]
 permissions:
   contents: read
 jobs:

@@ -1,0 +1,78 @@
+name: Benchmark Windows dependency disk
+on:
+  push:
+    branches: [bb/benchmark-windows-dependencies-20261024]
+permissions:
+  contents: read
+jobs:
+  seed:
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Create dependency disk
+        run: ./scripts/benchmark-windows-dependency-disk.ps1 create
+      - name: Install app dependencies
+        shell: bash
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...'
+      - name: Detach dependency disk
+        run: ./scripts/benchmark-windows-dependency-disk.ps1 detach
+      - name: Save dependency disk
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: benchmark-win-deps-disk-${{ github.run_id }}
+          path: ${{ runner.temp }}/bb-dependencies.vhdx
+  measure:
+    needs: seed
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [fresh, disk]
+        repetition: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Restore dependency disk
+        if: matrix.mode == 'disk'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: benchmark-win-deps-disk-${{ github.run_id }}
+          path: ${{ runner.temp }}/bb-dependencies.vhdx
+          fail-on-cache-miss: true
+      - name: Mount dependency disk
+        if: matrix.mode == 'disk'
+        run: ./scripts/benchmark-windows-dependency-disk.ps1 mount
+      - name: Measure frozen install
+        shell: bash
+        run: |
+          start=$(node -p 'Date.now()')
+          bash .github/actions/setup-workspace/install-dependencies.sh --reporter=ndjson --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...' > "$RUNNER_TEMP/install.ndjson"
+          end=$(node -p 'Date.now()')
+          echo "Install milliseconds: $((end-start))"
+          echo "Install milliseconds: $((end-start))" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify with uncached app shard
+        shell: cmd
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          BB_CI_TEST_SHARD: 1/4
+        run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=errors-only --summarize
+      - name: Detach dependency disk
+        if: always() && matrix.mode == 'disk'
+        run: ./scripts/benchmark-windows-dependency-disk.ps1 detach
+      - name: Upload installation trace
+            uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: install-${{ matrix.mode }}-${{ matrix.repetition }}
+          path: ${{ runner.temp }}/install.ndjson
