@@ -2310,6 +2310,104 @@ describe("UpdatesSettingsSection", () => {
     expect(installUpdate).toHaveBeenCalledOnce();
   });
 
+  describe("Desktop row release notes", () => {
+    function useSeparateDesktop(overrides: Partial<BbDesktopInfo>): void {
+      const desktopInfo: BbDesktopInfo = {
+        downloadState: "idle",
+        lastCheckedAt: null,
+        latestVersion: "0.47.0",
+        pendingVersion: null,
+        platform: "macos",
+        updateAvailable: true,
+        updateDownloaded: false,
+        version: "0.46.0",
+        ...overrides,
+      };
+      useDesktopUpdateInfoMock.mockReturnValue({
+        desktopApi: {
+          checkForUpdates: vi.fn().mockResolvedValue(desktopInfo),
+          installUpdate: vi.fn(),
+        } as unknown as BbDesktopApi,
+        desktopInfo,
+        isDesktop: true,
+      });
+      useUpdateInventoryMock.mockReturnValue(desktopFleet());
+      vi.mocked(sdk.system.appUpdate).mockResolvedValue(makeAppUpdateStatus());
+    }
+
+    async function renderBbCard(): Promise<HTMLElement> {
+      renderSection();
+      const bbCard = screen.getByRole("region", { name: "bb" });
+      await within(bbCard).findByText("Desktop");
+      return bbCard;
+    }
+
+    it("links the pending desktop release's notes when an update is available", async () => {
+      useSeparateDesktop({ latestVersion: "0.47.1", pendingVersion: "0.47.0" });
+      const bbCard = await renderBbCard();
+
+      expect(
+        within(bbCard)
+          .getByRole("link", { name: "Release notes for bb 0.0.6" })
+          .getAttribute("href"),
+      ).toBe("https://getbb.app/changelog#0-0-6");
+      const link = within(bbCard).getByRole("link", {
+        name: "Release notes for bb 0.47.0",
+      });
+      expect(link.getAttribute("href")).toBe(
+        "https://getbb.app/changelog#0-47-0",
+      );
+      fireEvent.click(link);
+      expect(openUrlInExternalBrowserMock).toHaveBeenCalledExactlyOnceWith(
+        "https://getbb.app/changelog#0-47-0",
+      );
+      expect(recordTelemetryEvent).toHaveBeenCalledExactlyOnceWith({
+        name: "release_notes_opened",
+        properties: { release_version: "0.47.0", entry_point: "updates_link" },
+      });
+    });
+
+    it("links the latest desktop release when nothing is pending", async () => {
+      useSeparateDesktop({});
+      const bbCard = await renderBbCard();
+
+      expect(
+        within(bbCard)
+          .getByRole("link", { name: "Release notes for bb 0.47.0" })
+          .getAttribute("href"),
+      ).toBe("https://getbb.app/changelog#0-47-0");
+    });
+
+    it("links the installed desktop release when no update is available", async () => {
+      useSeparateDesktop({
+        lastCheckedAt: "2026-10-20T12:00:00.000Z",
+        latestVersion: null,
+        updateAvailable: false,
+      });
+      const bbCard = await renderBbCard();
+
+      expect(
+        within(bbCard)
+          .getByRole("link", { name: "Release notes for bb 0.46.0" })
+          .getAttribute("href"),
+      ).toBe("https://getbb.app/changelog#0-46-0");
+    });
+
+    it("hides the desktop link for a nightly build", async () => {
+      useSeparateDesktop({
+        latestVersion: "0.48.0-nightly.20261021",
+        version: "0.48.0-nightly.20261020",
+      });
+      const bbCard = await renderBbCard();
+
+      expect(
+        within(bbCard)
+          .getAllByRole("link", { name: /Release notes/ })
+          .map((link) => link.getAttribute("aria-label")),
+      ).toEqual(["Release notes for bb 0.0.6"]);
+    });
+  });
+
   it("uses the Server label when the desktop runs the server itself", async () => {
     useDesktopApp();
     hostDaemon.localDaemonHostId = "host_primary";

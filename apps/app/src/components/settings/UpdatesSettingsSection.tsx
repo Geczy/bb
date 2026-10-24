@@ -1698,6 +1698,27 @@ function resolveReleaseNotesVersion({
   return installed !== null && isReleaseVersion(installed) ? installed : null;
 }
 
+function resolveDesktopReleaseNotesVersion(
+  desktopInfo: BbDesktopInfo | null,
+): string | null {
+  if (desktopInfo === null) {
+    return null;
+  }
+  const version = desktopInfo.updateAvailable
+    ? (desktopInfo.pendingVersion ?? desktopInfo.latestVersion)
+    : desktopInfo.version;
+  return version !== null && isReleaseVersion(version) ? version : null;
+}
+
+function releaseNotesLinkFor(version: string | null): ReleaseNotesLink | null {
+  return version === null
+    ? null
+    : {
+        version,
+        onOpen: () => viewReleaseNotes(version, "updates_link"),
+      };
+}
+
 export function UpdatesSettingsSection() {
   const queryClient = useQueryClient();
   const inventory = useUpdateInventory();
@@ -1718,19 +1739,6 @@ export function UpdatesSettingsSection() {
     number | null
   >(null);
   const appUpdate = appUpdateStatus.data;
-  const releaseNotesVersion = resolveReleaseNotesVersion({
-    isDesktop,
-    desktopInfo,
-    appUpdate,
-    systemVersion: inventory.systemVersion,
-  });
-  const releaseNotes: ReleaseNotesLink | null =
-    releaseNotesVersion === null
-      ? null
-      : {
-          version: releaseNotesVersion,
-          onOpen: () => viewReleaseNotes(releaseNotesVersion, "updates_link"),
-        };
 
   function startAppUpdate(): void {
     const runningThreadCount = appUpdate?.runningThreadCount ?? 0;
@@ -1845,6 +1853,17 @@ export function UpdatesSettingsSection() {
         };
   const useServerUpdate =
     serverRunsSeparately || appUpdate?.desktopUpdateSupported === true;
+  const releaseNotes = releaseNotesLinkFor(
+    resolveReleaseNotesVersion({
+      isDesktop: !useServerUpdate && isDesktop,
+      desktopInfo: useServerUpdate ? null : desktopInfo,
+      appUpdate,
+      systemVersion: inventory.systemVersion,
+    }),
+  );
+  const desktopReleaseNotes = releaseNotesLinkFor(
+    resolveDesktopReleaseNotesVersion(desktopInfo),
+  );
   const serverAppRow = (
     <BbAppUpdateRows
       name="Server"
@@ -1874,6 +1893,7 @@ export function UpdatesSettingsSection() {
       onRetryAppCheck={handleCheckForUpdates}
       onRelaunchDesktop={relaunchDesktop}
       onRetryDesktop={retryDesktop}
+      releaseNotes={desktopReleaseNotes}
     />
   );
 
