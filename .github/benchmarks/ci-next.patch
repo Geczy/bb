@@ -1,3 +1,63 @@
+diff --git a/apps/server/test/services/plugins/update-resolver.test.ts b/apps/server/test/services/plugins/update-resolver.test.ts
+index 651fb6fb97..9070aea58c 100644
+--- a/apps/server/test/services/plugins/update-resolver.test.ts
++++ b/apps/server/test/services/plugins/update-resolver.test.ts
+@@ -1,9 +1,9 @@
+ import { execFile } from "node:child_process";
+-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
++import { cp, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ import { promisify } from "node:util";
+-import { afterEach, describe, expect, it } from "vitest";
++import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+ import { PLUGIN_SDK_VERSION } from "@bb/domain";
+ import {
+   createNpmResolverRun,
+@@ -303,18 +303,17 @@ describe("git update resolution", () => {
+ });
+ 
+ describe("git semver tag resolution", () => {
+-  async function tagRepo(): Promise<{
+-    repo: string;
+-    commitOf: Map<string, string>;
+-  }> {
+-    const repo = await mkdtemp(join(tmpdir(), "bb-git-tags-"));
+-    cleanup.push(repo);
++  let template: string;
++  const commitOf = new Map<string, string>();
++
++  beforeAll(async () => {
++    template = await mkdtemp(join(tmpdir(), "bb-git-tags-template-"));
++    const repo = template;
+     await run("git", ["init", "-q", "-b", "main"], { cwd: repo });
+     await run("git", ["config", "user.email", "test@example.com"], {
+       cwd: repo,
+     });
+     await run("git", ["config", "user.name", "Test"], { cwd: repo });
+-    const commitOf = new Map<string, string>();
+     const releases: Array<{ tag: string; annotated: boolean }> = [
+       { tag: "v1.0.0", annotated: false },
+       { tag: "v1.1.0", annotated: true },
+@@ -341,7 +340,17 @@ describe("git semver tag resolution", () => {
+         (await run("git", ["rev-parse", "HEAD"], { cwd: repo })).stdout.trim(),
+       );
+     }
+-    return { repo, commitOf };
++  });
++
++  afterAll(async () => {
++    if (template) await rm(template, { recursive: true, force: true });
++  });
++
++  async function tagRepo() {
++    const repo = await mkdtemp(join(tmpdir(), "bb-git-tags-"));
++    cleanup.push(repo);
++    await cp(template, repo, { recursive: true });
++    return { repo, commitOf: new Map(commitOf) };
+   }
+ 
+   it("lists only [prefix]vX.Y.Z tags, peels annotated ones, and orders them", async () => {
 diff --git a/packages/plugin-sdk/scripts/shared-declaration-emit.mjs b/packages/plugin-sdk/scripts/shared-declaration-emit.mjs
 index b4a4a0041c..980c9dd52a 100644
 --- a/packages/plugin-sdk/scripts/shared-declaration-emit.mjs

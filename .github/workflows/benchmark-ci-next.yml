@@ -56,6 +56,14 @@ jobs:
           TMP: ${{ runner.temp }}
           PARITY_REPORT: ${{ runner.temp }}/parity.json
         run: pnpm exec turbo run test --filter=@bb/provider-parity --force --summarize --output-logs=errors-only -- --reporter=json --outputFile="$PARITY_REPORT"
+      - name: Test update resolver
+        shell: bash
+        env:
+          VITEST_MAX_WORKERS: 3
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          GIT_REPORT: ${{ runner.temp }}/git-fixture.json
+        run: pnpm exec turbo run test --filter=@bb/server --force --summarize --output-logs=errors-only -- test/services/plugins/update-resolver.test.ts --reporter=json --outputFile="$GIT_REPORT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -65,3 +73,4 @@ jobs:
             sdk-hashes.json
             .turbo/runs/*.json
             ${{ runner.temp }}/parity.json
+            ${{ runner.temp }}/git-fixture.json
