@@ -295,11 +295,6 @@ export function formPage({
                   {kind === "survey" && <p>{SURVEY_PURPOSE}</p>}
                   {kind === "merch" && <p>— brsbl &amp; the bb team</p>}
                 </div>
-                {!enabled && (
-                  <p className="community-notice">
-                    Preview for review. Responses are not being collected yet.
-                  </p>
-                )}
                 {(message || Object.keys(errors).length > 0) && (
                   <div className="community-notice" role="alert">
                     <strong>

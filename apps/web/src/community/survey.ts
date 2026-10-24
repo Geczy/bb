@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-export const SURVEY_TITLE = "bb community survey";
+export const SURVEY_TITLE = "Help us plan bb meetups";
 export const SURVEY_DESCRIPTION =
-  "Thanks for being part of the bb community. We'd like to send you a bb hat and stickers as a thank-you.";
+  "Thanks for being part of the bb community. As a thank-you, we'd like to send you a bb hat and stickers.";
 export const SURVEY_PURPOSE =
-  "It takes about 2 minutes, and it tells us who uses bb and where to start bb meetups.";
+  "This short survey asks how you found bb, how you use it, and where you're based, so we know who's using bb and where to start meetups. It takes about 2 minutes.";
 export const MEETUP_FRAMING =
   "We're starting bb meetups: small get-togethers to build with agents and see how other people work. Tell us where you are so we know where to start.";
 export const MEETUP_DECLINE = "Not for me right now";
