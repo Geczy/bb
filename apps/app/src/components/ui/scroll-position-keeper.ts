@@ -898,7 +898,11 @@ export class ScrollPositionKeeper {
         this.reconcile();
         return;
       }
-      this.setPosition(this.capture(scrollElement) ?? FREE);
+      this.setPosition(
+        target > max && this.isAtEnd(scrollTop)
+          ? { kind: "bottom" }
+          : (this.capture(scrollElement) ?? FREE),
+      );
     });
   }
 

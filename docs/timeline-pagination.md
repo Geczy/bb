@@ -243,9 +243,10 @@ A scroll without input or size change, such as find in page or focus moving to
 an offscreen control, is navigation, and the position follows it. Moving down
 into the last 4 px, or a wheel, End/PageDown or a touch drag toward the end
 while at the end, attaches. A navigation, a restore, or a viewport resize that
-leaves the reading position at or past the end also attaches. Moving up out of
-the end detaches. Content changes never attach or detach: a detached reader
-whose content shrinks onto the end stays detached until they scroll toward it.
+leaves the reading position at or past the end also attaches. So does content
+that shrinks under a detached reader until the browser clamps to the end, once
+the clamp is still there on the next frame, as when a row collapses near the
+end. Moving up out of the end detaches. Content changes never detach.
 
 Every layout change is reconciled before paint. Triggers are ResizeObservers on
 the root, its content, and every mounted row, plus each windowed list's layout

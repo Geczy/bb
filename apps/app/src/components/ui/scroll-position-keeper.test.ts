@@ -147,7 +147,10 @@ describe("ScrollPositionKeeper", () => {
     expect(timeline.topOf("row-3")).toBe(before);
   });
 
-  it("never attaches when content shrinks under a detached reader and the browser clamps to the end", () => {
+  it("attaches when content shrinks under a detached reader and the clamp to the end persists", () => {
+    vi.useFakeTimers({
+      toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"],
+    });
     const rows = rowsOf(10);
     const timeline = createTimeline(rows);
     timeline.userScrollTo(1200);
@@ -155,8 +158,28 @@ describe("ScrollPositionKeeper", () => {
     timeline.setRows(rows.slice(0, 7));
     timeline.keeper.reconcile();
     timeline.scrollElement.dispatchEvent(new Event("scroll"));
+    expect(timeline.keeper.isAttached()).toBe(false);
+    vi.advanceTimersToNextFrame();
 
     expect(timeline.layout.scrollTop).toBe(timeline.layout.maxScrollTop());
+    expect(timeline.keeper.isAttached()).toBe(true);
+  });
+
+  it("keeps a detached reader on their row when content shrinks onto the end for a single frame", () => {
+    vi.useFakeTimers({
+      toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"],
+    });
+    const rows = rowsOf(10);
+    const timeline = createTimeline(rows);
+    timeline.userScrollTo(1200);
+    const before = timeline.topOf("row-7");
+
+    timeline.setRows(rows.slice(0, 7));
+    timeline.keeper.reconcile();
+    timeline.setRows(rows);
+    vi.advanceTimersToNextFrame();
+
+    expect(timeline.topOf("row-7")).toBe(before);
     expect(timeline.keeper.isAttached()).toBe(false);
   });
 
