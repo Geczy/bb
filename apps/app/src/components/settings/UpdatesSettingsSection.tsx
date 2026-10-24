@@ -104,6 +104,12 @@ import {
 } from "@/hooks/queries/system-queries";
 import { sdk } from "@/lib/sdk";
 import { rawStringLocalStorage } from "@/lib/browser-storage";
+import {
+  isReleaseVersion,
+  resolveReleaseWidgetTargetVersion,
+  type ReleaseWidgetTargetInput,
+} from "@/components/sidebar/release-widget-model";
+import { useAutoOpenReleaseNotes, useOpenReleaseNotes } from "./release-notes";
 
 const CHANGELOG_URL = "https://getbb.app/changelog";
 const CHANGELOG_STALE_TIME_MS = 5 * 60_000;
@@ -798,6 +804,25 @@ interface BbAppUpdateRowsProps {
   onRetryDesktop: (() => void) | null;
   onShowAppUpdateResult?: ((result: SystemAppUpdateResult) => void) | null;
   isChecking?: boolean;
+  releaseNotes?: ReleaseNotesLink | null;
+}
+
+export interface ReleaseNotesLink {
+  version: string;
+  onOpen: () => void;
+}
+
+function ReleaseNotesLinkButton({ version, onOpen }: ReleaseNotesLink) {
+  return (
+    <button
+      type="button"
+      aria-label={`Release notes for bb ${version}`}
+      className="w-fit shrink-0 cursor-pointer rounded-sm text-2xs text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
+      onClick={onOpen}
+    >
+      Release notes
+    </button>
+  );
 }
 
 export function BbAppUpdateRows({
@@ -813,6 +838,7 @@ export function BbAppUpdateRows({
   onRetryDesktop,
   onShowAppUpdateResult = null,
   isChecking = false,
+  releaseNotes = null,
 }: BbAppUpdateRowsProps) {
   const settledStatus = isChecking ? (
     <RowStateControl live state="in-progress" />
@@ -842,6 +868,9 @@ export function BbAppUpdateRows({
         <span className="flex min-w-0 flex-col gap-1 @min-[28rem]/update-row:flex-row @min-[28rem]/update-row:items-baseline @min-[28rem]/update-row:gap-2">
           {name}
           {caption}
+          {releaseNotes === null ? null : (
+            <ReleaseNotesLinkButton {...releaseNotes} />
+          )}
         </span>
         {description === undefined ? null : (
           <span className="mt-0.5 text-xs leading-snug text-muted-foreground">
@@ -2005,10 +2034,33 @@ function useNow(intervalMs: number): number {
 
 interface UpdatesSettingsSectionProps {
   showChangelogPreview?: boolean;
+  showReleaseNotes?: boolean;
+}
+
+function resolveReleaseNotesVersion({
+  isDesktop,
+  desktopInfo,
+  appUpdate,
+  systemVersion,
+}: ReleaseWidgetTargetInput): string | null {
+  const target = resolveReleaseWidgetTargetVersion({
+    isDesktop,
+    desktopInfo,
+    appUpdate,
+    systemVersion,
+  });
+  if (target !== null) {
+    return target;
+  }
+  const installed = isDesktop
+    ? (desktopInfo?.version ?? null)
+    : (appUpdate?.current.version ?? systemVersion?.currentVersion ?? null);
+  return installed !== null && isReleaseVersion(installed) ? installed : null;
 }
 
 export function UpdatesSettingsSection({
   showChangelogPreview = false,
+  showReleaseNotes = false,
 }: UpdatesSettingsSectionProps = {}) {
   const queryClient = useQueryClient();
   const inventory = useUpdateInventory();
@@ -2029,6 +2081,23 @@ export function UpdatesSettingsSection({
     number | null
   >(null);
   const appUpdate = appUpdateStatus.data;
+  const openReleaseNotes = useOpenReleaseNotes();
+  useAutoOpenReleaseNotes(showReleaseNotes);
+  const releaseNotesVersion = showReleaseNotes
+    ? resolveReleaseNotesVersion({
+        isDesktop,
+        desktopInfo,
+        appUpdate,
+        systemVersion: inventory.systemVersion,
+      })
+    : null;
+  const releaseNotes: ReleaseNotesLink | null =
+    releaseNotesVersion === null
+      ? null
+      : {
+          version: releaseNotesVersion,
+          onOpen: () => openReleaseNotes(releaseNotesVersion, "updates_link"),
+        };
 
   function startAppUpdate(): void {
     const runningThreadCount = appUpdate?.runningThreadCount ?? 0;
@@ -2147,7 +2216,9 @@ export function UpdatesSettingsSection({
     <BbAppUpdateRows
       name="Server"
       systemVersion={inventory.systemVersion}
-      appUpdate={useServerUpdate || desktopInfo === null ? appUpdate : undefined}
+      appUpdate={
+        useServerUpdate || desktopInfo === null ? appUpdate : undefined
+      }
       applyPending={applyAppUpdate.isPending}
       desktopInfo={useServerUpdate ? null : desktopInfo}
       isDesktop={!useServerUpdate && isDesktop}
@@ -2157,6 +2228,7 @@ export function UpdatesSettingsSection({
       onShowAppUpdateResult={openAppUpdateResultDetails}
       onRelaunchDesktop={useServerUpdate ? null : relaunchDesktop}
       onRetryDesktop={useServerUpdate ? null : retryDesktop}
+      releaseNotes={releaseNotes}
     />
   );
   const desktopClientRow = (
@@ -2194,7 +2266,9 @@ export function UpdatesSettingsSection({
 
   return (
     <div className="space-y-6">
-      {showChangelogPreview ? <ChangelogPreviewCard /> : null}
+      {showChangelogPreview && !showReleaseNotes ? (
+        <ChangelogPreviewCard />
+      ) : null}
 
       <BbUpdatesCard>
         {serverAppRow}

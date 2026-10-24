@@ -24,7 +24,6 @@ import {
 import { useLocation } from "react-router-dom";
 import { Button } from "@bb/shared-ui/button";
 import { MachinesSettingsSection } from "@/components/settings/MachinesSettingsSection";
-import { UpdatesSettingsSection } from "@/components/settings/UpdatesSettingsSection";
 import {
   CHANGELOG_ENTRIES,
   changelogEntriesQueryOptions,
@@ -36,6 +35,11 @@ import {
   systemVersionQueryKey,
 } from "@/hooks/queries/query-keys";
 import { SettingsStoryChrome } from "../../../.ladle/story-settings-chrome";
+import { WithDesktopBrowser } from "../../../.ladle/story-desktop";
+import {
+  releaseNotesStoryDesktopInfo,
+  UpdatesWithReleaseNotesStory,
+} from "../../../.ladle/release-notes-story";
 import { AppLayoutSidebar } from "@/components/layout/AppLayoutSidebar";
 import { sdk } from "@/lib/sdk";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
@@ -187,6 +191,11 @@ export function MachineNotices() {
   );
 }
 
+const RELEASE_WIDGET_VERSIONS = {
+  installedVersion: "0.45.0",
+  version: "0.46.0",
+};
+
 const RELEASE_WIDGET_APP_UPDATE: SystemAppUpdateStatus = {
   activity: { phase: "idle" },
   available: {
@@ -317,39 +326,42 @@ export function ReleaseWidget() {
   const { pathname } = useLocation();
 
   return (
-    <SettingsStoryFixtures>
-      <SeedReleaseWidgetQueries>
-        {pathname === "/settings/updates" ? (
-          <SettingsStoryChrome activeSection="updates">
-            <UpdatesSettingsSection />
-          </SettingsStoryChrome>
-        ) : (
-          <SidebarProvider className="h-screen bg-background">
-            <AppLayoutSidebar
-              routeSidebar={null}
-              isSettingsActive={false}
-              isResizing={false}
-              onResizeMouseDown={() => {}}
-              settingsRoutePath="/settings/updates"
-              backToAppRoutePath={null}
-            />
-            <SidebarInset>
-              <main className="space-y-6 p-6">
-                <SidebarTrigger />
-                <h1 className="text-lg font-semibold">Release widget</h1>
-                <p className="max-w-lg text-sm text-muted-foreground">
-                  bb 0.46.0 is available, so the footer shows the bb chip and
-                  the release widget above it, led by the release's image.
-                  Choose No image to see the bb logo fallback. Open the widget
-                  to land on Settings → Updates, or dismiss it with ✕: the chip
-                  stays.
-                </p>
-                <ReleaseImageControls />
-              </main>
-            </SidebarInset>
-          </SidebarProvider>
-        )}
-      </SeedReleaseWidgetQueries>
-    </SettingsStoryFixtures>
+    <WithDesktopBrowser
+      previewFrames
+      desktopInfo={releaseNotesStoryDesktopInfo(RELEASE_WIDGET_VERSIONS)}
+    >
+      <SettingsStoryFixtures>
+        <SeedReleaseWidgetQueries>
+          {pathname === "/settings/updates" ? (
+            <UpdatesWithReleaseNotesStory {...RELEASE_WIDGET_VERSIONS} />
+          ) : (
+            <SidebarProvider className="h-screen bg-background">
+              <AppLayoutSidebar
+                routeSidebar={null}
+                isSettingsActive={false}
+                isResizing={false}
+                onResizeMouseDown={() => {}}
+                settingsRoutePath="/settings/updates"
+                backToAppRoutePath={null}
+              />
+              <SidebarInset>
+                <main className="space-y-6 p-6">
+                  <SidebarTrigger />
+                  <h1 className="text-lg font-semibold">Release widget</h1>
+                  <p className="max-w-lg text-sm text-muted-foreground">
+                    bb 0.46.0 is available, so the footer shows the bb chip and
+                    the release widget above it, led by the release's image.
+                    Choose No image to see the bb logo fallback. Open the widget
+                    to land on Settings → Updates with its release notes open on
+                    the right, or dismiss it with ✕: the chip stays.
+                  </p>
+                  <ReleaseImageControls />
+                </main>
+              </SidebarInset>
+            </SidebarProvider>
+          )}
+        </SeedReleaseWidgetQueries>
+      </SettingsStoryFixtures>
+    </WithDesktopBrowser>
   );
 }

@@ -2,7 +2,7 @@ import { MobileAppSection } from "@/components/settings/MobileAppSection";
 import { CliCommandSettingsSectionContent } from "@/components/settings/CliCommandSettingsSection";
 import { CliSkillsSettingsSectionContent } from "@/components/settings/CliSkillsSettingsSection";
 import { useEffect, useRef, useState } from "react";
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   defaultAppTheme,
   defaultExperiments,
@@ -53,6 +53,12 @@ import {
 import { MachineSettingsView } from "./MachineSettingsView";
 import { ProjectDetailSettingsView } from "./ProjectDetailSettingsView";
 import { ProvidersSettingsSection } from "@/components/settings/ProvidersSettingsSection";
+import type { ReleaseWidgetLocationState } from "@/components/sidebar/SidebarReleaseWidget";
+import { WithDesktopBrowser } from "../../.ladle/story-desktop";
+import {
+  releaseNotesStoryDesktopInfo,
+  UpdatesWithReleaseNotesStory,
+} from "../../.ladle/release-notes-story";
 
 export default {
   title: "settings/Settings",
@@ -430,5 +436,39 @@ export function FullPage() {
         <SettingsStoryContent route={route} />
       </SettingsStoryChrome>
     </SettingsStoryFixtures>
+  );
+}
+
+const RELEASE_NOTES_STORY_VERSIONS = {
+  installedVersion: "0.46.0",
+  version: "0.47.0",
+};
+const RELEASE_NOTES_STORY_PATH = "/settings/updates";
+
+function ArriveFromReleaseWidget() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const state: ReleaseWidgetLocationState = {
+      openReleaseNotes: RELEASE_NOTES_STORY_VERSIONS.version,
+    };
+    navigate(RELEASE_NOTES_STORY_PATH, { replace: true, state });
+  }, [navigate]);
+  if (pathname !== RELEASE_NOTES_STORY_PATH) {
+    return null;
+  }
+  return <UpdatesWithReleaseNotesStory {...RELEASE_NOTES_STORY_VERSIONS} />;
+}
+
+export function UpdatesWithReleaseNotesPanel() {
+  return (
+    <WithDesktopBrowser
+      previewFrames
+      desktopInfo={releaseNotesStoryDesktopInfo(RELEASE_NOTES_STORY_VERSIONS)}
+    >
+      <SettingsStoryFixtures>
+        <ArriveFromReleaseWidget />
+      </SettingsStoryFixtures>
+    </WithDesktopBrowser>
   );
 }
