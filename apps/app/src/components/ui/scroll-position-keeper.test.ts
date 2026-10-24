@@ -165,6 +165,35 @@ describe("ScrollPositionKeeper", () => {
     expect(timeline.keeper.isAttached()).toBe(true);
   });
 
+  it("attaches when a row collapses onto the end right after a touch drag, while fling momentum still counts as the reader's", () => {
+    vi.useFakeTimers({
+      toFake: [
+        "setTimeout",
+        "clearTimeout",
+        "requestAnimationFrame",
+        "cancelAnimationFrame",
+        "performance",
+      ],
+    });
+    const rows = rowsOf(10);
+    const timeline = createTimeline(rows, { attached: true });
+    timeline.scrollElement.dispatchEvent(new TouchEvent("touchstart"));
+    timeline.layout.layoutScrollTo(timeline.layout.scrollTop - 55);
+    timeline.scrollElement.dispatchEvent(new TouchEvent("touchend"));
+    vi.advanceTimersByTime(500);
+    expect(timeline.keeper.isAttached()).toBe(false);
+
+    timeline.scrollElement.dispatchEvent(new TouchEvent("touchstart"));
+    timeline.scrollElement.dispatchEvent(new TouchEvent("touchend"));
+    timeline.resize("row-9", 40);
+    timeline.layout.layoutScrollTo(timeline.layout.maxScrollTop());
+    timeline.keeper.reconcile();
+    vi.advanceTimersToNextFrame();
+
+    expect(timeline.layout.scrollTop).toBe(timeline.layout.maxScrollTop());
+    expect(timeline.keeper.isAttached()).toBe(true);
+  });
+
   it("keeps a detached reader on their row when content shrinks onto the end for a single frame", () => {
     vi.useFakeTimers({
       toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"],

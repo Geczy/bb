@@ -131,6 +131,7 @@ export class ScrollPositionKeeper {
   private scrollMovedAt = Number.NEGATIVE_INFINITY;
   private settleTimeout: number | null = null;
   private clampFrame: number | null = null;
+  private shrinkFrame: number | null = null;
   private readonly lists = new Set<ScrollWindowList>();
   private readonly listeners = new Set<() => void>();
   private readonly positionListeners = new Set<() => void>();
@@ -316,8 +317,11 @@ export class ScrollPositionKeeper {
       if (this.settleTimeout !== null) window.clearTimeout(this.settleTimeout);
       if (this.clampFrame !== null)
         window.cancelAnimationFrame(this.clampFrame);
+      if (this.shrinkFrame !== null)
+        window.cancelAnimationFrame(this.shrinkFrame);
       this.settleTimeout = null;
       this.clampFrame = null;
+      this.shrinkFrame = null;
       this.setDeferred(0);
     };
   }
@@ -532,6 +536,7 @@ export class ScrollPositionKeeper {
     const restored = this.advancePendingRestore(scrollElement);
     const scrollHeight = scrollElement.scrollHeight;
     const extentChanged = scrollHeight !== this.reconciledScrollHeight;
+    const shrank = scrollHeight < this.reconciledScrollHeight;
     this.reconciledScrollHeight = scrollHeight;
     const defer = this.shouldDefer(scrollTop, max);
     const bouncing =
@@ -570,6 +575,13 @@ export class ScrollPositionKeeper {
       if (Math.abs(clamped - target) >= 1 && this.position.kind === "anchor") {
         this.scheduleClampSettle();
       }
+    }
+    if (
+      shrank &&
+      this.position.kind !== "bottom" &&
+      this.isAtEnd(scrollElement.scrollTop)
+    ) {
+      this.scheduleShrinkAttach();
     }
     if (notify) this.notifyLists(urgent);
   }
@@ -898,11 +910,18 @@ export class ScrollPositionKeeper {
         this.reconcile();
         return;
       }
-      this.setPosition(
-        target > max && this.isAtEnd(scrollTop)
-          ? { kind: "bottom" }
-          : (this.capture(scrollElement) ?? FREE),
-      );
+      this.setPosition(this.capture(scrollElement) ?? FREE);
+    });
+  }
+
+  private scheduleShrinkAttach(): void {
+    if (this.shrinkFrame !== null) return;
+    this.shrinkFrame = window.requestAnimationFrame(() => {
+      this.shrinkFrame = null;
+      const scrollElement = this.options.getScrollElement();
+      if (scrollElement === null) return;
+      this.refreshExtent(scrollElement);
+      this.attachIfAtEnd();
     });
   }
 

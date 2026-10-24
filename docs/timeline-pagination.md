@@ -244,9 +244,10 @@ an offscreen control, is navigation, and the position follows it. Moving down
 into the last 4 px, or a wheel, End/PageDown or a touch drag toward the end
 while at the end, attaches. A navigation, a restore, or a viewport resize that
 leaves the reading position at or past the end also attaches. So does content
-that shrinks under a detached reader until the browser clamps to the end, once
-the clamp is still there on the next frame, as when a row collapses near the
-end. Moving up out of the end detaches. Content changes never detach.
+that shrinks under a detached reader and leaves the view at the end, if it is
+still at the end on the next frame, as when a row collapses near the end. This
+holds during a gesture's momentum too. Moving up out of the end detaches.
+Content changes never detach.
 
 Every layout change is reconciled before paint. Triggers are ResizeObservers on
 the root, its content, and every mounted row, plus each windowed list's layout
