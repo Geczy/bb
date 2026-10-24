@@ -18,11 +18,10 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          fetch-depth: 2
       - name: Restore baseline test files
         if: matrix.variant == 'baseline'
         run: |
+          git fetch --depth=1 origin 86be00767d3831d02b1cc0955a68062fdcebc537
           git show 86be00767d3831d02b1cc0955a68062fdcebc537:packages/config/test/verified-process-stop.test.ts > packages/config/test/verified-process-stop.test.ts
           git show 86be00767d3831d02b1cc0955a68062fdcebc537:packages/provider-bridge-acp/src/bridge/bridge.test.ts > packages/provider-bridge-acp/src/bridge/bridge.test.ts
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
