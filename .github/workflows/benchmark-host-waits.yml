@@ -18,6 +18,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
       - name: Restore baseline test files
         if: matrix.variant == 'baseline'
         run: |
