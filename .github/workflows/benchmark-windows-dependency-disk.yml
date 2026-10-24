@@ -1,4 +1,4 @@
-name: Benchmark CI test parallelism with unchanged coverage
+name: Confirm balanced plugin groups and Windows app sharding
 on:
   push:
     branches:
@@ -50,17 +50,13 @@ jobs:
             shard: 8
             vitestShard: 8/8
     steps:
-      - &a1
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - &a2
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.x
           package-manager-cache: false
-      - &a3
-        run: npm install --global pnpm@9.15.0 --ignore-scripts
-      - &a4
-        name: Apply faster fixtures
+      - run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Apply faster fixtures
         if: matrix.mode == 'parallel'
         shell: bash
         run: git apply .github/benchmarks/runtime.patch
@@ -86,8 +82,7 @@ jobs:
         run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=errors-only
           --summarize --concurrency=2 -- --reporter=json
           --outputFile="%RUNNER_TEMP%/app-results.json"
-      - &a5
-        name: Upload timings
+      - name: Upload timings
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -95,6 +90,7 @@ jobs:
           path: |-
             .turbo/runs/*.json
             ${{ runner.temp }}/app-results.json
+          include-hidden-files: true
   plugins:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
@@ -107,15 +103,24 @@ jobs:
             filter: --filter='bb-plugin-*'
           - mode: parallel
             shard: providers
-            filter: --filter='bb-plugin-provider-*'
+            filter: --filter='bb-plugin-provider-*' --filter=bb-plugin-tasks
+              --filter=bb-plugin-connect --filter=bb-plugin-thread-list
           - mode: parallel
             shard: other
             filter: --filter='bb-plugin-*' --filter='!bb-plugin-provider-*'
+              --filter='!bb-plugin-tasks' --filter='!bb-plugin-connect'
+              --filter='!bb-plugin-thread-list'
     steps:
-      - *a1
-      - *a2
-      - *a3
-      - *a4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Apply faster fixtures
+        if: matrix.mode == 'parallel'
+        shell: bash
+        run: git apply .github/benchmarks/runtime.patch
       - name: Install dependencies
         run: bash .github/actions/setup-workspace/install-dependencies.sh
           --ignore-scripts --filter '!@bb/mobile'
@@ -127,4 +132,12 @@ jobs:
           VITEST_MAX_WORKERS: "2"
         run: pnpm exec turbo run test ${{ matrix.filter }} --force
           --output-logs=errors-only --summarize --concurrency=4
-      - *a5
+      - name: Upload timings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ github.job }}-${{ matrix.mode }}-${{ matrix.shard }}
+          path: |-
+            .turbo/runs/*.json
+            ${{ runner.temp }}/app-results.json
+          include-hidden-files: true
