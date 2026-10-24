@@ -1,40 +1,17 @@
-name: Benchmark Windows broad dependency disk
+name: Benchmark Windows fresh Dev Drive
 on:
   push:
     branches: [bb/benchmark-windows-dependencies-20261024]
 permissions:
   contents: read
 jobs:
-  seed:
-    runs-on: blacksmith-4vcpu-windows-2025
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22.x
-          package-manager-cache: false
-      - run: npm install --global pnpm@9.15.0 --ignore-scripts
-      - name: Create dependency disk
-        run: ./scripts/benchmark-windows-dependency-disk.ps1 create
-      - name: Install app dependencies
-        shell: bash
-        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
-      - name: Detach dependency disk
-        run: ./scripts/benchmark-windows-dependency-disk.ps1 detach
-      - name: Save dependency disk
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          key: benchmark-win-deps-disk-${{ github.run_id }}
-          path: ${{ runner.temp }}/bb-dependencies.vhdx
   measure:
-    needs: seed
     runs-on: blacksmith-4vcpu-windows-2025
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        mode: [fresh, disk]
+        mode: [fresh, refs, host-cpu, refs-host-cpu]
         repetition: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -43,23 +20,24 @@ jobs:
           node-version: 22.x
           package-manager-cache: false
       - run: npm install --global pnpm@9.15.0 --ignore-scripts
-      - name: Restore dependency disk
-        if: matrix.mode == 'disk'
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      - name: Create fresh Dev Drive
+        if: startsWith(matrix.mode, 'refs')
+        uses: samypr100/setup-dev-drive@562171fe8df7401fdf582d766cd3b6ab80d5b1a0
         with:
-          key: benchmark-win-deps-disk-${{ github.run_id }}
-          path: ${{ runner.temp }}/bb-dependencies.vhdx
-          fail-on-cache-miss: true
-      - name: Mount dependency disk
-        if: matrix.mode == 'disk'
-        run: ./scripts/benchmark-windows-dependency-disk.ps1 mount
+          drive-size: 12GB
+          env-mapping: |
+            npm_config_store_dir,{{ DEV_DRIVE }}/store
+            npm_config_virtual_store_dir,{{ DEV_DRIVE }}/virtual-store
+      - name: Select current CPU
+        if: contains(matrix.mode, 'host-cpu')
+        shell: bash
+        run: node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync("package.json")); p.pnpm.supportedArchitectures.cpu=["current"]; fs.writeFileSync("package.json",JSON.stringify(p,null,2)+"\n")'
       - name: Measure frozen install
         shell: bash
         run: |
           start=$(node -p 'Date.now()')
           bash .github/actions/setup-workspace/install-dependencies.sh --reporter=ndjson --ignore-scripts --filter '!@bb/mobile' > "$RUNNER_TEMP/install.ndjson"
           end=$(node -p 'Date.now()')
-          echo "Install milliseconds: $((end-start))"
           echo "Install milliseconds: $((end-start))" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify with uncached build-package tests
         shell: cmd
@@ -67,9 +45,6 @@ jobs:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
         run: pnpm exec turbo run test --filter=@bb/templates --filter=bb-app --filter=@bb/demo-server --filter=@bb/desktop --filter=@bb/plugin-build --force --output-logs=errors-only --summarize --concurrency=2
-      - name: Detach dependency disk
-        if: always() && matrix.mode == 'disk'
-        run: ./scripts/benchmark-windows-dependency-disk.ps1 detach
       - name: Upload installation trace
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
