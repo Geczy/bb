@@ -63,12 +63,16 @@ const CHANGELOG = parseChangelog(`## 0.48.0
 
 ## 0.47.0
 
+Customizable sidebar navigation, new and improved ACP support, and **more**.
+
 ### Highlights
 
 - **Customizable sidebar navigation:** switch.
 - **New and improved ACP support:** rebuilt.
 - **Diff review:** viewed files.
 - **More customization surfaces:** plugins.
+
+![The sidebar navigation picker](https://getbb.app/changelog/0.47.0/navigation.jpg)
 
 ## 0.46.1
 
@@ -194,6 +198,51 @@ describe("SidebarReleaseWidget", () => {
     expect(card.textContent).toContain("Diff review");
     expect(card.textContent).not.toContain("More customization surfaces");
     expect(card.textContent).not.toContain(":");
+  });
+
+  it("leads with the release image, then the summary and the call to action", () => {
+    renderWidget();
+
+    const card = screen.getByRole("button", {
+      name: "bb 0.47.0 is available. Open Updates",
+    });
+    const image = screen.getByRole("img", {
+      name: "The sidebar navigation picker",
+    });
+    expect(image.getAttribute("src")).toBe(
+      "https://getbb.app/changelog/0.47.0/navigation.jpg",
+    );
+    expect(image.getAttribute("loading")).toBe("lazy");
+    expect(card.contains(image)).toBe(true);
+    expect(card.textContent).toContain(
+      "Customizable sidebar navigation, new and improved ACP support, and more.",
+    );
+    expect(card.textContent).toContain("See what's new");
+    expect(
+      document.getElementById(card.getAttribute("aria-describedby") ?? "")
+        ?.textContent,
+    ).toContain("Customizable sidebar navigation, new and improved");
+    expect(screen.queryByTestId("sidebar-release-widget-fallback")).toBeNull();
+  });
+
+  it("shows the bb logo and version when the image fails to load", () => {
+    renderWidget();
+
+    fireEvent.error(screen.getByTestId("sidebar-release-widget-image"));
+
+    expect(screen.queryByTestId("sidebar-release-widget-image")).toBeNull();
+    expect(
+      screen.getByTestId("sidebar-release-widget-fallback").textContent,
+    ).toBe("0.47.0");
+  });
+
+  it("shows the fallback when the release has no image", () => {
+    renderWidget({ available: "0.48.0" });
+
+    expect(screen.queryByTestId("sidebar-release-widget-image")).toBeNull();
+    expect(
+      screen.getByTestId("sidebar-release-widget-fallback").textContent,
+    ).toBe("0.48.0");
   });
 
   it("stays hidden with no update, while collapsed, or without highlights", () => {

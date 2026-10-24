@@ -8,7 +8,9 @@ import { parseChangelog } from "../../../../../changelog-parser";
 import { CHANGELOG_ENTRIES } from "@/components/settings/changelog-preview";
 import {
   releaseHighlights,
-  resolveReleaseWidgetHighlights,
+  releaseImage,
+  releaseSummary,
+  resolveReleaseWidgetContent,
   resolveReleaseWidgetTargetVersion,
 } from "./release-widget-model";
 
@@ -235,26 +237,135 @@ describe("releaseHighlights", () => {
   });
 });
 
-describe("resolveReleaseWidgetHighlights", () => {
+function entryWith(body: string) {
+  const [entry] = parseChangelog(`## 0.48.0\n\n${body}`);
+  if (entry === undefined) {
+    throw new Error("missing entry");
+  }
+  return entry;
+}
+
+describe("releaseImage", () => {
+  it("returns the first image of the release from getbb.app/changelog", () => {
+    expect(
+      releaseImage(
+        entryWith(`A lede.
+
+### Highlights
+
+- **One:** first.
+
+![The navigation rail](https://getbb.app/changelog/0.48.0/rail.jpg)
+
+![Second image](https://getbb.app/changelog/0.48.0/second.jpg)
+`),
+      ),
+    ).toEqual({
+      src: "https://getbb.app/changelog/0.48.0/rail.jpg",
+      alt: "The navigation rail",
+    });
+  });
+
+  it("reads the repo's own 0.46.0 hero image", () => {
+    const entry = CHANGELOG_ENTRIES.find(
+      (candidate) => candidate.version === "0.46.0",
+    );
+    expect(releaseImage(entry!)).toEqual({
+      src: "https://getbb.app/changelog/0.46.0/navigation-rail.jpg",
+      alt: "The navigation rail beside the new-thread composer",
+    });
+  });
+
+  it("gives an image without alt text a descriptive one", () => {
+    expect(
+      releaseImage(entryWith("![](https://getbb.app/changelog/0.48.0/a.png)"))
+        ?.alt,
+    ).toBe("What's new in bb 0.48.0");
+  });
+
+  it.each([
+    "http://getbb.app/changelog/0.48.0/a.png",
+    "https://evil.example/changelog/0.48.0/a.png",
+    "https://getbb.app.evil.example/changelog/a.png",
+    "https://user@getbb.app/changelog/0.48.0/a.png",
+    "https://getbb.app/blog/a.png",
+    "https://getbb.app/changelog/../blog/a.png",
+    "javascript:alert(1)",
+    "data:image/png;base64,AAAA",
+    "/changelog/0.48.0/a.png",
+  ])("rejects %s", (url) => {
+    expect(releaseImage(entryWith(`![Alt](${url})`))).toBeNull();
+  });
+
+  it("is null when the release has no image", () => {
+    expect(releaseImage(SAMPLE[0]!)).toBeNull();
+    expect(
+      releaseImage(
+        entryWith(
+          "Text with ![inline](https://getbb.app/changelog/a.png) image.",
+        ),
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("releaseSummary", () => {
+  it("returns the lede as plain text", () => {
+    expect(
+      releaseSummary(
+        entryWith(
+          "A **new** [navigation rail](https://getbb.app/docs), `bb acp add`, and more.\n\n### Highlights\n\n- **One:** first.",
+        ),
+      ),
+    ).toBe("A new navigation rail, bb acp add, and more.");
+  });
+
+  it("reads the repo's own 0.46.0 lede", () => {
+    const entry = CHANGELOG_ENTRIES.find(
+      (candidate) => candidate.version === "0.46.0",
+    );
+    expect(releaseSummary(entry!)).toBe(
+      "A new navigation rail, better thread search, reusable prompts, and more control over notifications and storage.",
+    );
+  });
+
+  it("is null without a lede", () => {
+    expect(releaseSummary(SAMPLE[1]!)).toBeNull();
+    expect(
+      releaseSummary(entryWith("![Alt](https://getbb.app/changelog/a.png)")),
+    ).toBeNull();
+  });
+});
+
+describe("resolveReleaseWidgetContent", () => {
   it("prefers the fetched changelog and falls back to the bundled one", () => {
     const bundled = parseChangelog(`## 0.48.0
+
+Bundled lede.
 
 ### Highlights
 
 - **Bundled:** older copy.
+
+![Bundled](https://getbb.app/changelog/0.48.0/bundled.jpg)
 `);
-    expect(resolveReleaseWidgetHighlights("0.48.0", SAMPLE, bundled)).toEqual([
-      "First highlight",
-      "Second",
-      "Third",
-    ]);
-    expect(
-      resolveReleaseWidgetHighlights("0.48.0", undefined, bundled),
-    ).toEqual(["Bundled"]);
+    expect(resolveReleaseWidgetContent("0.48.0", SAMPLE, bundled)).toEqual({
+      summary: "A lede.",
+      highlights: ["First highlight", "Second", "Third"],
+      image: null,
+    });
+    expect(resolveReleaseWidgetContent("0.48.0", undefined, bundled)).toEqual({
+      summary: "Bundled lede.",
+      highlights: ["Bundled"],
+      image: {
+        src: "https://getbb.app/changelog/0.48.0/bundled.jpg",
+        alt: "Bundled",
+      },
+    });
   });
 
   it("is null when the release is missing or has no highlights", () => {
-    expect(resolveReleaseWidgetHighlights("0.49.0", SAMPLE, [])).toBeNull();
-    expect(resolveReleaseWidgetHighlights("0.47.1", SAMPLE, [])).toBeNull();
+    expect(resolveReleaseWidgetContent("0.49.0", SAMPLE, [])).toBeNull();
+    expect(resolveReleaseWidgetContent("0.47.1", SAMPLE, [])).toBeNull();
   });
 });

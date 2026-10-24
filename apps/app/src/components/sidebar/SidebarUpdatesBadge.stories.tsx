@@ -28,6 +28,7 @@ import { UpdatesSettingsSection } from "@/components/settings/UpdatesSettingsSec
 import {
   CHANGELOG_ENTRIES,
   changelogEntriesQueryOptions,
+  type ChangelogEntry,
 } from "@/components/settings/changelog-preview";
 import {
   systemAppUpdateQueryKey,
@@ -193,18 +194,18 @@ const RELEASE_WIDGET_APP_UPDATE: SystemAppUpdateStatus = {
     commit: null,
     commitCount: null,
     subjects: [],
-    version: "0.47.0",
+    version: "0.46.0",
   },
   blocked: null,
-  current: { commit: null, version: "0.46.1" },
+  current: { commit: null, version: "0.45.0" },
   lastResult: null,
   runningThreadCount: 0,
   support: { kind: "supported", mode: "npm" },
 };
 
 const RELEASE_WIDGET_SYSTEM_VERSION = {
-  currentVersion: "0.46.1",
-  latestVersion: "0.47.0",
+  currentVersion: "0.45.0",
+  latestVersion: "0.46.0",
   currentCommit: null,
   installKind: "npm",
   source: "npm",
@@ -212,6 +213,17 @@ const RELEASE_WIDGET_SYSTEM_VERSION = {
   isDevelopment: false,
   upgradeCommand: "npx bb-app@latest",
 } satisfies SystemVersionResponse;
+
+const RELEASE_WIDGET_ENTRIES_WITHOUT_IMAGES: ChangelogEntry[] =
+  CHANGELOG_ENTRIES.map((entry) => ({
+    ...entry,
+    sections: entry.sections.map((section) => ({
+      ...section,
+      blocks: section.blocks.filter(
+        (block) => block.kind !== "paragraph" || !block.text.startsWith("!["),
+      ),
+    })),
+  }));
 
 const releaseWidgetStorySdk: Pick<
   typeof sdk.system,
@@ -273,6 +285,34 @@ function SeedReleaseWidgetQueries({ children }: { children: ReactNode }) {
   return children;
 }
 
+function ReleaseImageControls() {
+  const queryClient = useQueryClient();
+  const [withImage, setWithImage] = useState(true);
+  const choose = (next: boolean) => {
+    setWithImage(next);
+    queryClient.setQueryData(
+      changelogEntriesQueryOptions().queryKey,
+      next ? CHANGELOG_ENTRIES : RELEASE_WIDGET_ENTRIES_WITHOUT_IMAGES,
+    );
+  };
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        variant={withImage ? "default" : "outline"}
+        onClick={() => choose(true)}
+      >
+        Release image
+      </Button>
+      <Button
+        variant={withImage ? "outline" : "default"}
+        onClick={() => choose(false)}
+      >
+        No image
+      </Button>
+    </div>
+  );
+}
+
 export function ReleaseWidget() {
   const { pathname } = useLocation();
 
@@ -298,10 +338,13 @@ export function ReleaseWidget() {
                 <SidebarTrigger />
                 <h1 className="text-lg font-semibold">Release widget</h1>
                 <p className="max-w-lg text-sm text-muted-foreground">
-                  bb 0.47.0 is available, so the footer shows the bb chip and
-                  the release widget above it. Open the widget to land on
-                  Settings → Updates, or dismiss it with ✕: the chip stays.
+                  bb 0.46.0 is available, so the footer shows the bb chip and
+                  the release widget above it, led by the release's image.
+                  Choose No image to see the bb logo fallback. Open the widget
+                  to land on Settings → Updates, or dismiss it with ✕: the chip
+                  stays.
                 </p>
+                <ReleaseImageControls />
               </main>
             </SidebarInset>
           </SidebarProvider>

@@ -3,7 +3,10 @@ import type {
   SystemAppUpdateStatus,
   SystemVersionResponse,
 } from "@bb/server-contract";
-import type { ChangelogEntry } from "../../../../../changelog-parser";
+import type {
+  ChangelogBlock,
+  ChangelogEntry,
+} from "../../../../../changelog-parser";
 
 export const RELEASE_WIDGET_MAX_HIGHLIGHTS = 3;
 
@@ -109,11 +112,104 @@ export function releaseHighlights(entry: ChangelogEntry): string[] {
   return titles.slice(0, RELEASE_WIDGET_MAX_HIGHLIGHTS);
 }
 
-export function resolveReleaseWidgetHighlights(
+const MARKDOWN_IMAGE_PATTERN = /^!\[([^\]]*)\]\(([^)\s]+)\)$/;
+const RELEASE_IMAGE_ORIGIN = "https://getbb.app";
+const RELEASE_IMAGE_PATH_PREFIX = "/changelog/";
+
+export interface ReleaseWidgetImage {
+  src: string;
+  alt: string;
+}
+
+export interface ReleaseWidgetContent {
+  summary: string | null;
+  highlights: string[];
+  image: ReleaseWidgetImage | null;
+}
+
+function entryBlocks(entry: ChangelogEntry): ChangelogBlock[] {
+  return [
+    ...entry.lede,
+    ...entry.sections.flatMap((section) => section.blocks),
+  ];
+}
+
+function markdownImage(
+  block: ChangelogBlock,
+): { url: string; alt: string } | null {
+  if (block.kind !== "paragraph") {
+    return null;
+  }
+  const match = MARKDOWN_IMAGE_PATTERN.exec(block.text.trim());
+  if (match === null) {
+    return null;
+  }
+  return { alt: match[1]?.trim() ?? "", url: match[2] ?? "" };
+}
+
+function trustedReleaseImageUrl(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.origin !== RELEASE_IMAGE_ORIGIN ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    !parsed.pathname.startsWith(RELEASE_IMAGE_PATH_PREFIX)
+  ) {
+    return null;
+  }
+  return parsed.href;
+}
+
+export function releaseImage(entry: ChangelogEntry): ReleaseWidgetImage | null {
+  for (const block of entryBlocks(entry)) {
+    const image = markdownImage(block);
+    if (image === null) {
+      continue;
+    }
+    const src = trustedReleaseImageUrl(image.url);
+    if (src === null) {
+      return null;
+    }
+    return {
+      src,
+      alt: image.alt === "" ? `What's new in bb ${entry.version}` : image.alt,
+    };
+  }
+  return null;
+}
+
+function plainInlineText(markdown: string): string {
+  return markdown
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function releaseSummary(entry: ChangelogEntry): string | null {
+  for (const block of entry.lede) {
+    if (block.kind !== "paragraph" || markdownImage(block) !== null) {
+      continue;
+    }
+    const text = plainInlineText(block.text);
+    if (text !== "") {
+      return text;
+    }
+  }
+  return null;
+}
+
+export function resolveReleaseWidgetContent(
   version: string,
   fetchedEntries: readonly ChangelogEntry[] | undefined,
   bundledEntries: readonly ChangelogEntry[],
-): string[] | null {
+): ReleaseWidgetContent | null {
   const entry =
     fetchedEntries?.find((candidate) => candidate.version === version) ??
     bundledEntries.find((candidate) => candidate.version === version);
@@ -121,5 +217,12 @@ export function resolveReleaseWidgetHighlights(
     return null;
   }
   const highlights = releaseHighlights(entry);
-  return highlights.length === 0 ? null : highlights;
+  if (highlights.length === 0) {
+    return null;
+  }
+  return {
+    summary: releaseSummary(entry),
+    highlights,
+    image: releaseImage(entry),
+  };
 }
