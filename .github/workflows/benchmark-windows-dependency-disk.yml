@@ -72,7 +72,8 @@ jobs:
         if: always() && matrix.mode == 'disk'
         run: ./scripts/benchmark-windows-dependency-disk.ps1 detach
       - name: Upload installation trace
-            uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: install-${{ matrix.mode }}-${{ matrix.repetition }}
           path: ${{ runner.temp }}/install.ndjson
