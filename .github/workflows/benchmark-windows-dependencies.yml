@@ -6,6 +6,7 @@ permissions:
   contents: read
 jobs:
   seed:
+    if: false
     runs-on: blacksmith-4vcpu-windows-2025
     timeout-minutes: 15
     steps:
@@ -25,12 +26,12 @@ jobs:
       - name: Save pnpm store
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          key: benchmark-win-deps-store-${{ github.run_id }}
+          key: benchmark-win-deps-store-40064989311
           path: ${{ steps.store.outputs.path }}
       - name: Save installed dependencies
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          key: benchmark-win-deps-modules-${{ github.run_id }}
+          key: benchmark-win-deps-modules-40064989311
           path: |
             node_modules
             apps/*/node_modules
@@ -39,6 +40,7 @@ jobs:
             tests/*/node_modules
             examples/plugins/*/node_modules
   measure:
+    if: always()
     needs: seed
     runs-on: blacksmith-4vcpu-windows-2025
     timeout-minutes: 15
@@ -62,14 +64,14 @@ jobs:
         if: matrix.mode == 'store'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          key: benchmark-win-deps-store-${{ github.run_id }}
+          key: benchmark-win-deps-store-40064989311
           path: ${{ steps.store.outputs.path }}
           fail-on-cache-miss: true
       - name: Restore installed dependencies
         if: matrix.mode == 'modules'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          key: benchmark-win-deps-modules-${{ github.run_id }}
+          key: benchmark-win-deps-modules-40064989311
           path: |
             node_modules
             apps/*/node_modules
@@ -81,9 +83,9 @@ jobs:
       - name: Measure frozen install
         shell: bash
         run: |
-          start=$(node -p Date.now())
+          start=$(node -p 'Date.now()')
           bash .github/actions/setup-workspace/install-dependencies.sh --reporter=ndjson --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...' > "$RUNNER_TEMP/install.ndjson"
-          end=$(node -p Date.now())
+          end=$(node -p 'Date.now()')
           echo "Install milliseconds: $((end-start))"
           echo "Install milliseconds: $((end-start))" >> "$GITHUB_STEP_SUMMARY"
       - name: Verify with uncached app shard
