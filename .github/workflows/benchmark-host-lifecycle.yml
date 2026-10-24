@@ -1,4 +1,4 @@
-name: Measure host lifecycle waits
+name: Measure host test execution
 on:
   push:
     branches: [bb/benchmark-host-lifecycle-20261024]
@@ -19,11 +19,13 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Restore baseline lifecycle tests
+      - name: Restore baseline host tests
         if: matrix.variant == 'baseline'
         run: |
-          git fetch --depth=1 origin f5091f1c1ff5dd8d4f467e5d7c4ef37361da168e
-          git show FETCH_HEAD:apps/host-daemon/src/plugin-host-manager.test.ts > apps/host-daemon/src/plugin-host-manager.test.ts
+          git fetch --depth=1 origin 55746d1dcb89d9df36cf7f587d1cb1bad6c6851b
+          for file in apps/host-daemon/src/plugin-host-manager.test.ts apps/host-daemon/src/command-handlers/workspace-path-list.test.ts packages/host-workspace/test/git.test.ts packages/host-workspace/test/workspace-status-cache.test.ts packages/test-helpers/src/git-repo.ts; do
+            git show "FETCH_HEAD:$file" > "$file"
+          done
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.x
@@ -35,12 +37,12 @@ jobs:
         timeout-minutes: 1
       - name: Install workspace
         run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
-      - name: Test host daemon
+      - name: Test host daemon and CLI
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
           VITEST_MAX_WORKERS: ${{ runner.os == 'Linux' && '2' || '' }}
-        run: pnpm exec turbo run test --filter=@bb/host-daemon --cache-dir=.turbo/host-lifecycle-benchmark --cache=local:rw --output-logs=new-only --summarize > "$RUNNER_TEMP/host-lifecycle.log" 2>&1
+        run: pnpm exec turbo run test --filter=@bb/host-daemon --filter=@bb/cli --concurrency=1 --cache-dir=.turbo/host-lifecycle-benchmark --cache=local:rw --output-logs=new-only --summarize > "$RUNNER_TEMP/host-lifecycle.log" 2>&1
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
