@@ -60,12 +60,13 @@ describe("vitest tmpdir sandbox", () => {
         process.execPath,
         [
           "-e",
-          "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);",
+          "process.on('SIGTERM', () => {}); process.stdout.write('ready'); setInterval(() => {}, 1000);",
           path.join(root, "leaked-daemon"),
         ],
-        { stdio: "ignore" },
+        { stdio: ["ignore", "pipe", "ignore"] },
       );
       const exited = new Promise((resolve) => child.once("exit", resolve));
+      await new Promise((resolve) => child.stdout.once("data", resolve));
 
       await teardown();
 
