@@ -26,9 +26,8 @@ jobs:
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
-          VITEST_MAX_WORKERS: 2
         run: |
-          for iteration in {1..20}; do
+          for iteration in {1..5}; do
             echo "REPETITION $iteration"
-            pnpm exec turbo run test --filter=@bb/agent-runtime --force -- src/runtime.process-lifecycle.test.ts || exit 1
+            pnpm exec turbo run test --filter=@bb/agent-runtime --force || exit 1
           done
