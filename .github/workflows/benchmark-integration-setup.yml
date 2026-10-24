@@ -1,0 +1,51 @@
+name: Measure integration test setup
+on:
+  push:
+    branches: [bb/benchmark-integration-setup-20261024]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [blacksmith-4vcpu-windows-2025, blacksmith-4vcpu-ubuntu-2404]
+        variant: [baseline, candidate, candidate-four-workers]
+        replica: [1, 2]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Restore baseline integration fixtures
+        if: matrix.variant == 'baseline'
+        run: |
+          git fetch --depth=1 origin 5b2620faffc7822d43882ff1bf87558aa24a71a6
+          git restore --source=FETCH_HEAD -- tests/integration apps/server/test/helpers/provider-registry.ts
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - uses: ./.github/actions/windows-dependency-cache
+        if: runner.os == 'Windows'
+        timeout-minutes: 1
+      - name: Install workspace
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
+      - name: Test integration suite
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          VITEST_MAX_WORKERS: ${{ matrix.variant == 'candidate-four-workers' && '4' || runner.os == 'Linux' && '2' || '' }}
+        run: pnpm exec turbo run test --filter=@bb/integration-tests --concurrency=4 --cache-dir=.turbo/integration-setup-benchmark --cache=local:rw --output-logs=new-only --summarize > "$RUNNER_TEMP/integration-setup.log" 2>&1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: integration-setup-${{ matrix.runner }}-${{ matrix.variant }}-${{ matrix.replica }}
+          path: |
+            ${{ runner.temp }}/integration-setup.log
+            .turbo/runs/*.json
+          include-hidden-files: true
