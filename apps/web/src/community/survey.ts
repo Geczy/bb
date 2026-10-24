@@ -1,17 +1,21 @@
-export const SURVEY_TITLE = "bb Community Survey";
+import { z } from "zod";
+
+export const SURVEY_TITLE = "bb community survey";
 export const SURVEY_DESCRIPTION =
-  "hey 👋 we want to build the bb community around the people actually in it — what you're building, where you are, and whether you'd want a meetup nearby. 8 quick questions, ~2 min, all optional. it's anonymous unless you leave your Discord. we'll share what we learn with everyone, and you get a bb sticker pack for finishing (US for now).";
-export const WORK_CHAT = "A chat with the team about bb at work";
+  "Thanks for being part of the bb community. We'd like to send you a bb hat and stickers as a thank-you.";
+export const SURVEY_PURPOSE =
+  "It takes about 2 minutes, and it tells us who uses bb and where to start bb meetups.";
+export const MEETUP_FRAMING =
+  "We're starting bb meetups: small get-togethers to build with agents and see how other people work. Tell us where you are so we know where to start.";
+export const MEETUP_DECLINE = "Not for me right now";
 export const SOLD_OUT =
-  "we've given out all the sticker packs for now — thank you anyway 🙏";
+  "We've given out all the hats and stickers for now. Thank you for answering.";
 
 type Question = {
   name: string;
   label: string;
   type: "radio" | "checkbox" | "text";
   options: readonly string[];
-  shuffle: boolean;
-  maxChoices: number | null;
   placeholder: string;
 };
 
@@ -21,121 +25,79 @@ export const surveyQuestions: readonly Question[] = [
     label: "How did you first hear about bb?",
     type: "radio",
     options: [
-      "X/Twitter",
       "A friend or coworker",
-      "Discord",
+      "X (Twitter)",
+      "Google or another search engine",
       "GitHub",
       "Hacker News",
-      "Reddit",
-      "A newsletter",
-      "YouTube or a podcast",
-      "A conference or meetup",
-      "Google search",
-      "An ad",
+      "Product Hunt",
+      "A newsletter or blog post",
+      "I don't remember",
       "Other",
     ],
-    shuffle: true,
-    maxChoices: null,
     placeholder: "",
   },
   {
     name: "work",
-    label: "Who uses bb where you work?",
+    label: "How many people use bb where you work, including you?",
     type: "radio",
     options: [
-      "Just me, for side projects",
-      "Just me, at work",
-      "Me and 1–4 teammates",
-      "5+ people at my company",
-      "Not sure",
+      "I don't use bb for work",
+      "Just me",
+      "2–4 people",
+      "5 or more",
+      "I'm not sure",
     ],
-    shuffle: false,
-    maxChoices: null,
     placeholder: "",
   },
   {
     name: "role",
-    label: "Which best describes you?",
+    label: "Which of these best describes your current job?",
     type: "radio",
     options: [
-      "Professional software engineer",
-      "Founder or indie builder who codes",
-      "PM, designer or analyst who builds with agents",
-      "Non-technical builder (rarely writes code)",
+      "Developer or engineer",
+      "Engineering manager",
+      "Founder or executive",
+      "Product manager",
+      "Designer",
+      "Data or business analyst",
       "Student",
       "Other",
     ],
-    shuffle: false,
-    maxChoices: null,
-    placeholder: "",
-  },
-  {
-    name: "meetup",
-    label:
-      "If we sent you a kit (merch and a how-to), would you run a bb meetup?",
-    type: "radio",
-    options: [
-      "Yes, in person in my city",
-      "Yes, a remote one",
-      "I'd help someone else run one",
-      "I'd come to one",
-      "Not right now",
-    ],
-    shuffle: false,
-    maxChoices: null,
     placeholder: "",
   },
   {
     name: "city",
-    label: "What city are you in?",
+    label: "What city do you live in or near?",
     type: "text",
     options: [],
-    shuffle: false,
-    maxChoices: null,
-    placeholder: "city, country",
+    placeholder: "City, country",
   },
   {
-    name: "merch",
-    label: "What should we make next? (pick up to 3)",
+    name: "meetup",
+    label:
+      "If there were a bb meetup near you, how would you like to be involved?",
     type: "checkbox",
-    options: ["T-shirt", "Hoodie", "Tote", "Desk mat", "Socks", "Mug", "Other"],
-    shuffle: true,
-    maxChoices: 3,
-    placeholder: "",
-  },
-  {
-    name: "miss",
-    label: "What would you miss most if you couldn't use bb anymore?",
-    type: "text",
-    options: [],
-    shuffle: false,
-    maxChoices: null,
-    placeholder: "",
-  },
-  {
-    name: "opt_in",
-    label: "Want in on any of these?",
-    type: "checkbox",
-    options: ["Early test builds", WORK_CHAT],
-    shuffle: false,
-    maxChoices: null,
+    options: [
+      "I'd come",
+      "I'd help host",
+      "I'd give a short talk or demo",
+      "I could offer a space",
+      MEETUP_DECLINE,
+    ],
     placeholder: "",
   },
 ];
 
 export type FormValues = Record<string, string[]>;
 export type FormErrors = Record<string, string>;
-
-export function followUpFields(values: FormValues) {
-  const company = values.opt_in?.includes(WORK_CHAT) ?? false;
-  const discord =
-    Boolean(values.opt_in?.length) ||
-    (values.meetup ?? []).some(
-      (value) =>
-        value === "Yes, in person in my city" || value === "Yes, a remote one",
-    );
-  return { discord, company };
-}
+export const surveyFields = [
+  ...surveyQuestions.map((question) => question.name),
+  "discovery_other",
+  "role_other",
+  "name",
+  "email",
+];
 
 export function validateSurvey(values: FormValues): FormErrors {
   const errors: FormErrors = {};
@@ -153,30 +115,34 @@ export function validateSurvey(values: FormValues): FormErrors {
     } else if (new Set(selected).size !== selected.length) {
       errors[question.name] = "Choose each answer only once.";
     } else if (
-      question.maxChoices !== null &&
-      selected.length > question.maxChoices
+      question.name === "meetup" &&
+      selected.includes(MEETUP_DECLINE) &&
+      selected.length > 1
     ) {
-      errors[question.name] = "Pick up to 3";
+      errors.meetup = 'Choose involvement options or "Not for me right now".';
     }
   }
-  for (const name of ["discord", "company"]) {
+  for (const name of ["discovery_other", "role_other", "name", "email"]) {
     const selected = values[name] ?? [];
     if (selected.length > 1 || selected.some((value) => value.length > 250)) {
       errors[name] = "Please use one answer of up to 250 characters.";
     }
   }
+  if (!values.name?.[0]?.trim()) errors.name = "Please enter your name.";
+  if (!values.email?.[0]?.trim()) errors.email = "Please enter your email.";
+  else if (!z.email().safeParse(values.email[0]).success)
+    errors.email = "Please enter a valid email.";
   return errors;
 }
 
 export function surveyAnswers(values: FormValues): FormValues {
-  const fields = followUpFields(values);
-  const names = [
-    ...surveyQuestions.map((question) => question.name),
-    ...(fields.discord ? ["discord"] : []),
-    ...(fields.company ? ["company"] : []),
-  ];
   const answers: FormValues = {};
-  for (const name of names) {
+  for (const name of surveyFields) {
+    if (
+      name.endsWith("_other") &&
+      !values[name.slice(0, -6)]?.includes("Other")
+    )
+      continue;
     const selected = values[name]?.filter(Boolean) ?? [];
     if (selected.length) answers[name] = selected;
   }

@@ -1,58 +1,71 @@
 import { describe, expect, it } from "vitest";
-import {
-  followUpFields,
-  surveyAnswers,
-  validateSurvey,
-  WORK_CHAT,
-} from "./survey";
+import { MEETUP_DECLINE, surveyAnswers, validateSurvey } from "./survey";
+
+const contact = { name: ["Ada Lovelace"], email: ["ada@example.test"] };
 
 describe("community survey submission rules", () => {
-  it("allows every question and follow-up to be omitted", () => {
-    expect(validateSurvey({})).toEqual({});
-    expect(validateSurvey({ role: ["Other"] })).toEqual({});
-    expect(validateSurvey({ opt_in: [WORK_CHAT] })).toEqual({});
-  });
-  it("rejects a fourth merch pick, duplicate choices, invented options and oversized text", () => {
+  it("allows all questions to be skipped but requires valid contact details", () => {
+    expect(validateSurvey(contact)).toEqual({});
+    expect(validateSurvey({})).toEqual({
+      name: "Please enter your name.",
+      email: "Please enter your email.",
+    });
     expect(
-      validateSurvey({ merch: ["T-shirt", "Hoodie", "Tote", "Mug"] }).merch,
-    ).toBe("Pick up to 3");
-    expect(validateSurvey({ merch: ["T-shirt", "Hoodie", "Tote"] })).toEqual(
+      validateSurvey({ ...contact, email: ["invalid"] }).email,
+    ).toBeTruthy();
+    expect(validateSurvey({ ...contact, name: [" "] }).name).toBeTruthy();
+    expect(
+      validateSurvey({
+        ...contact,
+        email: ["a@example.test", "b@example.test"],
+      }).email,
+    ).toBeTruthy();
+  });
+  it("allows any involvement combination except the exclusive decline", () => {
+    expect(
+      validateSurvey({
+        ...contact,
+        meetup: [
+          "I'd come",
+          "I'd help host",
+          "I'd give a short talk or demo",
+          "I could offer a space",
+        ],
+      }),
+    ).toEqual({});
+    expect(validateSurvey({ ...contact, meetup: [MEETUP_DECLINE] })).toEqual(
       {},
     );
-    expect(validateSurvey({ merch: ["Mug", "Mug"] }).merch).toBeTruthy();
-    expect(validateSurvey({ role: ["Invented"] }).role).toBeTruthy();
-    expect(validateSurvey({ city: ["x".repeat(251)] }).city).toBeTruthy();
+    expect(
+      validateSurvey({ ...contact, meetup: ["I'd come", MEETUP_DECLINE] })
+        .meetup,
+    ).toBeTruthy();
+    expect(
+      validateSurvey({ ...contact, meetup: ["I'd come", "I'd come"] }).meetup,
+    ).toBeTruthy();
+    expect(
+      validateSurvey({ ...contact, role: ["Invented"] }).role,
+    ).toBeTruthy();
+    expect(
+      validateSurvey({ ...contact, city: ["x".repeat(251)] }).city,
+    ).toBeTruthy();
   });
-  it.each([
-    [{}, { discord: false, company: false }],
-    [
-      { meetup: ["Yes, in person in my city"] },
-      { discord: true, company: false },
-    ],
-    [{ meetup: ["Yes, a remote one"] }, { discord: true, company: false }],
-    [
-      { meetup: ["I'd help someone else run one"] },
-      { discord: false, company: false },
-    ],
-    [{ opt_in: ["Early test builds"] }, { discord: true, company: false }],
-    [{ opt_in: [WORK_CHAT] }, { discord: true, company: true }],
-  ])(
-    "collects follow-up details only with the matching opt-in",
-    (values, expected) => {
-      expect(followUpFields(values)).toEqual(expected);
-      const answers = surveyAnswers({
-        ...values,
-        discord: ["tester"],
-        company: ["Example"],
+  it("stores contact and selected Other detail with answers, excluding unrelated fields", () => {
+    expect(
+      surveyAnswers({
+        ...contact,
+        discovery: ["Other"],
+        discovery_other: ["Example"],
+        role: ["Student"],
+        role_other: ["Ignored"],
         submission_id: ["not-an-answer"],
-      });
-      expect(answers.discord).toEqual(
-        expected.discord ? ["tester"] : undefined,
-      );
-      expect(answers.company).toEqual(
-        expected.company ? ["Example"] : undefined,
-      );
-      expect(answers.submission_id).toBeUndefined();
-    },
-  );
+        address: ["not-stored"],
+      }),
+    ).toEqual({
+      ...contact,
+      discovery: ["Other"],
+      discovery_other: ["Example"],
+      role: ["Student"],
+    });
+  });
 });

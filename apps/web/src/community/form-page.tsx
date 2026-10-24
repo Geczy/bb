@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { siteHeadLinks } from "../landing/page-head";
 import { THEME_INIT } from "../lib/theme";
@@ -6,8 +7,9 @@ import {
   SURVEY_DESCRIPTION,
   SURVEY_TITLE,
   SOLD_OUT,
-  WORK_CHAT,
-  followUpFields,
+  SURVEY_PURPOSE,
+  MEETUP_FRAMING,
+  MEETUP_DECLINE,
   surveyQuestions,
   type FormErrors,
   type FormValues,
@@ -20,39 +22,35 @@ const form = document.querySelector('form');
 const scheme = matchMedia('(prefers-color-scheme: dark)');
 scheme.addEventListener('change', e => document.documentElement.classList.toggle('dark', e.matches));
 if (form) {
-  const validate = () => {
-    for (const group of form.querySelectorAll('[data-max]')) {
-      const checks = [...group.querySelectorAll('input[type="checkbox"]')];
-      const checked = checks.filter(el => el.checked);
-      const error = checked.length > Number(group.dataset.max) ? 'Pick up to 3' : '';
-      if (checks[0]) checks[0].setCustomValidity(error);
-      const message = group.querySelector('[data-live-error]');
-      if (message) message.textContent = error;
-    }
-    const optIn = [...form.querySelectorAll('[name="opt_in"]:checked')].map(el => el.value);
-    const meetup = form.querySelector('[name="meetup"]:checked')?.value;
-    const visible = { discord: optIn.length > 0 || ['Yes, in person in my city', 'Yes, a remote one'].includes(meetup), company: optIn.includes(${JSON.stringify(WORK_CHAT)}) };
-    for (const field of form.querySelectorAll('[data-follow-up]')) {
-      field.hidden = !visible[field.dataset.followUp];
-      field.querySelector('input').disabled = field.hidden;
+  const update = () => {
+    const city = form.elements.namedItem('city').value.trim();
+    form.querySelector('[data-meetup-label]').textContent = 'If there were a bb meetup near ' + (city || 'you') + ', how would you like to be involved?';
+    for (const input of form.querySelectorAll('[data-other]')) {
+      const selected = form.querySelector('[name="' + input.dataset.other + '"]:checked');
+      input.hidden = selected?.value !== 'Other';
+      input.disabled = input.hidden;
     }
   };
-  form.addEventListener('change', validate);
-  form.addEventListener('submit', e => {
-    validate();
-    if (!form.reportValidity()) e.preventDefault();
+  form.addEventListener('change', e => {
+    if (e.target.name === 'meetup' && e.target.checked) {
+      for (const input of form.querySelectorAll('[name="meetup"]')) {
+        if (input !== e.target && (e.target.value === ${JSON.stringify(MEETUP_DECLINE)} || input.value === ${JSON.stringify(MEETUP_DECLINE)})) input.checked = false;
+      }
+    }
+    update();
   });
-  validate();
+  form.addEventListener('input', update);
+  update();
 }
 `;
 
 function shuffled(options: readonly string[]): string[] {
-  const result = [...options];
+  const result = options.slice(0, -2);
   for (let index = result.length - 1; index > 0; index--) {
     const other = Math.floor(Math.random() * (index + 1));
     [result[index], result[other]] = [result[other]!, result[index]!];
   }
-  return result;
+  return [...result, ...options.slice(-2)];
 }
 
 function Survey({
@@ -62,76 +60,104 @@ function Survey({
   values: FormValues;
   errors: FormErrors;
 }) {
-  const followUp = followUpFields(values);
+  const city = values.city?.[0]?.trim();
   return (
     <>
       {surveyQuestions.map((question, index) => (
-        <fieldset
-          key={question.name}
-          id={`question-${question.name}`}
-          data-question={question.name}
-          data-max={question.maxChoices ?? undefined}
-          aria-describedby={
-            errors[question.name] ? `${question.name}-error` : undefined
-          }
-        >
-          <legend>
-            <span className="community-number">{index + 1}.</span>{" "}
-            {question.label}
-          </legend>
-          {question.options.length ? (
-            <div className="community-options">
-              {(question.shuffle
-                ? shuffled(question.options)
-                : question.options
-              ).map((option) => (
-                <label key={option} className="community-option">
-                  <input
-                    type={question.type === "checkbox" ? "checkbox" : "radio"}
-                    name={question.name}
-                    value={option}
-                    defaultChecked={values[question.name]?.includes(option)}
-                  />
-                  <span>{option}</span>
-                </label>
-              ))}
-            </div>
-          ) : (
-            <input
-              type="text"
-              name={question.name}
-              aria-label={question.label}
-              placeholder={question.placeholder}
-              maxLength={250}
-              defaultValue={values[question.name]?.[0] ?? ""}
-            />
+        <Fragment key={question.name}>
+          {question.name === "city" && (
+            <p className="community-meetup">{MEETUP_FRAMING}</p>
           )}
-          <p className="community-error" data-live-error aria-live="polite" />
-          {errors[question.name] && (
-            <p className="community-error" id={`${question.name}-error`}>
-              {errors[question.name]}
-            </p>
-          )}
-        </fieldset>
+          <fieldset
+            id={`question-${question.name}`}
+            data-question={question.name}
+            aria-describedby={
+              errors[question.name] ? `${question.name}-error` : undefined
+            }
+          >
+            <legend>
+              <span className="community-number">{index + 1}.</span>{" "}
+              <span
+                data-meetup-label={question.name === "meetup" ? "" : undefined}
+              >
+                {question.name === "meetup" && city
+                  ? `If there were a bb meetup near ${city}, how would you like to be involved?`
+                  : question.label}
+              </span>
+              {question.type === "checkbox" && " (pick any)"}
+            </legend>
+            {question.options.length ? (
+              <div className="community-options">
+                {(question.name === "discovery"
+                  ? shuffled(question.options)
+                  : question.options
+                ).map((option) => (
+                  <label key={option} className="community-option">
+                    <input
+                      type={question.type === "checkbox" ? "checkbox" : "radio"}
+                      name={question.name}
+                      value={option}
+                      defaultChecked={values[question.name]?.includes(option)}
+                    />
+                    <span>{option === "Other" ? "Other:" : option}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <input
+                type="text"
+                name={question.name}
+                aria-label={question.label}
+                placeholder={question.placeholder}
+                maxLength={250}
+                defaultValue={values[question.name]?.[0] ?? ""}
+              />
+            )}
+            {question.options.includes("Other") && (
+              <input
+                type="text"
+                name={`${question.name}_other`}
+                data-other={question.name}
+                aria-label={`${question.label} Other`}
+                maxLength={250}
+                defaultValue={values[`${question.name}_other`]?.[0] ?? ""}
+                aria-describedby={
+                  errors[`${question.name}_other`]
+                    ? `${question.name}_other-error`
+                    : undefined
+                }
+              />
+            )}
+            {errors[`${question.name}_other`] && (
+              <p
+                className="community-error"
+                id={`${question.name}_other-error`}
+              >
+                {errors[`${question.name}_other`]}
+              </p>
+            )}
+            {errors[question.name] && (
+              <p className="community-error" id={`${question.name}-error`}>
+                {errors[question.name]}
+              </p>
+            )}
+          </fieldset>
+        </Fragment>
       ))}
-      {(["discord", "company"] as const).map((name) => (
-        <div
-          key={name}
-          className="community-field"
-          id={`question-${name}`}
-          data-follow-up={name}
-          hidden={!followUp[name]}
-        >
-          <label htmlFor={name}>
-            {name === "discord" ? "Discord handle" : "Company name"}{" "}
-            <span className="community-optional">(optional)</span>
-          </label>
+      <p className="community-meetup">
+        <strong>Last step.</strong> So we can send you the results and get in
+        touch about meetups near you.
+      </p>
+      {(["name", "email"] as const).map((name) => (
+        <div key={name} className="community-field" id={`question-${name}`}>
+          <label htmlFor={name}>{name === "name" ? "Name" : "Email"}</label>
           <input
-            type="text"
+            type={name === "email" ? "email" : "text"}
+            required
+            autoComplete={name}
             name={name}
             id={name}
             maxLength={250}
-            disabled={!followUp[name]}
             defaultValue={values[name]?.[0] ?? ""}
             aria-describedby={errors[name] ? `${name}-error` : undefined}
           />
@@ -142,6 +168,9 @@ function Survey({
           )}
         </div>
       ))}
+      <p className="community-help">
+        We won't add you to a marketing list or share it.
+      </p>
     </>
   );
 }
@@ -159,6 +188,7 @@ export function formPage({
   stickerCode = null,
   duplicate = false,
   jotform = null,
+  hatsAvailable = true,
 }: {
   kind: FormKind;
   id: string;
@@ -172,6 +202,7 @@ export function formPage({
   stickerCode?: string | null;
   duplicate?: boolean;
   jotform?: string | null;
+  hatsAvailable?: boolean;
 }): Response {
   const nonce = crypto.randomUUID();
   const referrerPolicy = kind === "survey" ? "same-origin" : "no-referrer";
@@ -197,7 +228,7 @@ export function formPage({
         <div className="community-wrap">
           <header className="community-header">
             <a className="logo" href="/" aria-label="bb home">
-              <span className="community-wordmark" role="img" aria-label="bb" />
+              <span className="bb-mark logo-mark" />
             </a>
           </header>
           <main>
@@ -209,28 +240,40 @@ export function formPage({
                     your sticker code, you can still use its claim link.
                   </p>
                 ) : (
-                  <p>
-                    {stickerCode ? (
-                      <>
-                        thank you 🙏 here's a free bb sticker pack →{" "}
-                        <a
-                          href={`/community/merch?c=${encodeURIComponent(stickerCode)}`}
-                        >
-                          claim stickers
-                        </a>{" "}
-                        (code: <code>{stickerCode}</code>, one use, US only for
-                        now). it opens a short private form for your mailing
-                        address. only the person packing your envelope can read
-                        it, it isn't linked to these answers, and we delete it
-                        once your stickers ship.
-                      </>
-                    ) : (
-                      SOLD_OUT
-                    )}{" "}
-                    outside the US? we're working on it and will post in
-                    Discord. we'll share the results in Discord too, and if you
-                    said you'd host, we'll DM you.
-                  </p>
+                  <>
+                    <p>
+                      <strong>
+                        Thanks, {values.name?.[0]?.trim().split(/\s+/)[0]}.
+                      </strong>{" "}
+                      {stickerCode ? (
+                        <>
+                          Here's your bb{" "}
+                          {hatsAvailable ? "hat and stickers" : "stickers"}:{" "}
+                          <a
+                            href={`/community/merch?c=${encodeURIComponent(stickerCode)}`}
+                          >
+                            Claim them
+                          </a>{" "}
+                          (one-time code <code>{stickerCode}</code>)
+                        </>
+                      ) : (
+                        SOLD_OUT
+                      )}
+                    </p>
+                    {stickerCode && (
+                      <p>
+                        It opens a short private form for your US mailing
+                        address. Only the person packing your envelope sees it,
+                        it isn't linked to your answers, and we delete it once
+                        your package ships.
+                      </p>
+                    )}
+                    <p>
+                      Outside the US? We'll post in Discord when we can ship to
+                      you.
+                    </p>
+                    <p>We'll email you the results when they're in.</p>
+                  </>
                 )}
               </section>
             ) : unavailable ? (
@@ -249,6 +292,7 @@ export function formPage({
                       ? SURVEY_DESCRIPTION
                       : "you've helped people in the discord, built cool stuff, and told friends about bb. we notice, and it means a lot. so we made some merch and want you to have some first."}
                   </p>
+                  {kind === "survey" && <p>{SURVEY_PURPOSE}</p>}
                   {kind === "merch" && <p>— brsbl &amp; the bb team</p>}
                 </div>
                 {!enabled && (
@@ -329,7 +373,6 @@ export function formPage({
             )}
           </main>
           <footer className="community-footer">
-            <span>From the people building bb.</span>
             <a href="/privacy">Privacy</a>
           </footer>
         </div>

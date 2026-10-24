@@ -108,6 +108,7 @@
   accent-color: var(--ink);
 }
 .community-page input[type="text"],
+.community-page input[type="email"],
 .community-page textarea {
   display: block;
   width: 100%;
@@ -221,15 +222,6 @@
   }
 }
 
-.community-wordmark {
-  display: block;
-  width: 76px;
-  height: 44px;
-  background: url("/brand/bb-logo-flat-black.svg") center / contain no-repeat;
-}
-.dark .community-wordmark {
-  background-image: url("/brand/bb-logo-flat-white.svg");
-}
 .community-page [hidden] {
   display: none;
 }
@@ -240,4 +232,9 @@
 }
 .community-thanks code {
   overflow-wrap: anywhere;
+}
+
+.community-meetup {
+  margin: 32px 0 0;
+  line-height: 1.7;
 }

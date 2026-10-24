@@ -1244,3 +1244,7 @@ metadata is preserved. This is a desktop-local preference, with no server
 settings CLI/SDK endpoint. Builds with tolerant readers ignore the field and
 may drop it on save; older strict readers can reject the whole file, so keep a
 backup before rolling back to a build predating the tolerant-reader fix #5286.
+
+## Community survey gifts
+
+The website Worker uses `COMMUNITY_HATS_AVAILABLE` (default `true`). Set it to `false` when hats run out to offer stickers only in the survey confirmation. This does not enable collection; `COMMUNITY_FORMS_ENABLED` remains off by default. See [Community forms](community/forms.md) for the private storage and fulfillment contract.

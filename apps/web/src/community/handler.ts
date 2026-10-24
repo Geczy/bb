@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Env } from "../server/env";
 import { formPage, type FormKind } from "./form-page";
 import {
-  surveyQuestions,
+  surveyFields,
   surveyAnswers,
   validateSurvey,
   type FormValues,
@@ -15,6 +15,7 @@ type CommunityEnv = Pick<
   | "COMMUNITY_FORMS_ENABLED"
   | "COMMUNITY_MERCH_INVITE_HASHES"
   | "COMMUNITY_JOTFORM_URL"
+  | "COMMUNITY_HATS_AVAILABLE"
   | "COMMUNITY_FORM_RATE_LIMITER"
 >;
 
@@ -106,7 +107,13 @@ export async function handleCommunityForm(
   const enabled = env.COMMUNITY_FORMS_ENABLED === "true";
   let id: string = crypto.randomUUID();
   const page = (extra: Partial<Parameters<typeof formPage>[0]> = {}) =>
-    formPage({ kind, enabled, id, ...extra });
+    formPage({
+      kind,
+      enabled,
+      id,
+      hatsAvailable: env.COMMUNITY_HATS_AVAILABLE !== "false",
+      ...extra,
+    });
   if (kind === "merch") {
     if (request.method !== "GET")
       return new Response(null, { status: 405, headers: { Allow: "GET" } });
@@ -152,12 +159,7 @@ export async function handleCommunityForm(
         "Too many submissions just now. Please wait a minute and try again.",
     });
   const values = await readValues(request);
-  const allowed = new Set([
-    "submission_id",
-    "discord",
-    "company",
-    ...surveyQuestions.map((question) => question.name),
-  ]);
+  const allowed = new Set(["submission_id", ...surveyFields]);
   if (!values || Object.keys(values).some((key) => !allowed.has(key))) {
     return page({
       status: 400,
@@ -194,6 +196,7 @@ export async function handleCommunityForm(
       return page({ complete: true, duplicate: true });
     return page({
       complete: true,
+      values,
       stickerCode: allocation?.meta.changes ? code : null,
     });
   } catch {

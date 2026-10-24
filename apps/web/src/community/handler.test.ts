@@ -22,7 +22,12 @@ const submit = (
     new Request(`${origin}/community/survey`, {
       method: "POST",
       headers: { Origin: origin },
-      body: new URLSearchParams({ submission_id: id, ...fields }),
+      body: new URLSearchParams({
+        submission_id: id,
+        name: "Ada Lovelace",
+        email: "ada@example.test",
+        ...fields,
+      }),
     }),
     enabled(),
     "survey",
@@ -88,7 +93,9 @@ describe("private community forms", () => {
         .prepare("SELECT answers FROM community_survey_response WHERE id = ?")
         .bind(id)
         .first("answers"),
-    ).toBe("{}");
+    ).toBe(
+      JSON.stringify({ name: ["Ada Lovelace"], email: ["ada@example.test"] }),
+    );
     expect(
       await db
         .prepare("SELECT code_hash FROM community_sticker_code")
@@ -102,6 +109,65 @@ describe("private community forms", () => {
         .prepare("SELECT COUNT(*) AS n FROM community_sticker_code")
         .first("n"),
     ).toBe(1);
+  });
+  it("rejects missing contact, removed fields and conflicting involvement without saving", async () => {
+    const invalidFields: Record<string, string>[] = [
+      { name: "" },
+      { email: "" },
+      { email: "bad" },
+      { discord: "old" },
+      { merch: "Mug" },
+      { opt_in: "old" },
+      { miss: "old" },
+      { company: "old" },
+    ];
+    for (const fields of invalidFields) {
+      expect((await submit(crypto.randomUUID(), fields)).status).toBe(400);
+    }
+    const response = await handleCommunityForm(
+      new Request(`${origin}/community/survey`, {
+        method: "POST",
+        headers: { Origin: origin },
+        body: new URLSearchParams([
+          ["submission_id", crypto.randomUUID()],
+          ["name", "Ada"],
+          ["email", "ada@example.test"],
+          ["meetup", "I'd come"],
+          ["meetup", "Not for me right now"],
+        ]),
+      }),
+      enabled(),
+      "survey",
+    );
+    expect(response.status).toBe(400);
+    expect(
+      await db
+        .prepare("SELECT COUNT(*) AS n FROM community_survey_response")
+        .first("n"),
+    ).toBe(0);
+  });
+  it("personalizes the gift and switches to stickers when hats run out", async () => {
+    const normal = await (await submit()).text();
+    expect(normal).toContain("Thanks, Ada.");
+    expect(normal).toContain("hat and stickers");
+    const response = await handleCommunityForm(
+      new Request(`${origin}/community/survey`, {
+        method: "POST",
+        headers: { Origin: origin },
+        body: new URLSearchParams({
+          submission_id: crypto.randomUUID(),
+          name: "Grace Hopper",
+          email: "grace@example.test",
+        }),
+      }),
+      { ...enabled(), COMMUNITY_HATS_AVAILABLE: "false" },
+      "survey",
+    );
+    const html = await response.text();
+    expect(html).toContain("Thanks, Grace.");
+    expect(html).toContain("bb stickers");
+    expect(html).not.toContain("hat and stickers");
+    expect(codeFrom(html)).toBeTruthy();
   });
   it("caps concurrent allocations at 250 and still accepts answers when sold out", async () => {
     await db
