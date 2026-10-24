@@ -61,7 +61,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: bash .github/actions/setup-workspace/install-dependencies.sh
-          --ignore-scripts --filter '!@bb/mobile'
+          --ignore-scripts
       - name: Test package group
         shell: cmd
         env:
