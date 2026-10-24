@@ -576,6 +576,10 @@ function ThreadDetailViewInternal(
   const pendingInteractions = pendingInteractionsQuery.data ?? [];
   const hasPendingInteraction = pendingInteractions.length > 0;
   const unreadDividerState = useThreadUnreadDividerState({
+    hasFreshThread:
+      thread !== undefined &&
+      !isFetching &&
+      !threadDetailBootstrapQuery.isFetching,
     routeThreadId: threadId,
     thread,
   });

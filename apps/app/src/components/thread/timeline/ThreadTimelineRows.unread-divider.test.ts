@@ -14,8 +14,10 @@ const DIVIDER = "__divider__";
 function renderTopLevelSequence(
   timelineRows: TimelineRow[],
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null,
+  hasOlderRows = false,
 ): string[] {
   return buildTimelineRowsListItems({
+    hasOlderRows,
     rows: buildTimelineViewRows(timelineRows),
     unreadDividerPlacement,
   }).map((item) => {
@@ -142,5 +144,20 @@ describe("unread divider placement", () => {
     );
 
     expect(sequence[0]).toBe(DIVIDER);
+  });
+
+  it("holds the divider back while every loaded row is newer than the cutoff and older rows exist", () => {
+    const timelineRows = [command(400), assistantMessage(500)];
+    const placement = { kind: "after-cutoff", cutoffAt: 350 } as const;
+
+    expect(renderTopLevelSequence(timelineRows, placement, true)).toEqual([
+      "work",
+      "assistant",
+    ]);
+    expect(renderTopLevelSequence(timelineRows, placement, false)).toEqual([
+      DIVIDER,
+      "work",
+      "assistant",
+    ]);
   });
 });

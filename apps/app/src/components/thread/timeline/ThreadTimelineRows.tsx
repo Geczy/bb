@@ -76,6 +76,10 @@ import {
 import { TimelineSelectionMenu } from "./TimelineSelectionMenu.js";
 import type { MessageProseSelection } from "./SelectableMessageProse.js";
 import { TimelineReasoningDetail } from "./TimelineReasoningDetail.js";
+import {
+  REVEAL_MAX_FRAME_COUNT,
+  REVEAL_STABLE_FRAME_COUNT,
+} from "./reveal-timeline-row.js";
 import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import { TimelineRowBodyPlaceholder } from "./TimelineRowBodyPlaceholder.js";
 import {
@@ -246,6 +250,15 @@ interface TimelineUnreadDividerProps {
   autoScroll: boolean;
 }
 
+interface UseLoadOlderRowsForUnreadDividerArgs {
+  hasOlderRows: boolean;
+  isLoadingOlderRows: boolean;
+  onLoadOlderRows: (() => Promise<void> | void) | undefined;
+  rows: readonly ThreadTimelineViewRow[];
+  unreadDividerAutoScroll: boolean;
+  unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
+}
+
 interface TimelineRowViewProps {
   activeLatestBundleId: string | null;
   compactActivityIntents: boolean;
@@ -284,11 +297,13 @@ interface TimelineSystemDetailBlockProps {
 }
 
 interface BuildTimelineRowsListItemsArgs {
+  hasOlderRows: boolean;
   rows: readonly ThreadTimelineViewRow[];
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
 interface FindUnreadDividerIndexArgs {
+  hasOlderRows: boolean;
   rows: readonly ThreadTimelineViewRow[];
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
@@ -1045,6 +1060,39 @@ const ConversationRowContent = memo(function ConversationRowContent({
   );
 });
 
+function useLoadOlderRowsForUnreadDivider({
+  hasOlderRows,
+  isLoadingOlderRows,
+  onLoadOlderRows,
+  rows,
+  unreadDividerAutoScroll,
+  unreadDividerPlacement,
+}: UseLoadOlderRowsForUnreadDividerArgs): void {
+  const attemptedFirstRowIdRef = useRef<string | null>(null);
+  const firstRowId = rows[0]?.id ?? null;
+  const isAwaitingOlderRows =
+    unreadDividerAutoScroll &&
+    isUnreadDividerAwaitingOlderRows({
+      hasOlderRows,
+      rows,
+      unreadDividerPlacement,
+    });
+
+  useEffect(() => {
+    if (
+      !isAwaitingOlderRows ||
+      isLoadingOlderRows ||
+      onLoadOlderRows === undefined ||
+      firstRowId === null ||
+      attemptedFirstRowIdRef.current === firstRowId
+    ) {
+      return;
+    }
+    attemptedFirstRowIdRef.current = firstRowId;
+    void Promise.resolve(onLoadOlderRows()).catch(() => undefined);
+  }, [firstRowId, isAwaitingOlderRows, isLoadingOlderRows, onLoadOlderRows]);
+}
+
 function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
   const bottomAnchor = useBottomAnchoredScroll();
   const dividerRef = useRef<HTMLDivElement>(null);
@@ -1055,7 +1103,11 @@ function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
       return;
     }
 
-    const frameId = window.requestAnimationFrame(() => {
+    let frameId = 0;
+    let frameCount = 0;
+    let stableFrameCount = 0;
+    let previousGeometry: string | null = null;
+    const revealDivider = () => {
       const divider = dividerRef.current;
       if (!divider) {
         return;
@@ -1065,7 +1117,26 @@ function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
       bottomAnchor.scrollElementIntoViewClampedToMaxScroll({
         element: divider,
       });
-    });
+      const scrollElement = bottomAnchor.getScrollElement();
+      const geometry = [
+        Math.round(
+          divider.getBoundingClientRect().top + (scrollElement?.scrollTop ?? 0),
+        ),
+        scrollElement?.scrollHeight ?? 0,
+      ].join(":");
+      stableFrameCount =
+        geometry === previousGeometry ? stableFrameCount + 1 : 0;
+      previousGeometry = geometry;
+      frameCount += 1;
+      if (
+        stableFrameCount >= REVEAL_STABLE_FRAME_COUNT ||
+        frameCount >= REVEAL_MAX_FRAME_COUNT
+      ) {
+        return;
+      }
+      frameId = window.requestAnimationFrame(revealDivider);
+    };
+    frameId = window.requestAnimationFrame(revealDivider);
 
     return () => window.cancelAnimationFrame(frameId);
   }, [autoScroll, bottomAnchor]);
@@ -1901,11 +1972,33 @@ const MemoizedTimelineExpandableRowView = memo(
   areTimelineExpandableRowViewPropsEqual,
 );
 
+export function isUnreadDividerAwaitingOlderRows({
+  hasOlderRows,
+  rows,
+  unreadDividerPlacement,
+}: FindUnreadDividerIndexArgs): boolean {
+  const firstRow = rows[0];
+  return (
+    hasOlderRows &&
+    firstRow !== undefined &&
+    unreadDividerPlacement?.kind === "after-cutoff" &&
+    firstRow.startedAt > unreadDividerPlacement.cutoffAt
+  );
+}
+
 function findUnreadDividerIndex({
+  hasOlderRows,
   rows,
   unreadDividerPlacement,
 }: FindUnreadDividerIndexArgs): number {
-  if (unreadDividerPlacement === null) {
+  if (
+    unreadDividerPlacement === null ||
+    isUnreadDividerAwaitingOlderRows({
+      hasOlderRows,
+      rows,
+      unreadDividerPlacement,
+    })
+  ) {
     return -1;
   }
 
@@ -1944,11 +2037,13 @@ function isUnreadDividerCandidateAfterCutoff({
 }
 
 export function buildTimelineRowsListItems({
+  hasOlderRows,
   rows,
   unreadDividerPlacement,
 }: BuildTimelineRowsListItemsArgs): TimelineRowsListItem[] {
   const items: TimelineRowsListItem[] = [];
   const dividerIndex = findUnreadDividerIndex({
+    hasOlderRows,
     rows,
     unreadDividerPlacement,
   });
@@ -2054,10 +2149,24 @@ function TimelineRowsList({
     () => findActiveLatestBundleId(rows),
     [rows],
   );
+  const hasOlderRows = hasOlderTimelineRows ?? false;
   const items = useMemo(
-    () => buildTimelineRowsListItems({ rows, unreadDividerPlacement }),
-    [rows, unreadDividerPlacement],
+    () =>
+      buildTimelineRowsListItems({
+        hasOlderRows,
+        rows,
+        unreadDividerPlacement,
+      }),
+    [hasOlderRows, rows, unreadDividerPlacement],
   );
+  useLoadOlderRowsForUnreadDivider({
+    hasOlderRows,
+    isLoadingOlderRows: isLoadingOlderTimelineRows ?? false,
+    onLoadOlderRows,
+    rows,
+    unreadDividerAutoScroll,
+    unreadDividerPlacement,
+  });
   const itemKeys = useMemo(
     () =>
       items.map((item) =>

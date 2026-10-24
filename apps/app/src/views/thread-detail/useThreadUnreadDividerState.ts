@@ -10,6 +10,7 @@ interface ThreadUnreadDividerThreadState {
 interface ThreadUnreadDividerSnapshot {
   attentionAt: number;
   autoScroll: boolean;
+  isOpening: boolean;
   placement: ThreadTimelineUnreadDividerPlacement | null;
   threadId: string;
 }
@@ -25,6 +26,7 @@ interface ShouldTrackThreadUnreadDividerArgs {
 }
 
 interface UseThreadUnreadDividerStateArgs {
+  hasFreshThread: boolean;
   routeThreadId: string | undefined;
   thread: ThreadUnreadDividerThreadState | undefined;
 }
@@ -60,36 +62,46 @@ function buildUnreadDividerPlacement(
 function nextThreadUnreadDividerSnapshot(
   currentSnapshot: ThreadUnreadDividerSnapshot | null,
   thread: ThreadUnreadDividerThreadState,
+  hasFreshThread: boolean,
 ): ThreadUnreadDividerSnapshot {
+  const isOpening =
+    currentSnapshot?.threadId !== thread.id || currentSnapshot.isOpening;
+  const isStillOpening = isOpening && !hasFreshThread;
   if (
     currentSnapshot?.threadId === thread.id &&
     currentSnapshot.attentionAt === thread.latestAttentionAt
   ) {
-    if (thread.lastReadAt === null) {
-      if (currentSnapshot.placement?.kind === "before-first") {
-        return currentSnapshot;
-      }
+    if (
+      thread.lastReadAt === null &&
+      currentSnapshot.placement?.kind !== "before-first"
+    ) {
       return {
         attentionAt: thread.latestAttentionAt,
         autoScroll:
           currentSnapshot.placement !== null && currentSnapshot.autoScroll,
+        isOpening: isStillOpening,
         placement: { kind: "before-first" },
         threadId: thread.id,
       };
     }
-    return currentSnapshot;
+    if (currentSnapshot.isOpening === isStillOpening) {
+      return currentSnapshot;
+    }
+    return { ...currentSnapshot, isOpening: isStillOpening };
   }
 
   const placement = buildUnreadDividerPlacement(thread);
   return {
     attentionAt: thread.latestAttentionAt,
-    autoScroll: currentSnapshot?.threadId !== thread.id && placement !== null,
+    autoScroll: isOpening && placement !== null,
+    isOpening: isStillOpening,
     placement,
     threadId: thread.id,
   };
 }
 
 export function useThreadUnreadDividerState({
+  hasFreshThread,
   routeThreadId,
   thread,
 }: UseThreadUnreadDividerStateArgs): ThreadUnreadDividerState {
@@ -113,7 +125,7 @@ export function useThreadUnreadDividerState({
   const currentSnapshot =
     trackedThread === null
       ? null
-      : nextThreadUnreadDividerSnapshot(snapshot, trackedThread);
+      : nextThreadUnreadDividerSnapshot(snapshot, trackedThread, hasFreshThread);
   if (currentSnapshot !== snapshot) {
     setSnapshot(currentSnapshot);
   }

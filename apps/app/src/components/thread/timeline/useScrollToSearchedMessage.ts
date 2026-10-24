@@ -14,7 +14,11 @@ import { useLocation } from "react-router-dom";
 import { parseMessageLink } from "@bb/client-core";
 import { appToast } from "@/components/ui/app-toast";
 import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-body.js";
-import { revealTimelineRow } from "./reveal-timeline-row.js";
+import {
+  REVEAL_MAX_FRAME_COUNT,
+  REVEAL_STABLE_FRAME_COUNT,
+  revealTimelineRow,
+} from "./reveal-timeline-row.js";
 
 interface SeqAnchoredRow {
   id: string;
@@ -56,9 +60,6 @@ interface SeqRange {
   min: number;
   max: number;
 }
-
-const REVEAL_STABLE_FRAME_COUNT = 2;
-const REVEAL_MAX_FRAME_COUNT = 12;
 
 function escapeTimelineRowId(rowId: string): string {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
