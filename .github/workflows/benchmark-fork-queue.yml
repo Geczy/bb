@@ -1,4 +1,4 @@
-name: Measure Pi timeout tests
+name: Measure Windows Pi timeout tests
 on:
   push:
     branches: [bb/benchmark-fork-queue-20261024]
@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         variant: [baseline, candidate]
-        os: [ubuntu, windows]
+        os: [windows]
         replica: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -25,10 +25,12 @@ jobs:
           git fetch --depth=1 origin 7f3414a707a54519749d098165e3a98ff73a4b88
           git show FETCH_HEAD:plugins/provider-pi/src/bridge/bridge.lifecycle.test.ts > plugins/provider-pi/src/bridge/bridge.lifecycle.test.ts
           git show FETCH_HEAD:plugins/provider-pi/src/bridge/catalog.test.ts > plugins/provider-pi/src/bridge/catalog.test.ts
-      - uses: ./.github/actions/setup-workspace-tools
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.x
-          pnpm-version: 9.15.0
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.0 --ignore-scripts
       - name: Install workspace
         run: bash .github/actions/setup-workspace/install-dependencies.sh
       - uses: ./.github/actions/setup-bun
