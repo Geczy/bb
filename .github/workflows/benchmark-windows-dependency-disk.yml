@@ -1,18 +1,17 @@
-name: Benchmark Pi startup and fork scheduling
+name: Benchmark test execution and fork critical path
 on:
   push:
     branches: [bb/benchmark-windows-dependencies-20261024]
 permissions:
   contents: read
 jobs:
-  measure:
-    runs-on: ${{ matrix.os }}
+  forks:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025]
-        mode: [original, optimized]
+        mode: [original, fixture, scheduled]
         repetition: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -21,49 +20,60 @@ jobs:
           node-version: 22.x
           package-manager-cache: false
       - run: npm install --global pnpm@9.15.0 --ignore-scripts
-      - name: Apply fixture and scheduling optimization
-        if: matrix.mode == 'optimized'
+      - name: Apply faster test fixtures
+        if: matrix.mode != 'original'
+        run: git apply .github/benchmarks/runtime.patch
+      - name: Schedule the long fork first
+        if: matrix.mode == 'scheduled'
         shell: node {0}
         run: |
           const fs = require('node:fs');
-          const path = 'plugins/provider-pi/src/bridge/fake-pi-rpc.mjs';
-          let source = fs.readFileSync(path, 'utf8');
-          source = source.replace('const runtimeUrl = import.meta.resolve("@earendil-works/pi-coding-agent");', 'const runtimeUrl = new URL("./core/session-manager.js", import.meta.resolve("@earendil-works/pi-coding-agent")).href;');
-          source = source.replace('export * from ${JSON.stringify(runtimeUrl)}', 'export { SessionManager } from ${JSON.stringify(runtimeUrl)}');
-          fs.writeFileSync(path, source);
           const fork = 'scripts/check-plugin-forks.mjs';
           fs.writeFileSync(fork, fs.readFileSync(fork, 'utf8').replace('const queue = [...pluginDirs];', 'const queue = [...pluginDirs].sort((a, b) => Number(b === "plugins/provider-pi") - Number(a === "plugins/provider-pi"));'));
       - name: Install dependencies
-        shell: bash
         run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
       - uses: ./.github/actions/setup-bun
         with:
           version: '1.3.14'
-      - name: Run Pi provider tests on Windows
-        if: runner.os == 'Windows'
+      - name: Measure Markdown streaming tests
+        env:
+          VITEST_MAX_WORKERS: '2'
+        run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=new-only --summarize -- --run src/components/ui/markdown-incremental-pieces.test.ts
+      - name: Prepare shared fork prerequisites
+        run: pnpm exec turbo run build build:types --filter=@get-bb/plugin-sdk --filter=@bb/cli --output-logs=errors-only
+      - name: Run complete first fork shard
+        env:
+          MODE: ${{ matrix.mode }}
+        run: |
+          if [[ "$MODE" == "scheduled" ]]; then
+            export VITEST_MAX_WORKERS=2
+          fi
+          node scripts/check-plugin-forks.mjs --shard=1/3
+  markdown:
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [original, fixture]
+        repetition: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Apply faster test fixtures
+        if: matrix.mode != 'original'
+        shell: bash
+        run: git apply .github/benchmarks/runtime.patch
+      - name: Install dependencies
+        shell: bash
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
+      - name: Measure Markdown streaming tests
         shell: cmd
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
-        run: pnpm exec turbo run test --filter=bb-plugin-provider-pi --force --output-logs=new-only --summarize --concurrency=2
-      - name: Run Pi provider tests on Linux
-        if: runner.os == 'Linux'
-        env:
-          VITEST_MAX_WORKERS: '2'
-        run: pnpm exec turbo run test --filter=bb-plugin-provider-pi --force --output-logs=new-only --summarize --concurrency=4
-      - name: Run complete first fork shard
-        if: runner.os == 'Linux'
-        shell: bash
-        env:
-          MODE: ${{ matrix.mode }}
-        run: |
-          if [[ "$MODE" == "optimized" ]]; then
-            export VITEST_MAX_WORKERS=1
-          fi
-          node scripts/check-plugin-forks.mjs --shard=1/3
-      - name: Upload task timings
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pi-${{ runner.os }}-${{ matrix.mode }}-${{ matrix.repetition }}
-          path: .turbo/runs/*.json
+        run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=new-only --summarize -- --run src/components/ui/markdown-incremental-pieces.test.ts
