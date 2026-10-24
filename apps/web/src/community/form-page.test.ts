@@ -5,7 +5,10 @@ import { surveyQuestions } from "./survey";
 
 describe("survey page", () => {
   it("groups the questions, asks only for email, and fixes Other last while shuffling Q6", async () => {
-    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    vi.stubGlobal(
+      "Math",
+      Object.assign(Object.create(Math), { random: () => 0 }),
+    );
     try {
       const html = await formPage({ kind: "survey", id: "fixture" }).text();
       expect(html.indexOf("Getting to know you")).toBeLessThan(
@@ -40,7 +43,7 @@ describe("survey page", () => {
           ?.options,
       ).toHaveLength(7);
     } finally {
-      random.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 
