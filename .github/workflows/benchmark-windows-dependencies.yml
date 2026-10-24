@@ -1,0 +1,101 @@
+name: Benchmark Windows dependencies
+on:
+  push:
+    branches: [bb/benchmark-windows-dependencies-20261024]
+permissions:
+  contents: read
+jobs:
+  seed:
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Install app dependencies
+        shell: bash
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...'
+      - name: Locate store
+        id: store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Save pnpm store
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: benchmark-win-deps-store-${{ github.run_id }}
+          path: ${{ steps.store.outputs.path }}
+      - name: Save installed dependencies
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: benchmark-win-deps-modules-${{ github.run_id }}
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            plugins/*/node_modules
+            tests/*/node_modules
+            examples/plugins/*/node_modules
+  measure:
+    needs: seed
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [fresh, store, modules]
+        repetition: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Locate store
+        id: store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore pnpm store
+        if: matrix.mode == 'store'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: benchmark-win-deps-store-${{ github.run_id }}
+          path: ${{ steps.store.outputs.path }}
+          fail-on-cache-miss: true
+      - name: Restore installed dependencies
+        if: matrix.mode == 'modules'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          key: benchmark-win-deps-modules-${{ github.run_id }}
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            plugins/*/node_modules
+            tests/*/node_modules
+            examples/plugins/*/node_modules
+          fail-on-cache-miss: true
+      - name: Measure frozen install
+        shell: bash
+        run: |
+          start=$(node -p Date.now())
+          bash .github/actions/setup-workspace/install-dependencies.sh --reporter=ndjson --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...' > "$RUNNER_TEMP/install.ndjson"
+          end=$(node -p Date.now())
+          echo "Install milliseconds: $((end-start))"
+          echo "Install milliseconds: $((end-start))" >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify with uncached app shard
+        shell: cmd
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+          BB_CI_TEST_SHARD: 1/4
+        run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=errors-only --summarize
+      - name: Upload installation trace
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: install-${{ matrix.mode }}-${{ matrix.repetition }}
+          path: ${{ runner.temp }}/install.ndjson
