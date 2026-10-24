@@ -1,3 +1,4 @@
+import path from "node:path";
 import type {
   HostWatcher,
   WatchThreadStorageArgs,
@@ -1038,7 +1039,7 @@ describe("WatchManager", () => {
 
     expect(watchThreadStorage).toHaveBeenCalledTimes(1);
     expect(watchThreadStorageArgs?.threadStoragePath).toBe(
-      "/tmp/bb-data/thread-storage/thread-1",
+      path.resolve("/tmp/bb-data/thread-storage", "thread-1"),
     );
     expect(onThreadStorageChanged).toHaveBeenCalledWith({
       environmentId: "env-moved",
@@ -1096,10 +1097,14 @@ describe("WatchManager", () => {
     });
 
     expect(
-      stopWatchingByPath.get("/tmp/bb-data/thread-storage/thread-a"),
+      stopWatchingByPath.get(
+        path.resolve("/tmp/bb-data/thread-storage", "thread-a"),
+      ),
     ).toHaveBeenCalledTimes(1);
     expect(
-      stopWatchingByPath.get("/tmp/bb-data/thread-storage/thread-b"),
+      stopWatchingByPath.get(
+        path.resolve("/tmp/bb-data/thread-storage", "thread-b"),
+      ),
     ).not.toHaveBeenCalled();
     expect(manager.threadStorageWatchTargetCount()).toBe(1);
   });
