@@ -1,0 +1,42 @@
+name: Compare Linux server worker counts
+on:
+  push:
+    branches: [bb/benchmark-server-workers-20261024]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        workers: [2, 4]
+        shard: [1, 2]
+        replica: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/setup-workspace-tools
+        with:
+          node-version: 22.x
+          pnpm-version: 9.15.0
+      - name: Report resources
+        run: node -e 'const os=require("node:os"); console.log(JSON.stringify({cpus:os.availableParallelism(),model:os.cpus()[0].model}))'
+      - name: Install dependencies
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --filter '!@bb/mobile'
+      - name: Prepare test prerequisites
+        run: pnpm exec turbo run test --filter=@bb/server --output-logs=errors-only -- --passWithNoTests __benchmark_no_files__
+      - name: Test server shard
+        env:
+          BB_CI_TEST_SHARD: ${{ matrix.shard }}/2
+          VITEST_MAX_WORKERS: ${{ matrix.workers }}
+          REPORT: ${{ runner.temp }}/server.json
+        run: pnpm exec turbo run test --filter=@bb/server --summarize --output-logs=errors-only -- --reporter=json --outputFile="$REPORT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: server-workers-${{ matrix.workers }}-shard-${{ matrix.shard }}-${{ matrix.replica }}
+          include-hidden-files: true
+          path: |
+            .turbo/runs/*.json
+            ${{ runner.temp }}/server.json
