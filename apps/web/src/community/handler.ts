@@ -15,7 +15,6 @@ type CommunityEnv = Pick<
   | "COMMUNITY_FORMS_ENABLED"
   | "COMMUNITY_MERCH_INVITE_HASHES"
   | "COMMUNITY_JOTFORM_URL"
-  | "COMMUNITY_HATS_AVAILABLE"
   | "COMMUNITY_FORM_RATE_LIMITER"
 >;
 
@@ -110,7 +109,6 @@ export async function handleCommunityForm(
     formPage({
       kind,
       id,
-      hatsAvailable: env.COMMUNITY_HATS_AVAILABLE !== "false",
       ...extra,
     });
   if (kind === "merch") {

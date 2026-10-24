@@ -4,12 +4,12 @@ export const SURVEY_TITLE = "Help shape the bb community";
 export const SURVEY_DESCRIPTION =
   "We want to continue building with you and would love to know what you'd want to see from the bb community. From meetups to merch to whatever you'd like. This survey should take ~2 minutes.";
 export const SURVEY_PURPOSE =
-  "As a small thank you, we'll send you a bb hat and stickers. Thanks for building with us!";
+  "As a small thank you, we'll send you bb stickers. Thanks for building with us!";
 export const MEETUP_FRAMING =
   "We're starting bb meetups: small get-togethers to build with agents and see how other people work. Tell us where you are so we know where to start.";
 export const MEETUP_DECLINE = "Not for me right now";
 export const SOLD_OUT =
-  "We've given out all the hats and stickers for now. Thank you for answering.";
+  "We've given out all the stickers for now. Thank you for answering.";
 
 type Question = {
   name: string;
@@ -90,9 +90,17 @@ export const surveyQuestions: readonly Question[] = [
   {
     name: "community",
     label: "What would you like from the bb community?",
-    type: "textarea",
-    options: [],
-    placeholder: "Events, merch, ways to help, anything",
+    type: "checkbox",
+    options: [
+      "Meetups and events",
+      "Online build sessions",
+      "Merch",
+      "A place to show what you've built",
+      "Help and tips from other members",
+      "Ways to help build bb",
+      "Other",
+    ],
+    placeholder: "",
   },
 ];
 
@@ -102,7 +110,7 @@ export const surveyFields = [
   ...surveyQuestions.map((question) => question.name),
   "discovery_other",
   "role_other",
-  "name",
+  "community_other",
   "email",
 ];
 
@@ -129,13 +137,17 @@ export function validateSurvey(values: FormValues): FormErrors {
       errors.meetup = 'Choose involvement options or "Not for me right now".';
     }
   }
-  for (const name of ["discovery_other", "role_other", "name", "email"]) {
+  for (const name of [
+    "discovery_other",
+    "role_other",
+    "community_other",
+    "email",
+  ]) {
     const selected = values[name] ?? [];
     if (selected.length > 1 || selected.some((value) => value.length > 250)) {
       errors[name] = "Please use one answer of up to 250 characters.";
     }
   }
-  if (!values.name?.[0]?.trim()) errors.name = "Please enter your name.";
   if (!values.email?.[0]?.trim()) errors.email = "Please enter your email.";
   else if (!z.email().safeParse(values.email[0]).success)
     errors.email = "Please enter a valid email.";

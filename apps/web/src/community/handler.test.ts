@@ -24,7 +24,6 @@ const submit = (
       headers: { Origin: origin },
       body: new URLSearchParams({
         submission_id: id,
-        name: "Ada Lovelace",
         email: "ada@example.test",
         ...fields,
       }),
@@ -86,7 +85,7 @@ describe("private community forms", () => {
   });
   it("allocates one hashed code per new submission without storing it with answers", async () => {
     const id = crypto.randomUUID();
-    const html = await (await submit(id, { community: "Events\nMerch" })).text();
+    const html = await (await submit(id, { community: "Merch" })).text();
     const code = codeFrom(html)!;
     expect(code).toMatch(/^[a-f0-9]{32}$/);
     expect(
@@ -96,8 +95,7 @@ describe("private community forms", () => {
         .first("answers"),
     ).toBe(
       JSON.stringify({
-        community: ["Events\nMerch"],
-        name: ["Ada Lovelace"],
+        community: ["Merch"],
         email: ["ada@example.test"],
       }),
     );
@@ -135,7 +133,6 @@ describe("private community forms", () => {
         headers: { Origin: origin },
         body: new URLSearchParams([
           ["submission_id", crypto.randomUUID()],
-          ["name", "Ada"],
           ["email", "ada@example.test"],
           ["meetup", "I'd come"],
           ["meetup", "Not for me right now"],
@@ -151,28 +148,42 @@ describe("private community forms", () => {
         .first("n"),
     ).toBe(0);
   });
-  it("personalizes the gift and switches to stickers when hats run out", async () => {
-    const normal = await (await submit()).text();
-    expect(normal).toContain("Thanks, Ada.");
-    expect(normal).toContain("hat and stickers");
+  it("thanks respondents with stickers without requesting their name", async () => {
+    const html = await (await submit()).text();
+    expect(html).toContain("Thanks!");
+    expect(html).toContain("Your bb stickers:");
+    expect(html).not.toContain("hat and stickers");
+    expect(codeFrom(html)).toBeTruthy();
+  });
+  it("stores multiple community choices and selected Other text", async () => {
+    const id = crypto.randomUUID();
     const response = await handleCommunityForm(
       new Request(`${origin}/community/survey`, {
         method: "POST",
         headers: { Origin: origin },
-        body: new URLSearchParams({
-          submission_id: crypto.randomUUID(),
-          name: "Grace Hopper",
-          email: "grace@example.test",
-        }),
+        body: new URLSearchParams([
+          ["submission_id", id],
+          ["email", "ada@example.test"],
+          ["community", "Merch"],
+          ["community", "Other"],
+          ["community_other", "Workshops"],
+        ]),
       }),
-      { ...enabled(), COMMUNITY_HATS_AVAILABLE: "false" },
+      enabled(),
       "survey",
     );
-    const html = await response.text();
-    expect(html).toContain("Thanks, Grace.");
-    expect(html).toContain("bb stickers");
-    expect(html).not.toContain("hat and stickers");
-    expect(codeFrom(html)).toBeTruthy();
+    expect(response.status).toBe(200);
+    const answers = await db
+      .prepare("SELECT answers FROM community_survey_response WHERE id = ?")
+      .bind(id)
+      .first("answers");
+    expect(answers).toBe(
+      JSON.stringify({
+        community: ["Merch", "Other"],
+        community_other: ["Workshops"],
+        email: ["ada@example.test"],
+      }),
+    );
   });
   it("caps concurrent allocations at 250 and still accepts answers when sold out", async () => {
     await db

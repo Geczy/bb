@@ -26,7 +26,7 @@ if (form) {
     const city = form.elements.namedItem('city').value.trim();
     form.querySelector('[data-meetup-label]').textContent = 'If there were a bb meetup near ' + (city || 'you') + ', how would you like to be involved?';
     for (const input of form.querySelectorAll('[data-other]')) {
-      const selected = form.querySelector('[name="' + input.dataset.other + '"]:checked');
+      const selected = form.querySelector('[name="' + input.dataset.other + '"][value="Other"]:checked');
       input.hidden = selected?.value !== 'Other';
       input.disabled = input.hidden;
     }
@@ -44,13 +44,13 @@ if (form) {
 }
 `;
 
-function shuffled(options: readonly string[]): string[] {
-  const result = options.slice(0, -2);
+function shuffled(options: readonly string[], fixedLast: number): string[] {
+  const result = options.slice(0, -fixedLast);
   for (let index = result.length - 1; index > 0; index--) {
     const other = Math.floor(Math.random() * (index + 1));
     [result[index], result[other]] = [result[other]!, result[index]!];
   }
-  return [...result, ...options.slice(-2)];
+  return [...result, ...options.slice(-fixedLast)];
 }
 
 function Survey({
@@ -65,6 +65,17 @@ function Survey({
     <>
       {surveyQuestions.map((question, index) => (
         <Fragment key={question.name}>
+          {question.name === "discovery" && (
+            <h2 className="community-section">Getting to know you</h2>
+          )}
+          {question.name === "city" && (
+            <h2 className="community-section">bb meetups</h2>
+          )}
+          {question.name === "community" && (
+            <h2 className="community-section">
+              What you'd like from the bb community
+            </h2>
+          )}
           {question.name === "city" && (
             <p className="community-meetup">{MEETUP_FRAMING}</p>
           )}
@@ -89,8 +100,10 @@ function Survey({
             {question.options.length ? (
               <div className="community-options">
                 {(question.name === "discovery"
-                  ? shuffled(question.options)
-                  : question.options
+                  ? shuffled(question.options, 2)
+                  : question.name === "community"
+                    ? shuffled(question.options, 1)
+                    : question.options
                 ).map((option) => (
                   <label key={option} className="community-option">
                     <input
@@ -154,29 +167,27 @@ function Survey({
         </Fragment>
       ))}
       <p className="community-meetup">
-        <strong>Last step.</strong> So we can send you the results and get in
-        touch about meetups near you.
+        <strong>Last step.</strong> Your email, so we can send your stickers and
+        share the results with you.
       </p>
-      {(["name", "email"] as const).map((name) => (
-        <div key={name} className="community-field" id={`question-${name}`}>
-          <label htmlFor={name}>{name === "name" ? "Name" : "Email"}</label>
-          <input
-            type={name === "email" ? "email" : "text"}
-            required
-            autoComplete={name}
-            name={name}
-            id={name}
-            maxLength={250}
-            defaultValue={values[name]?.[0] ?? ""}
-            aria-describedby={errors[name] ? `${name}-error` : undefined}
-          />
-          {errors[name] && (
-            <p className="community-error" id={`${name}-error`}>
-              {errors[name]}
-            </p>
-          )}
-        </div>
-      ))}
+      <div className="community-field" id="question-email">
+        <label htmlFor="email">Email</label>
+        <input
+          type="email"
+          required
+          autoComplete="email"
+          name="email"
+          id="email"
+          maxLength={250}
+          defaultValue={values.email?.[0] ?? ""}
+          aria-describedby={errors.email ? "email-error" : undefined}
+        />
+        {errors.email && (
+          <p className="community-error" id="email-error">
+            {errors.email}
+          </p>
+        )}
+      </div>
       <p className="community-help">
         We won't add you to a marketing list or share it.
       </p>
@@ -196,7 +207,6 @@ export function formPage({
   stickerCode = null,
   duplicate = false,
   jotform = null,
-  hatsAvailable = true,
 }: {
   kind: FormKind;
   id: string;
@@ -209,7 +219,6 @@ export function formPage({
   stickerCode?: string | null;
   duplicate?: boolean;
   jotform?: string | null;
-  hatsAvailable?: boolean;
 }): Response {
   const nonce = crypto.randomUUID();
   const referrerPolicy = kind === "survey" ? "same-origin" : "no-referrer";
@@ -249,13 +258,10 @@ export function formPage({
                 ) : (
                   <>
                     <p>
-                      <strong>
-                        Thanks, {values.name?.[0]?.trim().split(/\s+/)[0]}.
-                      </strong>{" "}
+                      <strong>Thanks!</strong>{" "}
                       {stickerCode ? (
                         <>
-                          Here's your bb{" "}
-                          {hatsAvailable ? "hat and stickers" : "stickers"}:{" "}
+                          Your bb stickers:{" "}
                           <a
                             href={`/community/merch?c=${encodeURIComponent(stickerCode)}`}
                           >

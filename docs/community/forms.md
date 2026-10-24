@@ -1,6 +1,6 @@
 # Community forms
 
-`/community/survey` serves five optional questions followed by required name and email. `/community/merch?c=CODE` validates an issued code and opens an encrypted Jotform form. Both are standalone documents with the bb wordmark, no analytics or hydration client, `noindex, nofollow`, `Cache-Control: no-store`, and a restrictive Content Security Policy. The survey uses `Referrer-Policy: same-origin` to support its POST; merch pages, external form links and embeds suppress referrers so bearer codes cannot reach analytics on other pages. Neither appears in navigation or the sitemap.
+`/community/survey` serves six optional questions followed by required email. `/community/merch?c=CODE` validates an issued code and opens an encrypted Jotform form. Both are standalone documents with the bb wordmark, no analytics or hydration client, `noindex, nofollow`, `Cache-Control: no-store`, and a restrictive Content Security Policy. The survey uses `Referrer-Policy: same-origin` to support its POST; merch pages, external form links and embeds suppress referrers so bearer codes cannot reach analytics on other pages. Neither appears in navigation or the sitemap.
 
 ## Configuration and launch
 
@@ -16,19 +16,19 @@ The shared review preview keeps collection off and the form URL empty. Local syn
 
 ## Survey submission contract
 
-POST `application/x-www-form-urlencoded` to `/community/survey` with the `submission_id` UUID from the page. The question fields are `discovery`, `work`, `role`, `city` and `meetup`. Radio answers accept one listed choice; meetup checkbox answers repeat their field name. All five questions may be skipped. Only Q1's first seven choices are shuffled; “I don't remember” and “Other” remain last in that order. Q2 and Q3 keep their listed order. “Not for me right now” is exclusive with other meetup answers, enforced in the browser and on the server.
+POST `application/x-www-form-urlencoded` to `/community/survey` with the `submission_id` UUID from the page. The question fields are `discovery`, `work`, `role`, `city`, `meetup` and `community`. Radio answers accept one listed choice; meetup and community checkbox answers repeat their field name. All six questions may be skipped. Only Q1's first seven choices are shuffled; “I don't remember” and “Other” remain last in that order. Q2 and Q3 keep their listed order. Q6 shuffles all choices except “Other”, which remains last. “Not for me right now” is exclusive with other meetup answers, enforced in the browser and on the server.
 
-`discovery_other` and `role_other` accept optional text when the corresponding “Other” option is selected; otherwise they are discarded. `name` and `email` are required, accept one value each, and are stored with the answers in the private survey response. Email must be valid. Text fields accept up to 250 characters. Removed questions and contact fields are rejected.
+`discovery_other`, `role_other` and `community_other` accept optional text when the corresponding “Other” option is selected; otherwise they are discarded. `email` is required, accepts one value, and is stored with the answers in the private survey response. Email must be valid. Text fields accept up to 250 characters. Removed questions and contact fields are rejected.
 
 The request's `Origin` must match the page origin. A 16 KiB body limit and six submissions per minute per connection IP apply. Unknown fields are rejected. Validation returns HTTP 400 with answers preserved, collection-off or storage failure returns 503, rejected origin returns 403, and rate limiting returns 429. Merch accepts GET only; bb has no address POST endpoint.
 
 ## Gifts, sticker pool and privacy
 
-`COMMUNITY_HATS_AVAILABLE` defaults to `true`. Set it to `false` when hats run out to change the confirmation gift to stickers only. This is an operator-managed stock switch, not a per-response reservation. The same 250-code pool and encrypted mailing form serve both gifts; exhausted codes show “We've given out all the hats and stickers for now. Thank you for answering.”
+The gift is bb stickers. Exhausted codes show “We've given out all the stickers for now. Thank you for answering.”
 
 A successful survey save atomically allocates a random one-use sticker code while stock remains. Allocation picks a random unused slot so slot order cannot reveal response order. The database caps slots at 250, and a duplicate submission UUID cannot allocate another code. The confirmation links to `/community/merch?c=CODE`; exhausted stock uses the sold-out line. Reposting a saved submission shows a received-response message; it cannot recover its code because no response-to-code mapping exists. Save the original claim link.
 
-Survey responses contain a random submission ID, creation time and answers, including name and email. Contact details are used for results and meetup follow-ups, never a marketing list. `community_sticker_code` contains only a pool slot, code hash and shipped flag: no survey ID, answer, contact detail or timestamp. Raw codes are never persisted. Do not add request-body logging, analytics, or a join between these datasets. Infrastructure may still handle request metadata; review logging before launch. IP addresses are used by the short-lived rate limiter, not stored with answers.
+Survey responses contain a random submission ID, creation time and answers, including email. Email is used for stickers and results, never a marketing list. `community_sticker_code` contains only a pool slot, code hash and shipped flag: no survey ID, answer, contact detail or timestamp. Raw codes are never persisted. Do not add request-body logging, analytics, or a join between these datasets. Infrastructure may still handle request metadata; review logging before launch. IP addresses are used by the short-lived rate limiter, not stored with answers.
 
 GET does not consume a code: people must be able to reopen the mailing form. One-use means one fulfilled pack. The shipper decrypts Jotform submissions and validates each code against the issued hashes before sending, skipping unknown codes and codes already shipped. The external form is public, so this fulfillment check is mandatory even if a submitted code was prefilled.
 

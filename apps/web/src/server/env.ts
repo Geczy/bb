@@ -3,7 +3,6 @@ import { env as workerEnv } from "cloudflare:workers";
 export interface Env {
   DB: D1Database;
   COMMUNITY_FORMS_ENABLED?: string;
-  COMMUNITY_HATS_AVAILABLE?: string;
   COMMUNITY_MERCH_INVITE_HASHES?: string;
   COMMUNITY_JOTFORM_URL?: string;
   COMMUNITY_FORM_RATE_LIMITER?: RateLimit;

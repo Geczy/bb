@@ -238,3 +238,10 @@
   margin: 32px 0 0;
   line-height: 1.7;
 }
+
+.community-section {
+  margin: 32px 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--dim);
+}
