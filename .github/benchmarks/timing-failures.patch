@@ -1,0 +1,51 @@
+diff --git a/apps/connect-next/test/units.test.ts b/apps/connect-next/test/units.test.ts
+index 9b8fe66d4f..401c1e4695 100644
+--- a/apps/connect-next/test/units.test.ts
++++ b/apps/connect-next/test/units.test.ts
+@@ -397,20 +397,30 @@ describe("account API client", () => {
+   });
+ 
+   it("treats a null batch answer as could-not-check and a malformed one as an error", async () => {
++    vi.useFakeTimers();
++    onTestFinished(() => {
++      vi.useRealTimers();
++    });
+     const unchecked = createAccountApi({
+       baseUrl: "https://connect.test",
+       secret: "s",
+       fetch: async () => Response.json({ answers: [null] }),
+     });
+-    await expect(unchecked.resolve(ASK, { deadlineMs: 300 })).rejects.toThrow(
+-      "could not check",
+-    );
++    const uncheckedResult = expect(
++      unchecked.resolve(ASK, { deadlineMs: 300 }),
++    ).rejects.toThrow("could not check");
++    await vi.runAllTimersAsync();
++    await uncheckedResult;
+     const malformed = createAccountApi({
+       baseUrl: "https://connect.test",
+       secret: "s",
+       fetch: async () => Response.json({ answers: [{ label: null }] }),
+     });
+-    await expect(malformed.resolve(ASK)).rejects.toThrow("malformed");
++    const malformedResult = expect(malformed.resolve(ASK)).rejects.toThrow(
++      "malformed",
++    );
++    await vi.runAllTimersAsync();
++    await malformedResult;
+   });
+ 
+   it(`sends presence in calls of at most ${GATE_PRESENCE_BATCH_MAX} and checks the results`, async () => {
+diff --git a/packages/skill-index/src/index.ts b/packages/skill-index/src/index.ts
+index c2489de807..205d965f0b 100644
+--- a/packages/skill-index/src/index.ts
++++ b/packages/skill-index/src/index.ts
+@@ -165,6 +165,7 @@ export async function findSkillFiles(
+     }
+     if (leaf) return;
+     for (const entry of entries) {
++      if (root.shape !== "command" && entry.isFile()) continue;
+       const entryPath = path.join(directory, entry.name);
+       const target = await resolveSkillPath(entryPath, root.boundaryPath);
+       if (target === null) continue;

@@ -1,4 +1,4 @@
-name: Measure removal of test waits and DOM-only setup
+name: Verify deterministic account deadlines and faster skill scans
 on:
   push:
     branches:
@@ -29,22 +29,6 @@ jobs:
             mode: optimized
             replica: 2
             runner: blacksmith-4vcpu-windows-2025
-          - os: linux
-            mode: original
-            replica: 1
-            runner: blacksmith-4vcpu-ubuntu-2404
-          - os: linux
-            mode: original
-            replica: 2
-            runner: blacksmith-4vcpu-ubuntu-2404
-          - os: linux
-            mode: optimized
-            replica: 1
-            runner: blacksmith-4vcpu-ubuntu-2404
-          - os: linux
-            mode: optimized
-            replica: 2
-            runner: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -67,48 +51,37 @@ jobs:
         if: matrix.os == 'windows' && (steps.dependencies.outputs.active != 'true')
         run: throw 'Dependency image missing; do not mix cold setup into this
           comparison'
-      - name: Apply wait and setup fixes
+      - name: Apply timing fixes
         if: matrix.mode == 'optimized'
         shell: bash
-        run: git apply .github/benchmarks/waits.patch
+        run: git apply .github/benchmarks/timing-failures.patch
       - name: Install dependencies
         shell: bash
         run: bash .github/actions/setup-workspace/install-dependencies.sh
           --ignore-scripts --filter '!@bb/mobile'
-      - name: Test Connect
+      - name: Test Skill-index
         shell: bash
         env:
           VITEST_MAX_WORKERS: "2"
           TMP: ${{ runner.temp }}
           TEMP: ${{ runner.temp }}
-        run: pnpm exec turbo run test --filter=bb-plugin-connect --force
-          --output-logs=errors-only --concurrency=2 --summarize
-          --  --reporter=json --outputFile="$RUNNER_TEMP/Connect.json"
-      - name: Test Tasks
+        run: pnpm exec turbo run test --filter=@bb/skill-index --force
+          --output-logs=errors-only --concurrency=2 --summarize --
+          --reporter=json --outputFile="$RUNNER_TEMP/Skill-index.json"
+      - name: Test Connect-next
         shell: bash
         env:
           VITEST_MAX_WORKERS: "2"
           TMP: ${{ runner.temp }}
           TEMP: ${{ runner.temp }}
-        run: pnpm exec turbo run test --filter=bb-plugin-tasks --force
-          --output-logs=errors-only --concurrency=2 --summarize
-          --  --reporter=json --outputFile="$RUNNER_TEMP/Tasks.json"
-      - name: Test App waits
-        shell: bash
-        env:
-          VITEST_MAX_WORKERS: "2"
-          TMP: ${{ runner.temp }}
-          TEMP: ${{ runner.temp }}
-        run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=errors-only
-          --concurrency=2 --summarize --
-          src/hooks/queries/thread-queries.test.ts
-          src/components/dialogs/AddMachineDialog.test.tsx --reporter=json
-          --outputFile="$RUNNER_TEMP/App-waits.json"
+        run: pnpm exec turbo run test --filter=@bb/connect-next --force
+          --output-logs=errors-only --concurrency=2 --summarize --
+          --reporter=json --outputFile="$RUNNER_TEMP/Connect-next.json"
       - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: waits-${{ matrix.os }}-${{ matrix.mode }}-${{ matrix.replica }}
+          name: timing-${{ matrix.mode }}-${{ matrix.replica }}
           path: |-
             .turbo/runs/*.json
             ${{ runner.temp }}/*.json
