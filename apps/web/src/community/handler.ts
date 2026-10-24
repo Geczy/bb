@@ -132,11 +132,7 @@ export async function handleCommunityForm(
   if (request.method === "GET") return page();
   if (request.method !== "POST")
     return new Response(null, { status: 405, headers: { Allow: "GET, POST" } });
-  if (!enabled)
-    return page({
-      status: 503,
-      message: "We're not collecting responses yet. Please check back later.",
-    });
+  if (!enabled) return page({ status: 503 });
   if (request.headers.get("origin") !== new URL(request.url).origin) {
     return page({
       status: 403,

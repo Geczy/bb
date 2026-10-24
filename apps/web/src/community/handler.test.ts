@@ -61,6 +61,7 @@ describe("private community forms", () => {
       "survey",
     );
     expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain('class="community-notice"');
     const merch = await handleCommunityForm(
       new Request(`${origin}/community/merch`, {
         method: "POST",
