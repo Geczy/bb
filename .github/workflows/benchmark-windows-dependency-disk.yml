@@ -1,4 +1,4 @@
-name: Benchmark Windows dependency disk
+name: Benchmark Windows broad dependency disk
 on:
   push:
     branches: [bb/benchmark-windows-dependencies-20261024]
@@ -19,7 +19,7 @@ jobs:
         run: ./scripts/benchmark-windows-dependency-disk.ps1 create
       - name: Install app dependencies
         shell: bash
-        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...'
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
       - name: Detach dependency disk
         run: ./scripts/benchmark-windows-dependency-disk.ps1 detach
       - name: Save dependency disk
@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         mode: [fresh, disk]
-        repetition: [1, 2, 3]
+        repetition: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -57,17 +57,16 @@ jobs:
         shell: bash
         run: |
           start=$(node -p 'Date.now()')
-          bash .github/actions/setup-workspace/install-dependencies.sh --reporter=ndjson --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...' > "$RUNNER_TEMP/install.ndjson"
+          bash .github/actions/setup-workspace/install-dependencies.sh --reporter=ndjson --ignore-scripts --filter '!@bb/mobile' > "$RUNNER_TEMP/install.ndjson"
           end=$(node -p 'Date.now()')
           echo "Install milliseconds: $((end-start))"
           echo "Install milliseconds: $((end-start))" >> "$GITHUB_STEP_SUMMARY"
-      - name: Verify with uncached app shard
+      - name: Verify with uncached build-package tests
         shell: cmd
         env:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
-          BB_CI_TEST_SHARD: 1/4
-        run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=errors-only --summarize
+        run: pnpm exec turbo run test --filter=@bb/templates --filter=bb-app --filter=@bb/demo-server --filter=@bb/desktop --filter=@bb/plugin-build --force --output-logs=errors-only --summarize --concurrency=2
       - name: Detach dependency disk
         if: always() && matrix.mode == 'disk'
         run: ./scripts/benchmark-windows-dependency-disk.ps1 detach
