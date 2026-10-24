@@ -375,7 +375,18 @@ describe("createAgentRuntime process lifecycle", () => {
       undefined,
     ]);
     expect(completedPromptly).toBe(true);
-    expect(processIsAlive(replacementProcess.child.pid ?? 0)).toBe(false);
+    const aliveAfterShutdown = processIsAlive(replacementProcess.child.pid ?? 0);
+    if (aliveAfterShutdown) {
+      console.error("replacement alive after shutdown", {
+        pid: replacementProcess.child.pid,
+        exitCode: replacementProcess.child.exitCode,
+        signalCode: replacementProcess.child.signalCode,
+        killed: replacementProcess.child.killed,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      console.error("replacement alive 25ms later", processIsAlive(replacementProcess.child.pid ?? 0));
+    }
+    expect(aliveAfterShutdown).toBe(false);
     await manager.ensureProvider(MANAGER_PROVIDER);
     expect(manager.listRunningProviders()).toEqual([]);
   });
