@@ -103,6 +103,15 @@ function Survey({
                   </label>
                 ))}
               </div>
+            ) : question.type === "textarea" ? (
+              <textarea
+                name={question.name}
+                aria-label={question.label}
+                placeholder={question.placeholder}
+                rows={3}
+                maxLength={250}
+                defaultValue={values[question.name]?.[0] ?? ""}
+              />
             ) : (
               <input
                 type="text"
@@ -178,7 +187,6 @@ function Survey({
 export function formPage({
   kind,
   id,
-  enabled,
   values = {},
   errors = {},
   message = "",
@@ -192,7 +200,6 @@ export function formPage({
 }: {
   kind: FormKind;
   id: string;
-  enabled: boolean;
   values?: FormValues;
   errors?: FormErrors;
   message?: string;
@@ -321,11 +328,7 @@ export function formPage({
                     <input type="hidden" name="submission_id" value={id} />
                     <Survey values={values} errors={errors} />
                     <div className="community-submit">
-                      <button
-                        className="btn primary"
-                        type="submit"
-                        disabled={!enabled}
-                      >
+                      <button className="btn primary" type="submit">
                         Send my answers
                       </button>
                     </div>

@@ -57,6 +57,7 @@ describe("community survey submission rules", () => {
         discovery: ["Other"],
         discovery_other: ["Example"],
         role: ["Student"],
+        community: ["Events and ways to help"],
         role_other: ["Ignored"],
         submission_id: ["not-an-answer"],
         address: ["not-stored"],
@@ -66,6 +67,7 @@ describe("community survey submission rules", () => {
       discovery: ["Other"],
       discovery_other: ["Example"],
       role: ["Student"],
+      community: ["Events and ways to help"],
     });
   });
 });

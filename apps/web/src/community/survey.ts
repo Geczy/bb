@@ -1,10 +1,10 @@
 import { z } from "zod";
 
-export const SURVEY_TITLE = "Help us plan bb meetups";
+export const SURVEY_TITLE = "Help shape the bb community";
 export const SURVEY_DESCRIPTION =
   "Thanks for being part of the bb community. As a thank-you, we'd like to send you a bb hat and stickers.";
 export const SURVEY_PURPOSE =
-  "This short survey asks how you found bb, how you use it, and where you're based, so we know who's using bb and where to start meetups. It takes about 2 minutes.";
+  "We want to get to know you and build the community with you, from meetups to merch to whatever you'd like to see. This short survey takes about 2 minutes.";
 export const MEETUP_FRAMING =
   "We're starting bb meetups: small get-togethers to build with agents and see how other people work. Tell us where you are so we know where to start.";
 export const MEETUP_DECLINE = "Not for me right now";
@@ -14,7 +14,7 @@ export const SOLD_OUT =
 type Question = {
   name: string;
   label: string;
-  type: "radio" | "checkbox" | "text";
+  type: "radio" | "checkbox" | "text" | "textarea";
   options: readonly string[];
   placeholder: string;
 };
@@ -39,7 +39,7 @@ export const surveyQuestions: readonly Question[] = [
   },
   {
     name: "work",
-    label: "How many people use bb where you work, including you?",
+    label: "Including you, how many people use bb where you work?",
     type: "radio",
     options: [
       "I don't use bb for work",
@@ -86,6 +86,13 @@ export const surveyQuestions: readonly Question[] = [
       MEETUP_DECLINE,
     ],
     placeholder: "",
+  },
+  {
+    name: "community",
+    label: "What would you like from the bb community?",
+    type: "textarea",
+    options: [],
+    placeholder: "Events, merch, ways to help, anything",
   },
 ];
 

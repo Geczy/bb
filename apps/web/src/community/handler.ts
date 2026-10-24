@@ -109,7 +109,6 @@ export async function handleCommunityForm(
   const page = (extra: Partial<Parameters<typeof formPage>[0]> = {}) =>
     formPage({
       kind,
-      enabled,
       id,
       hatsAvailable: env.COMMUNITY_HATS_AVAILABLE !== "false",
       ...extra,

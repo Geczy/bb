@@ -85,7 +85,7 @@ describe("private community forms", () => {
   });
   it("allocates one hashed code per new submission without storing it with answers", async () => {
     const id = crypto.randomUUID();
-    const html = await (await submit(id)).text();
+    const html = await (await submit(id, { community: "Events\nMerch" })).text();
     const code = codeFrom(html)!;
     expect(code).toMatch(/^[a-f0-9]{32}$/);
     expect(
@@ -94,7 +94,11 @@ describe("private community forms", () => {
         .bind(id)
         .first("answers"),
     ).toBe(
-      JSON.stringify({ name: ["Ada Lovelace"], email: ["ada@example.test"] }),
+      JSON.stringify({
+        community: ["Events\nMerch"],
+        name: ["Ada Lovelace"],
+        email: ["ada@example.test"],
+      }),
     );
     expect(
       await db
