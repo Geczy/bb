@@ -65,14 +65,14 @@ export function useOpenReleaseNotes(): (
   );
 }
 
-export function useAutoOpenReleaseNotes(enabled: boolean): void {
+export function useAutoOpenReleaseNotes(): void {
   const location = useLocation();
   const navigate = useNavigate();
   const openReleaseNotes = useOpenReleaseNotes();
   const version = readReleaseNotesVersion(location.state);
   const { hash, pathname, search } = location;
   useEffect(() => {
-    if (!enabled || version === null) {
+    if (version === null) {
       return;
     }
     navigate({ hash, pathname, search }, { replace: true, state: null });
@@ -81,5 +81,5 @@ export function useAutoOpenReleaseNotes(enabled: boolean): void {
     }
     autoOpenedReleaseNotesVersions.add(version);
     openReleaseNotes(version, "widget_auto");
-  }, [enabled, hash, navigate, openReleaseNotes, pathname, search, version]);
+  }, [hash, navigate, openReleaseNotes, pathname, search, version]);
 }

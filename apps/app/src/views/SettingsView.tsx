@@ -1132,15 +1132,12 @@ export function PrivacySettingsSection({
   );
 }
 
+type VisibleExperimentKey = Exclude<ExperimentKey, "changelogPreview">;
+
 const EXPERIMENT_DEFINITIONS: Record<
-  ExperimentKey,
+  VisibleExperimentKey,
   { label: string; description: string }
 > = {
-  changelogPreview: {
-    label: "Changelog preview",
-    description:
-      "Show the latest release notes as a compact preview on the Updates page.",
-  },
   compactExpiredCache: {
     label: "Compact before resuming expired sessions",
     description:
@@ -1150,11 +1147,6 @@ const EXPERIMENT_DEFINITIONS: Record<
     label: "Server performance diagnostics",
     description:
       "Collect CPU profiles and detailed performance logs while the server was launched with --perf-diagnostics. Turning this off stops collection; saved profiles remain.",
-  },
-  releaseWidget: {
-    label: "Release widget",
-    description:
-      "Show each new bb release's highlights in the sidebar while an update is available.",
   },
   serverMove: {
     label: "Server move",
@@ -1172,14 +1164,22 @@ const EXPERIMENT_DEFINITIONS: Record<
       "Send an open thread's timeline changes over the live connection instead of reloading the latest window after each update.",
   },
 };
+function isVisibleExperimentKey(
+  experimentKey: ExperimentKey,
+): experimentKey is VisibleExperimentKey {
+  return experimentKey !== "changelogPreview";
+}
+
 export function visibleExperimentKeys(
   performanceDiagnosticsAvailable: boolean,
-): ExperimentKey[] {
-  return experimentKeys.filter(
-    (experimentKey) =>
-      experimentKey !== "performanceDiagnostics" ||
-      performanceDiagnosticsAvailable,
-  );
+): VisibleExperimentKey[] {
+  return experimentKeys
+    .filter(isVisibleExperimentKey)
+    .filter(
+      (experimentKey) =>
+        experimentKey !== "performanceDiagnostics" ||
+        performanceDiagnosticsAvailable,
+    );
 }
 
 const EARLY_ADOPTER_LABEL = "Early adopter";
@@ -1401,12 +1401,7 @@ export function SettingsView() {
   } else if (activeSection === "environment-variables") {
     content = <MachineEnvironmentSettings />;
   } else if (activeSection === "updates") {
-    content = (
-      <UpdatesSettingsSection
-        showChangelogPreview={experiments.changelogPreview}
-        showReleaseNotes={experiments.releaseWidget}
-      />
-    );
+    content = <UpdatesSettingsSection />;
   } else if (activeSection === "mobile") {
     content = <MobileAppSection />;
   } else if (activeSection === "experiments") {
@@ -1528,11 +1523,7 @@ export function SettingsView() {
   const page = (
     <div className="mx-auto w-full max-w-3xl space-y-10">{content}</div>
   );
-  if (
-    activePluginId === null &&
-    activeSection === "updates" &&
-    experiments.releaseWidget
-  ) {
+  if (activePluginId === null && activeSection === "updates") {
     return <UpdatesReleaseNotesLayout>{page}</UpdatesReleaseNotesLayout>;
   }
   return <PageShell contentClassName="pt-4 md:pt-5">{page}</PageShell>;

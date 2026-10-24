@@ -5,7 +5,6 @@ export const experimentKeys = [
   "compactExpiredCache",
   "serverMove",
   "performanceDiagnostics",
-  "releaseWidget",
   "sidebarMultiSelect",
   "timelinePush",
 ] as const;
@@ -26,7 +25,6 @@ export const defaultExperiments: Experiments = {
   compactExpiredCache: false,
   serverMove: false,
   performanceDiagnostics: false,
-  releaseWidget: false,
   sidebarMultiSelect: false,
   timelinePush: false,
 };
@@ -36,7 +34,6 @@ export const earlyAdopterExperiments: Experiments = {
   compactExpiredCache: true,
   serverMove: false,
   performanceDiagnostics: false,
-  releaseWidget: false,
   sidebarMultiSelect: true,
   timelinePush: true,
 };

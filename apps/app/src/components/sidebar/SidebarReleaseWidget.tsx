@@ -11,7 +11,6 @@ import {
   changelogEntriesQueryOptions,
 } from "@/components/settings/changelog-preview";
 import { useAppUpdateStatus } from "@/hooks/queries/app-update-queries";
-import { useSystemConfig } from "@/hooks/queries/system-queries";
 import { BbLogo } from "@/components/ui/bb-logo";
 import { useUpdateInventory } from "@/hooks/useUpdateInventory";
 import { rawStringLocalStorage } from "@/lib/browser-storage";
@@ -48,10 +47,7 @@ export function SidebarReleaseWidget({
   visible,
   onNavigate,
 }: SidebarReleaseWidgetProps) {
-  const enabled =
-    useSystemConfig().data?.experiments.releaseWidget === true &&
-    !isInsideNativeShell();
-  if (!visible || !enabled) {
+  if (!visible || isInsideNativeShell()) {
     return null;
   }
   return <ReleaseWidget onNavigate={onNavigate} />;

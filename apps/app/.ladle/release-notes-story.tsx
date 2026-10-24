@@ -33,7 +33,7 @@ export function releaseNotesStoryDesktopInfo({
 
 function ReleaseNotesUpdatesContent(versions: ReleaseNotesStoryVersions) {
   const openReleaseNotes = useOpenReleaseNotes();
-  useAutoOpenReleaseNotes(true);
+  useAutoOpenReleaseNotes();
   return (
     <BbUpdatesCard>
       <BbAppUpdateRows

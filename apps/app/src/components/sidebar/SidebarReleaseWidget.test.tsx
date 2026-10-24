@@ -4,17 +4,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { defaultExperiments } from "@bb/domain";
 import type { SystemAppUpdateStatus } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseChangelog } from "../../../../../changelog-parser";
 import { changelogEntriesQueryOptions } from "@/components/settings/changelog-preview";
-import {
-  systemAppUpdateQueryKey,
-  systemConfigQueryKey,
-} from "@/hooks/queries/query-keys";
+import { systemAppUpdateQueryKey } from "@/hooks/queries/query-keys";
 import type { UpdateInventory } from "@/hooks/useUpdateInventory";
-import { makeSystemConfig } from "@/test/fixtures/system-config";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { dismissedReleaseVersionAtom } from "./release-widget-preferences";
 import {
@@ -120,14 +115,12 @@ function LocationProbe() {
 }
 
 interface RenderOptions {
-  experiment?: boolean;
   available?: string | null;
   visible?: boolean;
   dismissed?: string | null;
 }
 
 function renderWidget({
-  experiment = true,
   available = "0.47.0",
   visible = true,
   dismissed = null,
@@ -143,12 +136,6 @@ function renderWidget({
     hasAttention: available !== null,
   } satisfies Partial<UpdateInventory>);
   const { queryClient } = createQueryClientTestHarness();
-  queryClient.setQueryData(
-    systemConfigQueryKey(),
-    makeSystemConfig({
-      experiments: { ...defaultExperiments, releaseWidget: experiment },
-    }),
-  );
   queryClient.setQueryData(systemAppUpdateQueryKey(), appUpdate(available));
   queryClient.setQueryData(changelogEntriesQueryOptions().queryKey, CHANGELOG);
   const store = createStore();
@@ -177,14 +164,6 @@ function widget(): HTMLElement | null {
 }
 
 describe("SidebarReleaseWidget", () => {
-  it("stays hidden when the experiment is off, but the chip still shows", () => {
-    renderWidget({ experiment: false });
-
-    expect(screen.getByTestId("sidebar-updates-badge-bb")).toBeTruthy();
-    expect(widget()).toBeNull();
-    expect(recordTelemetryEventMock).not.toHaveBeenCalled();
-  });
-
   it("shows the release and its highlights alongside the chip", () => {
     renderWidget();
 

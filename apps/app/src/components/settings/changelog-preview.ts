@@ -35,17 +35,6 @@ export async function fetchChangelogEntries(
   return entries;
 }
 
-export async function fetchLatestChangelogEntry(
-  fetchFn: typeof fetch,
-  signal?: AbortSignal,
-): Promise<ChangelogEntry> {
-  const [entry] = await fetchChangelogEntries(fetchFn, signal);
-  if (entry === undefined) {
-    throw new Error("The changelog has no releases");
-  }
-  return entry;
-}
-
 export function changelogEntriesQueryOptions() {
   return queryOptions({
     queryKey: ["updates", "changelog", "entries"] as const,

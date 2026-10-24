@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { defaultExperiments } from "@bb/domain";
 import type { ProviderCliInstallAction } from "@bb/host-daemon-contract";
 import type {
   SystemAppUpdateStatus,
-  SystemConfigResponse,
   SystemVersionResponse,
 } from "@bb/server-contract";
 import { SettingsStoryFixtures } from "../../../.ladle/settings-story-fixtures";
@@ -31,7 +29,6 @@ import {
 } from "@/components/settings/changelog-preview";
 import {
   systemAppUpdateQueryKey,
-  systemConfigQueryKey,
   systemVersionQueryKey,
 } from "@/hooks/queries/query-keys";
 import { SettingsStoryChrome } from "../../../.ladle/story-settings-chrome";
@@ -256,16 +253,6 @@ function SeedReleaseWidgetQueries({ children }: { children: ReactNode }) {
       version: sdk.system.version,
     };
     Object.assign(sdk.system, releaseWidgetStorySdk);
-    queryClient.setQueryData<SystemConfigResponse>(
-      systemConfigQueryKey(),
-      (config) =>
-        config === undefined
-          ? config
-          : {
-              ...config,
-              experiments: { ...defaultExperiments, releaseWidget: true },
-            },
-    );
     queryClient.setQueryData(
       systemVersionQueryKey(),
       RELEASE_WIDGET_SYSTEM_VERSION,

@@ -804,8 +804,11 @@ off. An experiment you set yourself keeps your value either way.
 `/system/config` and `sdk.system.config()` return the resolved values in
 `experiments`.
 
-- `changelogPreview` shows the latest release notes as a dismissible card on
-  Settings → Updates.
+- `changelogPreview` is retired. The key is still accepted but does nothing
+  and is not listed in Settings → Experiments: Settings → Updates always links
+  the release notes, and the sidebar shows each new release while an update is
+  available (dismissing it stores the release in the
+  `updates.dismissedReleaseVersion` UI preference).
 - `compactExpiredCache` (on for early adopters) reports `compactionOfferAt` on a thread's context
   usage (timeline `contextWindowUsage` and `bb thread context`) once the
   provider has reported a prompt-cache lifetime, the provider supports manual
@@ -829,9 +832,6 @@ off. An experiment you set yourself keeps your value either way.
   collection. The experiment itself applies live; turning it off restores
   normal logging and flushes the in-flight profile, keeping saved files. See
   [diagnostics](debugging-and-qa.md#opt-in-server-performance-diagnostics).
-- `releaseWidget` shows each new bb release's highlights in the sidebar while
-  an update is available. Dismissing it stores the release in the
-  `updates.dismissedReleaseVersion` UI preference.
 - `sidebarMultiSelect` (on for early adopters) lets the built-in thread list
   select several threads: Cmd/Ctrl-click toggles a row (starting from the open
   thread), Shift-click selects the visible range from the last clicked row, and
