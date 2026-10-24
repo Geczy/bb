@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [blacksmith-4vcpu-ubuntu-2404, blacksmith-4vcpu-windows-2025]
+        runner: [blacksmith-4vcpu-windows-2025]
         replica: [1, 2]
     defaults:
       run:
@@ -50,11 +50,11 @@ jobs:
       - name: Retain only package downloads
         run: node -e 'const f=require("node:fs"),p=require("node:path"),r=process.env.npm_config_cache; for(const n of f.readdirSync(r)) if(!["_cacache","_prebuilds"].includes(n)) f.rmSync(p.join(r,n),{recursive:true,force:true});'
       - name: Archive download cache
-        run: tar -czf "$RUNNER_TEMP/npm-downloads.tgz" -C "$npm_config_cache" .
+        run: tar --force-local -czf "$RUNNER_TEMP/npm-downloads.tgz" -C "$npm_config_cache" .
       - name: Restore archived downloads
         run: |
           node -e 'const f=require("node:fs"),r=process.env.npm_config_cache;f.rmSync(r,{recursive:true,force:true});f.mkdirSync(r,{recursive:true});'
-          tar -xzf "$RUNNER_TEMP/npm-downloads.tgz" -C "$npm_config_cache"
+          tar --force-local -xzf "$RUNNER_TEMP/npm-downloads.tgz" -C "$npm_config_cache"
       - name: Warm package smoke
         run: pnpm exec turbo run smoke:tarball --filter=bb-app --env-mode=loose --output-logs=new-only > "$RUNNER_TEMP/npm-warm.log" 2>&1
       - name: Clear downloads again
