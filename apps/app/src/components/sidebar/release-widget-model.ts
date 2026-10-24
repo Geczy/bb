@@ -122,7 +122,6 @@ export interface ReleaseWidgetImage {
 }
 
 export interface ReleaseWidgetContent {
-  summary: string | null;
   highlights: string[];
   image: ReleaseWidgetImage | null;
 }
@@ -184,27 +183,6 @@ export function releaseImage(entry: ChangelogEntry): ReleaseWidgetImage | null {
   return null;
 }
 
-function plainInlineText(markdown: string): string {
-  return markdown
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\*\*|`/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function releaseSummary(entry: ChangelogEntry): string | null {
-  for (const block of entry.lede) {
-    if (block.kind !== "paragraph" || markdownImage(block) !== null) {
-      continue;
-    }
-    const text = plainInlineText(block.text);
-    if (text !== "") {
-      return text;
-    }
-  }
-  return null;
-}
-
 export function resolveReleaseWidgetContent(
   version: string,
   fetchedEntries: readonly ChangelogEntry[] | undefined,
@@ -221,7 +199,6 @@ export function resolveReleaseWidgetContent(
     return null;
   }
   return {
-    summary: releaseSummary(entry),
     highlights,
     image: releaseImage(entry),
   };

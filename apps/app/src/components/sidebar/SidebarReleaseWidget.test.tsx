@@ -204,7 +204,7 @@ describe("SidebarReleaseWidget", () => {
     expect(region.textContent).not.toContain(":");
   });
 
-  it("leads with the release image, then the summary and the release notes link", () => {
+  it("leads with the release image, then the highlights and the release notes link", () => {
     renderWidget();
 
     const region = card();
@@ -216,7 +216,7 @@ describe("SidebarReleaseWidget", () => {
     );
     expect(image.getAttribute("loading")).toBe("lazy");
     expect(region.contains(image)).toBe(true);
-    expect(region.textContent).toContain(
+    expect(region.textContent).not.toContain(
       "Customizable sidebar navigation, new and improved ACP support, and more.",
     );
     expect(notesLink().getAttribute("href")).toBe(

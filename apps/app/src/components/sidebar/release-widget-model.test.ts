@@ -9,7 +9,6 @@ import { CHANGELOG_ENTRIES } from "@/components/settings/changelog-preview";
 import {
   releaseHighlights,
   releaseImage,
-  releaseSummary,
   resolveReleaseWidgetContent,
   resolveReleaseWidgetTargetVersion,
 } from "./release-widget-model";
@@ -309,34 +308,6 @@ describe("releaseImage", () => {
   });
 });
 
-describe("releaseSummary", () => {
-  it("returns the lede as plain text", () => {
-    expect(
-      releaseSummary(
-        entryWith(
-          "A **new** [navigation rail](https://getbb.app/docs), `bb acp add`, and more.\n\n### Highlights\n\n- **One:** first.",
-        ),
-      ),
-    ).toBe("A new navigation rail, bb acp add, and more.");
-  });
-
-  it("reads the repo's own 0.46.0 lede", () => {
-    const entry = CHANGELOG_ENTRIES.find(
-      (candidate) => candidate.version === "0.46.0",
-    );
-    expect(releaseSummary(entry!)).toBe(
-      "A new navigation rail, better thread search, reusable prompts, and more control over notifications and storage.",
-    );
-  });
-
-  it("is null without a lede", () => {
-    expect(releaseSummary(SAMPLE[1]!)).toBeNull();
-    expect(
-      releaseSummary(entryWith("![Alt](https://getbb.app/changelog/a.png)")),
-    ).toBeNull();
-  });
-});
-
 describe("resolveReleaseWidgetContent", () => {
   it("prefers the fetched changelog and falls back to the bundled one", () => {
     const bundled = parseChangelog(`## 0.48.0
@@ -350,12 +321,10 @@ Bundled lede.
 ![Bundled](https://getbb.app/changelog/0.48.0/bundled.jpg)
 `);
     expect(resolveReleaseWidgetContent("0.48.0", SAMPLE, bundled)).toEqual({
-      summary: "A lede.",
       highlights: ["First highlight", "Second", "Third"],
       image: null,
     });
     expect(resolveReleaseWidgetContent("0.48.0", undefined, bundled)).toEqual({
-      summary: "Bundled lede.",
       highlights: ["Bundled"],
       image: {
         src: "https://getbb.app/changelog/0.48.0/bundled.jpg",

@@ -220,20 +220,23 @@ function RowName({
   detail,
   current,
   latest,
+  trailing = null,
 }: {
   name: string;
   detail?: ReactNode;
   current: string | null;
   latest: string | null;
+  trailing?: ReactNode;
 }) {
   return (
     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
       <span className="w-16 shrink-0 truncate text-sm font-medium text-foreground">
         {name}
       </span>
-      {current === null ? null : (
-        <span className="min-w-0 basis-full @min-[28rem]/update-row:basis-auto">
+      {current === null && trailing === null ? null : (
+        <span className="inline-flex min-w-0 basis-full flex-wrap items-baseline gap-x-2 gap-y-1 @min-[28rem]/update-row:basis-auto">
           <RowVersions current={current} latest={latest} />
+          {trailing}
         </span>
       )}
       {detail}
@@ -485,6 +488,8 @@ export function BbAppUpdateRows({
   isChecking = false,
   releaseNotes = null,
 }: BbAppUpdateRowsProps) {
+  const notesLink =
+    releaseNotes === null ? null : <ReleaseNotesLinkButton {...releaseNotes} />;
   const settledStatus = isChecking ? (
     <RowStateControl live state="in-progress" />
   ) : (
@@ -513,9 +518,6 @@ export function BbAppUpdateRows({
         <span className="flex min-w-0 flex-col gap-1 @min-[28rem]/update-row:flex-row @min-[28rem]/update-row:items-baseline @min-[28rem]/update-row:gap-2">
           {name}
           {caption}
-          {releaseNotes === null ? null : (
-            <ReleaseNotesLinkButton {...releaseNotes} />
-          )}
         </span>
         {description === undefined ? null : (
           <span className="mt-0.5 text-xs leading-snug text-muted-foreground">
@@ -527,7 +529,12 @@ export function BbAppUpdateRows({
   );
   if (isDesktop && desktopInfo === null) {
     return row(
-      <RowName name={rowName} current={null} latest={null} />,
+      <RowName
+        name={rowName}
+        current={null}
+        latest={null}
+        trailing={notesLink}
+      />,
       <RowStateControl live state="in-progress" />,
     );
   }
@@ -537,7 +544,12 @@ export function BbAppUpdateRows({
       desktopInfo.pendingVersion ?? desktopInfo.latestVersion;
     const latest = desktopInfo.updateAvailable ? pendingVersion : null;
     const name = (
-      <RowName name={rowName} current={desktopInfo.version} latest={latest} />
+      <RowName
+        name={rowName}
+        current={desktopInfo.version}
+        latest={latest}
+        trailing={notesLink}
+      />
     );
 
     if (desktopInfo.updateDownloaded) {
@@ -618,6 +630,7 @@ export function BbAppUpdateRows({
         settledStatus={settledStatus}
         unavailableCheckControl={unavailableCheckControl}
         row={row}
+        trailing={notesLink}
         onApply={onApplyAppUpdate}
         onShowResult={onShowAppUpdateResult}
       />
@@ -626,7 +639,12 @@ export function BbAppUpdateRows({
 
   if (systemVersion === undefined) {
     return row(
-      <RowName name={rowName} current={null} latest={null} />,
+      <RowName
+        name={rowName}
+        current={null}
+        latest={null}
+        trailing={notesLink}
+      />,
       <RowStateControl state="in-progress" />,
     );
   }
@@ -646,6 +664,7 @@ export function BbAppUpdateRows({
             : systemVersion.currentCommit.slice(0, 7)
         }
         latest={null}
+        trailing={notesLink}
       />,
       null,
     );
@@ -668,6 +687,7 @@ export function BbAppUpdateRows({
       latest={
         systemVersion.updateAvailable ? systemVersion.latestVersion : null
       }
+      trailing={notesLink}
     />
   );
 
@@ -720,6 +740,7 @@ function InAppUpdateRow({
   settledStatus,
   unavailableCheckControl,
   row,
+  trailing,
   onApply,
   onShowResult,
 }: {
@@ -730,6 +751,7 @@ function InAppUpdateRow({
   settledStatus: ReactNode;
   unavailableCheckControl: ReactNode;
   row: BbAppRowRenderer;
+  trailing: ReactNode;
   onApply: (() => void) | null;
   onShowResult: ((result: SystemAppUpdateResult) => void) | null;
 }) {
@@ -746,6 +768,7 @@ function InAppUpdateRow({
       }
       current={formatAppUpdateRevision(status.current)}
       latest={available === null ? null : formatAppUpdateTarget(available)}
+      trailing={trailing}
     />
   );
   const activity = status.activity;
