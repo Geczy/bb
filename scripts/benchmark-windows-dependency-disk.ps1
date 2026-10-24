@@ -26,7 +26,6 @@ $commands | Set-Content $script
 if ($LASTEXITCODE -ne 0) { throw "Diskpart exited $LASTEXITCODE" }
 if ($Operation -ne 'detach') {
   if (!(Test-Path 'P:\')) { throw 'Benchmark disk was not mounted' }
-  New-Item -ItemType Directory -Path 'P:\node_modules' -Force | Out-Null
-  New-Item -ItemType Junction -Path (Join-Path $PWD 'node_modules') -Target 'P:\node_modules' | Out-Null
+  'npm_config_virtual_store_dir=P:\virtual-store' | Out-File -Append $env:GITHUB_ENV
   'npm_config_store_dir=P:\store' | Out-File -Append $env:GITHUB_ENV
 }
