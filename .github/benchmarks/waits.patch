@@ -1,0 +1,182 @@
+diff --git a/apps/app/src/components/dialogs/AddMachineDialog.test.tsx b/apps/app/src/components/dialogs/AddMachineDialog.test.tsx
+index c5d5b8420b..0d30fef7e1 100644
+--- a/apps/app/src/components/dialogs/AddMachineDialog.test.tsx
++++ b/apps/app/src/components/dialogs/AddMachineDialog.test.tsx
+@@ -4,6 +4,7 @@ import { createDeferredPromise } from "@bb/test-helpers";
+ import { makeHost } from "@bb/test-helpers/domain-fixtures";
+ import type { ServerAccessStatus } from "@bb/server-contract";
+ import {
++  act,
+   cleanup,
+   fireEvent,
+   render,
+@@ -60,6 +61,7 @@ beforeEach(() => {
+ 
+ afterEach(() => {
+   cleanup();
++  vi.useRealTimers();
+   vi.clearAllMocks();
+   vi.unstubAllGlobals();
+ });
+@@ -165,6 +167,7 @@ it("cancels a creating manual launch when the dialog content closes", async () =
+ });
+ 
+ it("retrieves the enrollment command after asynchronous access preparation", async () => {
++  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+   const rendered = setup(() => {
+     vi.mocked(sdk.hosts.experimental_getEnrollmentCommand)
+       .mockResolvedValueOnce(null)
+@@ -179,12 +182,16 @@ it("retrieves the enrollment command after asynchronous access preparation", asy
+       threadStorageRootPath: null,
+     });
+   });
+-  await screen.findByText("delayed enrollment command", {}, { timeout: 3_000 });
++  await act(async () => {
++    await vi.advanceTimersByTimeAsync(1_000);
++  });
++  expect(screen.getByText("delayed enrollment command")).toBeDefined();
+   expect(sdk.hosts.experimental_getEnrollmentCommand).toHaveBeenCalledTimes(2);
+   rendered.unmount();
+ });
+ 
+ it("marks a previously available command as used when the server withdraws it", async () => {
++  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+   const rendered = setup(() => {
+     vi.mocked(sdk.hosts.experimental_getEnrollmentCommand)
+       .mockResolvedValueOnce({
+@@ -199,8 +206,14 @@ it("marks a previously available command as used when the server withdraws it",
+       threadStorageRootPath: null,
+     });
+   });
+-  await screen.findByText("single-use enrollment command");
+-  await screen.findByText("Command used", {}, { timeout: 3_000 });
++  await act(async () => {
++    await vi.advanceTimersByTimeAsync(0);
++  });
++  expect(screen.getByText("single-use enrollment command")).toBeDefined();
++  await act(async () => {
++    await vi.advanceTimersByTimeAsync(1_000);
++  });
++  expect(screen.getByText("Command used")).toBeDefined();
+   expect(
+     screen.getByRole("button", { name: "Copy" }).hasAttribute("disabled"),
+   ).toBe(true);
+@@ -208,6 +221,7 @@ it("marks a previously available command as used when the server withdraws it",
+ });
+ 
+ it("accepts a connection before an enrollment command is returned", async () => {
++  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+   const rendered = setup(() => {
+     vi.mocked(sdk.hosts.experimental_getEnrollmentCommand).mockResolvedValue(
+       null,
+@@ -220,7 +234,10 @@ it("accepts a connection before an enrollment command is returned", async () =>
+       lifecycle: { ...reservedHost.lifecycle, phase: "active" },
+     });
+   });
+-  await screen.findByText("Manual machine connected", {}, { timeout: 3_000 });
++  await act(async () => {
++    await vi.advanceTimersByTimeAsync(1_000);
++  });
++  expect(screen.getByText("Manual machine connected")).toBeDefined();
+   rendered.unmount();
+   expect(sdk.hosts.delete).not.toHaveBeenCalled();
+ });
+diff --git a/apps/app/src/hooks/queries/thread-queries.test.ts b/apps/app/src/hooks/queries/thread-queries.test.ts
+index 96d52bbbcc..883e0c592c 100644
+--- a/apps/app/src/hooks/queries/thread-queries.test.ts
++++ b/apps/app/src/hooks/queries/thread-queries.test.ts
+@@ -954,10 +954,13 @@ describe("thread open cache retention", () => {
+         observer.setOptions(threadTimelineQueryOptions(queryClient, threadId));
+       }
+       const current = observer;
+-      await vi.waitFor(() => {
+-        expect(current.getCurrentResult().isFetchedAfterMount).toBe(true);
+-        expect(current.getCurrentResult().isFetching).toBe(false);
+-      });
++      await vi.waitFor(
++        () => {
++          expect(current.getCurrentResult().isFetchedAfterMount).toBe(true);
++          expect(current.getCurrentResult().isFetching).toBe(false);
++        },
++        { interval: 1 },
++      );
+     }
+     observer?.destroy();
+   }
+diff --git a/plugins/connect/src/account-integration.test.ts b/plugins/connect/src/account-integration.test.ts
+index abb0169cdf..e99e1dc2d4 100644
+--- a/plugins/connect/src/account-integration.test.ts
++++ b/plugins/connect/src/account-integration.test.ts
+@@ -41,10 +41,19 @@ let blockedAccountReads = 0;
+ let successfulAccountReads = 0;
+ let credentialReads = 0;
+ let failCredentialRead: number | null = null;
++let accountPollGate: Promise<void> | null = null;
+ let tunnelService: { controller: AbortController; done: Promise<void> } | null =
+   null;
+ 
+-function callAccountRpc(args: RpcArgs): Promise<unknown> {
++async function callAccountRpc(args: RpcArgs): Promise<unknown> {
++  if (
++    args.method === "bb-account.v1.waitForStatusChange" &&
++    accountPollGate !== null
++  ) {
++    const gate = accountPollGate;
++    accountPollGate = null;
++    await gate;
++  }
+   if (serverMoving) {
+     blockedAccountReads += 1;
+     return Promise.reject(
+@@ -164,6 +173,7 @@ beforeEach(async () => {
+   successfulAccountReads = 0;
+   credentialReads = 0;
+   failCredentialRead = null;
++  accountPollGate = null;
+ });
+ 
+ afterEach(async () => {
+@@ -181,11 +191,18 @@ describe("connect on top of bb account", () => {
+   it("keeps the live tunnel through a server move freeze and resumes account polling", async () => {
+     await loadBoth();
+     await signInAccount();
++    let resumeAccountPoll = () => {};
++    accountPollGate = new Promise<void>((resolve) => {
++      resumeAccountPoll = resolve;
++    });
+     startTunnel();
+-    await waitForConnected(1);
++    try {
++      await waitForConnected(1);
++      serverMoving = true;
++    } finally {
++      resumeAccountPoll();
++    }
+     const socket = stub.tunnelDials[0]!.socket!;
+-
+-    serverMoving = true;
+     await vi.waitFor(
+       () => expect(blockedAccountReads).toBeGreaterThanOrEqual(2),
+       { timeout: 30_000 },
+diff --git a/plugins/tasks/vitest.setup.ts b/plugins/tasks/vitest.setup.ts
+index 4a3793b53e..ff61a53108 100644
+--- a/plugins/tasks/vitest.setup.ts
++++ b/plugins/tasks/vitest.setup.ts
+@@ -1,10 +1,12 @@
+-import { installTestPluginRuntime } from "@get-bb/plugin-sdk/testing/app";
+-import { configure } from "@testing-library/react";
+ import { beforeEach } from "vitest";
+ 
+-if (typeof window !== "undefined") installTestPluginRuntime();
+-
+-configure({ asyncUtilTimeout: 8_000 });
++if (typeof window !== "undefined") {
++  const { installTestPluginRuntime } =
++    await import("@get-bb/plugin-sdk/testing/app");
++  const { configure } = await import("@testing-library/react");
++  installTestPluginRuntime();
++  configure({ asyncUtilTimeout: 8_000 });
++}
+ 
+ if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+   Object.defineProperty(Element.prototype, "scrollIntoView", {

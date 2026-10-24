@@ -1,4 +1,4 @@
-name: Compare fewer Windows app shards and worker counts
+name: Measure removal of test waits and DOM-only setup
 on:
   push:
     branches:
@@ -6,78 +6,45 @@ on:
 permissions:
   contents: read
 jobs:
-  app:
+  tests:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - mode: four-3w
-            shard: 1
-            vitestShard: 1/4
-            workers: 3
+          - os: windows
+            mode: original
+            replica: 1
             runner: blacksmith-4vcpu-windows-2025
-          - mode: four-3w
-            shard: 2
-            vitestShard: 2/4
-            workers: 3
+          - os: windows
+            mode: original
+            replica: 2
             runner: blacksmith-4vcpu-windows-2025
-          - mode: four-3w
-            shard: 3
-            vitestShard: 3/4
-            workers: 3
+          - os: windows
+            mode: optimized
+            replica: 1
             runner: blacksmith-4vcpu-windows-2025
-          - mode: four-3w
-            shard: 4
-            vitestShard: 4/4
-            workers: 3
+          - os: windows
+            mode: optimized
+            replica: 2
             runner: blacksmith-4vcpu-windows-2025
-          - mode: four-4w
-            shard: 1
-            vitestShard: 1/4
-            workers: 4
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: four-4w
-            shard: 2
-            vitestShard: 2/4
-            workers: 4
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: four-4w
-            shard: 3
-            vitestShard: 3/4
-            workers: 4
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: four-4w
-            shard: 4
-            vitestShard: 4/4
-            workers: 4
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: two-4w
-            shard: 1
-            vitestShard: 1/2
-            workers: 4
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: two-4w
-            shard: 2
-            vitestShard: 2/2
-            workers: 4
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: one-4w
-            shard: 1
-            vitestShard: 1/1
-            workers: 4
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: one-8w
-            shard: 1
-            vitestShard: 1/1
-            workers: 8
-            runner: blacksmith-4vcpu-windows-2025
-          - mode: one-16cpu
-            shard: 1
-            vitestShard: 1/1
-            workers: 12
-            runner: blacksmith-16vcpu-windows-2025
+          - os: linux
+            mode: original
+            replica: 1
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - os: linux
+            mode: original
+            replica: 2
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - os: linux
+            mode: optimized
+            replica: 1
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - os: linux
+            mode: optimized
+            replica: 2
+            runner: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -95,31 +62,54 @@ jobs:
         id: dependencies
         uses: ./.github/actions/windows-dependency-cache
         timeout-minutes: 1
+        if: matrix.os == 'windows'
       - name: Require warm image
-        if: steps.dependencies.outputs.active != 'true'
+        if: matrix.os == 'windows' && (steps.dependencies.outputs.active != 'true')
         run: throw 'Dependency image missing; do not mix cold setup into this
           comparison'
-      - name: Install app dependencies
+      - name: Apply wait and setup fixes
+        if: matrix.mode == 'optimized'
+        shell: bash
+        run: git apply .github/benchmarks/waits.patch
+      - name: Install dependencies
         shell: bash
         run: bash .github/actions/setup-workspace/install-dependencies.sh
-          --ignore-scripts --filter bb --filter "@bb/app..." --filter
-          "@bb/db..."
-      - name: Run app shard
-        shell: cmd
+          --ignore-scripts --filter '!@bb/mobile'
+      - name: Test Connect
+        shell: bash
         env:
-          TEMP: ${{ runner.temp }}
+          VITEST_MAX_WORKERS: "2"
           TMP: ${{ runner.temp }}
-          BB_CI_TEST_SHARD: ${{ matrix.vitestShard }}
-          VITEST_MAX_WORKERS: ${{ matrix.workers }}
+          TEMP: ${{ runner.temp }}
+        run: pnpm exec turbo run test --filter=bb-plugin-connect --force
+          --output-logs=errors-only --concurrency=2 --summarize
+          --  --reporter=json --outputFile="$RUNNER_TEMP/Connect.json"
+      - name: Test Tasks
+        shell: bash
+        env:
+          VITEST_MAX_WORKERS: "2"
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
+        run: pnpm exec turbo run test --filter=bb-plugin-tasks --force
+          --output-logs=errors-only --concurrency=2 --summarize
+          --  --reporter=json --outputFile="$RUNNER_TEMP/Tasks.json"
+      - name: Test App waits
+        shell: bash
+        env:
+          VITEST_MAX_WORKERS: "2"
+          TMP: ${{ runner.temp }}
+          TEMP: ${{ runner.temp }}
         run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=errors-only
-          --summarize --concurrency=2 -- --reporter=default --reporter=json
-          --outputFile.json="%RUNNER_TEMP%/app-results.json"
-      - name: Upload timings
+          --concurrency=2 --summarize --
+          src/hooks/queries/thread-queries.test.ts
+          src/components/dialogs/AddMachineDialog.test.tsx --reporter=json
+          --outputFile="$RUNNER_TEMP/App-waits.json"
+      - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ${{ github.job }}-${{ matrix.mode }}-${{ matrix.shard }}
+          name: waits-${{ matrix.os }}-${{ matrix.mode }}-${{ matrix.replica }}
           path: |-
             .turbo/runs/*.json
-            ${{ runner.temp }}/app-results.json
+            ${{ runner.temp }}/*.json
           include-hidden-files: true
