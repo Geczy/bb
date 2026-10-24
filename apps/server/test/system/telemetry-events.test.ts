@@ -67,7 +67,7 @@ describe("client telemetry events", () => {
         },
         {
           name: "release_widget_action",
-          properties: { release_version: "0.47.0", action: "open" },
+          properties: { release_version: "0.47.0", action: "open_notes" },
         },
         {
           name: "release_widget_action",
@@ -75,18 +75,13 @@ describe("client telemetry events", () => {
         },
         {
           name: "release_notes_opened",
-          properties: {
-            release_version: "0.47.0",
-            entry_point: "widget_auto",
-            destination: "browser_panel",
-          },
+          properties: { release_version: "0.47.0", entry_point: "widget" },
         },
         {
           name: "release_notes_opened",
           properties: {
             release_version: "0.47.0.1",
             entry_point: "updates_link",
-            destination: "external_browser",
           },
         },
       ];
@@ -127,13 +122,17 @@ describe("client telemetry events", () => {
         },
         {
           name: "release_widget_action",
+          properties: { release_version: "0.47.0", action: "open" },
+        },
+        {
+          name: "release_widget_action",
           properties: { release_version: "0.47.0", action: "snooze" },
         },
         {
           name: "release_widget_action",
           properties: {
             release_version: "0.47.0",
-            action: "open",
+            action: "open_notes",
             notes: "Release highlights text",
           },
         },
@@ -142,7 +141,13 @@ describe("client telemetry events", () => {
           properties: {
             release_version: "0.47.0",
             entry_point: "settings_search",
-            destination: "browser_panel",
+          },
+        },
+        {
+          name: "release_notes_opened",
+          properties: {
+            release_version: "0.47.0",
+            entry_point: "sidebar",
           },
         },
         {
@@ -150,15 +155,14 @@ describe("client telemetry events", () => {
           properties: {
             release_version: "0.47.0",
             entry_point: "updates_link",
-            destination: "https://example.com/notes",
+            destination: "external_browser",
           },
         },
         {
           name: "release_notes_opened",
           properties: {
             release_version: "0.47.0",
-            entry_point: "widget_auto",
-            destination: "browser_panel",
+            entry_point: "widget",
             url: "https://example.com/notes",
           },
         },

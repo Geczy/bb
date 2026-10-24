@@ -363,10 +363,7 @@ export function AppSidebar({
           </div>
         ) : (
           <>
-            <SidebarReleaseWidget
-              visible={isThreadListVisible}
-              onNavigate={closeOnMobile}
-            />
+            <SidebarReleaseWidget visible={isThreadListVisible} />
             <PluginSidebarFooterDisclosure
               item={pluginSidebarFooter.activeItem}
               onDismiss={pluginSidebarFooter.dismiss}

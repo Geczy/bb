@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useSetAtom } from "jotai";
 import type { ProviderCliInstallAction } from "@bb/host-daemon-contract";
 import type {
   SystemAppUpdateStatus,
@@ -32,14 +33,10 @@ import {
   systemVersionQueryKey,
 } from "@/hooks/queries/query-keys";
 import { SettingsStoryChrome } from "../../../.ladle/story-settings-chrome";
-import { WithDesktopBrowser } from "../../../.ladle/story-desktop";
-import {
-  releaseNotesStoryDesktopInfo,
-  UpdatesWithReleaseNotesStory,
-} from "../../../.ladle/release-notes-story";
 import { AppLayoutSidebar } from "@/components/layout/AppLayoutSidebar";
 import { sdk } from "@/lib/sdk";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
+import { dismissedReleaseVersionAtom } from "./release-widget-preferences";
 
 export default { title: "sidebar/Updates badge" };
 
@@ -188,11 +185,6 @@ export function MachineNotices() {
   );
 }
 
-const RELEASE_WIDGET_VERSIONS = {
-  installedVersion: "0.45.0",
-  version: "0.46.0",
-};
-
 const RELEASE_WIDGET_APP_UPDATE: SystemAppUpdateStatus = {
   activity: { phase: "idle" },
   available: {
@@ -283,6 +275,7 @@ function SeedReleaseWidgetQueries({ children }: { children: ReactNode }) {
 
 function ReleaseImageControls() {
   const queryClient = useQueryClient();
+  const setDismissedVersion = useSetAtom(dismissedReleaseVersionAtom);
   const [withImage, setWithImage] = useState(true);
   const choose = (next: boolean) => {
     setWithImage(next);
@@ -305,50 +298,42 @@ function ReleaseImageControls() {
       >
         No image
       </Button>
+      <Button variant="ghost" onClick={() => setDismissedVersion(null)}>
+        Show the widget again
+      </Button>
     </div>
   );
 }
 
 export function ReleaseWidget() {
-  const { pathname } = useLocation();
-
   return (
-    <WithDesktopBrowser
-      previewFrames
-      desktopInfo={releaseNotesStoryDesktopInfo(RELEASE_WIDGET_VERSIONS)}
-    >
-      <SettingsStoryFixtures>
-        <SeedReleaseWidgetQueries>
-          {pathname === "/settings/updates" ? (
-            <UpdatesWithReleaseNotesStory {...RELEASE_WIDGET_VERSIONS} />
-          ) : (
-            <SidebarProvider className="h-screen bg-background">
-              <AppLayoutSidebar
-                routeSidebar={null}
-                isSettingsActive={false}
-                isResizing={false}
-                onResizeMouseDown={() => {}}
-                settingsRoutePath="/settings/updates"
-                backToAppRoutePath={null}
-              />
-              <SidebarInset>
-                <main className="space-y-6 p-6">
-                  <SidebarTrigger />
-                  <h1 className="text-lg font-semibold">Release widget</h1>
-                  <p className="max-w-lg text-sm text-muted-foreground">
-                    bb 0.46.0 is available, so the footer shows the bb chip and
-                    the release widget above it, led by the release's image.
-                    Choose No image to see the bb logo fallback. Open the widget
-                    to land on Settings → Updates with its release notes open on
-                    the right, or dismiss it with ✕: the chip stays.
-                  </p>
-                  <ReleaseImageControls />
-                </main>
-              </SidebarInset>
-            </SidebarProvider>
-          )}
-        </SeedReleaseWidgetQueries>
-      </SettingsStoryFixtures>
-    </WithDesktopBrowser>
+    <SettingsStoryFixtures>
+      <SeedReleaseWidgetQueries>
+        <SidebarProvider className="h-screen bg-background">
+          <AppLayoutSidebar
+            routeSidebar={null}
+            isSettingsActive={false}
+            isResizing={false}
+            onResizeMouseDown={() => {}}
+            settingsRoutePath="/settings/updates"
+            backToAppRoutePath={null}
+          />
+          <SidebarInset>
+            <main className="space-y-6 p-6">
+              <SidebarTrigger />
+              <h1 className="text-lg font-semibold">Release widget</h1>
+              <p className="max-w-lg text-sm text-muted-foreground">
+                bb 0.46.0 is available, so the footer shows the release widget
+                above the bb update chip, led by the release's image. Choose No
+                image to see the bb logo fallback. Read the release notes opens
+                getbb.app/changelog in the browser and dismisses the widget, as
+                ✕ does; the chip stays as the way to update.
+              </p>
+              <ReleaseImageControls />
+            </main>
+          </SidebarInset>
+        </SidebarProvider>
+      </SeedReleaseWidgetQueries>
+    </SettingsStoryFixtures>
   );
 }

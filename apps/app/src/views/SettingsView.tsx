@@ -69,7 +69,6 @@ import { VoiceInputSettingsSection } from "@/components/settings/VoiceInputSetti
 import { AiServicesSettingsSection } from "@/components/settings/AiServicesSettingsSection";
 import { CommunitySettingsSection } from "@/components/settings/CommunitySettingsSection";
 import { UpdatesSettingsSection } from "@/components/settings/UpdatesSettingsSection";
-import { UpdatesReleaseNotesLayout } from "@/components/settings/UpdatesReleaseNotesLayout";
 import { KeyboardSettingsSection } from "@/components/settings/KeyboardSettingsSection";
 import { BrowserSettingsSection } from "@/components/settings/BrowserSettingsSection";
 import { MachinesSettingsSection } from "@/components/settings/MachinesSettingsSection";
@@ -1520,11 +1519,9 @@ export function SettingsView() {
     );
   }
 
-  const page = (
-    <div className="mx-auto w-full max-w-3xl space-y-10">{content}</div>
+  return (
+    <PageShell contentClassName="pt-4 md:pt-5">
+      <div className="mx-auto w-full max-w-3xl space-y-10">{content}</div>
+    </PageShell>
   );
-  if (activePluginId === null && activeSection === "updates") {
-    return <UpdatesReleaseNotesLayout>{page}</UpdatesReleaseNotesLayout>;
-  }
-  return <PageShell contentClassName="pt-4 md:pt-5">{page}</PageShell>;
 }

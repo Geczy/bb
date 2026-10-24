@@ -283,8 +283,8 @@ first-send events through `POST /api/v1/system/telemetry/events`
 `onboarding_step_skipped`, `onboarding_finished`, `onboarding_agent_state`,
 `onboarding_sign_in`, and `new_thread_submit` (started, accepted, or failed),
 and release widget events: `release_widget_shown`, `release_widget_action`
-(`open` or `dismiss`), and `release_notes_opened` (`entry_point` `widget_auto`
-or `updates_link`; `destination` `browser_panel` or `external_browser`).
+(`open_notes` or `dismiss`), and `release_notes_opened` (`entry_point`
+`widget` or `updates_link`).
 The route accepts only these events with fixed enums and booleans, plus a
 `release_version` of digits and dots (such as `0.47.0`): no provider ids,
 account details, prompts, release-note text, project or file names, terminal

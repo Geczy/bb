@@ -9,7 +9,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { MemoryRouter, useLocation, type InitialEntry } from "react-router-dom";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Host } from "@bb/domain";
@@ -41,10 +41,6 @@ import {
   type UpdateInventoryMachine,
 } from "@/hooks/useUpdateInventory";
 import { recordTelemetryEvent } from "@/components/onboarding/onboarding-telemetry";
-import {
-  ReleaseNotesPanelContext,
-  resetReleaseNotesSessionForTest,
-} from "./release-notes";
 import {
   UpdateActionButton,
   UpdatesSettingsSection,
@@ -290,32 +286,16 @@ function makeInventory(overrides: Partial<UpdateInventory>): UpdateInventory {
   };
 }
 
-function LocationStateProbe() {
-  const location = useLocation();
-  return (
-    <span data-testid="location-state">{JSON.stringify(location.state)}</span>
-  );
-}
-
-function renderSection({
-  openInPanel = null,
-  initialEntries = ["/settings/updates"],
-}: {
-  openInPanel?: ((url: string) => void) | null;
-  initialEntries?: InitialEntry[];
-} = {}): void {
+function renderSection(): void {
   render(
-    <MemoryRouter initialEntries={initialEntries}>
+    <MemoryRouter>
       <TooltipProvider>
         <QueryClientProvider
           client={
             new QueryClient({ defaultOptions: { queries: { retry: false } } })
           }
         >
-          <ReleaseNotesPanelContext.Provider value={openInPanel}>
-            <UpdatesSettingsSection />
-          </ReleaseNotesPanelContext.Provider>
-          <LocationStateProbe />
+          <UpdatesSettingsSection />
         </QueryClientProvider>
       </TooltipProvider>
     </MemoryRouter>,
@@ -392,7 +372,6 @@ afterEach(() => {
   window.localStorage.clear();
   resetAppUpdateCheckStoreForTests();
   resetProviderCliInstallStoreForTests();
-  resetReleaseNotesSessionForTest();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -499,102 +478,65 @@ describe("UpdatesSettingsSection", () => {
       useUpdateInventoryMock.mockReturnValue(updateInventory());
     });
 
-    it("shows a release notes link instead of the old changelog preview", () => {
+    function releaseNotesLink(version: string): HTMLElement {
+      return screen.getByRole("link", {
+        name: `Release notes for bb ${version}`,
+      });
+    }
+
+    it("links the target release's notes when an update is available", () => {
       renderSection();
 
       expect(
         document.querySelector('[data-updates-domain="changelog"]'),
       ).toBeNull();
       expect(fetch).not.toHaveBeenCalled();
-      expect(
-        screen.getByRole("button", { name: "Release notes for bb 0.47.0" }),
-      ).toBeDefined();
+      expect(releaseNotesLink("0.47.0").getAttribute("href")).toBe(
+        "https://getbb.app/changelog#0-47-0",
+      );
     });
 
     it("links the installed release when no update is available", () => {
       useUpdateInventoryMock.mockReturnValue(makeInventory({}));
       renderSection();
 
-      expect(
-        screen.getByRole("button", { name: "Release notes for bb 0.0.5" }),
-      ).toBeDefined();
+      expect(releaseNotesLink("0.0.5").getAttribute("href")).toBe(
+        "https://getbb.app/changelog#0-0-5",
+      );
     });
 
-    it("opens the release notes in the right panel when the in-app browser is available", () => {
-      const openInPanel = vi.fn();
-      renderSection({ openInPanel });
-
-      fireEvent.click(
-        screen.getByRole("button", { name: "Release notes for bb 0.47.0" }),
+    it("hides the link for a nightly build", () => {
+      useUpdateInventoryMock.mockReturnValue(
+        makeInventory({
+          systemVersion: {
+            currentVersion: "0.48.0-nightly.20261020",
+            latestVersion: "0.48.0-nightly.20261020",
+            currentCommit: null,
+            installKind: "npm",
+            source: "npm",
+            updateAvailable: false,
+            isDevelopment: false,
+            upgradeCommand: "npx bb-app@nightly",
+          },
+        }),
       );
-
-      expect(openInPanel).toHaveBeenCalledExactlyOnceWith(
-        "https://getbb.app/changelog#0-47-0",
-      );
-      expect(openUrlInExternalBrowserMock).not.toHaveBeenCalled();
-      expect(recordTelemetryEvent).toHaveBeenCalledExactlyOnceWith({
-        name: "release_notes_opened",
-        properties: {
-          release_version: "0.47.0",
-          entry_point: "updates_link",
-          destination: "browser_panel",
-        },
-      });
-    });
-
-    it("opens the release notes externally without the in-app browser", () => {
       renderSection();
 
-      fireEvent.click(
-        screen.getByRole("button", { name: "Release notes for bb 0.47.0" }),
-      );
+      expect(screen.queryByRole("link", { name: /Release notes/ })).toBeNull();
+    });
+
+    it("opens the release notes in the external browser", () => {
+      renderSection();
+
+      fireEvent.click(releaseNotesLink("0.47.0"));
 
       expect(openUrlInExternalBrowserMock).toHaveBeenCalledExactlyOnceWith(
         "https://getbb.app/changelog#0-47-0",
       );
       expect(recordTelemetryEvent).toHaveBeenCalledExactlyOnceWith({
         name: "release_notes_opened",
-        properties: {
-          release_version: "0.47.0",
-          entry_point: "updates_link",
-          destination: "external_browser",
-        },
+        properties: { release_version: "0.47.0", entry_point: "updates_link" },
       });
-    });
-
-    it("opens the notes once per release when arriving from the widget", async () => {
-      const openInPanel = vi.fn();
-      const fromWidget: InitialEntry[] = [
-        {
-          pathname: "/settings/updates",
-          state: { openReleaseNotes: "0.47.0" },
-        },
-      ];
-      renderSection({ openInPanel, initialEntries: fromWidget });
-
-      await waitFor(() => {
-        expect(screen.getByTestId("location-state").textContent).toBe("null");
-      });
-      expect(openInPanel).toHaveBeenCalledExactlyOnceWith(
-        "https://getbb.app/changelog#0-47-0",
-      );
-      expect(recordTelemetryEvent).toHaveBeenCalledExactlyOnceWith({
-        name: "release_notes_opened",
-        properties: {
-          release_version: "0.47.0",
-          entry_point: "widget_auto",
-          destination: "browser_panel",
-        },
-      });
-
-      cleanup();
-      renderSection({ openInPanel, initialEntries: fromWidget });
-
-      await waitFor(() => {
-        expect(screen.getByTestId("location-state").textContent).toBe("null");
-      });
-      expect(openInPanel).toHaveBeenCalledTimes(1);
-      expect(recordTelemetryEvent).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -686,7 +628,7 @@ describe("UpdatesSettingsSection", () => {
       makeInventory({ lastCheckedAt: Date.now(), machines: [machine] }),
     );
 
-    renderSection({});
+    renderSection();
 
     expect(screen.getByText("Nothing to update on workstation.")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Show machines" }));

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { createStore, Provider } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -21,6 +27,7 @@ import { TooltipProvider } from "@bb/shared-ui/tooltip";
 
 const useUpdateInventoryMock = vi.hoisted(() => vi.fn());
 const recordTelemetryEventMock = vi.hoisted(() => vi.fn());
+const openUrlInExternalBrowserMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/hooks/useUpdateInventory", () => ({
   useUpdateInventory: useUpdateInventoryMock,
@@ -28,6 +35,10 @@ vi.mock("@/hooks/useUpdateInventory", () => ({
 
 vi.mock("@/components/onboarding/onboarding-telemetry", () => ({
   recordTelemetryEvent: recordTelemetryEventMock,
+}));
+
+vi.mock("@/lib/url-open-routing", () => ({
+  openUrlInExternalBrowser: openUrlInExternalBrowserMock,
 }));
 
 vi.mock("@/components/provider-cli/provider-cli-install", () => ({
@@ -81,6 +92,7 @@ afterEach(() => {
   window.localStorage.clear();
   useUpdateInventoryMock.mockReset();
   recordTelemetryEventMock.mockReset();
+  openUrlInExternalBrowserMock.mockReset();
   resetReleaseWidgetSessionForTest();
 });
 
@@ -140,14 +152,13 @@ function renderWidget({
   queryClient.setQueryData(changelogEntriesQueryOptions().queryKey, CHANGELOG);
   const store = createStore();
   store.set(dismissedReleaseVersionAtom, dismissed);
-  const onNavigate = vi.fn();
   const result = render(
     <Provider store={store}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={["/"]}>
           <TooltipProvider>
             <SidebarUpdatesBadge />
-            <SidebarReleaseWidget visible={visible} onNavigate={onNavigate} />
+            <SidebarReleaseWidget visible={visible} />
             <Routes>
               <Route path="*" element={<LocationProbe />} />
             </Routes>
@@ -156,11 +167,19 @@ function renderWidget({
       </QueryClientProvider>
     </Provider>,
   );
-  return { ...result, store, onNavigate, queryClient };
+  return { ...result, store, queryClient };
 }
 
 function widget(): HTMLElement | null {
   return screen.queryByTestId("sidebar-release-widget");
+}
+
+function card(version = "0.47.0"): HTMLElement {
+  return screen.getByRole("article", { name: `bb ${version} is available` });
+}
+
+function notesLink(): HTMLElement {
+  return screen.getByRole("link", { name: "Read the release notes" });
 }
 
 describe("SidebarReleaseWidget", () => {
@@ -168,23 +187,27 @@ describe("SidebarReleaseWidget", () => {
     renderWidget();
 
     expect(screen.getByTestId("sidebar-updates-badge-bb")).toBeTruthy();
-    const card = screen.getByRole("button", {
-      name: "bb 0.47.0 is available. Open Updates",
-    });
-    expect(card.textContent).toContain("bb 0.47.0 is available");
-    expect(card.textContent).toContain("Customizable sidebar navigation");
-    expect(card.textContent).toContain("New and improved ACP support");
-    expect(card.textContent).toContain("Diff review");
-    expect(card.textContent).not.toContain("More customization surfaces");
-    expect(card.textContent).not.toContain(":");
+    const region = card();
+    expect(
+      screen.getByRole("heading", { name: "bb 0.47.0 is available" }),
+    ).toBeTruthy();
+    expect(
+      within(region)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "Customizable sidebar navigation",
+      "New and improved ACP support",
+      "Diff review",
+    ]);
+    expect(region.textContent).not.toContain("More customization surfaces");
+    expect(region.textContent).not.toContain(":");
   });
 
-  it("leads with the release image, then the summary and the call to action", () => {
+  it("leads with the release image, then the summary and the release notes link", () => {
     renderWidget();
 
-    const card = screen.getByRole("button", {
-      name: "bb 0.47.0 is available. Open Updates",
-    });
+    const region = card();
     const image = screen.getByRole("img", {
       name: "The sidebar navigation picker",
     });
@@ -192,15 +215,21 @@ describe("SidebarReleaseWidget", () => {
       "https://getbb.app/changelog/0.47.0/navigation.jpg",
     );
     expect(image.getAttribute("loading")).toBe("lazy");
-    expect(card.contains(image)).toBe(true);
-    expect(card.textContent).toContain(
+    expect(region.contains(image)).toBe(true);
+    expect(region.textContent).toContain(
       "Customizable sidebar navigation, new and improved ACP support, and more.",
     );
-    expect(card.textContent).toContain("See what's new");
+    expect(notesLink().getAttribute("href")).toBe(
+      "https://getbb.app/changelog#0-47-0",
+    );
     expect(
-      document.getElementById(card.getAttribute("aria-describedby") ?? "")
-        ?.textContent,
-    ).toContain("Customizable sidebar navigation, new and improved");
+      Array.from(region.querySelectorAll("a, button")).map(
+        (control) => control.textContent || control.getAttribute("aria-label"),
+      ),
+    ).toEqual([
+      "Read the release notes",
+      "Dismiss the bb 0.47.0 release preview",
+    ]);
     expect(screen.queryByTestId("sidebar-release-widget-fallback")).toBeNull();
   });
 
@@ -251,6 +280,7 @@ describe("SidebarReleaseWidget", () => {
     expect(widget()).toBeNull();
     expect(store.get(dismissedReleaseVersionAtom)).toBe("0.47.0");
     expect(screen.getByTestId("sidebar-updates-badge-bb")).toBeTruthy();
+    expect(openUrlInExternalBrowserMock).not.toHaveBeenCalled();
     expect(recordTelemetryEventMock).toHaveBeenCalledWith({
       name: "release_widget_action",
       properties: { release_version: "0.47.0", action: "dismiss" },
@@ -263,11 +293,7 @@ describe("SidebarReleaseWidget", () => {
     cleanup();
 
     renderWidget({ dismissed: "0.47.0", available: "0.48.0" });
-    expect(
-      screen.getByRole("button", {
-        name: "bb 0.48.0 is available. Open Updates",
-      }),
-    ).toBeTruthy();
+    expect(card("0.48.0")).toBeTruthy();
   });
 
   it("carries the old card's dismissal over once", () => {
@@ -285,23 +311,33 @@ describe("SidebarReleaseWidget", () => {
     expect(newer.store.get(dismissedReleaseVersionAtom)).toBeNull();
   });
 
-  it("opens Settings → Updates with the release in router state", () => {
-    const { onNavigate } = renderWidget();
+  it("opens the release notes in the external browser and dismisses the release", () => {
+    const { store } = renderWidget();
+    recordTelemetryEventMock.mockClear();
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "bb 0.47.0 is available. Open Updates",
-      }),
-    );
+    fireEvent.click(notesLink());
 
-    expect(onNavigate).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("location").textContent).toBe(
-      '/settings/updates {"openReleaseNotes":"0.47.0"}',
+    expect(openUrlInExternalBrowserMock).toHaveBeenCalledExactlyOnceWith(
+      "https://getbb.app/changelog#0-47-0",
     );
-    expect(recordTelemetryEventMock).toHaveBeenCalledWith({
-      name: "release_widget_action",
-      properties: { release_version: "0.47.0", action: "open" },
-    });
+    expect(widget()).toBeNull();
+    expect(store.get(dismissedReleaseVersionAtom)).toBe("0.47.0");
+    expect(screen.getByTestId("sidebar-updates-badge-bb")).toBeTruthy();
+    expect(screen.getByTestId("location").textContent).toBe("/ null");
+    expect(recordTelemetryEventMock.mock.calls).toEqual([
+      [
+        {
+          name: "release_widget_action",
+          properties: { release_version: "0.47.0", action: "open_notes" },
+        },
+      ],
+      [
+        {
+          name: "release_notes_opened",
+          properties: { release_version: "0.47.0", entry_point: "widget" },
+        },
+      ],
+    ]);
   });
 
   it("records it shown once per release per session", () => {

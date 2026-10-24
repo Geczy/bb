@@ -98,7 +98,7 @@ import {
   resolveReleaseWidgetTargetVersion,
   type ReleaseWidgetTargetInput,
 } from "@/components/sidebar/release-widget-model";
-import { useAutoOpenReleaseNotes, useOpenReleaseNotes } from "./release-notes";
+import { getReleaseNotesUrl, viewReleaseNotes } from "./release-notes";
 
 const BULK_RETRY_THRESHOLD = 1;
 
@@ -454,14 +454,19 @@ export interface ReleaseNotesLink {
 
 function ReleaseNotesLinkButton({ version, onOpen }: ReleaseNotesLink) {
   return (
-    <button
-      type="button"
+    <a
+      href={getReleaseNotesUrl(version)}
+      target="_blank"
+      rel="noopener noreferrer"
       aria-label={`Release notes for bb ${version}`}
       className="w-fit shrink-0 cursor-pointer rounded-sm text-2xs text-muted-foreground underline decoration-border underline-offset-4 hover:text-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
-      onClick={onOpen}
+      onClick={(event) => {
+        event.preventDefault();
+        onOpen();
+      }}
     >
       Release notes
-    </button>
+    </a>
   );
 }
 
@@ -1713,8 +1718,6 @@ export function UpdatesSettingsSection() {
     number | null
   >(null);
   const appUpdate = appUpdateStatus.data;
-  const openReleaseNotes = useOpenReleaseNotes();
-  useAutoOpenReleaseNotes();
   const releaseNotesVersion = resolveReleaseNotesVersion({
     isDesktop,
     desktopInfo,
@@ -1726,7 +1729,7 @@ export function UpdatesSettingsSection() {
       ? null
       : {
           version: releaseNotesVersion,
-          onOpen: () => openReleaseNotes(releaseNotesVersion, "updates_link"),
+          onOpen: () => viewReleaseNotes(releaseNotesVersion, "updates_link"),
         };
 
   function startAppUpdate(): void {
