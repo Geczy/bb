@@ -1,4 +1,4 @@
-name: Confirm balanced plugin groups and Windows app sharding
+name: Compare fewer Windows app shards and worker counts
 on:
   push:
     branches:
@@ -7,57 +7,88 @@ permissions:
   contents: read
 jobs:
   app:
-    runs-on: blacksmith-4vcpu-windows-2025
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - mode: original
+          - mode: four-3w
             shard: 1
             vitestShard: 1/4
-          - mode: original
+            workers: 3
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: four-3w
             shard: 2
             vitestShard: 2/4
-          - mode: original
+            workers: 3
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: four-3w
             shard: 3
             vitestShard: 3/4
-          - mode: original
+            workers: 3
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: four-3w
             shard: 4
             vitestShard: 4/4
-          - mode: parallel
+            workers: 3
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: four-4w
             shard: 1
-            vitestShard: 1/8
-          - mode: parallel
+            vitestShard: 1/4
+            workers: 4
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: four-4w
             shard: 2
-            vitestShard: 2/8
-          - mode: parallel
+            vitestShard: 2/4
+            workers: 4
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: four-4w
             shard: 3
-            vitestShard: 3/8
-          - mode: parallel
+            vitestShard: 3/4
+            workers: 4
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: four-4w
             shard: 4
-            vitestShard: 4/8
-          - mode: parallel
-            shard: 5
-            vitestShard: 5/8
-          - mode: parallel
-            shard: 6
-            vitestShard: 6/8
-          - mode: parallel
-            shard: 7
-            vitestShard: 7/8
-          - mode: parallel
-            shard: 8
-            vitestShard: 8/8
+            vitestShard: 4/4
+            workers: 4
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: two-4w
+            shard: 1
+            vitestShard: 1/2
+            workers: 4
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: two-4w
+            shard: 2
+            vitestShard: 2/2
+            workers: 4
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: one-4w
+            shard: 1
+            vitestShard: 1/1
+            workers: 4
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: one-8w
+            shard: 1
+            vitestShard: 1/1
+            workers: 8
+            runner: blacksmith-4vcpu-windows-2025
+          - mode: one-16cpu
+            shard: 1
+            vitestShard: 1/1
+            workers: 12
+            runner: blacksmith-16vcpu-windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 22.x
           package-manager-cache: false
+      - name: Report runner resources
+        run: node -e "const os=require('node:os');
+          console.log(JSON.stringify({parallelism:os.availableParallelism(),cpus:os.cpus().length,memoryGiB:os.totalmem()/2**30,model:os.cpus()[0].model}))"
       - run: npm install --global pnpm@9.15.0 --ignore-scripts
       - name: Apply faster fixtures
-        if: matrix.mode == 'parallel'
         shell: bash
         run: git apply .github/benchmarks/runtime.patch
       - name: Restore dependency image
@@ -79,59 +110,10 @@ jobs:
           TEMP: ${{ runner.temp }}
           TMP: ${{ runner.temp }}
           BB_CI_TEST_SHARD: ${{ matrix.vitestShard }}
+          VITEST_MAX_WORKERS: ${{ matrix.workers }}
         run: pnpm exec turbo run test --filter=@bb/app --force --output-logs=errors-only
-          --summarize --concurrency=2 -- --reporter=json
-          --outputFile="%RUNNER_TEMP%/app-results.json"
-      - name: Upload timings
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: ${{ github.job }}-${{ matrix.mode }}-${{ matrix.shard }}
-          path: |-
-            .turbo/runs/*.json
-            ${{ runner.temp }}/app-results.json
-          include-hidden-files: true
-  plugins:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - mode: original
-            shard: all
-            filter: --filter='bb-plugin-*'
-          - mode: parallel
-            shard: providers
-            filter: --filter='bb-plugin-provider-*' --filter=bb-plugin-tasks
-              --filter=bb-plugin-connect --filter=bb-plugin-thread-list
-          - mode: parallel
-            shard: other
-            filter: --filter='bb-plugin-*' --filter='!bb-plugin-provider-*'
-              --filter='!bb-plugin-tasks' --filter='!bb-plugin-connect'
-              --filter='!bb-plugin-thread-list'
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 22.x
-          package-manager-cache: false
-      - run: npm install --global pnpm@9.15.0 --ignore-scripts
-      - name: Apply faster fixtures
-        if: matrix.mode == 'parallel'
-        shell: bash
-        run: git apply .github/benchmarks/runtime.patch
-      - name: Install dependencies
-        run: bash .github/actions/setup-workspace/install-dependencies.sh
-          --ignore-scripts --filter '!@bb/mobile'
-      - uses: ./.github/actions/setup-bun
-        with:
-          version: 1.3.14
-      - name: Test plugins
-        env:
-          VITEST_MAX_WORKERS: "2"
-        run: pnpm exec turbo run test ${{ matrix.filter }} --force
-          --output-logs=errors-only --summarize --concurrency=4
+          --summarize --concurrency=2 -- --reporter=default --reporter=json
+          --outputFile.json="%RUNNER_TEMP%/app-results.json"
       - name: Upload timings
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
