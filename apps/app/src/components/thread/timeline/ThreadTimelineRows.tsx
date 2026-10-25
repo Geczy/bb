@@ -76,10 +76,6 @@ import {
 import { TimelineSelectionMenu } from "./TimelineSelectionMenu.js";
 import type { MessageProseSelection } from "./SelectableMessageProse.js";
 import { TimelineReasoningDetail } from "./TimelineReasoningDetail.js";
-import {
-  REVEAL_MAX_FRAME_COUNT,
-  REVEAL_STABLE_FRAME_COUNT,
-} from "./reveal-timeline-row.js";
 import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import { TimelineRowBodyPlaceholder } from "./TimelineRowBodyPlaceholder.js";
 import {
@@ -115,6 +111,7 @@ import {
   TimelineScrollRestoreContext,
   useBottomAnchoredScroll,
 } from "@/components/ui/bottom-anchored-scroll-body.js";
+import type { ScrollPositionKeeper } from "@/components/ui/scroll-position-keeper.js";
 import {
   collectSearchedMessageAncestorRowIds,
   SearchMessageLocationProvider,
@@ -246,10 +243,6 @@ interface TimelineRowsListProps {
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
-interface TimelineUnreadDividerProps {
-  autoScroll: boolean;
-}
-
 interface TimelineRowViewProps {
   activeLatestBundleId: string | null;
   compactActivityIntents: boolean;
@@ -289,6 +282,13 @@ interface TimelineSystemDetailBlockProps {
 
 interface BuildTimelineRowsListItemsArgs {
   rows: readonly ThreadTimelineViewRow[];
+  unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
+}
+
+interface UseLandOnUnreadDividerArgs {
+  items: readonly TimelineRowsListItem[];
+  positionKeeper: ScrollPositionKeeper | null;
+  unreadDividerAutoScroll: boolean;
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
@@ -1050,57 +1050,9 @@ const ConversationRowContent = memo(function ConversationRowContent({
   );
 });
 
-function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
-  const bottomAnchor = useBottomAnchoredScroll();
-  const dividerRef = useRef<HTMLDivElement>(null);
-  const hasScrolledRef = useRef(false);
-
-  useLayoutEffect(() => {
-    if (!autoScroll || !bottomAnchor || hasScrolledRef.current) {
-      return;
-    }
-
-    let frameId = 0;
-    let frameCount = 0;
-    let stableFrameCount = 0;
-    let previousGeometry: string | null = null;
-    const revealDivider = () => {
-      const divider = dividerRef.current;
-      if (!divider) {
-        return;
-      }
-
-      hasScrolledRef.current = true;
-      bottomAnchor.scrollElementIntoViewClampedToMaxScroll({
-        element: divider,
-      });
-      const scrollElement = bottomAnchor.getScrollElement();
-      const geometry = [
-        Math.round(
-          divider.getBoundingClientRect().top + (scrollElement?.scrollTop ?? 0),
-        ),
-        scrollElement?.scrollHeight ?? 0,
-      ].join(":");
-      stableFrameCount =
-        geometry === previousGeometry ? stableFrameCount + 1 : 0;
-      previousGeometry = geometry;
-      frameCount += 1;
-      if (
-        stableFrameCount >= REVEAL_STABLE_FRAME_COUNT ||
-        frameCount >= REVEAL_MAX_FRAME_COUNT
-      ) {
-        return;
-      }
-      frameId = window.requestAnimationFrame(revealDivider);
-    };
-    frameId = window.requestAnimationFrame(revealDivider);
-
-    return () => window.cancelAnimationFrame(frameId);
-  }, [autoScroll, bottomAnchor]);
-
+function TimelineUnreadDivider() {
   return (
     <div
-      ref={dividerRef}
       role="separator"
       aria-label="New messages"
       className={cn(
@@ -1949,6 +1901,42 @@ export function useLoadedUnreadDividerPlacement({
   return isUnplaceable ? null : unreadDividerPlacement;
 }
 
+function useLandOnUnreadDivider({
+  items,
+  positionKeeper,
+  unreadDividerAutoScroll,
+  unreadDividerPlacement,
+}: UseLandOnUnreadDividerArgs): void {
+  const landedPlacementRef =
+    useRef<ThreadTimelineUnreadDividerPlacement | null>(null);
+  const divider = items.find((item) => item.kind === "unread-divider");
+  const dividerId = divider?.id ?? null;
+
+  useLayoutEffect(() => {
+    if (
+      !unreadDividerAutoScroll ||
+      unreadDividerPlacement === null ||
+      dividerId === null ||
+      positionKeeper === null ||
+      landedPlacementRef.current === unreadDividerPlacement
+    ) {
+      return;
+    }
+    landedPlacementRef.current = unreadDividerPlacement;
+    if (positionKeeper.hasUserScrolled()) return;
+    positionKeeper.restore({
+      rowId: dividerId,
+      offsetWithinRow: 0,
+      atBottom: false,
+    });
+  }, [
+    dividerId,
+    positionKeeper,
+    unreadDividerAutoScroll,
+    unreadDividerPlacement,
+  ]);
+}
+
 function findUnreadDividerIndex({
   rows,
   unreadDividerPlacement,
@@ -2108,6 +2096,12 @@ function TimelineRowsList({
       }),
     [rows, loadedUnreadDividerPlacement],
   );
+  useLandOnUnreadDivider({
+    items,
+    positionKeeper: bottomAnchor?.positionKeeper ?? null,
+    unreadDividerAutoScroll,
+    unreadDividerPlacement: loadedUnreadDividerPlacement,
+  });
   const itemKeys = useMemo(
     () =>
       items.map((item) =>
@@ -2191,11 +2185,10 @@ function TimelineRowsList({
                   <div
                     key={item.id}
                     ref={windowedState.itemRef}
+                    data-scroll-landmark-id={item.id}
                     data-timeline-window-key={`divider:${item.id}`}
                   >
-                    <TimelineUnreadDivider
-                      autoScroll={unreadDividerAutoScroll}
-                    />
+                    <TimelineUnreadDivider />
                   </div>
                 );
               }

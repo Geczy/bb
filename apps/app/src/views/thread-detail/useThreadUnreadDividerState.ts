@@ -10,7 +10,6 @@ interface ThreadUnreadDividerThreadState {
 interface ThreadUnreadDividerSnapshot {
   attentionAt: number;
   autoScroll: boolean;
-  isOpening: boolean;
   placement: ThreadTimelineUnreadDividerPlacement | null;
   threadId: string;
 }
@@ -63,25 +62,22 @@ function nextThreadUnreadDividerSnapshot(
   currentSnapshot: ThreadUnreadDividerSnapshot | null,
   thread: ThreadUnreadDividerThreadState,
   hasFreshThread: boolean,
-): ThreadUnreadDividerSnapshot {
-  const isOpening =
-    currentSnapshot?.threadId !== thread.id || currentSnapshot.isOpening;
-  const isStillOpening = isOpening && !hasFreshThread;
+): ThreadUnreadDividerSnapshot | null {
+  const isOpening = currentSnapshot?.threadId !== thread.id;
+  if (isOpening && !hasFreshThread) {
+    return null;
+  }
   if (
     currentSnapshot?.threadId === thread.id &&
     currentSnapshot.attentionAt === thread.latestAttentionAt
   ) {
-    if (currentSnapshot.isOpening === isStillOpening) {
-      return currentSnapshot;
-    }
-    return { ...currentSnapshot, isOpening: isStillOpening };
+    return currentSnapshot;
   }
 
   const placement = buildUnreadDividerPlacement(thread);
   return {
     attentionAt: thread.latestAttentionAt,
     autoScroll: isOpening && placement !== null,
-    isOpening: isStillOpening,
     placement,
     threadId: thread.id,
   };

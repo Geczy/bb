@@ -226,7 +226,8 @@ anchor. The position changes only when:
 - the viewport gets narrower or wider and the anchor would leave the visible
   viewport, in which case the anchor moves just enough to stay on screen;
 - the content really shrinks, so the browser clamps a correction, and the clamp
-  is still there on the next frame.
+  is still there on the next frame;
+- the view sits at the end while detached (see below).
 
 A scroll counts as the reader's during an input session: a wheel, a scroll key,
 a touch or pointer drag that scrolled, and the momentum that follows (up to
@@ -240,14 +241,15 @@ so the app's own jump is never counted as the reader's gesture. Any other
 scroll that comes with a change in the scroll extent is layout, such as a clamp
 after content briefly shrank, and the owner reconciles it back to the position.
 A scroll without input or size change, such as find in page or focus moving to
-an offscreen control, is navigation, and the position follows it. Moving down
-into the last 4 px, or a wheel, End/PageDown or a touch drag toward the end
-while at the end, attaches. A navigation, a restore, or a viewport resize that
-leaves the reading position at or past the end also attaches. So does content
-that shrinks under a detached reader and leaves the view at the end, if it is
-still at the end on the next frame, as when a row collapses near the end. This
-holds during a gesture's momentum too. Moving up out of the end detaches.
-Content changes never detach.
+an offscreen control, is navigation, and the position follows it.
+
+Attachment follows one rule: a detached view within 4 px of the end attaches,
+whatever put it there, unless a restore or landing is still waiting for its row.
+When the reader's scroll, a navigation, or a completed restore put it there, it
+attaches at once. When only layout did, such as a row collapsing near the end
+or the viewport growing, it attaches if the view is still at the end on the
+next frame, so content that shrinks and regrows within a frame does not attach.
+Moving up out of the end detaches. Content changes never detach.
 
 Every layout change is reconciled before paint. Triggers are ResizeObservers on
 the root, its content, and every mounted row, plus each windowed list's layout
@@ -315,6 +317,17 @@ the row has not loaded yet, the timeline waits
 at the bottom for up to a second. The timeline keeps the loaded pages of the
 eight most recent threads for each query client, so a position in older history
 survives a thread switch.
+
+Opening an unread thread decides its landing once, from the first copy of the
+thread fetched after it opens, not a cached one, and the rows loaded at that
+moment. If the read cutoff falls inside the loaded rows, the NEW divider is
+placed and the owner lands on it through the restore path, with the divider as
+the anchor at the top of the viewport, so rows that render or resize around it
+afterwards do not move it. Otherwise, and for a thread marked unread, there is
+no divider and the saved position or the bottom stands. No older pages are
+loaded to find the cutoff, and a divider dropped this way stays dropped when
+the reader pages back. A reader who scrolls before the landing keeps their
+position.
 
 Content shorter than the viewport is top-aligned. In that case a row that
 expands moves the rows below it, including the latest row.
