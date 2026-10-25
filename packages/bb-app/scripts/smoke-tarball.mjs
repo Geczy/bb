@@ -1262,7 +1262,7 @@ try {
   const smokeStartedAt = performance.now();
   const tarballPath = await timed("npm pack", () => packTarball());
   let sdkDir;
-  if (process.platform === "win32") {
+  if (process.platform === "win32" || process.platform === "linux") {
     const [npxResult, sdkResult] = await Promise.allSettled([
       timed("npx entrypoint", () => smokeNpxEntrypoint(tarballPath)),
       timed("sdk package", () => smokeSdkPackage(tarballPath)),
@@ -1287,8 +1287,18 @@ try {
   await timed("plugin host worker bundle", () =>
     smokePluginHostWorkerBundle(installedPackageDir),
   );
-  await timed("full stack", () => smokeFullStack(installedBinDir, sdkDir));
-  await timed("daemon join", () => smokeDaemonJoin(installedBinDir));
+  if (process.platform === "linux") {
+    const results = await Promise.allSettled([
+      timed("full stack", () => smokeFullStack(installedBinDir, sdkDir)),
+      timed("daemon join", () => smokeDaemonJoin(installedBinDir)),
+    ]);
+    for (const result of results) {
+      if (result.status === "rejected") throw result.reason;
+    }
+  } else {
+    await timed("full stack", () => smokeFullStack(installedBinDir, sdkDir));
+    await timed("daemon join", () => smokeDaemonJoin(installedBinDir));
+  }
   process.stdout.write(
     `bb-app tarball smoke passed in ${formatElapsed(smokeStartedAt)}\n`,
   );

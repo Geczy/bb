@@ -2,6 +2,7 @@ name: Measure app resolver filtering
 on:
   push:
     branches: [bb/benchmark-critical-path-20261024]
+    paths: [apps/app/vite-shared-ui-seam.ts, .github/workflows/benchmark-critical-path.yml]
 permissions:
   contents: read
 jobs:

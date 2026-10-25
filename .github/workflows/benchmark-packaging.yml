@@ -1,0 +1,43 @@
+name: Measure packaging smoke overlap
+on:
+  push:
+    branches: [bb/benchmark-critical-path-20261024]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [baseline, candidate]
+        replica: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Restore baseline smoke
+        if: matrix.variant == 'baseline'
+        run: |
+          git fetch --depth=1 origin 06bb048a522432f6383b13ba90213582807d8d7a
+          git show FETCH_HEAD:packages/bb-app/scripts/smoke-tarball.mjs > packages/bb-app/scripts/smoke-tarball.mjs
+      - uses: ./.github/actions/setup-workspace-tools
+        with:
+          node-version: 22.x
+          pnpm-version: 9.15.0
+      - name: Install workspace
+        run: bash .github/actions/setup-workspace/install-dependencies.sh
+      - uses: ./.github/actions/setup-bun
+        with:
+          version: "1.3.14"
+      - name: Build prerequisites
+        run: pnpm exec turbo run build --filter=bb-app --output-logs=errors-only > "$RUNNER_TEMP/build.log" 2>&1
+      - name: Smoke real package
+        run: pnpm exec turbo run smoke:tarball --filter=bb-app --summarize > "$RUNNER_TEMP/smoke.log" 2>&1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: packaging-${{ matrix.variant }}-${{ matrix.replica }}
+          path: |
+            ${{ runner.temp }}/smoke.log
+            ${{ runner.temp }}/build.log
+            .turbo/runs/*.json
