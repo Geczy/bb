@@ -47,7 +47,10 @@ import { PluginThreadTitle } from "@/components/plugin/PluginThreadTitle";
 import { ThreadStatusGlyph } from "@/components/thread/ThreadStatusGlyph";
 import { PluginUrlLink } from "@/components/plugin/PluginUrlLink";
 import { ExperimentalFileLink } from "@/components/plugin/ExperimentalFileLink";
-import { MarkdownPreview } from "@/components/ui/markdown-preview";
+import {
+  MarkdownPreview,
+  type MarkdownThreadMentions,
+} from "@/components/ui/markdown-preview";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing";
 import { buildMarkdownDocumentLinkRouting } from "@/components/ui/markdown-document-link-routing";
 import { buildMarkdownMessageLinkRouting } from "@/components/ui/markdown-message-link-routing";
@@ -234,6 +237,11 @@ export const retiredPluginSdkAppMembers = {
   experimental_useSidebarThreadPullRequest: useSidebarThreadPullRequest,
 };
 
+const PLUGIN_MARKDOWN_THREAD_MENTIONS: MarkdownThreadMentions = {
+  mentions: [],
+  preserveSoftBreaks: false,
+};
+
 function PluginMarkdown({
   content,
   className,
@@ -277,6 +285,7 @@ function PluginMarkdown({
       content={content}
       className={className}
       linkRouting={linkRouting}
+      threadMentions={PLUGIN_MARKDOWN_THREAD_MENTIONS}
     />
   );
 }
