@@ -61,7 +61,7 @@ describe("useThreadUnreadDividerState", () => {
 
     expect(renders[0]).toEqual({
       autoScroll: true,
-      placement: { kind: "after-cutoff", cutoffAt: 100 },
+      placement: { cutoffAt: 100 },
     });
   });
 
@@ -72,12 +72,25 @@ describe("useThreadUnreadDividerState", () => {
       latestAttentionAt: 200,
     });
 
-    show({ id: "thr_b", lastReadAt: null, latestAttentionAt: 300 });
+    show({ id: "thr_b", lastReadAt: 250, latestAttentionAt: 300 });
 
     expect(renders[0]).toEqual({
       autoScroll: true,
-      placement: { kind: "before-first" },
+      placement: { cutoffAt: 250 },
     });
+  });
+
+  it("opens a thread marked unread without a divider, and adds none when marked unread while open", () => {
+    const { result, show } = renderDividerState({
+      id: "thr_a",
+      lastReadAt: null,
+      latestAttentionAt: 200,
+    });
+    expect(result.current).toEqual({ autoScroll: false, placement: null });
+
+    show({ id: "thr_b", lastReadAt: 300, latestAttentionAt: 200 });
+    show({ id: "thr_b", lastReadAt: null, latestAttentionAt: 200 });
+    expect(result.current).toEqual({ autoScroll: false, placement: null });
   });
 
   it("keeps the opening divider when the thread is marked read, and drops it after a watched reply", () => {
@@ -90,7 +103,7 @@ describe("useThreadUnreadDividerState", () => {
     show({ id: "thr_a", lastReadAt: 250, latestAttentionAt: 200 });
     expect(result.current).toEqual({
       autoScroll: true,
-      placement: { kind: "after-cutoff", cutoffAt: 100 },
+      placement: { cutoffAt: 100 },
     });
 
     show({ id: "thr_a", lastReadAt: 400, latestAttentionAt: 300 });
@@ -117,7 +130,7 @@ describe("useThreadUnreadDividerState", () => {
     show({ id: "thr_a", lastReadAt: 300, latestAttentionAt: 400 });
     expect(result.current).toEqual({
       autoScroll: true,
-      placement: { kind: "after-cutoff", cutoffAt: 300 },
+      placement: { cutoffAt: 300 },
     });
   });
 
@@ -131,7 +144,7 @@ describe("useThreadUnreadDividerState", () => {
     show({ id: "thr_a", lastReadAt: 300, latestAttentionAt: 400 });
     expect(result.current).toEqual({
       autoScroll: false,
-      placement: { kind: "after-cutoff", cutoffAt: 300 },
+      placement: { cutoffAt: 300 },
     });
   });
 });

@@ -71,7 +71,7 @@ describe("unread divider placement", () => {
         command(400),
         assistantMessage(500),
       ],
-      { kind: "after-cutoff", cutoffAt: 350 },
+      { cutoffAt: 350 },
     );
 
     expect(sequence).toEqual(["user", "step-summary", DIVIDER, "assistant"]);
@@ -86,7 +86,7 @@ describe("unread divider placement", () => {
         command(500),
         assistantMessage(600),
       ],
-      { kind: "after-cutoff", cutoffAt: 300 },
+      { cutoffAt: 300 },
     );
 
     expect(sequence).toEqual([
@@ -113,7 +113,7 @@ describe("unread divider placement", () => {
         }),
         assistantMessage(500),
       ],
-      { kind: "after-cutoff", cutoffAt: 350 },
+      { cutoffAt: 350 },
     );
 
     expect(collapsed).toEqual(["user", "turn", DIVIDER, "assistant"]);
@@ -122,7 +122,7 @@ describe("unread divider placement", () => {
   it("never anchors the divider on the reader's own message", () => {
     const sequence = renderTopLevelSequence(
       [assistantMessage(100), userMessage(400), command(500)],
-      { kind: "after-cutoff", cutoffAt: 300 },
+      { cutoffAt: 300 },
     );
 
     expect(sequence).toEqual(["assistant", "user", DIVIDER, "work"]);
@@ -131,24 +131,15 @@ describe("unread divider placement", () => {
   it("omits the divider when no row started after the cutoff", () => {
     const sequence = renderTopLevelSequence(
       [userMessage(100), command(200), assistantMessage(300)],
-      { kind: "after-cutoff", cutoffAt: 400 },
+      { cutoffAt: 400 },
     );
 
     expect(sequence).not.toContain(DIVIDER);
   });
 
-  it("places the divider above the first row for an explicitly unread thread", () => {
-    const sequence = renderTopLevelSequence(
-      [userMessage(100), command(200), assistantMessage(300)],
-      { kind: "before-first" },
-    );
-
-    expect(sequence[0]).toBe(DIVIDER);
-  });
-
   it("holds the divider back while every loaded row is newer than the cutoff and older rows exist", () => {
     const timelineRows = [command(400), assistantMessage(500)];
-    const placement = { kind: "after-cutoff", cutoffAt: 350 } as const;
+    const placement = { cutoffAt: 350 } as const;
 
     expect(renderTopLevelSequence(timelineRows, placement, true)).toEqual([
       "work",

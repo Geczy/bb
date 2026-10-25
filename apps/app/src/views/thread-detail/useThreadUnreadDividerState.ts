@@ -50,13 +50,13 @@ function shouldTrackThreadUnreadDivider({
 function buildUnreadDividerPlacement(
   thread: ThreadUnreadDividerThreadState,
 ): ThreadTimelineUnreadDividerPlacement | null {
-  if (thread.lastReadAt === null) {
-    return { kind: "before-first" };
+  if (
+    thread.lastReadAt === null ||
+    thread.lastReadAt >= thread.latestAttentionAt
+  ) {
+    return null;
   }
-  if (thread.lastReadAt < thread.latestAttentionAt) {
-    return { kind: "after-cutoff", cutoffAt: thread.lastReadAt };
-  }
-  return null;
+  return { cutoffAt: thread.lastReadAt };
 }
 
 function nextThreadUnreadDividerSnapshot(
@@ -71,19 +71,6 @@ function nextThreadUnreadDividerSnapshot(
     currentSnapshot?.threadId === thread.id &&
     currentSnapshot.attentionAt === thread.latestAttentionAt
   ) {
-    if (
-      thread.lastReadAt === null &&
-      currentSnapshot.placement?.kind !== "before-first"
-    ) {
-      return {
-        attentionAt: thread.latestAttentionAt,
-        autoScroll:
-          currentSnapshot.placement !== null && currentSnapshot.autoScroll,
-        isOpening: isStillOpening,
-        placement: { kind: "before-first" },
-        threadId: thread.id,
-      };
-    }
     if (currentSnapshot.isOpening === isStillOpening) {
       return currentSnapshot;
     }
@@ -125,7 +112,11 @@ export function useThreadUnreadDividerState({
   const currentSnapshot =
     trackedThread === null
       ? null
-      : nextThreadUnreadDividerSnapshot(snapshot, trackedThread, hasFreshThread);
+      : nextThreadUnreadDividerSnapshot(
+          snapshot,
+          trackedThread,
+          hasFreshThread,
+        );
   if (currentSnapshot !== snapshot) {
     setSnapshot(currentSnapshot);
   }

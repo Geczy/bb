@@ -1981,7 +1981,7 @@ export function isUnreadDividerAwaitingOlderRows({
   return (
     hasOlderRows &&
     firstRow !== undefined &&
-    unreadDividerPlacement?.kind === "after-cutoff" &&
+    unreadDividerPlacement !== null &&
     firstRow.startedAt > unreadDividerPlacement.cutoffAt
   );
 }
@@ -2002,19 +2002,12 @@ function findUnreadDividerIndex({
     return -1;
   }
 
-  switch (unreadDividerPlacement.kind) {
-    case "before-first":
-      return rows.length > 0 ? 0 : -1;
-    case "after-cutoff":
-      return rows.findIndex((row) =>
-        isUnreadDividerCandidateAfterCutoff({
-          cutoffAt: unreadDividerPlacement.cutoffAt,
-          row,
-        }),
-      );
-    default:
-      assertNever(unreadDividerPlacement);
-  }
+  return rows.findIndex((row) =>
+    isUnreadDividerCandidateAfterCutoff({
+      cutoffAt: unreadDividerPlacement.cutoffAt,
+      row,
+    }),
+  );
 }
 
 function isUserAuthoredConversationRow(row: ThreadTimelineViewRow): boolean {
