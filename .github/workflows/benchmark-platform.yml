@@ -20,6 +20,10 @@ jobs:
         replica: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Restore the packaging baseline source
+        run: |
+          git fetch --depth=1 origin 8ee6cb6c7573825f96d77993f2e3308d1b0003e5
+          git show FETCH_HEAD:apps/app/vitest.config.ts > apps/app/vitest.config.ts
       - uses: ./.github/actions/setup-workspace-tools
         with:
           node-version: 22.x
