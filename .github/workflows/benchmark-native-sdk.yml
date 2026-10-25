@@ -1,0 +1,63 @@
+name: Paired native SDK declarations
+on:
+  push:
+    branches: [bb/benchmark-native-sdk-dts-20261025]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [blacksmith-4vcpu-ubuntu-2404, blacksmith-6vcpu-macos-15]
+        order: [baseline-first, candidate-first]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/setup-workspace-tools
+        with:
+          node-version: 22.x
+          pnpm-version: 9.15.0
+      - name: Restore React Compiler cache
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/cache-react-compiler
+      - name: Restore workspace caches
+        id: cache
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/cache-workspace
+        with:
+          node-version: 22.x
+          cache-prefix: package-smoke
+          turbo-cache-max-size-mb: '256'
+      - name: Restore pnpm cache
+        if: runner.os == 'macOS'
+        id: pnpm-cache
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/cache-pnpm
+      - name: Install dependencies
+        timeout-minutes: 5
+        env:
+          TURBO_CACHE_RESTORE_OUTCOME: ${{ steps.cache.outcome }}
+          PNPM_CACHE_RESTORE_OUTCOME: ${{ steps.pnpm-cache.outcome }}
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --filter '!@bb/mobile'
+      - name: Build prerequisite artifacts
+        run: pnpm exec turbo run build --filter=bb-app --concurrency=4 --output-logs=new-only > "$RUNNER_TEMP/build.log" 2>&1
+      - name: Compare fresh declaration generation
+        env:
+          BENCHMARK_ORDER: ${{ matrix.order }}
+        run: |
+          cp packages/bb-app/scripts/build-public-sdk-dts.mjs "$RUNNER_TEMP/candidate.mjs"
+          git fetch --depth=1 origin 8ee6cb6c7573825f96d77993f2e3308d1b0003e5
+          git show FETCH_HEAD:packages/bb-app/scripts/build-public-sdk-dts.mjs > "$RUNNER_TEMP/baseline.mjs"
+          node .github/scripts/benchmark-native-sdk.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: native-sdk-${{ matrix.runner }}-${{ matrix.order }}
+          path: |
+            ${{ runner.temp }}/native-sdk/
+            ${{ runner.temp }}/build.log
