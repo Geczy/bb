@@ -1,0 +1,87 @@
+name: Compare Windows registry consumer smoke
+on:
+  push:
+    branches: [bb/benchmark-windows-registry-smoke]
+permissions:
+  contents: read
+jobs:
+  profile:
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [baseline-first, candidate-first]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+
+      - name: Setup pnpm
+        run: npm install --global pnpm@9.15.0 --ignore-scripts
+
+      - name: Restore Windows dependency disk
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/windows-dependency-cache
+
+      - name: Restore React Compiler cache
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/cache-react-compiler
+
+      - name: Restore workspace caches
+        id: cache
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/cache-workspace
+        with:
+          node-version: 22.x
+          cache-prefix: windows-app-smoke
+          turbo-cache: "true"
+          turbo-cache-max-size-mb: "256"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        shell: bash
+        env:
+          TURBO_CACHE_RESTORE_OUTCOME: ${{ steps.cache.outcome }}
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
+
+      - name: Build bb-app and boot it
+        shell: bash
+        run: pnpm exec turbo run smoke:boot --filter=bb-app --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only
+
+      - name: Restore npm package downloads
+        id: npm-downloads
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/cache-npm-downloads
+
+      - name: Prepare both smoke variants
+        shell: bash
+        run: |
+          cp packages/bb-app/scripts/smoke-tarball.mjs "$RUNNER_TEMP/candidate.mjs"
+          git fetch --depth=1 origin a6fff60f53c615a109103075328bf7017431e792
+          git show FETCH_HEAD:packages/bb-app/scripts/smoke-tarball.mjs > "$RUNNER_TEMP/baseline.mjs"
+          cp "$RUNNER_TEMP/baseline.mjs" packages/bb-app/scripts/smoke-tarball.mjs
+      - name: Warm real consumer installation paths
+        shell: bash
+        run: pnpm exec turbo run smoke:tarball --filter=bb-app --only --force --env-mode=loose > "$RUNNER_TEMP/warmup.log" 2>&1
+      - name: Compare registry-backed npx and named SDK install
+        shell: bash
+        env:
+          BENCHMARK_ORDER: ${{ matrix.order }}
+        run: node .github/scripts/benchmark-registry-smoke.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: registry-smoke-${{ matrix.order }}
+          path: |
+            ${{ runner.temp }}/registry-smoke/
+            ${{ runner.temp }}/warmup.log
