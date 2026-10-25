@@ -1,12 +1,12 @@
-name: Compare Windows registry consumer smoke
+name: Compare macOS registry consumer smoke
 on:
   push:
-    branches: [bb/benchmark-windows-registry-smoke]
+    branches: [bb/benchmark-mac-registry-smoke]
 permissions:
   contents: read
 jobs:
   profile:
-    runs-on: blacksmith-4vcpu-windows-2025
+    runs-on: blacksmith-6vcpu-macos-15
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -16,20 +16,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - uses: ./.github/actions/setup-workspace-tools
         with:
           node-version: 22.x
-          package-manager-cache: false
-
-      - name: Setup pnpm
-        run: npm install --global pnpm@9.15.0 --ignore-scripts
-
-      - name: Restore Windows dependency disk
-        timeout-minutes: 1
-        continue-on-error: true
-        uses: ./.github/actions/windows-dependency-cache
-
+          pnpm-version: 9.15.0
       - name: Restore React Compiler cache
         timeout-minutes: 1
         continue-on-error: true
@@ -42,26 +32,26 @@ jobs:
         uses: ./.github/actions/cache-workspace
         with:
           node-version: 22.x
-          cache-prefix: windows-app-smoke
+          cache-prefix: package-smoke
           turbo-cache: "true"
           turbo-cache-max-size-mb: "256"
 
+      - name: Restore pnpm cache
+        id: pnpm-cache
+        timeout-minutes: 5
+        continue-on-error: true
+        uses: ./.github/actions/cache-pnpm
       - name: Install dependencies
         timeout-minutes: 5
         shell: bash
         env:
           TURBO_CACHE_RESTORE_OUTCOME: ${{ steps.cache.outcome }}
-        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter '!@bb/mobile'
+          PNPM_CACHE_RESTORE_OUTCOME: ${{ steps.pnpm-cache.outcome }}
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --filter '!@bb/mobile'
 
-      - name: Build bb-app and boot it
+      - name: Build bb-app prerequisites
         shell: bash
-        run: pnpm exec turbo run smoke:boot --filter=bb-app --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only
-
-      - name: Restore npm package downloads
-        id: npm-downloads
-        timeout-minutes: 1
-        continue-on-error: true
-        uses: ./.github/actions/cache-npm-downloads
+        run: pnpm exec turbo run build --filter=bb-app --concurrency=4 --cache-dir="${TURBO_CACHE_DIR:-.turbo/cache}" --output-logs=new-only
 
       - name: Prepare both smoke variants
         shell: bash

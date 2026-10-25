@@ -426,12 +426,21 @@ function createInstalledBinInvocation(binDir, bin, args) {
 
 async function smokeNpxEntrypoint(tarballPath) {
   const archive = await readFile(tarballPath);
-  const manifest = JSON.parse(await runCommand({
-    command: "tar",
-    args: ["-xOf", basename(tarballPath), "package/package.json"],
-    cwd: dirname(tarballPath),
-    label: "read packed manifest",
-  }));
+  const manifest = JSON.parse(
+    await runCommand({
+      command: "tar",
+      args: ["-xOf", basename(tarballPath), "package/package.json"],
+      cwd: dirname(tarballPath),
+      label: "read packed manifest",
+    }),
+  );
+  if (
+    !isRecord(manifest) ||
+    manifest.name !== "bb-app" ||
+    typeof manifest.version !== "string"
+  ) {
+    throw new Error("Expected a packed bb-app manifest with a version");
+  }
   const tag = `smoke-${randomUUID()}`;
   const integrity = `sha512-${createHash("sha512").update(archive).digest("base64")}`;
   let registryUrl;
@@ -441,18 +450,22 @@ async function smokeNpxEntrypoint(tarballPath) {
       response.end(archive);
     } else if (request.url === "/bb-app") {
       response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({
-        name: manifest.name,
-        "dist-tags": { [tag]: manifest.version },
-        versions: {
-          [manifest.version]: {
-            ...manifest,
-            dist: { tarball: `${registryUrl}/bb-app.tgz`, integrity },
+      response.end(
+        JSON.stringify({
+          name: manifest.name,
+          "dist-tags": { [tag]: manifest.version },
+          versions: {
+            [manifest.version]: {
+              ...manifest,
+              dist: { tarball: `${registryUrl}/bb-app.tgz`, integrity },
+            },
           },
-        },
-      }));
+        }),
+      );
     } else {
-      response.writeHead(302, { location: `https://registry.npmjs.org${request.url}` });
+      response.writeHead(302, {
+        location: `https://registry.npmjs.org${request.url}`,
+      });
       response.end();
     }
   });
@@ -462,14 +475,27 @@ async function smokeNpxEntrypoint(tarballPath) {
   });
   try {
     registryUrl = `http://127.0.0.1:${server.address().port}`;
-    await timed("npx install and help", () => runCommand({
-      args: ["--yes", "--no-audit", "--no-fund", "--package", `bb-app@${tag}`, "--", "bb-app", "--help"],
-      command: "npx",
-      env: { npm_config_registry: registryUrl },
-      label: "bb-app npx help",
-    }));
+    await timed("npx install and help", () =>
+      runCommand({
+        args: [
+          "--yes",
+          "--no-audit",
+          "--no-fund",
+          "--package",
+          `bb-app@${tag}`,
+          "--",
+          "bb-app",
+          "--help",
+        ],
+        command: "npx",
+        env: { npm_config_registry: registryUrl },
+        label: "bb-app npx help",
+      }),
+    );
   } finally {
-    await new Promise((resolvePromise, reject) => server.close((error) => error ? reject(error) : resolvePromise()));
+    await new Promise((resolvePromise, reject) =>
+      server.close((error) => (error ? reject(error) : resolvePromise())),
+    );
   }
 }
 
@@ -1315,9 +1341,6 @@ try {
       timed("npx entrypoint", () => smokeNpxEntrypoint(tarballPath)),
       timed("sdk package", () => smokeSdkPackage(tarballPath)),
     ]);
-    for (const result of [npxResult, sdkResult]) {
-      if (result.status === "rejected") process.stderr.write(`${result.reason.stack}\n`);
-    }
     if (npxResult.status === "rejected") throw npxResult.reason;
     if (sdkResult.status === "rejected") throw sdkResult.reason;
     sdkDir = sdkResult.value;
