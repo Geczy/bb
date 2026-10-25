@@ -1,0 +1,70 @@
+name: Paired Windows app scheduling
+on:
+  push:
+    branches: [bb/benchmark-app-shared-first-20261025]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        order: [baseline-first, candidate-first]
+        replica: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - name: Setup pnpm
+        run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Restore Windows dependency disk
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: ./.github/actions/windows-dependency-cache
+      - name: Install app dependencies
+        shell: bash
+        run: bash .github/actions/setup-workspace/install-dependencies.sh --ignore-scripts --filter bb --filter '@bb/app...' --filter '@bb/db...'
+      - name: Prepare prerequisites and initial filesystem reads
+        shell: bash
+        env:
+          VITEST_MAX_WORKERS: '4'
+          BB_CI_TEST_SHARD: '2/4'
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: |
+          cp apps/app/vitest.config.ts "$RUNNER_TEMP/candidate.ts"
+          git fetch --depth=1 origin 8ee6cb6c7573825f96d77993f2e3308d1b0003e5
+          git show FETCH_HEAD:apps/app/vitest.config.ts > "$RUNNER_TEMP/baseline.ts"
+          cp "$RUNNER_TEMP/baseline.ts" apps/app/vitest.config.ts
+          pnpm exec turbo run test --filter=@bb/app > "$RUNNER_TEMP/warmup.log" 2>&1
+      - name: Compare both orders on the same runner
+        shell: bash
+        env:
+          BENCHMARK_ORDER: ${{ matrix.order }}
+          VITEST_MAX_WORKERS: '4'
+          BB_CI_TEST_SHARD: '2/4'
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: |
+          variants="baseline candidate"
+          if [[ "$BENCHMARK_ORDER" == "candidate-first" ]]; then
+            variants="candidate baseline"
+          fi
+          for variant in $variants; do
+            result_dir="$RUNNER_TEMP/results/$variant"
+            mkdir -p "$result_dir"
+            cp "$RUNNER_TEMP/$variant.ts" apps/app/vitest.config.ts
+            rm -rf apps/app/node_modules/.vite/vitest node_modules/.vite/vitest
+            pnpm exec turbo run test --filter=@bb/app --only --force -- --reporter=json --outputFile="$result_dir/tests.json" > "$result_dir/run.log" 2>&1
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: app-paired-${{ matrix.order }}-${{ matrix.replica }}
+          path: |
+            ${{ runner.temp }}/results/
+            ${{ runner.temp }}/warmup.log
