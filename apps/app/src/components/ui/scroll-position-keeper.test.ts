@@ -194,6 +194,21 @@ describe("ScrollPositionKeeper", () => {
     expect(timeline.keeper.isAttached()).toBe(true);
   });
 
+  it("leaves a view the reader never placed at the top while its content loads in, instead of following it", () => {
+    vi.useFakeTimers({
+      toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"],
+    });
+    const timeline = createTimeline(rowsOf(1, 100));
+    vi.advanceTimersToNextFrame();
+
+    timeline.setRows(rowsOf(10));
+    timeline.keeper.reconcile();
+    vi.advanceTimersToNextFrame();
+
+    expect(timeline.layout.scrollTop).toBe(0);
+    expect(timeline.keeper.isAttached()).toBe(false);
+  });
+
   it("keeps a detached reader on their row when content shrinks onto the end for a single frame", () => {
     vi.useFakeTimers({
       toFake: ["requestAnimationFrame", "cancelAnimationFrame", "performance"],

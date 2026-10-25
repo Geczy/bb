@@ -889,7 +889,11 @@ export class ScrollPositionKeeper {
   }
 
   private scheduleAttachAtEnd(scrollElement: HTMLElement): void {
-    if (this.attachFrame !== null || !this.isDetachedAtEnd(scrollElement)) {
+    if (
+      this.attachFrame !== null ||
+      this.position.kind === "free" ||
+      !this.isDetachedAtEnd(scrollElement)
+    ) {
       return;
     }
     this.attachFrame = window.requestAnimationFrame(() => {

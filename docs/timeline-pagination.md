@@ -249,7 +249,18 @@ When the reader's scroll, a navigation, or a completed restore put it there, it
 attaches at once. When only layout did, such as a row collapsing near the end
 or the viewport growing, it attaches if the view is still at the end on the
 next frame, so content that shrinks and regrows within a frame does not attach.
-Moving up out of the end detaches. Content changes never detach.
+Moving up out of the end detaches. Content changes never detach. A view the
+reader never placed, such as a tool output box that was not streaming when it
+opened, attaches only when the reader or a navigation brings it to the end, so
+output that loads in after it opens does not pull it down.
+
+`scroll-position-keeper.model.test.ts` checks these rules over random sequences
+of reader scrolls, touch gestures, toggles, streaming, prepends, regroups,
+transient shrinks, resizes, navigations, and restores, with and without iOS
+write deferral: attached exactly when at the end, content changes never detach,
+the reading row never moves without the reader unless the content cannot hold
+it, and a reader's scroll is never moved. It runs 200 sequences by default; set
+`KEEPER_MODEL_SEEDS` for a deeper local run.
 
 Every layout change is reconciled before paint. Triggers are ResizeObservers on
 the root, its content, and every mounted row, plus each windowed list's layout
