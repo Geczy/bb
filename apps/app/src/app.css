@@ -101,6 +101,12 @@
     user-select: text;
   }
 
+  @media (pointer: coarse) {
+    :where(input, textarea, [contenteditable]:not([contenteditable="false"])) {
+      font-size: 1rem !important;
+    }
+  }
+
   .chat-prompt-box {
     padding-bottom: 0.5rem;
   }
