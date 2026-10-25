@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+
+import { renderHook } from "@testing-library/react";
 import { buildTimelineViewRows } from "@bb/thread-view";
 import { describe, expect, it } from "vitest";
 import type { TimelineRow } from "@bb/server-contract";
@@ -7,17 +10,18 @@ import {
   turnRow,
 } from "@/test/fixtures/thread-timeline-rows";
 import type { ThreadTimelineUnreadDividerPlacement } from "./types";
-import { buildTimelineRowsListItems } from "./ThreadTimelineRows";
+import {
+  buildTimelineRowsListItems,
+  useLoadedUnreadDividerPlacement,
+} from "./ThreadTimelineRows";
 
 const DIVIDER = "__divider__";
 
 function renderTopLevelSequence(
   timelineRows: TimelineRow[],
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null,
-  hasOlderRows = false,
 ): string[] {
   return buildTimelineRowsListItems({
-    hasOlderRows,
     rows: buildTimelineViewRows(timelineRows),
     unreadDividerPlacement,
   }).map((item) => {
@@ -136,19 +140,54 @@ describe("unread divider placement", () => {
 
     expect(sequence).not.toContain(DIVIDER);
   });
+});
 
-  it("holds the divider back while every loaded row is newer than the cutoff and older rows exist", () => {
-    const timelineRows = [command(400), assistantMessage(500)];
-    const placement = { cutoffAt: 350 } as const;
+describe("loaded unread divider placement", () => {
+  it("drops a divider whose cutoff is older than the loaded rows, and keeps it dropped after older rows load", () => {
+    const placement = { cutoffAt: 350 };
+    const latestPage = buildTimelineViewRows([
+      command(400),
+      assistantMessage(500),
+    ]);
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useLoadedUnreadDividerPlacement>[0]) =>
+        useLoadedUnreadDividerPlacement(props),
+      {
+        initialProps: {
+          hasOlderRows: true,
+          rows: latestPage,
+          unreadDividerPlacement: placement,
+        },
+      },
+    );
+    expect(result.current).toBeNull();
 
-    expect(renderTopLevelSequence(timelineRows, placement, true)).toEqual([
-      "work",
-      "assistant",
-    ]);
-    expect(renderTopLevelSequence(timelineRows, placement, false)).toEqual([
-      DIVIDER,
-      "work",
-      "assistant",
-    ]);
+    rerender({
+      hasOlderRows: false,
+      rows: buildTimelineViewRows([
+        userMessage(100),
+        command(200),
+        command(400),
+        assistantMessage(500),
+      ]),
+      unreadDividerPlacement: placement,
+    });
+    expect(result.current).toBeNull();
+  });
+
+  it("keeps a divider whose cutoff falls inside the loaded rows", () => {
+    const placement = { cutoffAt: 350 };
+    const { result } = renderHook(() =>
+      useLoadedUnreadDividerPlacement({
+        hasOlderRows: true,
+        rows: buildTimelineViewRows([
+          userMessage(300),
+          command(400),
+          assistantMessage(500),
+        ]),
+        unreadDividerPlacement: placement,
+      }),
+    );
+    expect(result.current).toBe(placement);
   });
 });

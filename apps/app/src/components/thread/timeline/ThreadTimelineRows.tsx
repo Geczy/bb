@@ -250,15 +250,6 @@ interface TimelineUnreadDividerProps {
   autoScroll: boolean;
 }
 
-interface UseLoadOlderRowsForUnreadDividerArgs {
-  hasOlderRows: boolean;
-  isLoadingOlderRows: boolean;
-  onLoadOlderRows: (() => Promise<void> | void) | undefined;
-  rows: readonly ThreadTimelineViewRow[];
-  unreadDividerAutoScroll: boolean;
-  unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
-}
-
 interface TimelineRowViewProps {
   activeLatestBundleId: string | null;
   compactActivityIntents: boolean;
@@ -297,12 +288,11 @@ interface TimelineSystemDetailBlockProps {
 }
 
 interface BuildTimelineRowsListItemsArgs {
-  hasOlderRows: boolean;
   rows: readonly ThreadTimelineViewRow[];
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
-interface FindUnreadDividerIndexArgs {
+interface UseLoadedUnreadDividerPlacementArgs {
   hasOlderRows: boolean;
   rows: readonly ThreadTimelineViewRow[];
   unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
@@ -1059,39 +1049,6 @@ const ConversationRowContent = memo(function ConversationRowContent({
     />
   );
 });
-
-function useLoadOlderRowsForUnreadDivider({
-  hasOlderRows,
-  isLoadingOlderRows,
-  onLoadOlderRows,
-  rows,
-  unreadDividerAutoScroll,
-  unreadDividerPlacement,
-}: UseLoadOlderRowsForUnreadDividerArgs): void {
-  const attemptedFirstRowIdRef = useRef<string | null>(null);
-  const firstRowId = rows[0]?.id ?? null;
-  const isAwaitingOlderRows =
-    unreadDividerAutoScroll &&
-    isUnreadDividerAwaitingOlderRows({
-      hasOlderRows,
-      rows,
-      unreadDividerPlacement,
-    });
-
-  useEffect(() => {
-    if (
-      !isAwaitingOlderRows ||
-      isLoadingOlderRows ||
-      onLoadOlderRows === undefined ||
-      firstRowId === null ||
-      attemptedFirstRowIdRef.current === firstRowId
-    ) {
-      return;
-    }
-    attemptedFirstRowIdRef.current = firstRowId;
-    void Promise.resolve(onLoadOlderRows()).catch(() => undefined);
-  }, [firstRowId, isAwaitingOlderRows, isLoadingOlderRows, onLoadOlderRows]);
-}
 
 function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
   const bottomAnchor = useBottomAnchoredScroll();
@@ -1972,33 +1929,31 @@ const MemoizedTimelineExpandableRowView = memo(
   areTimelineExpandableRowViewPropsEqual,
 );
 
-export function isUnreadDividerAwaitingOlderRows({
+export function useLoadedUnreadDividerPlacement({
   hasOlderRows,
   rows,
   unreadDividerPlacement,
-}: FindUnreadDividerIndexArgs): boolean {
+}: UseLoadedUnreadDividerPlacementArgs): ThreadTimelineUnreadDividerPlacement | null {
+  const [unplaceablePlacement, setUnplaceablePlacement] =
+    useState<ThreadTimelineUnreadDividerPlacement | null>(null);
   const firstRow = rows[0];
-  return (
-    hasOlderRows &&
-    firstRow !== undefined &&
+  const isUnplaceable =
     unreadDividerPlacement !== null &&
-    firstRow.startedAt > unreadDividerPlacement.cutoffAt
-  );
+    (unreadDividerPlacement === unplaceablePlacement ||
+      (hasOlderRows &&
+        firstRow !== undefined &&
+        firstRow.startedAt > unreadDividerPlacement.cutoffAt));
+  if (isUnplaceable && unreadDividerPlacement !== unplaceablePlacement) {
+    setUnplaceablePlacement(unreadDividerPlacement);
+  }
+  return isUnplaceable ? null : unreadDividerPlacement;
 }
 
 function findUnreadDividerIndex({
-  hasOlderRows,
   rows,
   unreadDividerPlacement,
-}: FindUnreadDividerIndexArgs): number {
-  if (
-    unreadDividerPlacement === null ||
-    isUnreadDividerAwaitingOlderRows({
-      hasOlderRows,
-      rows,
-      unreadDividerPlacement,
-    })
-  ) {
+}: BuildTimelineRowsListItemsArgs): number {
+  if (unreadDividerPlacement === null) {
     return -1;
   }
 
@@ -2030,13 +1985,11 @@ function isUnreadDividerCandidateAfterCutoff({
 }
 
 export function buildTimelineRowsListItems({
-  hasOlderRows,
   rows,
   unreadDividerPlacement,
 }: BuildTimelineRowsListItemsArgs): TimelineRowsListItem[] {
   const items: TimelineRowsListItem[] = [];
   const dividerIndex = findUnreadDividerIndex({
-    hasOlderRows,
     rows,
     unreadDividerPlacement,
   });
@@ -2142,24 +2095,19 @@ function TimelineRowsList({
     () => findActiveLatestBundleId(rows),
     [rows],
   );
-  const hasOlderRows = hasOlderTimelineRows ?? false;
+  const loadedUnreadDividerPlacement = useLoadedUnreadDividerPlacement({
+    hasOlderRows: hasOlderTimelineRows ?? false,
+    rows,
+    unreadDividerPlacement,
+  });
   const items = useMemo(
     () =>
       buildTimelineRowsListItems({
-        hasOlderRows,
         rows,
-        unreadDividerPlacement,
+        unreadDividerPlacement: loadedUnreadDividerPlacement,
       }),
-    [hasOlderRows, rows, unreadDividerPlacement],
+    [rows, loadedUnreadDividerPlacement],
   );
-  useLoadOlderRowsForUnreadDivider({
-    hasOlderRows,
-    isLoadingOlderRows: isLoadingOlderTimelineRows ?? false,
-    onLoadOlderRows,
-    rows,
-    unreadDividerAutoScroll,
-    unreadDividerPlacement,
-  });
   const itemKeys = useMemo(
     () =>
       items.map((item) =>
