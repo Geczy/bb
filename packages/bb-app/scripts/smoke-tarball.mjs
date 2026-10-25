@@ -23,7 +23,7 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { createManagedProcessStop } from "./managed-process.mjs";
 
 const HTTP_WAIT_TIMEOUT_MS = 60_000;
@@ -428,7 +428,8 @@ async function smokeNpxEntrypoint(tarballPath) {
   const archive = await readFile(tarballPath);
   const manifest = JSON.parse(await runCommand({
     command: "tar",
-    args: ["-xOf", tarballPath, "package/package.json"],
+    args: ["-xOf", basename(tarballPath), "package/package.json"],
+    cwd: dirname(tarballPath),
     label: "read packed manifest",
   }));
   const tag = `smoke-${randomUUID()}`;
@@ -915,7 +916,7 @@ async function smokeSdkPackage(tarballPath) {
         "--ignore-scripts=false",
         "--no-audit",
         "--no-fund",
-        `bb-app@${pathToFileURL(tarballPath).href}`,
+        `bb-app@file:${tarballPath}`,
       ],
       command: "npm",
       cwd: sdkDir,
@@ -1314,6 +1315,9 @@ try {
       timed("npx entrypoint", () => smokeNpxEntrypoint(tarballPath)),
       timed("sdk package", () => smokeSdkPackage(tarballPath)),
     ]);
+    for (const result of [npxResult, sdkResult]) {
+      if (result.status === "rejected") process.stderr.write(`${result.reason.stack}\n`);
+    }
     if (npxResult.status === "rejected") throw npxResult.reason;
     if (sdkResult.status === "rejected") throw sdkResult.reason;
     sdkDir = sdkResult.value;
