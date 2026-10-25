@@ -1,4 +1,4 @@
-name: Measure packaging smoke overlap
+name: Measure Linux packaging critical path
 on:
   push:
     branches: [bb/benchmark-critical-path-20261024]
@@ -29,15 +29,33 @@ jobs:
       - uses: ./.github/actions/setup-bun
         with:
           version: "1.3.14"
-      - name: Build prerequisites
-        run: pnpm exec turbo run build --filter=bb-app --output-logs=errors-only > "$RUNNER_TEMP/build.log" 2>&1
-      - name: Smoke real package
-        run: pnpm exec turbo run smoke:tarball --filter=bb-app --summarize > "$RUNNER_TEMP/smoke.log" 2>&1
+      - name: Sequential packaging baseline
+        if: matrix.variant == 'baseline'
+        run: |
+          /usr/bin/time -f '{"seconds":%e,"exitCode":%x}' -o "$RUNNER_TEMP/packaging-time.json" bash -e -c '
+            pnpm exec turbo run smoke:tarball --filter=bb-app --summarize --concurrency=4
+            pnpm exec turbo run desktop:build:linux --filter=@bb/desktop --summarize
+          ' > "$RUNNER_TEMP/packaging.log" 2>&1
+      - name: Concurrent packaging candidate
+        if: matrix.variant == 'candidate'
+        run: /usr/bin/time -f '{"seconds":%e,"exitCode":%x}' -o "$RUNNER_TEMP/packaging-time.json" pnpm exec turbo run 'bb-app#smoke:tarball' '@bb/desktop#desktop:build:linux' --summarize --concurrency=4 --continue=dependencies-successful > "$RUNNER_TEMP/packaging.log" 2>&1
+      - name: Check desktop package contains no injected stale chunks
+        run: |
+          if rg --files --hidden apps/desktop/release | rg 'SLOP-CACHE-STALE'; then
+            exit 1
+          fi
+      - uses: ./.github/actions/install-appimage-fuse
+        with:
+          package: libfuse2t64
+      - name: Smoke Linux AppImage lifecycle
+        run: xvfb-run -a pnpm exec turbo run smoke:appimage-lifecycle --filter=@bb/desktop --force > "$RUNNER_TEMP/lifecycle.log" 2>&1
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: packaging-${{ matrix.variant }}-${{ matrix.replica }}
+          name: packaging-critical-${{ matrix.variant }}-${{ matrix.replica }}
+          include-hidden-files: true
           path: |
-            ${{ runner.temp }}/smoke.log
-            ${{ runner.temp }}/build.log
+            ${{ runner.temp }}/packaging-time.json
+            ${{ runner.temp }}/packaging.log
+            ${{ runner.temp }}/lifecycle.log
             .turbo/runs/*.json

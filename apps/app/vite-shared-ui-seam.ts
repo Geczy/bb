@@ -13,26 +13,18 @@ export function sharedUiEnvSeam(): Plugin {
   return {
     name: "bb:shared-ui-env-seam",
     enforce: "pre",
-    resolveId: {
-      filter: {
-        id: [
-          /(^|\/)lib\/portal-scope(\.js)?$/,
-          /(^|\/)hooks\/useBrowserDimmingModal(\.js)?$/,
-        ],
-      },
-      handler(source, importer) {
-        if (
-          !importer ||
-          !importer.replace(/\\/g, "/").includes("/packages/shared-ui/")
-        ) {
-          return null;
-        }
-        if (/(^|\/)lib\/portal-scope(\.js)?$/.test(source)) return portalScope;
-        if (/(^|\/)hooks\/useBrowserDimmingModal(\.js)?$/.test(source)) {
-          return browserDimming;
-        }
+    resolveId(source, importer) {
+      if (
+        !importer ||
+        !importer.replace(/\\/g, "/").includes("/packages/shared-ui/")
+      ) {
         return null;
-      },
+      }
+      if (/(^|\/)lib\/portal-scope(\.js)?$/.test(source)) return portalScope;
+      if (/(^|\/)hooks\/useBrowserDimmingModal(\.js)?$/.test(source)) {
+        return browserDimming;
+      }
+      return null;
     },
   };
 }
