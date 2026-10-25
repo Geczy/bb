@@ -340,5 +340,16 @@ loaded to find the cutoff, and a divider dropped this way stays dropped when
 the reader pages back. A reader who scrolls before the landing keeps their
 position.
 
+`thread-opening.model.test.tsx` checks the landing end to end. It renders the
+timeline with the thread view's own loading hooks against a fake server that
+pages a random history, opens or returns to the thread with random read
+states, page sizes, and time away, and resolves the bootstrap, thread, and
+timeline requests in random orders, sometimes with the reader scrolling while
+they load. Once settled, NEW must sit above the first unread row of the whole
+history, must be at the top unless the reader scrolled or the view is at the
+end, and must show whenever the read cutoff is inside the first page;
+otherwise the saved position or the bottom stands. It runs 40 sequences by
+default; set `OPENING_MODEL_SEEDS` for more.
+
 Content shorter than the viewport is top-aligned. In that case a row that
 expands moves the rows below it, including the latest row.

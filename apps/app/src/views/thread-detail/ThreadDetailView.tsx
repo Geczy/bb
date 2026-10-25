@@ -75,11 +75,9 @@ import {
   type ChildThreadPendingAttentionSource,
 } from "../../hooks/queries/child-thread-pending-interactions";
 import {
-  didThreadDetailBootstrapRefreshAfterMount,
   useChildThreads,
   useProjectThreadSubset,
   useThread,
-  useThreadDetailBootstrap,
   useThreadPendingInteractions,
   type ProjectThreadSubsetFilters,
 } from "../../hooks/queries/thread-queries";
@@ -235,7 +233,7 @@ import type {
 import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "@/hooks/useThreadReadTracking";
-import { useThreadUnreadDividerState } from "./useThreadUnreadDividerState";
+import { useThreadDetailThread } from "./useThreadDetailThread";
 import {
   buildTerminalSyncedSecondaryFileTabs,
   syncTerminalTabsInFixedPanelState,
@@ -465,22 +463,12 @@ function ThreadDetailViewInternal(
   const navigate = useImmediateRouteNavigate();
   useFixedPanelTabsStorageMaintenance();
   const systemConfigQuery = useSystemConfig();
-  const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId);
-  const hasThreadDetailBootstrapSettled =
-    threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
   const {
-    data: thread,
-    isFetching,
-    isLoadingError,
-    error,
-  } = useThread(threadId, {
-    enabled: hasThreadDetailBootstrapSettled,
-    refetchOnMount: didThreadDetailBootstrapRefreshAfterMount(
-      threadDetailBootstrapQuery,
-    )
-      ? false
-      : "always",
-  });
+    hasThreadDetailBootstrapSettled,
+    threadDetailBootstrapQuery,
+    threadQuery: { data: thread, isFetching, isLoadingError, error },
+    unreadDividerState,
+  } = useThreadDetailThread(threadId);
   const environmentQuery = useEnvironment(thread?.environmentId, {
     enabled: hasThreadDetailBootstrapSettled,
     staleTime: 5_000,
@@ -575,14 +563,6 @@ function ThreadDetailViewInternal(
   );
   const pendingInteractions = pendingInteractionsQuery.data ?? [];
   const hasPendingInteraction = pendingInteractions.length > 0;
-  const unreadDividerState = useThreadUnreadDividerState({
-    hasFreshThread:
-      thread !== undefined &&
-      !isFetching &&
-      !threadDetailBootstrapQuery.isFetching,
-    routeThreadId: threadId,
-    thread,
-  });
   const [hasRequestedMergeBaseOptions, setHasRequestedMergeBaseOptions] =
     useState(false);
   const [shouldAutoFocusNewTab, setShouldAutoFocusNewTab] = useState(false);
