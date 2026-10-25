@@ -1,0 +1,62 @@
+name: Measure app resolver filtering
+on:
+  push:
+    branches: [bb/benchmark-critical-path-20261024]
+permissions:
+  contents: read
+jobs:
+  benchmark:
+    runs-on: ${{ matrix.os == 'windows' && 'blacksmith-4vcpu-windows-2025' || 'blacksmith-4vcpu-ubuntu-2404' }}
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [baseline, candidate]
+        os: [ubuntu, windows]
+        replica: [1, 2]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Restore baseline resolver
+        if: matrix.variant == 'baseline'
+        run: |
+          git fetch --depth=1 origin 06bb048a522432f6383b13ba90213582807d8d7a
+          git show FETCH_HEAD:apps/app/vite-shared-ui-seam.ts > apps/app/vite-shared-ui-seam.ts
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.x
+          package-manager-cache: false
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.0 --ignore-scripts
+      - name: Install workspace
+        run: bash .github/actions/setup-workspace/install-dependencies.sh
+      - uses: ./.github/actions/setup-bun
+        with:
+          version: "1.3.14"
+      - name: Cold app build
+        run: pnpm exec turbo run build --filter=@bb/app --summarize > "$RUNNER_TEMP/cold.log" 2>&1
+      - name: Save cold timings and output
+        run: |
+          mkdir -p "$RUNNER_TEMP/results/cold"
+          cp .turbo/runs/*.json "$RUNNER_TEMP/results/cold/"
+          node --input-type=module -e 'import{readdir,readFile,writeFile}from"node:fs/promises";import{createHash}from"node:crypto";const root="apps/app/dist/";const files=await readdir(root,{recursive:true,withFileTypes:true});const manifest={};for(const f of files){if(!f.isFile())continue;const p=f.parentPath+"/"+f.name;manifest[p.slice(root.length)]=createHash("sha256").update(await readFile(p)).digest("hex");}await writeFile(process.env.RUNNER_TEMP+"/results/manifest.json",JSON.stringify(manifest));'
+      - name: Warm app rebuild
+        run: pnpm exec turbo run build --filter=@bb/app --only --force --summarize > "$RUNNER_TEMP/warm.log" 2>&1
+      - name: App shard 2 of 4
+        env:
+          VITEST_MAX_WORKERS: "4"
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
+        run: pnpm exec turbo run test --filter=@bb/app -- --shard=2/4 --reporter=json --outputFile="$RUNNER_TEMP/results/app-tests.json" > "$RUNNER_TEMP/app-tests.log" 2>&1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: resolver-${{ matrix.variant }}-${{ matrix.os }}-${{ matrix.replica }}
+          path: |
+            ${{ runner.temp }}/results/
+            ${{ runner.temp }}/cold.log
+            ${{ runner.temp }}/warm.log
+            ${{ runner.temp }}/app-tests.log
+            .turbo/runs/*.json
